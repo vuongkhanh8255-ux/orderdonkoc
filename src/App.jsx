@@ -3,7 +3,7 @@ import { supabase } from './supabaseClient';
 import { CSVLink } from "react-csv";
 
 function App() {
-  // ... (toàn bộ state cũ không thay đổi)
+  // State cho form
   const [isLoading, setIsLoading] = useState(false);
   const [hoTen, setHoTen] = useState('');
   const [idKenh, setIdKenh] = useState('');
@@ -17,7 +17,11 @@ function App() {
   const [selectedSanPhams, setSelectedSanPhams] = useState([]); 
   const [selectedNhanSu, setSelectedNhanSu] = useState('');
   const [loaiShip, setLoaiShip] = useState('Ship thường');
+  
+  // State cho bảng
   const [donHangs, setDonHangs] = useState([]);
+
+  // State cho các ô lọc
   const [filterIdKenh, setFilterIdKenh] = useState('');
   const [filterSdt, setFilterSdt] = useState('');
   const [filterBrand, setFilterBrand] = useState('');
@@ -25,16 +29,23 @@ function App() {
   const [filterNhanSu, setFilterNhanSu] = useState('');
   const [filterNgay, setFilterNgay] = useState('');
   const [filterSanPhams, setFilterSanPhams] = useState([]);
+  
+  // State cho tính năng tổng hợp
   const [summaryDate, setSummaryDate] = useState(new Date().toISOString().split('T')[0]);
   const [productSummary, setProductSummary] = useState([]);
   const [isSummarizing, setIsSummarizing] = useState(false);
-
-  // STATE MỚI: Dành cho ô tìm kiếm sản phẩm trong form
   const [productSearchTerm, setProductSearchTerm] = useState('');
 
-  // ... (các hàm fetchDonHangs, useEffect, handleSubmit... không thay đổi)
   const fetchDonHangs = async (filters = {}) => {
-    let query = supabase.from('donguis').select(`id, ngay_gui, loai_ship, kocs ( ho_ten, id_kenh, sdt, dia_chi, cccd ), nhansu ( ten_nhansu ), chitiettonguis ( sanphams ( id, ten_sanpham, barcode, brands ( ten_brand ) ) )`);
+    let query = supabase
+      .from('donguis')
+      .select(`
+        id, ngay_gui, loai_ship,
+        kocs ( ho_ten, id_kenh, sdt, dia_chi, cccd ), 
+        nhansu ( ten_nhansu ),
+        chitiettonguis ( sanphams ( id, ten_sanpham, barcode, brands ( ten_brand ) ) )
+      `);
+
     if (filters.nhanSuId) { query = query.eq('nhansu_id', filters.nhanSuId); }
     if (filters.idKenh) { query = query.ilike('kocs.id_kenh', `%${filters.idKenh}%`); }
     if (filters.sdt) { query = query.ilike('kocs.sdt', `%${filters.sdt}%`); }
@@ -46,9 +57,16 @@ function App() {
       endDate.setDate(endDate.getDate() + 1);
       query = query.gte('ngay_gui', startDate.toISOString()).lt('ngay_gui', endDate.toISOString());
     }
+
     const { data, error } = await query.order('ngay_gui', { ascending: false });
-    if (error) { alert('Lỗi khi lọc dữ liệu: ' + error.message); } else { setDonHangs(data); }
+
+    if (error) {
+      alert('Lỗi khi lọc dữ liệu: ' + error.message);
+    } else {
+      setDonHangs(data);
+    }
   };
+
   useEffect(() => {
     async function getInitialData() {
       const { data: brandsData } = await supabase.from('brands').select();
@@ -59,6 +77,7 @@ function App() {
     }
     getInitialData();
   }, []);
+
   useEffect(() => {
     if (!selectedBrand) { setSanPhams([]); setSelectedSanPhams([]); return; }
     async function getSanPhams() {
@@ -67,6 +86,7 @@ function App() {
     }
     getSanPhams();
   }, [selectedBrand]);
+
   useEffect(() => {
     if (!filterBrand) { setFilterSanPhams([]); setFilterSanPham(''); return; }
     async function getFilterSanPhams() {
@@ -75,6 +95,7 @@ function App() {
     }
     getFilterSanPhams();
   }, [filterBrand]);
+
   const handleSanPhamChange = (sanPhamId) => {
     setSelectedSanPhams(prevSelected => {
       if (prevSelected.includes(sanPhamId)) {
@@ -84,9 +105,17 @@ function App() {
       }
     });
   };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
+
+    // THÊM ĐIỀU KIỆN KIỂM TRA CCCD
+    if (cccd.length !== 12 || !/^\d{12}$/.test(cccd)) {
+      alert('Vui lòng nhập CCCD đủ 12 chữ số.');
+      return;
+    }
     if (selectedSanPhams.length === 0) { alert('Vui lòng chọn ít nhất một sản phẩm!'); return; }
+
     setIsLoading(true);
     try {
       const { data: kocData } = await supabase.from('kocs').upsert({ ho_ten: hoTen, id_kenh: idKenh, sdt: sdt, dia_chi: diaChi, cccd: cccd }, { onConflict: 'cccd' }).select().single();
@@ -103,8 +132,28 @@ function App() {
       setIsLoading(false);
     }
   };
-  const handleFilter = () => { fetchDonHangs({ idKenh: filterIdKenh, sdt: filterSdt, brandId: filterBrand, sanPhamId: filterSanPham, nhanSuId: filterNhanSu, ngay: filterNgay, }); };
-  const clearFilters = () => { setFilterIdKenh(''); setFilterSdt(''); setFilterBrand(''); setFilterSanPham(''); setFilterNhanSu(''); setFilterNgay(''); fetchDonHangs(); };
+  
+  const handleIdKenhBlur = async () => {
+    if (!idKenh) return;
+    const { data } = await supabase.from('kocs').select().eq('id_kenh', idKenh).single();
+    if (data) {
+      setHoTen(data.ho_ten);
+      setSdt(data.sdt);
+      setDiaChi(data.dia_chi);
+      setCccd(data.cccd);
+    }
+  };
+
+  const handleFilter = () => {
+    fetchDonHangs({ idKenh: filterIdKenh, sdt: filterSdt, brandId: filterBrand, sanPhamId: filterSanPham, nhanSuId: filterNhanSu, ngay: filterNgay, });
+  };
+
+  const clearFilters = () => {
+    setFilterIdKenh(''); setFilterSdt(''); setFilterBrand(''); setFilterSanPham('');
+    setFilterNhanSu(''); setFilterNgay('');
+    fetchDonHangs();
+  };
+  
   const handleGetSummary = async () => {
     if (!summaryDate) { alert('Vui lòng chọn ngày để tổng hợp!'); return; }
     setIsSummarizing(true);
@@ -113,11 +162,14 @@ function App() {
     if (error) { alert('Lỗi khi lấy tổng hợp: ' + error.message); } else { setProductSummary(data); }
     setIsSummarizing(false);
   };
+
+  // ĐÃ SẮP XẾP LẠI CSV HEADERS
   const csvHeaders = [
     { label: "Ngày Gửi", key: "ngayGui" }, { label: "Tên KOC", key: "tenKOC" }, { label: "ID Kênh", key: "idKenh" }, { label: "SĐT", key: "sdt" },
     { label: "Địa chỉ", key: "diaChi" }, { label: "CCCD", key: "cccd" }, { label: "Sản Phẩm", key: "sanPham" },
     { label: "Brand", key: "brand" }, { label: "Nhân Sự Gửi", key: "nhanSu" }, { label: "Loại Ship", key: "loaiShip" }, { label: "Barcode", key: "barcode" }
   ];
+
   const csvData = donHangs.map(donHang => ({
     ngayGui: new Date(donHang.ngay_gui).toLocaleString('vi-VN'),
     tenKOC: donHang.kocs?.ho_ten, idKenh: donHang.kocs?.id_kenh, sdt: donHang.kocs?.sdt, diaChi: donHang.kocs?.dia_chi, cccd: donHang.kocs?.cccd,
@@ -135,29 +187,36 @@ function App() {
         <div style={{ padding: '2rem', border: '1px solid #ddd', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
           <h1 style={{ textAlign: 'center', color: '#333', marginBottom: '1.5rem' }}>Tạo Đơn Gửi KOC</h1>
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div>
+              <label>ID Kênh</label>
+              <input type="text" value={idKenh} onChange={e => setIdKenh(e.target.value)} onBlur={handleIdKenhBlur} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} required />
+            </div>
             <div><label>Họ tên KOC</label><input type="text" value={hoTen} onChange={e => setHoTen(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} required /></div>
-            <div><label>ID Kênh</label><input type="text" value={idKenh} onChange={e => setIdKenh(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} required /></div>
             <div><label>Số điện thoại</label><input type="text" value={sdt} onChange={e => setSdt(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} required /></div>
             <div><label>Địa chỉ</label><input type="text" value={diaChi} onChange={e => setDiaChi(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} required /></div>
-            <div><label>CCCD</label><input type="text" value={cccd} onChange={e => setCccd(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} required /></div>
-            <div><label>Brand</label><select value={selectedBrand} onChange={e => setSelectedBrand(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} required><option value="">-- Chọn Brand --</option>{brands.map(brand => (<option key={brand.id} value={brand.id}>{brand.ten_brand}</option>))}</select></div>
             
+            {/* THÊM THUỘC TÍNH VÀO Ô CCCD */}
             <div>
-              <label>Sản phẩm</label>
-              {/* Ô TÌM KIẾM SẢN PHẨM MỚI */}
+              <label>CCCD</label>
               <input 
                 type="text" 
-                placeholder="Tìm sản phẩm..."
-                value={productSearchTerm}
-                onChange={e => setProductSearchTerm(e.target.value)}
-                style={{ width: '100%', padding: '8px', boxSizing: 'border-box', marginBottom: '10px' }}
-                disabled={!selectedBrand}
+                value={cccd} 
+                onChange={e => setCccd(e.target.value)} 
+                style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} 
+                required 
+                maxLength="12" 
+                minLength="12" 
+                pattern="[0-9]*"
+                title="Vui lòng nhập đủ 12 chữ số."
               />
+            </div>
+
+            <div><label>Brand</label><select value={selectedBrand} onChange={e => setSelectedBrand(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} required><option value="">-- Chọn Brand --</option>{brands.map(brand => (<option key={brand.id} value={brand.id}>{brand.ten_brand}</option>))}</select></div>
+            <div>
+              <label>Sản phẩm</label>
+              <input type="text" placeholder="Tìm sản phẩm..." value={productSearchTerm} onChange={e => setProductSearchTerm(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box', marginBottom: '10px' }} disabled={!selectedBrand} />
               <div style={{ border: '1px solid #ccc', borderRadius: '4px', padding: '10px', maxHeight: '150px', overflowY: 'auto' }}>
-                {/* LOGIC LỌC SẢN PHẨM ĐƯỢC THÊM VÀO ĐÂY */}
-                {sanPhams.length > 0 ? sanPhams
-                  .filter(sp => sp.ten_sanpham.toLowerCase().includes(productSearchTerm.toLowerCase()))
-                  .map(sp => (
+                {sanPhams.length > 0 ? sanPhams.filter(sp => sp.ten_sanpham.toLowerCase().includes(productSearchTerm.toLowerCase())).map(sp => (
                     <div key={sp.id}>
                       <input type="checkbox" id={sp.id} value={sp.id} checked={selectedSanPhams.includes(sp.id)} onChange={() => handleSanPhamChange(sp.id)} />
                       <label htmlFor={sp.id} style={{ marginLeft: '8px' }}>{sp.ten_sanpham}</label>
@@ -165,7 +224,6 @@ function App() {
                   )) : <p style={{ margin: 0, color: '#888' }}>Vui lòng chọn Brand để xem sản phẩm</p>}
               </div>
             </div>
-
             <div><label>Nhân sự gửi</label><select value={selectedNhanSu} onChange={e => setSelectedNhanSu(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} required><option value="">-- Chọn nhân sự --</option>{nhanSus.map(nhansu => (<option key={nhansu.id} value={nhansu.id}>{nhansu.ten_nhansu}</option>))}</select></div>
             <div>
               <label>Loại hình vận chuyển</label>
