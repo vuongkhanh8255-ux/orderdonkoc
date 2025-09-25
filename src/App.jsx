@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import * as XLSX from 'xlsx';
-import { Resizable } from 'react-resizable'; // Thêm thư viện mới
-import 'react-resizable/css/styles.css'; // Thêm CSS cho thư viện
+import { Resizable } from 'react-resizable';
+import 'react-resizable/css/styles.css';
 
 // Component Header có thể kéo thả
 const ResizableHeader = ({ onResize, width, children }) => {
@@ -41,10 +41,8 @@ function App() {
   const [selectedSanPhams, setSelectedSanPhams] = useState([]); 
   const [selectedNhanSu, setSelectedNhanSu] = useState('');
   const [loaiShip, setLoaiShip] = useState('Ship thường');
-  
   // State cho bảng
   const [donHangs, setDonHangs] = useState([]);
-
   // State cho các ô lọc
   const [filterIdKenh, setFilterIdKenh] = useState('');
   const [filterSdt, setFilterSdt] = useState('');
@@ -54,7 +52,6 @@ function App() {
   const [filterNgay, setFilterNgay] = useState('');
   const [filterSanPhams, setFilterSanPhams] = useState([]);
   const [productSearchTerm, setProductSearchTerm] = useState('');
-  
   // State cho tính năng tổng hợp
   const [summaryDate, setSummaryDate] = useState(new Date().toISOString().split('T')[0]);
   const [productSummary, setProductSummary] = useState([]);
@@ -62,7 +59,6 @@ function App() {
   
   // State cho tính năng sửa
   const [editingDonHang, setEditingDonHang] = useState(null);
-
   // STATE MỚI: Lưu trữ độ rộng của các cột
   const [columnWidths, setColumnWidths] = useState({
     stt: 50,
@@ -80,7 +76,6 @@ function App() {
     trangThai: 120,
     hanhDong: 100,
   });
-
   // HÀM MỚI: Xử lý khi kéo thả để thay đổi độ rộng cột
   const handleResize = (key) => (e, { size }) => {
     setColumnWidths(prev => ({
@@ -92,10 +87,14 @@ function App() {
   const fetchDonHangs = async (filters = {}) => {
     let query = supabase.from('donguis').select(`id, ngay_gui, loai_ship, trang_thai,kocs ( id, ho_ten, id_kenh, sdt, dia_chi, cccd ), nhansu ( ten_nhansu ),chitiettonguis ( id, sanphams ( id, ten_sanpham, barcode, brands ( ten_brand ) ) )`);
     if (filters.nhanSuId) { query = query.eq('nhansu_id', filters.nhanSuId); }
-    if (filters.idKenh) { query = query.ilike('kocs.id_kenh', `%${filters.idKenh}%`); }
-    if (filters.sdt) { query = query.ilike('kocs.sdt', `%${filters.sdt}%`); }
-    if (filters.brandId) { query = query.eq('chitiettonguis.sanphams.brand_id', filters.brandId); }
-    if (filters.sanPhamId) { query = query.eq('chitiettonguis.sanpham_id', filters.sanPhamId); }
+    if (filters.idKenh) { query = query.ilike('kocs.id_kenh', `%${filters.idKenh}%`);
+    }
+    if (filters.sdt) { query = query.ilike('kocs.sdt', `%${filters.sdt}%`);
+    }
+    if (filters.brandId) { query = query.eq('chitiettonguis.sanphams.brand_id', filters.brandId);
+    }
+    if (filters.sanPhamId) { query = query.eq('chitiettonguis.sanpham_id', filters.sanPhamId);
+    }
     if (filters.ngay) {
       const startDate = new Date(filters.ngay);
       const endDate = new Date(filters.ngay);
@@ -142,8 +141,10 @@ function App() {
   };
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (cccd.length !== 12 || !/^\d{12}$/.test(cccd)) { alert('Vui lòng nhập CCCD đủ 12 chữ số.'); return; }
-    if (selectedSanPhams.length === 0) { alert('Vui lòng chọn ít nhất một sản phẩm!'); return; }
+    if (cccd.length !== 12 || !/^\d{12}$/.test(cccd)) { alert('Vui lòng nhập CCCD đủ 12 chữ số.'); return;
+    }
+    if (selectedSanPhams.length === 0) { alert('Vui lòng chọn ít nhất một sản phẩm!'); return;
+    }
     setIsLoading(true);
     try {
       const { data: kocData } = await supabase.from('kocs').upsert({ ho_ten: hoTen, id_kenh: idKenh, sdt: sdt, dia_chi: diaChi, cccd: cccd }, { onConflict: 'cccd' }).select().single();
@@ -167,10 +168,12 @@ function App() {
       setHoTen(data.ho_ten); setSdt(data.sdt); setDiaChi(data.dia_chi); setCccd(data.cccd);
     }
   };
-  const handleFilter = () => { fetchDonHangs({ idKenh: filterIdKenh, sdt: filterSdt, brandId: filterBrand, sanPhamId: filterSanPham, nhanSuId: filterNhanSu, ngay: filterNgay, }); };
+  const handleFilter = () => { fetchDonHangs({ idKenh: filterIdKenh, sdt: filterSdt, brandId: filterBrand, sanPhamId: filterSanPham, nhanSuId: filterNhanSu, ngay: filterNgay, });
+  };
   const clearFilters = () => { setFilterIdKenh(''); setFilterSdt(''); setFilterBrand(''); setFilterSanPham(''); setFilterNhanSu(''); setFilterNgay(''); fetchDonHangs(); };
   const handleGetSummary = async () => {
-    if (!summaryDate) { alert('Vui lòng chọn ngày để tổng hợp!'); return; }
+    if (!summaryDate) { alert('Vui lòng chọn ngày để tổng hợp!');
+    return; }
     setIsSummarizing(true);
     setProductSummary([]);
     const { data, error } = await supabase.rpc('get_product_summary_by_day', { target_day: summaryDate });
@@ -179,16 +182,30 @@ function App() {
   };
   const handleEdit = (donHang) => { setEditingDonHang({ ...donHang }); };
   const handleCancelEdit = () => { setEditingDonHang(null); };
+
   const handleUpdate = async () => {
     if (!editingDonHang) return;
+    
     const { error: kocError } = await supabase.from('kocs').update({ ho_ten: editingDonHang.kocs.ho_ten, id_kenh: editingDonHang.kocs.id_kenh, sdt: editingDonHang.kocs.sdt, dia_chi: editingDonHang.kocs.dia_chi, cccd: editingDonHang.kocs.cccd }).eq('id', editingDonHang.kocs.id);
-    if (kocError) { alert('Lỗi cập nhật thông tin KOC: ' + kocError.message); return; }
+    if (kocError) { alert('Lỗi cập nhật thông tin KOC: ' + kocError.message); return;
+    }
     const { error: donGuiError } = await supabase.from('donguis').update({ loai_ship: editingDonHang.loai_ship, trang_thai: editingDonHang.trang_thai }).eq('id', editingDonHang.id);
     if (donGuiError) { alert('Lỗi cập nhật đơn gửi: ' + donGuiError.message); return; }
-    alert('Cập nhật thành công!');
+
+    setDonHangs(currentDonHangs => {
+      return currentDonHangs.map(donHang => {
+        if (donHang.id === editingDonHang.id) {
+          return editingDonHang;
+        }
+        return donHang;
+      });
+    });
+
+    // Dòng alert đã được xóa
+    
     setEditingDonHang(null);
-    fetchDonHangs();
   };
+
   const handleExport = ({ data, headers, filename }) => {
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
@@ -202,14 +219,12 @@ function App() {
   });
   const mainExportHeaders = [ { label: "STT", key: "stt"}, { label: "Ngày Gửi", key: "ngayGui" }, { label: "Tên KOC", key: "tenKOC" }, { label: "ID Kênh", key: "idKenh" }, { label: "SĐT", key: "sdt" }, { label: "Địa chỉ", key: "diaChi" }, { label: "CCCD", key: "cccd" }, { label: "Sản Phẩm", key: "sanPham" }, { label: "Brand", key: "brand" }, { label: "Barcode", key: "barcode" }, { label: "Nhân Sự Gửi", key: "nhanSu" }, { label: "Loại Ship", key: "loaiShip" } ];
   const summaryExportHeaders = [ { label: "Sản Phẩm", key: "ten_san_pham" }, { label: "Barcode", key: "barcode" }, { label: "Brand", key: "ten_brand" }, { label: "Tổng Số Lượng", key: "total_quantity" } ];
-
   const headers = [
     { key: 'stt', label: 'STT' }, { key: 'ngayGui', label: 'Ngày Gửi' }, { key: 'hoTenKOC', label: 'Họ Tên KOC' }, { key: 'idKenh', label: 'ID Kênh' },
     { key: 'sdt', label: 'SĐT' }, { key: 'diaChi', label: 'Địa chỉ' }, { key: 'cccd', label: 'CCCD' }, { key: 'brand', label: 'Brand' },
     { key: 'sanPham', label: 'Sản Phẩm' }, { key: 'nhanSu', label: 'Nhân Sự Gửi' }, { key: 'loaiShip', label: 'Loại Ship' }, { key: 'barcode', label: 'Barcode' },
     { key: 'trangThai', label: 'Trạng Thái' }, { key: 'hanhDong', label: 'Hành Động' },
   ];
-
   return (
     <div style={{ padding: '2rem' }}>
       
@@ -217,29 +232,35 @@ function App() {
         <div style={{ flex: 1, padding: '2rem', border: '1px solid #ddd', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
           <h1 style={{ textAlign: 'center', color: '#333', marginBottom: '1.5rem' }}>Tạo Đơn Gửi KOC</h1>
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div><label>ID Kênh</label><input type="text" value={idKenh} onChange={e => setIdKenh(e.target.value)} onBlur={handleIdKenhBlur} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} required /></div>
+ 
+           <div><label>ID Kênh</label><input type="text" value={idKenh} onChange={e => setIdKenh(e.target.value)} onBlur={handleIdKenhBlur} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} required /></div>
             <div><label>Họ tên KOC</label><input type="text" value={hoTen} onChange={e => setHoTen(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} required /></div>
             <div><label>Số điện thoại</label><input type="text" value={sdt} onChange={e => setSdt(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} required /></div>
             <div><label>Địa chỉ</label><input type="text" value={diaChi} onChange={e => setDiaChi(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} required /></div>
             <div><label>CCCD</label><input type="text" value={cccd} onChange={e => setCccd(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} required maxLength="12" minLength="12" pattern="[0-9]*" title="Vui lòng nhập đủ 12 chữ số." /></div>
             <div><label>Brand</label><select value={selectedBrand} onChange={e => setSelectedBrand(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} required><option value="">-- Chọn Brand --</option>{brands.map(brand => (<option key={brand.id} value={brand.id}>{brand.ten_brand}</option>))}</select></div>
             <div>
+    
               <label>Sản phẩm</label>
               <input type="text" placeholder="Tìm sản phẩm..." value={productSearchTerm} onChange={e => setProductSearchTerm(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box', marginBottom: '10px' }} disabled={!selectedBrand} />
               <div style={{ border: '1px solid #ccc', borderRadius: '4px', padding: '10px', maxHeight: '150px', overflowY: 'auto' }}>
-                {sanPhams.length > 0 ? sanPhams.filter(sp => sp.ten_sanpham.toLowerCase().includes(productSearchTerm.toLowerCase())).map(sp => (
+                {sanPhams.length > 0 ?
+                  sanPhams.filter(sp => sp.ten_sanpham.toLowerCase().includes(productSearchTerm.toLowerCase())).map(sp => (
                     <div key={sp.id}>
                       <input type="checkbox" id={sp.id} value={sp.id} checked={selectedSanPhams.includes(sp.id)} onChange={() => handleSanPhamChange(sp.id)} />
                       <label htmlFor={sp.id} style={{ marginLeft: '8px' }}>{sp.ten_sanpham}</label>
+                  
                     </div>
                   )) : <p style={{ margin: 0, color: '#888' }}>Vui lòng chọn Brand để xem sản phẩm</p>}
               </div>
             </div>
             <div><label>Nhân sự gửi</label><select value={selectedNhanSu} onChange={e => setSelectedNhanSu(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }} required><option value="">-- Chọn nhân sự --</option>{nhanSus.map(nhansu => (<option key={nhansu.id} value={nhansu.id}>{nhansu.ten_nhansu}</option>))}</select></div>
+   
             <div>
               <label>Loại hình vận chuyển</label>
               <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
                 <label style={{ display: 'flex', alignItems: 'center' }}><input type="radio" value="Ship thường" checked={loaiShip === 'Ship thường'} onChange={e => setLoaiShip(e.target.value)} style={{ marginRight: '5px' }} />Ship thường</label>
+              
                 <label style={{ display: 'flex', alignItems: 'center' }}><input type="radio" value="Hỏa tốc" checked={loaiShip === 'Hỏa tốc'} onChange={e => setLoaiShip(e.target.value)} style={{ marginRight: '5px' }} />Hỏa tốc</label>
               </div>
             </div>
@@ -249,7 +270,8 @@ function App() {
         <div style={{ flex: 1, padding: '2rem', border: '1px solid #ddd', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
             <h2 style={{ textAlign: 'center', color: '#333', marginBottom: '1.5rem' }}>Tổng Hợp Sản Phẩm</h2>
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}><input type="date" value={summaryDate} onChange={e => setSummaryDate(e.target.value)} style={{ padding: '7px', flex: 1 }} /><button onClick={handleGetSummary} disabled={isSummarizing} style={{ padding: '8px 16px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>{isSummarizing ? 'Đang xử lý...' : 'Tổng hợp'}</button></div>
-            <div style={{ marginTop: '1rem' }}>{productSummary.length > 0 ? (<><table style={{ width: '100%', borderCollapse: 'collapse' }}><thead style={{textAlign: 'left'}}><tr><th style={{padding: '8px', borderBottom: '1px solid #ddd'}}>Sản phẩm</th><th style={{padding: '8px', borderBottom: '1px solid #ddd'}}>Barcode</th><th style={{padding: '8px', borderBottom: '1px solid #ddd'}}>Brand</th><th style={{padding: '8px', borderBottom: '1px solid #ddd'}}>Số lượng</th></tr></thead><tbody>{productSummary.map(item => (<tr key={item.ten_san_pham}><td style={{padding: '8px', borderBottom: '1px solid #eee'}}>{item.ten_san_pham}</td><td style={{padding: '8px', borderBottom: '1px solid #eee'}}>{item.barcode}</td><td style={{padding: '8px', borderBottom: '1px solid #eee'}}>{item.ten_brand}</td><td style={{padding: '8px', borderBottom: '1px solid #eee', textAlign: 'center'}}><strong>{item.total_quantity}</strong></td></tr>))}</tbody></table><div style={{ marginTop: '1rem', textAlign: 'right' }}><button onClick={() => handleExport({ data: productSummary, headers: summaryExportHeaders, filename: `tong-hop-san-pham-${summaryDate}.xlsx`})} style={{ padding: '8px 16px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Xuất File Tổng Hợp</button></div></>) : (<p style={{ textAlign: 'center', color: '#888' }}>Chưa có dữ liệu cho ngày đã chọn.</p>)}</div>
+            <div style={{ marginTop: '1rem' }}>{productSummary.length > 0 ?
+              (<><table style={{ width: '100%', borderCollapse: 'collapse' }}><thead style={{textAlign: 'left'}}><tr><th style={{padding: '8px', borderBottom: '1px solid #ddd'}}>Sản phẩm</th><th style={{padding: '8px', borderBottom: '1px solid #ddd'}}>Barcode</th><th style={{padding: '8px', borderBottom: '1px solid #ddd'}}>Brand</th><th style={{padding: '8px', borderBottom: '1px solid #ddd'}}>Số lượng</th></tr></thead><tbody>{productSummary.map(item => (<tr key={item.ten_san_pham}><td style={{padding: '8px', borderBottom: '1px solid #eee'}}>{item.ten_san_pham}</td><td style={{padding: '8px', borderBottom: '1px solid #eee'}}>{item.barcode}</td><td style={{padding: '8px', borderBottom: '1px solid #eee'}}>{item.ten_brand}</td><td style={{padding: '8px', borderBottom: '1px solid #eee', textAlign: 'center'}}><strong>{item.total_quantity}</strong></td></tr>))}</tbody></table><div style={{ marginTop: '1rem', textAlign: 'right' }}><button onClick={() => handleExport({ data: productSummary, headers: summaryExportHeaders, filename: `tong-hop-san-pham-${summaryDate}.xlsx`})} style={{ padding: '8px 16px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Xuất File Tổng Hợp</button></div></>) : (<p style={{ textAlign: 'center', color: '#888' }}>Chưa có dữ liệu cho ngày đã chọn.</p>)}</div>
         </div>
       </div>
 
@@ -265,6 +287,7 @@ function App() {
           <div style={{display: 'flex', gap: '0.5rem'}}>
             <button onClick={handleFilter} style={{ flex: 1, padding: '8px 16px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Lọc</button>
             <button onClick={clearFilters} style={{ flex: 1, padding: '8px 16px', backgroundColor: '#6c757d', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Xóa Lọc</button>
+  
           </div>
           <button onClick={() => handleExport({ data: mainExportData, headers: mainExportHeaders, filename: 'danh-sach-don-hang.xlsx' })} style={{ padding: '8px 16px', backgroundColor: '#17a2b8', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', textAlign: 'center' }}>
             Xuất File
@@ -272,10 +295,11 @@ function App() {
         </div>
 
         <div style={{ width: '100%', overflow: 'auto' }}>
+          
           <table style={{ borderCollapse: 'collapse', width: '100%' }}>
             <thead style={{ backgroundColor: '#f2f2f2' }}>
               <tr>
-                {headers.map((header, index) => (
+                {headers.map((header) => (
                   <ResizableHeader
                     key={header.key}
                     width={columnWidths[header.key]}
@@ -283,16 +307,19 @@ function App() {
                   >
                     {header.label}
                   </ResizableHeader>
-                ))}
+           
+                 ))}
               </tr>
             </thead>
             <tbody>
               {donHangs.map((donHang, index) => (
                 <tr key={donHang.id}>
-                  {editingDonHang?.id === donHang.id ? (
+                  {editingDonHang?.id === donHang.id ?
+                  (
                     <>
                       <td style={{ width: `${columnWidths.stt}px`, padding: '12px', border: '1px solid #ddd' }}>{index + 1}</td>
                       <td style={{ width: `${columnWidths.ngayGui}px`, padding: '12px', border: '1px solid #ddd' }}>{new Date(donHang.ngay_gui).toLocaleString('vi-VN')}</td>
+             
                       <td style={{ width: `${columnWidths.hoTenKOC}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{width: '90%'}} value={editingDonHang.kocs.ho_ten} onChange={e => setEditingDonHang({...editingDonHang, kocs: {...editingDonHang.kocs, ho_ten: e.target.value}})} /></td>
                       <td style={{ width: `${columnWidths.idKenh}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{width: '90%'}} value={editingDonHang.kocs.id_kenh} onChange={e => setEditingDonHang({...editingDonHang, kocs: {...editingDonHang.kocs, id_kenh: e.target.value}})} /></td>
                       <td style={{ width: `${columnWidths.sdt}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{width: '90%'}} value={editingDonHang.kocs.sdt} onChange={e => setEditingDonHang({...editingDonHang, kocs: {...editingDonHang.kocs, sdt: e.target.value}})} /></td>
@@ -304,42 +331,53 @@ function App() {
                       <td style={{ width: `${columnWidths.loaiShip}px`, padding: '12px', border: '1px solid #ddd' }}>
                         <select style={{width: '100%'}} value={editingDonHang.loai_ship} onChange={e => setEditingDonHang({...editingDonHang, loai_ship: e.target.value})}>
                           <option>Ship thường</option><option>Hỏa tốc</option>
+ 
                         </select>
                       </td>
                       <td style={{ width: `${columnWidths.barcode}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.chitiettonguis.map(ct => <div key={ct.sanphams?.id}>{ct.sanphams?.barcode}</div>)}</td>
+                    
                       <td style={{ width: `${columnWidths.trangThai}px`, padding: '12px', border: '1px solid #ddd' }}>
                         <select style={{width: '100%'}} value={editingDonHang.trang_thai} onChange={e => setEditingDonHang({...editingDonHang, trang_thai: e.target.value})}>
                           <option>Chưa đóng đơn</option><option>Đã đóng đơn</option>
                         </select>
+  
                       </td>
                       <td style={{ width: `${columnWidths.hanhDong}px`, padding: '12px', border: '1px solid #ddd' }}>
                         <button onClick={handleUpdate} style={{padding: '5px'}}>Lưu</button>
+                     
                         <button onClick={handleCancelEdit} style={{padding: '5px'}}>Hủy</button>
                       </td>
                     </>
                   ) : (
                     <>
+            
                       <td style={{ width: `${columnWidths.stt}px`, padding: '12px', border: '1px solid #ddd' }}>{index + 1}</td>
                       <td style={{ width: `${columnWidths.ngayGui}px`, padding: '12px', border: '1px solid #ddd' }}>{new Date(donHang.ngay_gui).toLocaleString('vi-VN')}</td>
                       <td style={{ width: `${columnWidths.hoTenKOC}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.kocs?.ho_ten}</td>
+             
                       <td style={{ width: `${columnWidths.idKenh}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.kocs?.id_kenh}</td>
                       <td style={{ width: `${columnWidths.sdt}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.kocs?.sdt}</td>
                       <td style={{ width: `${columnWidths.diaChi}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.kocs?.dia_chi}</td>
-                      <td style={{ width: `${columnWidths.cccd}px`, padding: '1px solid #ddd', border: '1px solid #ddd' }}>{donHang.kocs?.cccd}</td>
+                 
+                      <td style={{ width: `${columnWidths.cccd}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.kocs?.cccd}</td>
                       <td style={{ width: `${columnWidths.brand}px`, padding: '12px', border: '1px solid #ddd' }}>{[...new Set(donHang.chitiettonguis.map(ct => ct.sanphams?.brands?.ten_brand))].map(tenBrand => ( <div key={tenBrand}>{tenBrand}</div> ))}</td>
                       <td style={{ width: `${columnWidths.sanPham}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.chitiettonguis.map(ct => ( <div key={ct.sanphams?.id}>{ct.sanphams?.ten_sanpham}</div> ))}</td>
+      
                       <td style={{ width: `${columnWidths.nhanSu}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.nhansu?.ten_nhansu}</td>
                       <td style={{ width: `${columnWidths.loaiShip}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.loai_ship}</td>
                       <td style={{ width: `${columnWidths.barcode}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.chitiettonguis.map(ct => ( <div key={ct.sanphams?.id}>{ct.sanphams?.barcode}</div> ))}</td>
+     
                       <td style={{ width: `${columnWidths.trangThai}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.trang_thai}</td>
                       <td style={{ width: `${columnWidths.hanhDong}px`, padding: '12px', border: '1px solid #ddd' }}>
                         <button onClick={() => handleEdit(donHang)} style={{padding: '5px'}}>Sửa</button>
+            
                       </td>
                     </>
                   )}
                 </tr>
               ))}
             </tbody>
+          
           </table>
         </div>
       </div>
