@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'; // <-- Thêm useMemo
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from './supabaseClient';
 import * as XLSX from 'xlsx';
 import { Resizable } from 'react-resizable';
@@ -53,7 +53,7 @@ function App() {
   const [filterNhanSu, setFilterNhanSu] = useState('');
   const [filterNgay, setFilterNgay] = useState('');
   const [filterLoaiShip, setFilterLoaiShip] = useState('');
-  const [filterEditedStatus, setFilterEditedStatus] = useState('all'); // <-- THÊM MỚI
+  const [filterEditedStatus, setFilterEditedStatus] = useState('all');
   const [filterSanPhams, setFilterSanPhams] = useState([]);
   const [productSearchTerm, setProductSearchTerm] = useState('');
   // State cho tính năng tổng hợp
@@ -64,7 +64,13 @@ function App() {
   // State cho tính năng sửa
   const [editingDonHang, setEditingDonHang] = useState(null);
 
-  // STATE MỚI: Lưu trữ độ rộng của các cột
+  const [isPastDeadlineForNewOrders] = useState(() => {
+    const now = new Date();
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    return hours > 16 || (hours === 16 && minutes >= 30);
+  });
+
   const [columnWidths, setColumnWidths] = useState({
     stt: 50,
     ngayGui: 160,
@@ -80,40 +86,12 @@ function App() {
     trangThai: 120,
     hanhDong: 100,
   });
-  // HÀM MỚI: Xử lý khi kéo thả để thay đổi độ rộng cột
+  
   const handleResize = (key) => (e, { size }) => {
     setColumnWidths(prev => ({
       ...prev,
       [key]: size.width
     }));
-  };
-
-  const fetchDonHangs = async (filters = {}) => {
-    let query = supabase.from('donguis').select(`id, ngay_gui, loai_ship, trang_thai, kocs ( id, ho_ten, id_kenh, sdt, dia_chi, cccd ), nhansu ( ten_nhansu ),chitiettonguis ( id, sanphams ( id, ten_sanpham, barcode, brands ( ten_brand ) ) )`);
-    if (filters.nhanSuId) { query = query.eq('nhansu_id', filters.nhanSuId); }
-    if (filters.idKenh) { query = query.ilike('kocs.id_kenh', `%${filters.idKenh}%`);
-    }
-    if (filters.sdt) { query = query.ilike('kocs.sdt', `%${filters.sdt}%`);
-    }
-    if (filters.brandId) { query = query.eq('chitiettonguis.sanphams.brand_id', filters.brandId);
-    }
-    if (filters.sanPhamId) { query = query.eq('chitiettonguis.sanpham_id', filters.sanPhamId);
-    }
-    if (filters.loaiShip) {
-      query = query.eq('loai_ship', filters.loaiShip);
-    }
-    if (filters.ngay) {
-      const startDate = new Date(filters.ngay);
-      const endDate = new Date(filters.ngay);
-      endDate.setDate(endDate.getDate() + 1);
-      query = query.gte('ngay_gui', startDate.toISOString()).lt('ngay_gui', endDate.toISOString());
-    }
-    const { data, error } = await query.order('ngay_gui', { ascending: false });
-    if (error) { 
-        alert('Lỗi khi lọc dữ liệu: ' + error.message); 
-    } else { 
-        setDonHangs(data);
-    }
   };
 
   useEffect(() => {
@@ -128,39 +106,62 @@ function App() {
       if(error) {
         alert("Lỗi tải dữ liệu: " + error.message)
       } else if (data) {
-        setDonHangs(data);
-        setInitialDonHangs(data);
+        const dataWithStt = data.map((item, index) => ({
+          ...item,
+          originalStt: index + 1
+        }));
+        setDonHangs(dataWithStt);
+        setInitialDonHangs(dataWithStt);
       }
     }
     getInitialData();
   }, []);
 
-  // --- LOGIC MỚI: TẠO DANH SÁCH HIỂN THỊ DỰA TRÊN BỘ LỌC SỬA ---
   const displayedDonHangs = useMemo(() => {
-    if (filterEditedStatus === 'all') {
-      return donHangs;
-    }
-
     const hasBeenEdited = (currentOrder, initialOrder) => {
-      if (!initialOrder) return false;
-      const fieldsToCompare = ['ho_ten', 'id_kenh', 'sdt', 'dia_chi', 'cccd'];
-      for (const field of fieldsToCompare) {
-        if (currentOrder.kocs?.[field] !== initialOrder.kocs?.[field]) return true;
-      }
-      if (currentOrder.loai_ship !== initialOrder.loai_ship) return true;
-      if (currentOrder.trang_thai !== initialOrder.trang_thai) return true;
-      return false;
+        if (!initialOrder) return false;
+        const fieldsToCompare = ['ho_ten', 'id_kenh', 'sdt', 'dia_chi', 'cccd'];
+        for (const field of fieldsToCompare) {
+            if (currentOrder.kocs?.[field] !== initialOrder.kocs?.[field]) return true;
+        }
+        if (currentOrder.loai_ship !== initialOrder.loai_ship) return true;
+        if (currentOrder.trang_thai !== initialOrder.trang_thai) return true;
+        return false;
     };
-    
-    return donHangs.filter(donHang => {
-      const initialOrder = initialDonHangs.find(d => d.id === donHang.id);
-      const isEdited = hasBeenEdited(donHang, initialOrder);
 
-      if (filterEditedStatus === 'edited') return isEdited;
-      if (filterEditedStatus === 'unedited') return !isEdited;
-      return true;
+    return donHangs.filter(donHang => {
+        if (filterIdKenh && !donHang.kocs?.id_kenh?.toLowerCase().includes(filterIdKenh.toLowerCase())) {
+            return false;
+        }
+        if (filterSdt && !donHang.kocs?.sdt?.includes(filterSdt)) {
+            return false;
+        }
+        if (filterNhanSu && donHang.nhansu?.id !== parseInt(filterNhanSu, 10)) {
+            return false;
+        }
+        if (filterLoaiShip && donHang.loai_ship !== filterLoaiShip) {
+            return false;
+        }
+        if (filterBrand && !donHang.chitiettonguis.some(ct => ct.sanphams?.brands?.id === parseInt(filterBrand, 10))) {
+            return false;
+        }
+        if (filterSanPham && !donHang.chitiettonguis.some(ct => ct.sanphams?.id === parseInt(filterSanPham, 10))) {
+            return false;
+        }
+        if (filterNgay && !donHang.ngay_gui.startsWith(filterNgay)) {
+            return false;
+        }
+
+        if (filterEditedStatus !== 'all') {
+            const initialOrder = initialDonHangs.find(d => d.id === donHang.id);
+            const isEdited = hasBeenEdited(donHang, initialOrder);
+            if (filterEditedStatus === 'edited' && !isEdited) return false;
+            if (filterEditedStatus === 'unedited' && isEdited) return false;
+        }
+
+        return true;
     });
-  }, [donHangs, initialDonHangs, filterEditedStatus]);
+  }, [donHangs, initialDonHangs, filterIdKenh, filterSdt, filterBrand, filterSanPham, filterNhanSu, filterNgay, filterLoaiShip, filterEditedStatus]);
 
 
   useEffect(() => {
@@ -201,9 +202,7 @@ function App() {
       const chiTietData = selectedSanPhams.map(sanPhamId => ({ don_gui_id: donGuiData.id, sanpham_id: sanPhamId, so_luong: 1 }));
       await supabase.from('chitiettonguis').insert(chiTietData);
       alert('Tạo đơn gửi thành công!');
-      setHoTen(''); setIdKenh(''); setSdt(''); setDiaChi(''); setCccd('');
-      setSelectedBrand(''); setSelectedSanPhams([]); setSelectedNhanSu(''); setLoaiShip('Ship thường');
-      fetchDonHangs();
+      window.location.reload();
     } catch (error) {
       alert('Đã có lỗi xảy ra: ' + error.message);
     } finally {
@@ -217,17 +216,7 @@ function App() {
       setHoTen(data.ho_ten); setSdt(data.sdt); setDiaChi(data.dia_chi); setCccd(data.cccd);
     }
   };
-  const handleFilter = () => { 
-    fetchDonHangs({ 
-        idKenh: filterIdKenh, 
-        sdt: filterSdt, 
-        brandId: filterBrand, 
-        sanPhamId: filterSanPham, 
-        nhanSuId: filterNhanSu, 
-        ngay: filterNgay, 
-        loaiShip: filterLoaiShip
-    });
-  };
+
   const clearFilters = () => { 
     setFilterIdKenh(''); 
     setFilterSdt(''); 
@@ -236,8 +225,7 @@ function App() {
     setFilterNhanSu(''); 
     setFilterNgay(''); 
     setFilterLoaiShip('');
-    setFilterEditedStatus('all'); // <-- CẬP NHẬT
-    setDonHangs(initialDonHangs);
+    setFilterEditedStatus('all');
   };
   const handleGetSummary = async () => {
     if (!summaryDate) { alert('Vui lòng chọn ngày để tổng hợp!');
@@ -258,6 +246,12 @@ function App() {
 
   const handleUpdate = async () => {
     if (!editingDonHang) return;
+
+    // --- THÊM MỚI: Kiểm tra CCCD khi sửa ---
+    if (!editingDonHang.kocs.cccd || editingDonHang.kocs.cccd.length !== 12 || !/^\d{12}$/.test(editingDonHang.kocs.cccd)) {
+        alert('Vui lòng nhập CCCD đủ 12 chữ số.');
+        return; // Dừng việc cập nhật nếu CCCD không hợp lệ
+    }
     
     const { error: kocError } = await supabase.from('kocs').update({ ho_ten: editingDonHang.kocs.ho_ten, id_kenh: editingDonHang.kocs.id_kenh, sdt: editingDonHang.kocs.sdt, dia_chi: editingDonHang.kocs.dia_chi, cccd: editingDonHang.kocs.cccd }).eq('id', editingDonHang.kocs.id);
     if (kocError) { alert('Lỗi cập nhật thông tin KOC: ' + kocError.message); return;
@@ -284,9 +278,9 @@ function App() {
     XLSX.utils.sheet_add_aoa(worksheet, [headers.map(h => h.label)], { origin: "A1" });
     XLSX.writeFile(workbook, filename);
   };
-  const mainExportData = donHangs.flatMap((donHang, index) => {
-    if (donHang.chitiettonguis.length === 0) { return [{ stt: index + 1, ngayGui: new Date(donHang.ngay_gui).toLocaleString('vi-VN'), tenKOC: donHang.kocs?.ho_ten, idKenh: donHang.kocs?.id_kenh, sdt: donHang.kocs?.sdt, diaChi: donHang.kocs?.dia_chi, cccd: donHang.kocs?.cccd, sanPham: 'N/A', brand: 'N/A', barcode: 'N/A', nhanSu: donHang.nhansu?.ten_nhansu, loaiShip: donHang.loai_ship, }]; }
-    return donHang.chitiettonguis.map(ct => ({ stt: index + 1, ngayGui: new Date(donHang.ngay_gui).toLocaleString('vi-VN'), tenKOC: donHang.kocs?.ho_ten, idKenh: donHang.kocs?.id_kenh, sdt: donHang.kocs?.sdt, diaChi: donHang.kocs?.dia_chi, cccd: donHang.kocs?.cccd, sanPham: ct.sanphams?.ten_sanpham, brand: ct.sanphams?.brands?.ten_brand, barcode: ct.sanphams?.barcode, nhanSu: donHang.nhansu?.ten_nhansu, loaiShip: donHang.loai_ship, }));
+  const mainExportData = donHangs.flatMap((donHang) => {
+    if (donHang.chitiettonguis.length === 0) { return [{ stt: donHang.originalStt, ngayGui: new Date(donHang.ngay_gui).toLocaleString('vi-VN'), tenKOC: donHang.kocs?.ho_ten, idKenh: donHang.kocs?.id_kenh, sdt: donHang.kocs?.sdt, diaChi: donHang.kocs?.dia_chi, cccd: donHang.kocs?.cccd, sanPham: 'N/A', brand: 'N/A', barcode: 'N/A', nhanSu: donHang.nhansu?.ten_nhansu, loaiShip: donHang.loai_ship, }]; }
+    return donHang.chitiettonguis.map(ct => ({ stt: donHang.originalStt, ngayGui: new Date(donHang.ngay_gui).toLocaleString('vi-VN'), tenKOC: donHang.kocs?.ho_ten, idKenh: donHang.kocs?.id_kenh, sdt: donHang.kocs?.sdt, diaChi: donHang.kocs?.dia_chi, cccd: donHang.kocs?.cccd, sanPham: ct.sanphams?.ten_sanpham, brand: ct.sanphams?.brands?.ten_brand, barcode: ct.sanphams?.barcode, nhanSu: donHang.nhansu?.ten_nhansu, loaiShip: donHang.loai_ship, }));
   });
   const mainExportHeaders = [ { label: "STT", key: "stt"}, { label: "Ngày Gửi", key: "ngayGui" }, { label: "Tên KOC", key: "tenKOC" }, { label: "ID Kênh", key: "idKenh" }, { label: "SĐT", key: "sdt" }, { label: "Địa chỉ", key: "diaChi" }, { label: "CCCD", key: "cccd" }, { label: "Sản Phẩm", key: "sanPham" }, { label: "Brand", key: "brand" }, { label: "Barcode", key: "barcode" }, { label: "Nhân Sự Gửi", key: "nhanSu" }, { label: "Loại Ship", key: "loaiShip" } ];
   const summaryExportHeaders = [ { label: "Sản Phẩm", key: "ten_san_pham" }, { label: "Barcode", key: "barcode" }, { label: "Brand", key: "ten_brand" }, { label: "Tổng Số Lượng", key: "total_quantity" } ];
@@ -336,7 +330,12 @@ function App() {
                 <label style={{ display: 'flex', alignItems: 'center' }}><input type="radio" value="Hỏa tốc" checked={loaiShip === 'Hỏa tốc'} onChange={e => setLoaiShip(e.target.value)} style={{ marginRight: '5px' }} />Hỏa tốc</label>
               </div>
             </div>
-            <button type="submit" disabled={isLoading} style={{ width: '100%', padding: '10px', backgroundColor: isLoading ? '#ccc' : '#007bff', color: 'white', border: 'none', borderRadius: '4px', fontSize: '16px', cursor: 'pointer', marginTop: '1rem' }}>{isLoading ? 'Đang xử lý...' : 'Gửi Đơn'}</button>
+            <button type="submit" disabled={isLoading || isPastDeadlineForNewOrders} style={{ width: '100%', padding: '10px', backgroundColor: (isLoading || isPastDeadlineForNewOrders) ? '#ccc' : '#007bff', color: 'white', border: 'none', borderRadius: '4px', fontSize: '16px', cursor: 'pointer', marginTop: '1rem' }}>{isLoading ? 'Đang xử lý...' : 'Gửi Đơn'}</button>
+            {isPastDeadlineForNewOrders && (
+              <p style={{ color: 'red', textAlign: 'center', marginTop: '0.5rem', fontWeight: 'bold' }}>
+                Đã quá 16h30, không thể tạo đơn hàng mới.
+              </p>
+            )}
           </form>
         </div>
         <div style={{ flex: 1, padding: '2rem', border: '1px solid #ddd', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
@@ -360,7 +359,6 @@ function App() {
             <option value="Ship thường">Ship thường</option>
             <option value="Hỏa tốc">Hỏa tốc</option>
           </select>
-          {/* THÊM MỚI: BỘ LỌC TRẠNG THÁI SỬA */}
           <select value={filterEditedStatus} onChange={e => setFilterEditedStatus(e.target.value)} style={{ padding: '8px' }}>
             <option value="all">Tất cả trạng thái sửa</option>
             <option value="edited">Đơn đã sửa</option>
@@ -368,9 +366,7 @@ function App() {
           </select>
           <input type="date" value={filterNgay} onChange={e => setFilterNgay(e.target.value)} style={{ padding: '7px' }} />
           <div style={{display: 'flex', gap: '0.5rem'}}>
-            <button onClick={handleFilter} style={{ flex: 1, padding: '8px 16px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Lọc</button>
             <button onClick={clearFilters} style={{ flex: 1, padding: '8px 16px', backgroundColor: '#6c757d', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Xóa Lọc</button>
-  
           </div>
           <button onClick={() => handleExport({ data: mainExportData, headers: mainExportHeaders, filename: 'danh-sach-don-hang.xlsx' })} style={{ padding: '8px 16px', backgroundColor: '#17a2b8', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', textAlign: 'center' }}>
             Xuất File
@@ -395,8 +391,7 @@ function App() {
               </tr>
             </thead>
             <tbody>
-              {/* CẬP NHẬT: Dùng displayedDonHangs thay vì donHangs */}
-              {displayedDonHangs.map((donHang, index) => {
+              {displayedDonHangs.map((donHang) => {
                 const initialOrder = initialDonHangs.find(d => d.id === donHang.id);
                 
                 const getCellStyle = (currentValue, initialValue) => {
@@ -410,7 +405,7 @@ function App() {
                   {editingDonHang?.id === donHang.id ?
                   ( // Chế độ Sửa
                     <>
-                      <td style={{ width: `${columnWidths.stt}px`, padding: '12px', border: '1px solid #ddd' }}>{index + 1}</td>
+                      <td style={{ width: `${columnWidths.stt}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.originalStt}</td>
                       <td style={{ width: `${columnWidths.ngayGui}px`, padding: '12px', border: '1px solid #ddd' }}>{new Date(donHang.ngay_gui).toLocaleString('vi-VN')}</td>
                       <td style={{ width: `${columnWidths.hoTenKOC}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{width: '90%'}} value={editingDonHang.kocs.ho_ten} onChange={e => setEditingDonHang({...editingDonHang, kocs: {...editingDonHang.kocs, ho_ten: e.target.value}})} /></td>
                       <td style={{ width: `${columnWidths.idKenh}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{width: '90%'}} value={editingDonHang.kocs.id_kenh} onChange={e => setEditingDonHang({...editingDonHang, kocs: {...editingDonHang.kocs, id_kenh: e.target.value}})} /></td>
@@ -437,7 +432,7 @@ function App() {
                     </>
                   ) : ( // Chế độ Xem
                     <>
-                      <td style={{ width: `${columnWidths.stt}px`, padding: '12px', border: '1px solid #ddd' }}>{index + 1}</td>
+                      <td style={{ width: `${columnWidths.stt}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.originalStt}</td>
                       <td style={{ width: `${columnWidths.ngayGui}px`, padding: '12px', border: '1px solid #ddd' }}>{new Date(donHang.ngay_gui).toLocaleString('vi-VN')}</td>
                       <td style={{ width: `${columnWidths.hoTenKOC}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.kocs?.ho_ten, initialOrder?.kocs?.ho_ten) }}>{donHang.kocs?.ho_ten}</td>
                       <td style={{ width: `${columnWidths.idKenh}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.kocs?.id_kenh, initialOrder?.kocs?.id_kenh) }}>{donHang.kocs?.id_kenh}</td>
