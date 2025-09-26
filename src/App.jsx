@@ -94,27 +94,32 @@ function App() {
     }));
   };
 
+  // --- TÁCH LOGIC TẢI DỮ LIỆU RA HÀM RIÊNG ---
+  const loadInitialData = async () => {
+    let { data, error } = await supabase.from('donguis').select(`id, ngay_gui, loai_ship, trang_thai, kocs ( id, ho_ten, id_kenh, sdt, dia_chi, cccd ), nhansu ( ten_nhansu ),chitiettonguis ( id, sanphams ( id, ten_sanpham, barcode, brands ( ten_brand ) ) )`).order('ngay_gui', { ascending: false });
+    
+    if(error) {
+      alert("Lỗi tải dữ liệu: " + error.message)
+    } else if (data) {
+      const totalOrders = data.length;
+      const dataWithStt = data.map((item, index) => ({
+        ...item,
+        originalStt: totalOrders - index
+      }));
+      setDonHangs(dataWithStt);
+      setInitialDonHangs(dataWithStt);
+    }
+  };
+
   useEffect(() => {
-    async function getInitialData() {
+    async function getDropdownData() {
       const { data: brandsData } = await supabase.from('brands').select();
       if (brandsData) setBrands(brandsData);
       const { data: nhanSusData } = await supabase.from('nhansu').select();
       if (nhanSusData) setNhanSus(nhanSusData);
-      
-      let { data, error } = await supabase.from('donguis').select(`id, ngay_gui, loai_ship, trang_thai, kocs ( id, ho_ten, id_kenh, sdt, dia_chi, cccd ), nhansu ( ten_nhansu ),chitiettonguis ( id, sanphams ( id, ten_sanpham, barcode, brands ( ten_brand ) ) )`).order('ngay_gui', { ascending: false });
-      
-      if(error) {
-        alert("Lỗi tải dữ liệu: " + error.message)
-      } else if (data) {
-        const dataWithStt = data.map((item, index) => ({
-          ...item,
-          originalStt: index + 1
-        }));
-        setDonHangs(dataWithStt);
-        setInitialDonHangs(dataWithStt);
-      }
     }
-    getInitialData();
+    getDropdownData();
+    loadInitialData(); // Gọi hàm tải dữ liệu chính
   }, []);
 
   const displayedDonHangs = useMemo(() => {
@@ -189,26 +194,62 @@ function App() {
       }
     });
   };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (cccd.length !== 12 || !/^\d{12}$/.test(cccd)) { alert('Vui lòng nhập CCCD đủ 12 chữ số.'); return;
+    if (cccd.length !== 12 || !/^\d{12}$/.test(cccd)) { 
+      alert('Vui lòng nhập CCCD đủ 12 chữ số.'); 
+      return;
     }
-    if (selectedSanPhams.length === 0) { alert('Vui lòng chọn ít nhất một sản phẩm!'); return;
+    if (selectedSanPhams.length === 0) { 
+      alert('Vui lòng chọn ít nhất một sản phẩm!'); 
+      return;
     }
     setIsLoading(true);
     try {
-      const { data: kocData } = await supabase.from('kocs').upsert({ ho_ten: hoTen, id_kenh: idKenh, sdt: sdt, dia_chi: diaChi, cccd: cccd }, { onConflict: 'cccd' }).select().single();
-      const { data: donGuiData } = await supabase.from('donguis').insert({ koc_id: kocData.id, nhansu_id: selectedNhanSu, loai_ship: loaiShip }).select().single();
+      let kocId;
+      const kocsDataPayload = { ho_ten: hoTen, id_kenh: idKenh, sdt: sdt, dia_chi: diaChi, cccd: cccd };
+
+      const { data: existingKoc, error: findError } = await supabase.from('kocs').select('id').eq('cccd', cccd).single();
+
+      if (findError && findError.code !== 'PGRST116') {
+        throw findError;
+      }
+      
+      if (existingKoc) {
+        const { error: updateError } = await supabase.from('kocs').update(kocsDataPayload).eq('id', existingKoc.id);
+        if (updateError) throw updateError;
+        kocId = existingKoc.id;
+      } else {
+        const { data: newKoc, error: insertError } = await supabase.from('kocs').insert(kocsDataPayload).select('id').single();
+        if (insertError) throw insertError;
+        kocId = newKoc.id;
+      }
+
+      if (!kocId) {
+        throw new Error("Không thể lấy hoặc tạo thông tin KOC.");
+      }
+
+      const { data: donGuiData, error: donGuiError } = await supabase.from('donguis').insert({ koc_id: kocId, nhansu_id: selectedNhanSu, loai_ship: loaiShip }).select().single();
+      if (donGuiError) throw donGuiError;
+
       const chiTietData = selectedSanPhams.map(sanPhamId => ({ don_gui_id: donGuiData.id, sanpham_id: sanPhamId, so_luong: 1 }));
-      await supabase.from('chitiettonguis').insert(chiTietData);
+      const { error: chiTietError } = await supabase.from('chitiettonguis').insert(chiTietData);
+      if (chiTietError) throw chiTietError;
+
       alert('Tạo đơn gửi thành công!');
-      window.location.reload();
+      // --- CẬP NHẬT: Reset form và tải lại dữ liệu thay vì reload trang ---
+      setHoTen(''); setIdKenh(''); setSdt(''); setDiaChi(''); setCccd('');
+      setSelectedBrand(''); setSelectedSanPhams([]); setSelectedNhanSu(''); setLoaiShip('Ship thường');
+      await loadInitialData(); // Tải lại dữ liệu để cập nhật bảng
+
     } catch (error) {
       alert('Đã có lỗi xảy ra: ' + error.message);
     } finally {
       setIsLoading(false);
     }
   };
+  
   const handleIdKenhBlur = async () => {
     if (!idKenh) return;
     const { data } = await supabase.from('kocs').select().eq('id_kenh', idKenh).single();
@@ -246,11 +287,10 @@ function App() {
 
   const handleUpdate = async () => {
     if (!editingDonHang) return;
-
-    // --- THÊM MỚI: Kiểm tra CCCD khi sửa ---
+    
     if (!editingDonHang.kocs.cccd || editingDonHang.kocs.cccd.length !== 12 || !/^\d{12}$/.test(editingDonHang.kocs.cccd)) {
         alert('Vui lòng nhập CCCD đủ 12 chữ số.');
-        return; // Dừng việc cập nhật nếu CCCD không hợp lệ
+        return;
     }
     
     const { error: kocError } = await supabase.from('kocs').update({ ho_ten: editingDonHang.kocs.ho_ten, id_kenh: editingDonHang.kocs.id_kenh, sdt: editingDonHang.kocs.sdt, dia_chi: editingDonHang.kocs.dia_chi, cccd: editingDonHang.kocs.cccd }).eq('id', editingDonHang.kocs.id);
