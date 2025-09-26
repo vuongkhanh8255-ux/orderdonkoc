@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react'; // <-- Thêm useMemo
 import { supabase } from './supabaseClient';
 import * as XLSX from 'xlsx';
 import { Resizable } from 'react-resizable';
@@ -43,6 +43,8 @@ function App() {
   const [loaiShip, setLoaiShip] = useState('Ship thường');
   // State cho bảng
   const [donHangs, setDonHangs] = useState([]);
+  const [initialDonHangs, setInitialDonHangs] = useState([]);
+
   // State cho các ô lọc
   const [filterIdKenh, setFilterIdKenh] = useState('');
   const [filterSdt, setFilterSdt] = useState('');
@@ -50,6 +52,8 @@ function App() {
   const [filterSanPham, setFilterSanPham] = useState('');
   const [filterNhanSu, setFilterNhanSu] = useState('');
   const [filterNgay, setFilterNgay] = useState('');
+  const [filterLoaiShip, setFilterLoaiShip] = useState('');
+  const [filterEditedStatus, setFilterEditedStatus] = useState('all'); // <-- THÊM MỚI
   const [filterSanPhams, setFilterSanPhams] = useState([]);
   const [productSearchTerm, setProductSearchTerm] = useState('');
   // State cho tính năng tổng hợp
@@ -59,6 +63,7 @@ function App() {
   
   // State cho tính năng sửa
   const [editingDonHang, setEditingDonHang] = useState(null);
+
   // STATE MỚI: Lưu trữ độ rộng của các cột
   const [columnWidths, setColumnWidths] = useState({
     stt: 50,
@@ -72,7 +77,6 @@ function App() {
     sanPham: 200,
     nhanSu: 120,
     loaiShip: 120,
-    barcode: 120,
     trangThai: 120,
     hanhDong: 100,
   });
@@ -85,7 +89,7 @@ function App() {
   };
 
   const fetchDonHangs = async (filters = {}) => {
-    let query = supabase.from('donguis').select(`id, ngay_gui, loai_ship, trang_thai,kocs ( id, ho_ten, id_kenh, sdt, dia_chi, cccd ), nhansu ( ten_nhansu ),chitiettonguis ( id, sanphams ( id, ten_sanpham, barcode, brands ( ten_brand ) ) )`);
+    let query = supabase.from('donguis').select(`id, ngay_gui, loai_ship, trang_thai, kocs ( id, ho_ten, id_kenh, sdt, dia_chi, cccd ), nhansu ( ten_nhansu ),chitiettonguis ( id, sanphams ( id, ten_sanpham, barcode, brands ( ten_brand ) ) )`);
     if (filters.nhanSuId) { query = query.eq('nhansu_id', filters.nhanSuId); }
     if (filters.idKenh) { query = query.ilike('kocs.id_kenh', `%${filters.idKenh}%`);
     }
@@ -95,6 +99,9 @@ function App() {
     }
     if (filters.sanPhamId) { query = query.eq('chitiettonguis.sanpham_id', filters.sanPhamId);
     }
+    if (filters.loaiShip) {
+      query = query.eq('loai_ship', filters.loaiShip);
+    }
     if (filters.ngay) {
       const startDate = new Date(filters.ngay);
       const endDate = new Date(filters.ngay);
@@ -102,18 +109,60 @@ function App() {
       query = query.gte('ngay_gui', startDate.toISOString()).lt('ngay_gui', endDate.toISOString());
     }
     const { data, error } = await query.order('ngay_gui', { ascending: false });
-    if (error) { alert('Lỗi khi lọc dữ liệu: ' + error.message); } else { setDonHangs(data); }
+    if (error) { 
+        alert('Lỗi khi lọc dữ liệu: ' + error.message); 
+    } else { 
+        setDonHangs(data);
+    }
   };
+
   useEffect(() => {
     async function getInitialData() {
       const { data: brandsData } = await supabase.from('brands').select();
       if (brandsData) setBrands(brandsData);
       const { data: nhanSusData } = await supabase.from('nhansu').select();
       if (nhanSusData) setNhanSus(nhanSusData);
-      fetchDonHangs();
+      
+      let { data, error } = await supabase.from('donguis').select(`id, ngay_gui, loai_ship, trang_thai, kocs ( id, ho_ten, id_kenh, sdt, dia_chi, cccd ), nhansu ( ten_nhansu ),chitiettonguis ( id, sanphams ( id, ten_sanpham, barcode, brands ( ten_brand ) ) )`).order('ngay_gui', { ascending: false });
+      
+      if(error) {
+        alert("Lỗi tải dữ liệu: " + error.message)
+      } else if (data) {
+        setDonHangs(data);
+        setInitialDonHangs(data);
+      }
     }
     getInitialData();
   }, []);
+
+  // --- LOGIC MỚI: TẠO DANH SÁCH HIỂN THỊ DỰA TRÊN BỘ LỌC SỬA ---
+  const displayedDonHangs = useMemo(() => {
+    if (filterEditedStatus === 'all') {
+      return donHangs;
+    }
+
+    const hasBeenEdited = (currentOrder, initialOrder) => {
+      if (!initialOrder) return false;
+      const fieldsToCompare = ['ho_ten', 'id_kenh', 'sdt', 'dia_chi', 'cccd'];
+      for (const field of fieldsToCompare) {
+        if (currentOrder.kocs?.[field] !== initialOrder.kocs?.[field]) return true;
+      }
+      if (currentOrder.loai_ship !== initialOrder.loai_ship) return true;
+      if (currentOrder.trang_thai !== initialOrder.trang_thai) return true;
+      return false;
+    };
+    
+    return donHangs.filter(donHang => {
+      const initialOrder = initialDonHangs.find(d => d.id === donHang.id);
+      const isEdited = hasBeenEdited(donHang, initialOrder);
+
+      if (filterEditedStatus === 'edited') return isEdited;
+      if (filterEditedStatus === 'unedited') return !isEdited;
+      return true;
+    });
+  }, [donHangs, initialDonHangs, filterEditedStatus]);
+
+
   useEffect(() => {
     if (!selectedBrand) { setSanPhams([]); setSelectedSanPhams([]); return; }
     async function getSanPhams() {
@@ -168,9 +217,28 @@ function App() {
       setHoTen(data.ho_ten); setSdt(data.sdt); setDiaChi(data.dia_chi); setCccd(data.cccd);
     }
   };
-  const handleFilter = () => { fetchDonHangs({ idKenh: filterIdKenh, sdt: filterSdt, brandId: filterBrand, sanPhamId: filterSanPham, nhanSuId: filterNhanSu, ngay: filterNgay, });
+  const handleFilter = () => { 
+    fetchDonHangs({ 
+        idKenh: filterIdKenh, 
+        sdt: filterSdt, 
+        brandId: filterBrand, 
+        sanPhamId: filterSanPham, 
+        nhanSuId: filterNhanSu, 
+        ngay: filterNgay, 
+        loaiShip: filterLoaiShip
+    });
   };
-  const clearFilters = () => { setFilterIdKenh(''); setFilterSdt(''); setFilterBrand(''); setFilterSanPham(''); setFilterNhanSu(''); setFilterNgay(''); fetchDonHangs(); };
+  const clearFilters = () => { 
+    setFilterIdKenh(''); 
+    setFilterSdt(''); 
+    setFilterBrand(''); 
+    setFilterSanPham(''); 
+    setFilterNhanSu(''); 
+    setFilterNgay(''); 
+    setFilterLoaiShip('');
+    setFilterEditedStatus('all'); // <-- CẬP NHẬT
+    setDonHangs(initialDonHangs);
+  };
   const handleGetSummary = async () => {
     if (!summaryDate) { alert('Vui lòng chọn ngày để tổng hợp!');
     return; }
@@ -180,8 +248,13 @@ function App() {
     if (error) { alert('Lỗi khi lấy tổng hợp: ' + error.message); } else { setProductSummary(data); }
     setIsSummarizing(false);
   };
-  const handleEdit = (donHang) => { setEditingDonHang({ ...donHang }); };
-  const handleCancelEdit = () => { setEditingDonHang(null); };
+  
+  const handleEdit = (donHang) => { 
+    setEditingDonHang({ ...donHang });
+  };
+  const handleCancelEdit = () => { 
+    setEditingDonHang(null); 
+  };
 
   const handleUpdate = async () => {
     if (!editingDonHang) return;
@@ -200,8 +273,6 @@ function App() {
         return donHang;
       });
     });
-
-    // Dòng alert đã được xóa
     
     setEditingDonHang(null);
   };
@@ -219,10 +290,11 @@ function App() {
   });
   const mainExportHeaders = [ { label: "STT", key: "stt"}, { label: "Ngày Gửi", key: "ngayGui" }, { label: "Tên KOC", key: "tenKOC" }, { label: "ID Kênh", key: "idKenh" }, { label: "SĐT", key: "sdt" }, { label: "Địa chỉ", key: "diaChi" }, { label: "CCCD", key: "cccd" }, { label: "Sản Phẩm", key: "sanPham" }, { label: "Brand", key: "brand" }, { label: "Barcode", key: "barcode" }, { label: "Nhân Sự Gửi", key: "nhanSu" }, { label: "Loại Ship", key: "loaiShip" } ];
   const summaryExportHeaders = [ { label: "Sản Phẩm", key: "ten_san_pham" }, { label: "Barcode", key: "barcode" }, { label: "Brand", key: "ten_brand" }, { label: "Tổng Số Lượng", key: "total_quantity" } ];
+  
   const headers = [
     { key: 'stt', label: 'STT' }, { key: 'ngayGui', label: 'Ngày Gửi' }, { key: 'hoTenKOC', label: 'Họ Tên KOC' }, { key: 'idKenh', label: 'ID Kênh' },
     { key: 'sdt', label: 'SĐT' }, { key: 'diaChi', label: 'Địa chỉ' }, { key: 'cccd', label: 'CCCD' }, { key: 'brand', label: 'Brand' },
-    { key: 'sanPham', label: 'Sản Phẩm' }, { key: 'nhanSu', label: 'Nhân Sự Gửi' }, { key: 'loaiShip', label: 'Loại Ship' }, { key: 'barcode', label: 'Barcode' },
+    { key: 'sanPham', label: 'Sản Phẩm' }, { key: 'nhanSu', label: 'Nhân Sự Gửi' }, { key: 'loaiShip', label: 'Loại Ship' }, 
     { key: 'trangThai', label: 'Trạng Thái' }, { key: 'hanhDong', label: 'Hành Động' },
   ];
   return (
@@ -283,6 +355,17 @@ function App() {
           <select value={filterBrand} onChange={e => setFilterBrand(e.target.value)} style={{ padding: '8px' }}><option value="">Tất cả Brand</option>{brands.map(b => <option key={b.id} value={b.id}>{b.ten_brand}</option>)}</select>
           <select value={filterSanPham} onChange={e => setFilterSanPham(e.target.value)} style={{ padding: '8px' }} disabled={!filterBrand}><option value="">Tất cả Sản phẩm</option>{filterSanPhams.map(sp => <option key={sp.id} value={sp.id}>{sp.ten_sanpham}</option>)}</select>
           <select value={filterNhanSu} onChange={e => setFilterNhanSu(e.target.value)} style={{ padding: '8px' }}><option value="">Tất cả nhân sự</option>{nhanSus.map(ns => <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>)}</select>
+          <select value={filterLoaiShip} onChange={e => setFilterLoaiShip(e.target.value)} style={{ padding: '8px' }}>
+            <option value="">Tất cả loại ship</option>
+            <option value="Ship thường">Ship thường</option>
+            <option value="Hỏa tốc">Hỏa tốc</option>
+          </select>
+          {/* THÊM MỚI: BỘ LỌC TRẠNG THÁI SỬA */}
+          <select value={filterEditedStatus} onChange={e => setFilterEditedStatus(e.target.value)} style={{ padding: '8px' }}>
+            <option value="all">Tất cả trạng thái sửa</option>
+            <option value="edited">Đơn đã sửa</option>
+            <option value="unedited">Đơn chưa sửa</option>
+          </select>
           <input type="date" value={filterNgay} onChange={e => setFilterNgay(e.target.value)} style={{ padding: '7px' }} />
           <div style={{display: 'flex', gap: '0.5rem'}}>
             <button onClick={handleFilter} style={{ flex: 1, padding: '8px 16px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Lọc</button>
@@ -312,14 +395,23 @@ function App() {
               </tr>
             </thead>
             <tbody>
-              {donHangs.map((donHang, index) => (
+              {/* CẬP NHẬT: Dùng displayedDonHangs thay vì donHangs */}
+              {displayedDonHangs.map((donHang, index) => {
+                const initialOrder = initialDonHangs.find(d => d.id === donHang.id);
+                
+                const getCellStyle = (currentValue, initialValue) => {
+                    return initialOrder && currentValue !== initialValue
+                        ? { backgroundColor: 'red', color: 'white' }
+                        : {};
+                };
+
+                return (
                 <tr key={donHang.id}>
                   {editingDonHang?.id === donHang.id ?
-                  (
+                  ( // Chế độ Sửa
                     <>
                       <td style={{ width: `${columnWidths.stt}px`, padding: '12px', border: '1px solid #ddd' }}>{index + 1}</td>
                       <td style={{ width: `${columnWidths.ngayGui}px`, padding: '12px', border: '1px solid #ddd' }}>{new Date(donHang.ngay_gui).toLocaleString('vi-VN')}</td>
-             
                       <td style={{ width: `${columnWidths.hoTenKOC}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{width: '90%'}} value={editingDonHang.kocs.ho_ten} onChange={e => setEditingDonHang({...editingDonHang, kocs: {...editingDonHang.kocs, ho_ten: e.target.value}})} /></td>
                       <td style={{ width: `${columnWidths.idKenh}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{width: '90%'}} value={editingDonHang.kocs.id_kenh} onChange={e => setEditingDonHang({...editingDonHang, kocs: {...editingDonHang.kocs, id_kenh: e.target.value}})} /></td>
                       <td style={{ width: `${columnWidths.sdt}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{width: '90%'}} value={editingDonHang.kocs.sdt} onChange={e => setEditingDonHang({...editingDonHang, kocs: {...editingDonHang.kocs, sdt: e.target.value}})} /></td>
@@ -331,53 +423,41 @@ function App() {
                       <td style={{ width: `${columnWidths.loaiShip}px`, padding: '12px', border: '1px solid #ddd' }}>
                         <select style={{width: '100%'}} value={editingDonHang.loai_ship} onChange={e => setEditingDonHang({...editingDonHang, loai_ship: e.target.value})}>
                           <option>Ship thường</option><option>Hỏa tốc</option>
- 
                         </select>
                       </td>
-                      <td style={{ width: `${columnWidths.barcode}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.chitiettonguis.map(ct => <div key={ct.sanphams?.id}>{ct.sanphams?.barcode}</div>)}</td>
-                    
                       <td style={{ width: `${columnWidths.trangThai}px`, padding: '12px', border: '1px solid #ddd' }}>
                         <select style={{width: '100%'}} value={editingDonHang.trang_thai} onChange={e => setEditingDonHang({...editingDonHang, trang_thai: e.target.value})}>
                           <option>Chưa đóng đơn</option><option>Đã đóng đơn</option>
                         </select>
-  
                       </td>
                       <td style={{ width: `${columnWidths.hanhDong}px`, padding: '12px', border: '1px solid #ddd' }}>
                         <button onClick={handleUpdate} style={{padding: '5px'}}>Lưu</button>
-                     
                         <button onClick={handleCancelEdit} style={{padding: '5px'}}>Hủy</button>
                       </td>
                     </>
-                  ) : (
+                  ) : ( // Chế độ Xem
                     <>
-            
                       <td style={{ width: `${columnWidths.stt}px`, padding: '12px', border: '1px solid #ddd' }}>{index + 1}</td>
                       <td style={{ width: `${columnWidths.ngayGui}px`, padding: '12px', border: '1px solid #ddd' }}>{new Date(donHang.ngay_gui).toLocaleString('vi-VN')}</td>
-                      <td style={{ width: `${columnWidths.hoTenKOC}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.kocs?.ho_ten}</td>
-             
-                      <td style={{ width: `${columnWidths.idKenh}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.kocs?.id_kenh}</td>
-                      <td style={{ width: `${columnWidths.sdt}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.kocs?.sdt}</td>
-                      <td style={{ width: `${columnWidths.diaChi}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.kocs?.dia_chi}</td>
-                 
-                      <td style={{ width: `${columnWidths.cccd}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.kocs?.cccd}</td>
+                      <td style={{ width: `${columnWidths.hoTenKOC}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.kocs?.ho_ten, initialOrder?.kocs?.ho_ten) }}>{donHang.kocs?.ho_ten}</td>
+                      <td style={{ width: `${columnWidths.idKenh}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.kocs?.id_kenh, initialOrder?.kocs?.id_kenh) }}>{donHang.kocs?.id_kenh}</td>
+                      <td style={{ width: `${columnWidths.sdt}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.kocs?.sdt, initialOrder?.kocs?.sdt) }}>{donHang.kocs?.sdt}</td>
+                      <td style={{ width: `${columnWidths.diaChi}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.kocs?.dia_chi, initialOrder?.kocs?.dia_chi) }}>{donHang.kocs?.dia_chi}</td>
+                      <td style={{ width: `${columnWidths.cccd}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.kocs?.cccd, initialOrder?.kocs?.cccd) }}>{donHang.kocs?.cccd}</td>
                       <td style={{ width: `${columnWidths.brand}px`, padding: '12px', border: '1px solid #ddd' }}>{[...new Set(donHang.chitiettonguis.map(ct => ct.sanphams?.brands?.ten_brand))].map(tenBrand => ( <div key={tenBrand}>{tenBrand}</div> ))}</td>
                       <td style={{ width: `${columnWidths.sanPham}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.chitiettonguis.map(ct => ( <div key={ct.sanphams?.id}>{ct.sanphams?.ten_sanpham}</div> ))}</td>
-      
                       <td style={{ width: `${columnWidths.nhanSu}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.nhansu?.ten_nhansu}</td>
-                      <td style={{ width: `${columnWidths.loaiShip}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.loai_ship}</td>
-                      <td style={{ width: `${columnWidths.barcode}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.chitiettonguis.map(ct => ( <div key={ct.sanphams?.id}>{ct.sanphams?.barcode}</div> ))}</td>
-     
-                      <td style={{ width: `${columnWidths.trangThai}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.trang_thai}</td>
-                      <td style={{ width: `${columnWidths.hanhDong}px`, padding: '12px', border: '1px solid #ddd' }}>
+                      <td style={{ width: `${columnWidths.loaiShip}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.loai_ship, initialOrder?.loai_ship) }}>{donHang.loai_ship}</td>
+                      <td style={{ width: `${columnWidths.trangThai}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.trang_thai, initialOrder?.trang_thai) }}>{donHang.trang_thai}</td>
+                      <td style={{ width: `${columnWidths.hanhDong}px`, padding: '1px solid #ddd' }}>
                         <button onClick={() => handleEdit(donHang)} style={{padding: '5px'}}>Sửa</button>
-            
                       </td>
                     </>
                   )}
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
-          
           </table>
         </div>
       </div>
