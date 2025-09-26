@@ -38,12 +38,13 @@ function App() {
   const [nhanSus, setNhanSus] = useState([]);
   const [sanPhams, setSanPhams] = useState([]);
   const [selectedBrand, setSelectedBrand] = useState('');
-  const [selectedSanPhams, setSelectedSanPhams] = useState([]); 
+  const [selectedSanPhams, setSelectedSanPhams] = useState({}); // <-- CẬP NHẬT: Đổi thành object để lưu số lượng
   const [selectedNhanSu, setSelectedNhanSu] = useState('');
   const [loaiShip, setLoaiShip] = useState('Ship thường');
   // State cho bảng
   const [donHangs, setDonHangs] = useState([]);
   const [initialDonHangs, setInitialDonHangs] = useState([]);
+  const [selectedOrders, setSelectedOrders] = useState(new Set());
 
   // State cho các ô lọc
   const [filterIdKenh, setFilterIdKenh] = useState('');
@@ -72,6 +73,7 @@ function App() {
   });
 
   const [columnWidths, setColumnWidths] = useState({
+    select: 40,
     stt: 50,
     ngayGui: 160,
     hoTenKOC: 150,
@@ -94,7 +96,6 @@ function App() {
     }));
   };
 
-  // --- TÁCH LOGIC TẢI DỮ LIỆU RA HÀM RIÊNG ---
   const loadInitialData = async () => {
     let { data, error } = await supabase.from('donguis').select(`id, ngay_gui, loai_ship, trang_thai, kocs ( id, ho_ten, id_kenh, sdt, dia_chi, cccd ), nhansu ( ten_nhansu ),chitiettonguis ( id, sanphams ( id, ten_sanpham, barcode, brands ( ten_brand ) ) )`).order('ngay_gui', { ascending: false });
     
@@ -119,7 +120,7 @@ function App() {
       if (nhanSusData) setNhanSus(nhanSusData);
     }
     getDropdownData();
-    loadInitialData(); // Gọi hàm tải dữ liệu chính
+    loadInitialData();
   }, []);
 
   const displayedDonHangs = useMemo(() => {
@@ -135,27 +136,13 @@ function App() {
     };
 
     return donHangs.filter(donHang => {
-        if (filterIdKenh && !donHang.kocs?.id_kenh?.toLowerCase().includes(filterIdKenh.toLowerCase())) {
-            return false;
-        }
-        if (filterSdt && !donHang.kocs?.sdt?.includes(filterSdt)) {
-            return false;
-        }
-        if (filterNhanSu && donHang.nhansu?.id !== parseInt(filterNhanSu, 10)) {
-            return false;
-        }
-        if (filterLoaiShip && donHang.loai_ship !== filterLoaiShip) {
-            return false;
-        }
-        if (filterBrand && !donHang.chitiettonguis.some(ct => ct.sanphams?.brands?.id === parseInt(filterBrand, 10))) {
-            return false;
-        }
-        if (filterSanPham && !donHang.chitiettonguis.some(ct => ct.sanphams?.id === parseInt(filterSanPham, 10))) {
-            return false;
-        }
-        if (filterNgay && !donHang.ngay_gui.startsWith(filterNgay)) {
-            return false;
-        }
+        if (filterIdKenh && !donHang.kocs?.id_kenh?.toLowerCase().includes(filterIdKenh.toLowerCase())) return false;
+        if (filterSdt && !donHang.kocs?.sdt?.includes(filterSdt)) return false;
+        if (filterNhanSu && donHang.nhansu?.id !== parseInt(filterNhanSu, 10)) return false;
+        if (filterLoaiShip && donHang.loai_ship !== filterLoaiShip) return false;
+        if (filterBrand && !donHang.chitiettonguis.some(ct => ct.sanphams?.brands?.id === parseInt(filterBrand, 10))) return false;
+        if (filterSanPham && !donHang.chitiettonguis.some(ct => ct.sanphams?.id === parseInt(filterSanPham, 10))) return false;
+        if (filterNgay && !donHang.ngay_gui.startsWith(filterNgay)) return false;
 
         if (filterEditedStatus !== 'all') {
             const initialOrder = initialDonHangs.find(d => d.id === donHang.id);
@@ -170,7 +157,7 @@ function App() {
 
 
   useEffect(() => {
-    if (!selectedBrand) { setSanPhams([]); setSelectedSanPhams([]); return; }
+    if (!selectedBrand) { setSanPhams([]); setSelectedSanPhams({}); return; }
     async function getSanPhams() {
       const { data } = await supabase.from('sanphams').select().eq('brand_id', selectedBrand);
       if (data) setSanPhams(data);
@@ -185,13 +172,18 @@ function App() {
     }
     getFilterSanPhams();
   }, [filterBrand]);
-  const handleSanPhamChange = (sanPhamId) => {
+
+  // --- HÀM MỚI: Xử lý thay đổi số lượng sản phẩm ---
+  const handleQuantityChange = (productId, newQuantity) => {
+    const quantity = parseInt(newQuantity, 10);
     setSelectedSanPhams(prevSelected => {
-      if (prevSelected.includes(sanPhamId)) {
-        return prevSelected.filter(id => id !== sanPhamId);
+      const newSelected = { ...prevSelected };
+      if (isNaN(quantity) || quantity <= 0) {
+        delete newSelected[productId]; // Xóa sản phẩm khỏi danh sách nếu số lượng là 0 hoặc không hợp lệ
       } else {
-        return [...prevSelected, sanPhamId];
+        newSelected[productId] = quantity; // Cập nhật số lượng
       }
+      return newSelected;
     });
   };
 
@@ -201,8 +193,9 @@ function App() {
       alert('Vui lòng nhập CCCD đủ 12 chữ số.'); 
       return;
     }
-    if (selectedSanPhams.length === 0) { 
-      alert('Vui lòng chọn ít nhất một sản phẩm!'); 
+    // CẬP NHẬT: Kiểm tra nếu chưa có sản phẩm nào được chọn
+    if (Object.keys(selectedSanPhams).length === 0) { 
+      alert('Vui lòng chọn ít nhất một sản phẩm với số lượng lớn hơn 0!'); 
       return;
     }
     setIsLoading(true);
@@ -233,15 +226,19 @@ function App() {
       const { data: donGuiData, error: donGuiError } = await supabase.from('donguis').insert({ koc_id: kocId, nhansu_id: selectedNhanSu, loai_ship: loaiShip }).select().single();
       if (donGuiError) throw donGuiError;
 
-      const chiTietData = selectedSanPhams.map(sanPhamId => ({ don_gui_id: donGuiData.id, sanpham_id: sanPhamId, so_luong: 1 }));
+      // CẬP NHẬT: Tạo chi tiết đơn hàng với đúng số lượng
+      const chiTietData = Object.entries(selectedSanPhams).map(([sanPhamId, soLuong]) => ({
+        don_gui_id: donGuiData.id,
+        sanpham_id: parseInt(sanPhamId, 10),
+        so_luong: soLuong
+      }));
       const { error: chiTietError } = await supabase.from('chitiettonguis').insert(chiTietData);
       if (chiTietError) throw chiTietError;
 
       alert('Tạo đơn gửi thành công!');
-      // --- CẬP NHẬT: Reset form và tải lại dữ liệu thay vì reload trang ---
       setHoTen(''); setIdKenh(''); setSdt(''); setDiaChi(''); setCccd('');
-      setSelectedBrand(''); setSelectedSanPhams([]); setSelectedNhanSu(''); setLoaiShip('Ship thường');
-      await loadInitialData(); // Tải lại dữ liệu để cập nhật bảng
+      setSelectedBrand(''); setSelectedSanPhams({}); setSelectedNhanSu(''); setLoaiShip('Ship thường');
+      await loadInitialData();
 
     } catch (error) {
       alert('Đã có lỗi xảy ra: ' + error.message);
@@ -299,16 +296,57 @@ function App() {
     const { error: donGuiError } = await supabase.from('donguis').update({ loai_ship: editingDonHang.loai_ship, trang_thai: editingDonHang.trang_thai }).eq('id', editingDonHang.id);
     if (donGuiError) { alert('Lỗi cập nhật đơn gửi: ' + donGuiError.message); return; }
 
-    setDonHangs(currentDonHangs => {
-      return currentDonHangs.map(donHang => {
-        if (donHang.id === editingDonHang.id) {
-          return editingDonHang;
-        }
-        return donHang;
-      });
-    });
+    const updatedDonHangs = donHangs.map(donHang => donHang.id === editingDonHang.id ? editingDonHang : donHang);
+    setDonHangs(updatedDonHangs);
     
     setEditingDonHang(null);
+  };
+  
+  const handleSelect = (orderId) => {
+    setSelectedOrders(prevSelected => {
+      const newSelected = new Set(prevSelected);
+      if (newSelected.has(orderId)) {
+        newSelected.delete(orderId);
+      } else {
+        newSelected.add(orderId);
+      }
+      return newSelected;
+    });
+  };
+
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      const allDisplayedIds = new Set(displayedDonHangs.map(dh => dh.id));
+      setSelectedOrders(allDisplayedIds);
+    } else {
+      setSelectedOrders(new Set());
+    }
+  };
+
+  const handleBulkUpdateStatus = async () => {
+    if (selectedOrders.size === 0) {
+      alert("Vui lòng chọn ít nhất một đơn hàng.");
+      return;
+    }
+    const idsToUpdate = Array.from(selectedOrders);
+    
+    const { error } = await supabase
+      .from('donguis')
+      .update({ trang_thai: 'Đã đóng đơn' })
+      .in('id', idsToUpdate);
+
+    if (error) {
+      alert("Lỗi khi cập nhật hàng loạt: " + error.message);
+    } else {
+      setDonHangs(prevState => prevState.map(donHang => 
+        idsToUpdate.includes(donHang.id) 
+          ? { ...donHang, trang_thai: 'Đã đóng đơn' } 
+          : donHang
+      ));
+
+      setSelectedOrders(new Set());
+      alert(`Đã cập nhật trạng thái cho ${idsToUpdate.length} đơn hàng.`);
+    }
   };
 
   const handleExport = ({ data, headers, filename }) => {
@@ -326,6 +364,7 @@ function App() {
   const summaryExportHeaders = [ { label: "Sản Phẩm", key: "ten_san_pham" }, { label: "Barcode", key: "barcode" }, { label: "Brand", key: "ten_brand" }, { label: "Tổng Số Lượng", key: "total_quantity" } ];
   
   const headers = [
+    { key: 'select', label: <input type="checkbox" onChange={handleSelectAll} checked={selectedOrders.size > 0 && displayedDonHangs.length > 0 && selectedOrders.size === displayedDonHangs.length} /> },
     { key: 'stt', label: 'STT' }, { key: 'ngayGui', label: 'Ngày Gửi' }, { key: 'hoTenKOC', label: 'Họ Tên KOC' }, { key: 'idKenh', label: 'ID Kênh' },
     { key: 'sdt', label: 'SĐT' }, { key: 'diaChi', label: 'Địa chỉ' }, { key: 'cccd', label: 'CCCD' }, { key: 'brand', label: 'Brand' },
     { key: 'sanPham', label: 'Sản Phẩm' }, { key: 'nhanSu', label: 'Nhân Sự Gửi' }, { key: 'loaiShip', label: 'Loại Ship' }, 
@@ -352,10 +391,18 @@ function App() {
               <div style={{ border: '1px solid #ccc', borderRadius: '4px', padding: '10px', maxHeight: '150px', overflowY: 'auto' }}>
                 {sanPhams.length > 0 ?
                   sanPhams.filter(sp => sp.ten_sanpham.toLowerCase().includes(productSearchTerm.toLowerCase())).map(sp => (
-                    <div key={sp.id}>
-                      <input type="checkbox" id={sp.id} value={sp.id} checked={selectedSanPhams.includes(sp.id)} onChange={() => handleSanPhamChange(sp.id)} />
-                      <label htmlFor={sp.id} style={{ marginLeft: '8px' }}>{sp.ten_sanpham}</label>
-                  
+                    // --- CẬP NHẬT: Thay checkbox bằng ô nhập số lượng ---
+                    <div key={sp.id} style={{ display: 'flex', alignItems: 'center', marginBottom: '5px' }}>
+                      <label htmlFor={sp.id} style={{ flex: 1 }}>{sp.ten_sanpham}</label>
+                      <input 
+                        type="number" 
+                        min="0" 
+                        id={sp.id} 
+                        value={selectedSanPhams[sp.id] || ''} 
+                        onChange={(e) => handleQuantityChange(sp.id, e.target.value)} 
+                        style={{ width: '60px', padding: '4px', textAlign: 'center' }} 
+                        placeholder="0"
+                      />
                     </div>
                   )) : <p style={{ margin: 0, color: '#888' }}>Vui lòng chọn Brand để xem sản phẩm</p>}
               </div>
@@ -407,6 +454,9 @@ function App() {
           <input type="date" value={filterNgay} onChange={e => setFilterNgay(e.target.value)} style={{ padding: '7px' }} />
           <div style={{display: 'flex', gap: '0.5rem'}}>
             <button onClick={clearFilters} style={{ flex: 1, padding: '8px 16px', backgroundColor: '#6c757d', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Xóa Lọc</button>
+            <button onClick={handleBulkUpdateStatus} disabled={selectedOrders.size === 0} style={{ flex: 1, padding: '8px 16px', backgroundColor: selectedOrders.size > 0 ? '#007bff' : '#ccc', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                Đóng ({selectedOrders.size}) đơn
+            </button>
           </div>
           <button onClick={() => handleExport({ data: mainExportData, headers: mainExportHeaders, filename: 'danh-sach-don-hang.xlsx' })} style={{ padding: '8px 16px', backgroundColor: '#17a2b8', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', textAlign: 'center' }}>
             Xuất File
@@ -426,7 +476,6 @@ function App() {
                   >
                     {header.label}
                   </ResizableHeader>
-           
                  ))}
               </tr>
             </thead>
@@ -445,6 +494,7 @@ function App() {
                   {editingDonHang?.id === donHang.id ?
                   ( // Chế độ Sửa
                     <>
+                      <td style={{ width: `${columnWidths.select}px`, padding: '12px', border: '1px solid #ddd' }}></td>
                       <td style={{ width: `${columnWidths.stt}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.originalStt}</td>
                       <td style={{ width: `${columnWidths.ngayGui}px`, padding: '12px', border: '1px solid #ddd' }}>{new Date(donHang.ngay_gui).toLocaleString('vi-VN')}</td>
                       <td style={{ width: `${columnWidths.hoTenKOC}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{width: '90%'}} value={editingDonHang.kocs.ho_ten} onChange={e => setEditingDonHang({...editingDonHang, kocs: {...editingDonHang.kocs, ho_ten: e.target.value}})} /></td>
@@ -472,6 +522,9 @@ function App() {
                     </>
                   ) : ( // Chế độ Xem
                     <>
+                      <td style={{ width: `${columnWidths.select}px`, padding: '12px', border: '1px solid #ddd' }}>
+                          <input type="checkbox" checked={selectedOrders.has(donHang.id)} onChange={() => handleSelect(donHang.id)} />
+                      </td>
                       <td style={{ width: `${columnWidths.stt}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.originalStt}</td>
                       <td style={{ width: `${columnWidths.ngayGui}px`, padding: '12px', border: '1px solid #ddd' }}>{new Date(donHang.ngay_gui).toLocaleString('vi-VN')}</td>
                       <td style={{ width: `${columnWidths.hoTenKOC}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.kocs?.ho_ten, initialOrder?.kocs?.ho_ten) }}>{donHang.kocs?.ho_ten}</td>
