@@ -38,7 +38,7 @@ function App() {
   const [nhanSus, setNhanSus] = useState([]);
   const [sanPhams, setSanPhams] = useState([]);
   const [selectedBrand, setSelectedBrand] = useState('');
-  const [selectedSanPhams, setSelectedSanPhams] = useState({}); // <-- CẬP NHẬT: Đổi thành object để lưu số lượng
+  const [selectedSanPhams, setSelectedSanPhams] = useState([]); 
   const [selectedNhanSu, setSelectedNhanSu] = useState('');
   const [loaiShip, setLoaiShip] = useState('Ship thường');
   // State cho bảng
@@ -157,7 +157,7 @@ function App() {
 
 
   useEffect(() => {
-    if (!selectedBrand) { setSanPhams([]); setSelectedSanPhams({}); return; }
+    if (!selectedBrand) { setSanPhams([]); setSelectedSanPhams([]); return; }
     async function getSanPhams() {
       const { data } = await supabase.from('sanphams').select().eq('brand_id', selectedBrand);
       if (data) setSanPhams(data);
@@ -172,18 +172,13 @@ function App() {
     }
     getFilterSanPhams();
   }, [filterBrand]);
-
-  // --- HÀM MỚI: Xử lý thay đổi số lượng sản phẩm ---
-  const handleQuantityChange = (productId, newQuantity) => {
-    const quantity = parseInt(newQuantity, 10);
+  const handleSanPhamChange = (sanPhamId) => {
     setSelectedSanPhams(prevSelected => {
-      const newSelected = { ...prevSelected };
-      if (isNaN(quantity) || quantity <= 0) {
-        delete newSelected[productId]; // Xóa sản phẩm khỏi danh sách nếu số lượng là 0 hoặc không hợp lệ
+      if (prevSelected.includes(sanPhamId)) {
+        return prevSelected.filter(id => id !== sanPhamId);
       } else {
-        newSelected[productId] = quantity; // Cập nhật số lượng
+        return [...prevSelected, sanPhamId];
       }
-      return newSelected;
     });
   };
 
@@ -193,9 +188,8 @@ function App() {
       alert('Vui lòng nhập CCCD đủ 12 chữ số.'); 
       return;
     }
-    // CẬP NHẬT: Kiểm tra nếu chưa có sản phẩm nào được chọn
-    if (Object.keys(selectedSanPhams).length === 0) { 
-      alert('Vui lòng chọn ít nhất một sản phẩm với số lượng lớn hơn 0!'); 
+    if (selectedSanPhams.length === 0) { 
+      alert('Vui lòng chọn ít nhất một sản phẩm!'); 
       return;
     }
     setIsLoading(true);
@@ -226,18 +220,13 @@ function App() {
       const { data: donGuiData, error: donGuiError } = await supabase.from('donguis').insert({ koc_id: kocId, nhansu_id: selectedNhanSu, loai_ship: loaiShip }).select().single();
       if (donGuiError) throw donGuiError;
 
-      // CẬP NHẬT: Tạo chi tiết đơn hàng với đúng số lượng
-      const chiTietData = Object.entries(selectedSanPhams).map(([sanPhamId, soLuong]) => ({
-        don_gui_id: donGuiData.id,
-        sanpham_id: parseInt(sanPhamId, 10),
-        so_luong: soLuong
-      }));
+      const chiTietData = selectedSanPhams.map(sanPhamId => ({ don_gui_id: donGuiData.id, sanpham_id: sanPhamId, so_luong: 1 }));
       const { error: chiTietError } = await supabase.from('chitiettonguis').insert(chiTietData);
       if (chiTietError) throw chiTietError;
 
       alert('Tạo đơn gửi thành công!');
       setHoTen(''); setIdKenh(''); setSdt(''); setDiaChi(''); setCccd('');
-      setSelectedBrand(''); setSelectedSanPhams({}); setSelectedNhanSu(''); setLoaiShip('Ship thường');
+      setSelectedBrand(''); setSelectedSanPhams([]); setSelectedNhanSu(''); setLoaiShip('Ship thường');
       await loadInitialData();
 
     } catch (error) {
@@ -338,6 +327,7 @@ function App() {
     if (error) {
       alert("Lỗi khi cập nhật hàng loạt: " + error.message);
     } else {
+      // Chỉ cập nhật `donHangs`, không cập nhật `initialDonHangs`
       setDonHangs(prevState => prevState.map(donHang => 
         idsToUpdate.includes(donHang.id) 
           ? { ...donHang, trang_thai: 'Đã đóng đơn' } 
@@ -391,18 +381,10 @@ function App() {
               <div style={{ border: '1px solid #ccc', borderRadius: '4px', padding: '10px', maxHeight: '150px', overflowY: 'auto' }}>
                 {sanPhams.length > 0 ?
                   sanPhams.filter(sp => sp.ten_sanpham.toLowerCase().includes(productSearchTerm.toLowerCase())).map(sp => (
-                    // --- CẬP NHẬT: Thay checkbox bằng ô nhập số lượng ---
-                    <div key={sp.id} style={{ display: 'flex', alignItems: 'center', marginBottom: '5px' }}>
-                      <label htmlFor={sp.id} style={{ flex: 1 }}>{sp.ten_sanpham}</label>
-                      <input 
-                        type="number" 
-                        min="0" 
-                        id={sp.id} 
-                        value={selectedSanPhams[sp.id] || ''} 
-                        onChange={(e) => handleQuantityChange(sp.id, e.target.value)} 
-                        style={{ width: '60px', padding: '4px', textAlign: 'center' }} 
-                        placeholder="0"
-                      />
+                    <div key={sp.id}>
+                      <input type="checkbox" id={sp.id} value={sp.id} checked={selectedSanPhams.includes(sp.id)} onChange={() => handleSanPhamChange(sp.id)} />
+                      <label htmlFor={sp.id} style={{ marginLeft: '8px' }}>{sp.ten_sanpham}</label>
+                  
                     </div>
                   )) : <p style={{ margin: 0, color: '#888' }}>Vui lòng chọn Brand để xem sản phẩm</p>}
               </div>
