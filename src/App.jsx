@@ -123,7 +123,7 @@ function App() {
     async function getFilterSanPhams() { const { data } = await supabase.from('sanphams').select().eq('brand_id', filterBrand); if (data) setFilterSanPhams(data); }
     getFilterSanPhams();
   }, [filterBrand]);
-
+  
   const handleQuantityChange = (productId, newQuantity) => {
     const quantity = parseInt(newQuantity, 10);
     setSelectedSanPhams(prevSelected => { const newSelected = { ...prevSelected }; if (isNaN(quantity) || quantity <= 0) { delete newSelected[productId]; } else { newSelected[productId] = quantity; } return newSelected; });
@@ -197,11 +197,70 @@ function App() {
   const handleSelect = (orderId) => { setSelectedOrders(prevSelected => { const newSelected = new Set(prevSelected); if (newSelected.has(orderId)) { newSelected.delete(orderId); } else { newSelected.add(orderId); } return newSelected; }); };
   const handleSelectAll = (e) => { if (e.target.checked) { const allDisplayedIds = new Set(displayedDonHangs.map(dh => dh.id)); setSelectedOrders(allDisplayedIds); } else { setSelectedOrders(new Set()); } };
   const handleBulkUpdateStatus = async () => { if (selectedOrders.size === 0) { alert("Vui lòng chọn ít nhất một đơn hàng."); return; } const idsToUpdate = Array.from(selectedOrders); const { error } = await supabase.from('donguis').update({ trang_thai: 'Đã đóng đơn' }).in('id', idsToUpdate); if (error) { alert("Lỗi khi cập nhật hàng loạt: " + error.message); } else { setDonHangs(prevState => prevState.map(donHang => idsToUpdate.includes(donHang.id) ? { ...donHang, trang_thai: 'Đã đóng đơn' } : donHang )); setSelectedOrders(new Set()); alert(`Đã cập nhật trạng thái cho ${idsToUpdate.length} đơn hàng.`); } };
-  const handleExport = ({ data, headers, filename }) => { const worksheet = XLSX.utils.json_to_sheet(data); const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1"); XLSX.utils.sheet_add_aoa(worksheet, [headers.map(h => h.label)], { origin: "A1" }); XLSX.writeFile(workbook, filename); };
-  const mainExportData = donHangs.flatMap((donHang) => { const baseData = { stt: donHang.originalStt, ngayGui: new Date(donHang.ngay_gui).toLocaleString('vi-VN'), tenKOC: donHang.koc_ho_ten, idKenh: donHang.koc_id_kenh, sdt: donHang.koc_sdt, diaChi: donHang.koc_dia_chi, cccd: donHang.koc_cccd, nhanSu: donHang.nhansu?.ten_nhansu, loaiShip: donHang.loai_ship, }; if (donHang.chitiettonguis.length === 0) { return [{ ...baseData, sanPham: 'N/A', soLuong: 0, brand: 'N/A', barcode: 'N/A' }]; } return donHang.chitiettonguis.map(ct => ({ ...baseData, sanPham: ct.sanphams?.ten_sanpham, soLuong: ct.so_luong, brand: ct.sanphams?.brands?.ten_brand, barcode: ct.sanphams?.barcode, })); });
-  const mainExportHeaders = [ { label: "STT", key: "stt"}, { label: "Ngày Gửi", key: "ngayGui" }, { label: "Tên KOC", key: "tenKOC" }, { label: "ID Kênh", key: "idKenh" }, { label: "SĐT", key: "sdt" }, { label: "Địa chỉ", key: "diaChi" }, { label: "CCCD", key: "cccd" }, { label: "Sản Phẩm", key: "sanPham" }, { label: "Số Lượng", key: "soLuong"}, { label: "Brand", key: "brand" }, { label: "Barcode", key: "barcode" }, { label: "Nhân Sự Gửi", key: "nhanSu" }, { label: "Loại Ship", key: "loaiShip" } ];
+  
+  // =================================================================
+  // SỬA LỖI XUẤT FILE TẠI ĐÂY
+  // =================================================================
+  const handleExport = ({ data, headers, filename }) => {
+    const orderedData = data.map(row => {
+      const newRow = {};
+      headers.forEach(header => {
+        if (header.key) {
+          newRow[header.label] = row[header.key];
+        }
+      });
+      return newRow;
+    });
+    const worksheet = XLSX.utils.json_to_sheet(orderedData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
+    XLSX.writeFile(workbook, filename);
+  };
+
+  const mainExportData = donHangs.flatMap((donHang) => {
+    const baseData = {
+      stt: donHang.originalStt,
+      ngayGui: new Date(donHang.ngay_gui).toLocaleString('vi-VN'),
+      tenKOC: donHang.koc_ho_ten,
+      idKenh: donHang.koc_id_kenh,
+      sdt: donHang.koc_sdt,
+      diaChi: donHang.koc_dia_chi,
+      cccd: donHang.koc_cccd,
+      nhanSu: donHang.nhansu?.ten_nhansu,
+      loaiShip: donHang.loai_ship,
+      trangThai: donHang.trang_thai,
+    };
+    if (donHang.chitiettonguis.length === 0) { 
+        return [{ ...baseData, sanPham: 'N/A', soLuong: 0, brand: 'N/A', barcode: 'N/A' }]; 
+    }
+    return donHang.chitiettonguis.map(ct => ({ 
+        ...baseData,
+        sanPham: ct.sanphams?.ten_sanpham, 
+        soLuong: ct.so_luong, 
+        brand: ct.sanphams?.brands?.ten_brand, 
+        barcode: ct.sanphams?.barcode, 
+    }));
+  });
+  
+  const mainExportHeaders = [
+    { label: "STT", key: "stt"},
+    { label: "Ngày Gửi", key: "ngayGui" },
+    { label: "Tên KOC", key: "tenKOC" },
+    { label: "ID Kênh", key: "idKenh" },
+    { label: "SĐT", key: "sdt" },
+    { label: "Địa chỉ", key: "diaChi" },
+    { label: "CCCD", key: "cccd" },
+    { label: "Sản Phẩm", key: "sanPham" },
+    { label: "Số Lượng", key: "soLuong"},
+    { label: "Brand", key: "brand" },
+    { label: "Barcode", key: "barcode" },
+    { label: "Nhân Sự Gửi", key: "nhanSu" },
+    { label: "Loại Ship", key: "loaiShip" },
+    { label: "Trạng Thái", key: "trangThai" },
+  ];
+
   const summaryExportHeaders = [ { label: "Sản Phẩm", key: "ten_san_pham" }, { label: "Barcode", key: "barcode" }, { label: "Brand", key: "ten_brand" }, { label: "Tổng Số Lượng", key: "total_quantity" } ];
-  const headers = [ { key: 'select', label: <input type="checkbox" onChange={handleSelectAll} checked={selectedOrders.size > 0 && displayedDonHangs.length > 0 && selectedOrders.size === displayedDonHangs.length} /> }, { key: 'stt', label: 'STT' }, { key: 'ngayGui', label: 'Ngày Gửi' }, { key: 'hoTenKOC', label: 'Họ Tên KOC' }, { key: 'idKenh', label: 'ID Kênh' }, { key: 'sdt', label: 'SĐT' }, { key: 'diaChi', label: 'Địa chỉ' }, { key: 'cccd', label: 'CCCD' }, { key: 'brand', label: 'Brand' }, { key: 'sanPham', label: 'Sản Phẩm' }, { key: 'nhanSu', label: 'Nhân Sự Gửi' }, { key: 'loaiShip', label: 'Loại Ship' }, { key: 'trangThai', label: 'Trạng Thái' }, { key: 'hanhDong', label: 'Hành Động' }, ];
+  const headers = [ { key: 'select', label: <input type="checkbox" onChange={handleSelectAll} checked={selectedOrders.size > 0 && displayedDonHangs.length > 0 && selectedOrders.size === displayedDonHangs.length} /> }, { key: 'stt', label: 'STT' }, { key: 'ngayGui', label: 'Ngày Gửi' }, { key: 'hoTenKOC', label: 'Họ Tên KOC' }, { key: 'idKenh', label: 'ID Kênh' }, { key: 'sdt', label: 'SĐT' }, { key: 'diaChi', label: 'Địa chỉ' }, { key: 'cccd', label: 'CCCD' }, { key: 'brand', label: 'Brand' }, { key: 'sanPham', label: 'Sản Phẩm (SL)' }, { key: 'nhanSu', label: 'Nhân Sự Gửi' }, { key: 'loaiShip', label: 'Loại Ship' }, { key: 'trangThai', label: 'Trạng Thái' }, { key: 'hanhDong', label: 'Hành Động' }, ];
 
   return (
     <div style={{ padding: '2rem' }}>
