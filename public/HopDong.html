@@ -1,0 +1,610 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Công Cụ Tạo Hợp Đồng Dịch Vụ Quảng Cáo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* CSS cho giao diện chính */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+
+        /* CSS cho phần hiển thị hợp đồng */
+        #contractContent {
+            background-color: white;
+            line-height: 1.6;
+            font-family: 'Times New Roman', Times, serif;
+            font-size: 13pt;
+        }
+        #contractContent table {
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid black;
+        }
+        #contractContent th, #contractContent td {
+            border: 1px solid black;
+            padding: 8px;
+            vertical-align: top;
+        }
+        #contractContent .no-border-table, #contractContent .no-border-table td {
+             border: none !important;
+             padding: 2px 0;
+        }
+        #contractContent h1, #contractContent h2 {
+            text-align: center;
+            font-weight: bold;
+        }
+        #contractContent .center-text {
+            text-align: center;
+        }
+        #contractContent .bold-text {
+            font-weight: bold;
+        }
+        /* CSS cho việc in ấn */
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #outputContainer, #outputContainer * {
+                visibility: visible;
+            }
+            #outputContainer {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                height: auto;
+                box-shadow: none;
+                border: none;
+            }
+             #contractContent {
+                max-height: none;
+                overflow: visible;
+             }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="container mx-auto p-4 sm:p-6 md:p-8 max-w-7xl">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl sm:text-4xl font-bold text-gray-900" style="font-family: 'Inter', sans-serif;">Công Cụ Tạo Hợp Đồng Dịch Vụ Quảng Cáo</h1>
+            <p class="mt-2 text-gray-600" style="font-family: 'Inter', sans-serif;">Điền thông tin vào biểu mẫu bên dưới để tạo hợp đồng ngay lập tức.</p>
+        </header>
+
+        <main class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- CỘT ĐIỀN THÔNG TIN -->
+            <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+                <h2 class="text-2xl font-semibold mb-6 border-b pb-3" style="font-family: 'Inter', sans-serif;">Thông tin hợp đồng</h2>
+                <form id="contractForm" class="space-y-4">
+                    <!-- Thông tin Bên A -->
+                    <fieldset class="border p-4 rounded-lg">
+                        <legend class="px-2 font-semibold text-lg">Bên A (Công ty)</legend>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+                           <div class="sm:col-span-2">
+                                <label for="benA_ten" class="block text-sm font-medium text-gray-700">Tên công ty</label>
+                                <input type="text" id="benA_ten" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" value="CÔNG TY TNHH ĐỘNG HỌC STELLA">
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label for="benA_diaChi" class="block text-sm font-medium text-gray-700">Địa chỉ</label>
+                                <!-- THAY ĐỔI: Cập nhật địa chỉ cố định -->
+                                <input type="text" id="benA_diaChi" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" value="9/11 Nguyễn Huy Tưởng, Phường Gia Định, Thành phố Hồ Chí Minh">
+                            </div>
+                            <div>
+                                <label for="benA_mst" class="block text-sm font-medium text-gray-700">Mã số thuế</label>
+                                <input type="text" id="benA_mst" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" value="0314421133">
+                            </div>
+                            <div>
+                                <label for="benA_nguoiDaiDien" class="block text-sm font-medium text-gray-700">Người đại diện</label>
+                                <input type="text" id="benA_nguoiDaiDien" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" value="VÕ HUÂN">
+                            </div>
+                             <div>
+                                <label for="benA_chucVu" class="block text-sm font-medium text-gray-700">Chức vụ</label>
+                                <input type="text" id="benA_chucVu" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" value="Giám đốc">
+                            </div>
+                        </div>
+                    </fieldset>
+
+                     <!-- Thông tin Bên B -->
+                    <fieldset class="border p-4 rounded-lg">
+                        <legend class="px-2 font-semibold text-lg">Bên B (Người cung cấp dịch vụ)</legend>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+                            <div>
+                                <label for="benB_ten" class="block text-sm font-medium text-gray-700">Họ và Tên</label>
+                                <input type="text" id="benB_ten" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="VD: MAI TIẾN LÂM">
+                            </div>
+                            <div>
+                                <label for="benB_sdt" class="block text-sm font-medium text-gray-700">Số điện thoại</label>
+                                <input type="text" id="benB_sdt" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="VD: 03379726769">
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label for="benB_diaChi" class="block text-sm font-medium text-gray-700">Địa chỉ</label>
+                                <input type="text" id="benB_diaChi" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="VD: Hải Vân, Hải Hậu, Nam Định">
+                            </div>
+                            <div>
+                                <label for="benB_cccd" class="block text-sm font-medium text-gray-700">Số CCCD</label>
+                                <input type="text" id="benB_cccd" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="VD: 040202012030">
+                            </div>
+                             <div>
+                                <label for="benB_mst" class="block text-sm font-medium text-gray-700">Mã số thuế cá nhân</label>
+                                 <input type="text" id="benB_mst" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="VD: 040202012030">
+                            </div>
+                             <div>
+                                <label for="benB_stk" class="block text-sm font-medium text-gray-700">Số tài khoản</label>
+                                <input type="text" id="benB_stk" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="VD: 3720021903">
+                            </div>
+                            <div>
+                                <label for="benB_nganHang" class="block text-sm font-medium text-gray-700">Ngân hàng thụ hưởng</label>
+                                <input type="text" id="benB_nganHang" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="VD: VIETCOMBANK">
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label for="benB_nguoiThuHuong" class="block text-sm font-medium text-gray-700">Người thụ hưởng</label>
+                                <input type="text" id="benB_nguoiThuHuong" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="VD: MAI TIEN LAM">
+                            </div>
+                        </div>
+                    </fieldset>
+
+                     <!-- Chi tiết hợp đồng -->
+                    <fieldset class="border p-4 rounded-lg">
+                        <legend class="px-2 font-semibold text-lg">Nội dung công việc</legend>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+                            <div>
+                                <label for="soHopDong" class="block text-sm font-medium text-gray-700">Số hợp đồng</label>
+                                <input type="text" id="soHopDong" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="VD: 260725/HĐQC/ten-STELLA">
+                            </div>
+                             <div>
+                                <label for="ngayKy" class="block text-sm font-medium text-gray-700">Ngày ký hợp đồng</label>
+                                <input type="date" id="ngayKy" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="ngayThucHien" class="block text-sm font-medium text-gray-700">Ngày đăng video</label>
+                                <input type="date" id="ngayThucHien" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="sanPham" class="block text-sm font-medium text-gray-700">Sản phẩm</label>
+                                <input type="text" id="sanPham" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="VD: Bodymist - Brand BODYMISS">
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label for="linkSanPham" class="block text-sm font-medium text-gray-700">Link sản phẩm</label>
+                                <input type="text" id="linkSanPham" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="Dán link sản phẩm ở đây">
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label for="linkKenh" class="block text-sm font-medium text-gray-700">Link kênh Tiktok</label>
+                                <input type="text" id="linkKenh" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="Dán link kênh Tiktok ở đây">
+                            </div>
+                            <div>
+                                <label for="soLuong" class="block text-sm font-medium text-gray-700">Số lượng video</label>
+                                <input type="number" id="soLuong" value="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label for="donGia" class="block text-sm font-medium text-gray-700">Đơn giá (VNĐ)</label>
+                                <input type="number" id="donGia" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="VD: 2000000">
+                            </div>
+                        </div>
+                    </fieldset>
+
+                    <div class="pt-4 text-right">
+                         <button type="submit" class="inline-flex justify-center py-2 px-6 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            Tạo Hợp Đồng
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- CỘT HIỂN THỊ KẾT QUẢ -->
+            <div id="outputContainer" class="bg-white p-6 rounded-xl shadow-md border border-gray-200 hidden">
+                <div class="flex justify-between items-center border-b pb-3 mb-4">
+                    <h2 class="text-2xl font-semibold" style="font-family: 'Inter', sans-serif;">Nội dung hợp đồng</h2>
+                    <div>
+                        <button id="copyButton" class="py-2 px-4 text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                            Sao chép
+                        </button>
+                         <button onclick="window.print()" class="ml-2 py-2 px-4 text-sm font-medium rounded-md text-gray-700 bg-gray-200 hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400">
+                            In / PDF
+                        </button>
+                    </div>
+                </div>
+                <div class="bg-gray-50 p-4 rounded-md overflow-auto" style="max-height: 80vh;">
+                    <div id="contractContent"></div>
+                </div>
+                <div id="copyMessage" class="mt-2 text-sm text-green-600 font-medium hidden">Đã sao chép vào clipboard!</div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const contractForm = document.getElementById('contractForm');
+            const outputContainer = document.getElementById('outputContainer');
+            const contractContent = document.getElementById('contractContent');
+            const copyButton = document.getElementById('copyButton');
+            const copyMessage = document.getElementById('copyMessage');
+            
+            document.getElementById('ngayKy').valueAsDate = new Date();
+            document.getElementById('ngayThucHien').valueAsDate = new Date();
+            
+            // --- HÀM ĐỔI SỐ THÀNH CHỮ (ĐÃ SỬA LỖI) ---
+            const mangso = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
+            function dochangchuc(so, daydu) {
+                let chuoi = "";
+                let chuc = Math.floor(so / 10);
+                let donvi = so % 10;
+                if (chuc > 1) {
+                    chuoi = " " + mangso[chuc] + " mươi";
+                    if (donvi == 1) {
+                        chuoi += " mốt";
+                    }
+                } else if (chuc == 1) {
+                    chuoi = " mười";
+                    if (donvi == 5) {
+                        chuoi += " lăm";
+                    }
+                } else if (daydu && donvi > 0) {
+                    chuoi = " lẻ";
+                }
+                if (donvi == 5 && chuc > 1) {
+                    chuoi += " lăm";
+                } else if (donvi > 0 && donvi != 1 && donvi != 5) {
+                    chuoi += " " + mangso[donvi];
+                } else if (donvi == 1 && chuc < 1) {
+                    chuoi += " " + mangso[donvi];
+                }
+                return chuoi;
+            }
+
+            function dochangtram(so, daydu) {
+                let chuoi = "";
+                let tram = Math.floor(so / 100);
+                so = so % 100;
+                if (daydu || tram > 0) {
+                    chuoi = " " + mangso[tram] + " trăm";
+                    chuoi += dochangchuc(so, true);
+                } else {
+                    chuoi = dochangchuc(so, false);
+                }
+                return chuoi;
+            }
+
+            function dochangtrieu(so, daydu) {
+                let chuoi = "";
+                let trieu = Math.floor(so / 1000000);
+                so = so % 1000000;
+                if (trieu > 0) {
+                    chuoi = dochangtram(trieu, daydu) + " triệu";
+                    daydu = true;
+                }
+                let nghin = Math.floor(so / 1000);
+                so = so % 1000;
+                if (nghin > 0) {
+                    chuoi += dochangtram(nghin, daydu) + " nghìn";
+                    daydu = true;
+                }
+                if (so > 0) {
+                    chuoi += dochangtram(so, daydu);
+                }
+                return chuoi;
+            }
+
+            function to_vietnamese_string(so) {
+                if (so == 0) return mangso[0].charAt(0).toUpperCase() + mangso[0].slice(1);
+                let chuoi = "", hauto = "";
+                do {
+                    let ty = so % 1000000000;
+                    so = Math.floor(so / 1000000000);
+                    if (so > 0) {
+                        chuoi = dochangtrieu(ty, true) + hauto + chuoi;
+                    } else {
+                        chuoi = dochangtrieu(ty, false) + hauto + chuoi;
+                    }
+                    hauto = " tỷ";
+                } while (so > 0);
+                
+                let finalString = chuoi.trim();
+                return finalString.charAt(0).toUpperCase() + finalString.slice(1);
+            }
+            // --- KẾT THÚC HÀM ĐỔI SỐ THÀNH CHỮ ---
+
+
+            contractForm.addEventListener('submit', function (event) {
+                event.preventDefault();
+
+                const getValue = (id) => document.getElementById(id).value;
+                const formatCurrency = (num) => num.toLocaleString('vi-VN');
+
+                const benA = {
+                    ten: getValue('benA_ten'),
+                    diaChi: getValue('benA_diaChi'),
+                    mst: getValue('benA_mst'),
+                    nguoiDaiDien: getValue('benA_nguoiDaiDien'),
+                    chucVu: getValue('benA_chucVu')
+                };
+
+                const benB = {
+                    ten: getValue('benB_ten'),
+                    diaChi: getValue('benB_diaChi'),
+                    sdt: getValue('benB_sdt'),
+                    cccd: getValue('benB_cccd'),
+                    mst: getValue('benB_mst'),
+                    stk: getValue('benB_stk'),
+                    nganHang: getValue('benB_nganHang'),
+                    nguoiThuHuong: getValue('benB_nguoiThuHuong')
+                };
+
+                const soHopDong = getValue('soHopDong');
+                const ngayKyRaw = getValue('ngayKy');
+                const ngayThucHienRaw = getValue('ngayThucHien');
+                const sanPham = getValue('sanPham');
+                const linkSanPham = getValue('linkSanPham');
+                const linkKenh = getValue('linkKenh');
+                const soLuong = parseInt(getValue('soLuong'), 10) || 0;
+                const donGia = parseFloat(getValue('donGia')) || 0;
+                const tongGiaTri = soLuong * donGia;
+                
+                const tongCong = Math.round(tongGiaTri / 0.9);
+                const thueTNCN = tongCong - tongGiaTri;
+                const thucTeThanhToan = tongGiaTri;
+                
+                const tongCongChu = to_vietnamese_string(tongCong) + ' đồng';
+                const thueTNCNChu = to_vietnamese_string(thueTNCN) + ' đồng';
+                const thucTeThanhToanChu = to_vietnamese_string(thucTeThanhToan) + ' đồng chẵn';
+
+                const formatDate = (dateString) => {
+                    const dateObj = new Date(dateString);
+                    const ngay = String(dateObj.getDate()).padStart(2, '0');
+                    const thang = String(dateObj.getMonth() + 1).padStart(2, '0');
+                    const nam = dateObj.getFullYear();
+                    return { ngay, thang, nam, full: `ngày ${ngay} tháng ${thang} năm ${nam}` };
+                };
+                const ngayKy = formatDate(ngayKyRaw);
+                const ngayThucHien = formatDate(ngayThucHienRaw);
+
+
+                // --- MẪU HỢP ĐỒNG DẠNG HTML ---
+                const contractHTML = `
+                    <div class="center-text">
+                        <p class="bold-text">CỘNG HOÀ XÃ HỘI CHỦ NGHĨA VIỆT NAM</p>
+                        <p class="bold-text">Độc lập - Tự do - Hạnh phúc</p>
+                        <p>---- o0o ----</p>
+                    </div>
+                    <br>
+                    <h2>HỢP ĐỒNG DỊCH VỤ</h2>
+                    <p class="center-text">Số: ${soHopDong}</p>
+                    <br>
+                    <p>Căn cứ Bộ luật Dân sự 2015 số 91/2015/QH13 ngày 24/11/2015;</p>
+                    <p>Căn cứ Luật Thương Mại số 36/2005/QH11 ngày 14/06/2005;</p>
+                    <p>Căn cứ Luật Quảng Cáo số 16/2012/QH13 ngày 21/06/2012 và các văn bản hướng dẫn liên quan;</p>
+                    <p>Căn cứ nhu cầu và khả năng của các bên</p>
+                    <br>
+                    <p>Hôm nay, ${ngayKy.full}, chúng tôi gồm:</p>
+                    
+                    <table class="no-border-table" style="width: 100%;">
+                        <tr>
+                            <td style="width: 20%;" class="bold-text">BÊN A</td>
+                            <td style="width: 80%;" class="bold-text">: ${benA.ten.toUpperCase()}</td>
+                        </tr>
+                        <tr>
+                            <td>Địa chỉ</td>
+                            <td>: ${benA.diaChi}</td>
+                        </tr>
+                        <tr>
+                            <td>Mã số thuế</td>
+                             <td>: ${benA.mst}</td>
+                        </tr>
+                         <tr>
+                            <td>Người đại diện</td>
+                             <td>: <span class="bold-text">${benA.nguoiDaiDien.toUpperCase()}</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Chức vụ: ${benA.chucVu}</td>
+                        </tr>
+                    </table>
+                    <p>Và</p>
+                    <table class="no-border-table" style="width: 100%;">
+                        <tr>
+                            <td style="width: 20%;" class="bold-text">BÊN B</td>
+                            <td style="width: 80%;" class="bold-text">: ${benB.ten.toUpperCase()}</td>
+                        </tr>
+                        <tr>
+                            <td>Địa chỉ</td>
+                            <td>: ${benB.diaChi}</td>
+                        </tr>
+                         <tr>
+                            <td>SĐT</td>
+                            <td>: ${benB.sdt}</td>
+                        </tr>
+                         <tr>
+                            <td>CCCD</td>
+                            <td>: ${benB.cccd}</td>
+                        </tr>
+                         <tr>
+                            <td>MST</td>
+                            <td>: ${benB.mst}</td>
+                        </tr>
+                        <tr>
+                            <td>Số tài khoản</td>
+                            <td>: ${benB.stk}</td>
+                        </tr>
+                        <tr>
+                            <td>Ngân hàng</td>
+                            <td>: ${benB.nganHang.toUpperCase()}</td>
+                        </tr>
+                         <tr>
+                            <td>Người thụ hưởng</td>
+                            <td>: ${benB.nguoiThuHuong.toUpperCase()}</td>
+                        </tr>
+                    </table>
+                    <br>
+                    <p>Hai Bên thống nhất ký kết hợp đồng với các điều khoản và điều kiện sau đây:</p>
+                    <p class="bold-text">ĐIỀU 1: NỘI DUNG HỢP ĐỒNG</p>
+                    <p>1.1. Bên A mời Bên B đồng ý nhận cung cấp dịch vụ quảng cáo và Bên A đồng ý sử dụng dịch vụ quảng cáo trên kênh của B, cụ thể như sau:</p>
+                    <p style="padding-left: 20px;">a. Thời gian: ${ngayThucHien.ngay}/${ngayThucHien.thang}/${ngayThucHien.nam}</p>
+                    <p style="padding-left: 20px;">b. Sản phẩm: ${sanPham}</p>
+                    <p style="padding-left: 20px;">c. Link sản phẩm: ${linkSanPham}</p>
+                    <p style="padding-left: 20px;">d. Nội dung công việc cụ thể:</p>
+                    
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="center-text">STT</th>
+                                <th class="center-text">Link kênh Tiktok</th>
+                                <th class="center-text">Hạng mục</th>
+                                <th class="center-text">Số lượng</th>
+                                <th class="center-text">Đơn giá</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="center-text">1</td>
+                                <td>${linkKenh}</td>
+                                <td class="center-text">video</td>
+                                <td class="center-text">${String(soLuong).padStart(2, '0')}</td>
+                                <td style="text-align: right;">${formatCurrency(donGia)}</td>
+                            </tr>
+                            <tr>
+                                 <td colspan="4" class="bold-text">Tổng giá trị hợp đồng</td>
+                                <td style="text-align: right;" class="bold-text">${formatCurrency(tongGiaTri)}</td>
+                            </tr>
+                            <tr>
+                                <td colspan="4">Thuế TNCN 10%</td>
+                                <td style="text-align: right;">${formatCurrency(thueTNCN)}</td>
+                            </tr>
+                            <tr>
+                                <td colspan="4" class="bold-text">TỔNG CỘNG</td>
+                                <td style="text-align: right;" class="bold-text">${formatCurrency(tongCong)}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p><i>(Bằng chữ: ${tongCongChu}.)</i></p>
+
+                    <p>1.2. Nội dung nghiệm thu công việc:</p>
+                     <table>
+                        <thead>
+                            <tr>
+                                <th class="center-text">STT</th>
+                                <th class="center-text">Hạng mục</th>
+                                <th class="center-text">Nội dung nghiệm thu</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                 <td class="center-text">1</td>
+                                <td>Demo (video)</td>
+                                <td>Gửi Demo trước từ 3-5 ngày kể từ ngày đăng video</td>
+                            </tr>
+                             <tr>
+                                <td class="center-text">2</td>
+                                <td>Link Post (Url)</td>
+                                <td>Check video đã gắn đúng link sản phẩm</td>
+                            </tr>
+                            <tr>
+                                <td class="center-text">3</td>
+                                <td>Cung cấp mã quảng cáo</td>
+                                <td>Code ads 365 ngày hoặc uỷ quyền kênh</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    
+                    <p class="bold-text">ĐIỀU 2: GIÁ TRỊ HỢP ĐỒNG VÀ THANH TOÁN</p>
+                    <p>2.1. Giá trị và thời gian thanh toán:</p>
+                    <p style="padding-left: 20px;">a. Tổng chi phí cho công việc mà Bên B thực hiện là <b>${formatCurrency(tongCong)} VNĐ</b> <i>(Bằng chữ: ${tongCongChu}.)</i> - Đã bao gồm thuế TNCN (10%)</p>
+                    <p style="padding-left: 20px;">b. Nghĩa vụ thuế TNCN của Bên B là: <b>${formatCurrency(thueTNCN)} VNĐ</b> <i>(Bằng chữ: ${thueTNCNChu}.)</i> Bên A có trách nhiệm khấu trừ tiền thuế tại nguồn để nộp thuế TNCN cho bên B.</p>
+                    <p style="padding-left: 20px;">c. Giá trị Hợp đồng Bên A thực tế thanh toán cho Bên B sau khi đã khấu trừ thuế TNCN cho Bên B là: <b>${formatCurrency(thucTeThanhToan)} VNĐ</b> <i>(Bằng chữ: ${thucTeThanhToanChu}).</i></p>
+                    <p style="padding-left: 20px;">d. Trong quá trình thực hiện Hợp đồng, nếu có phát sinh bất kỳ khoản chi phí nào ngoài giá trị Hợp đồng nêu trên, Bên B phải thông báo ngay lập tức cho Bên A và chỉ thực hiện phần công việc phát sinh chi phí đó khi nhận được sự đồng ý bằng văn bản của Bên A. Bên A không có trách nhiệm thanh toán cho Bên B bất kỳ khoản chi phí nào được triển khai khi chưa nhận được sự chấp thuận của Bên A.</p>
+                    <p>2.2. Thanh toán:</p>
+                    <p style="padding-left: 20px;">a. Hình thức thanh toán: Chuyển khoản theo số tài khoản quy định tại trang đầu tiên của hợp đồng.</p>
+                    <p style="padding-left: 20px;">b. Loại tiền thanh toán: Việt Nam đồng (VNĐ).</p>
+                    <p style="padding-left: 20px;">c. Thời hạn thanh toán: Bên A thanh toán 100% giá trị Hợp đồng quy định tại điểm c Điều 2.1 nêu trên cho Bên B trong thời hạn 15 (mười lăm) ngày làm việc kể từ thời điểm các Bên hoàn tất nghiệm thu tất cả các hạng mục theo quy định tại Điều 1.2 Hợp đồng.</p>
+                    
+                    <p class="bold-text">ĐIỀU 3: TRÁCH NHIỆM CỦA BÊN A</p>
+                    <p>3.1. Tạo điều kiện thuận lợi để bên B hoàn thành công việc.</p>
+                    <p>3.2. Bên A có trách nhiệm thanh toán đầy đủ và đúng hạn theo quy định tại Điều 2 của Hợp đồng. Việc thanh toán không được chậm hơn thời gian được quy định tại Điều 2 của Hợp đồng. Nếu bên A thanh toán chậm hơn thời gian được quy định tại điểm này, Bên A phải chịu tiền lãi suất tiền gửi không kỳ hạn của ngân hàng BIDV quy định tại thời điểm thanh toán.</p>
+                    <p>3.3. Bên A có trách nhiệm cung cấp đầy đủ, nhanh chóng, kịp thời thông tin, tài liệu để bên B thực hiện công việc.</p>
+                    <p>3.4. Thông báo bằng văn bản và nêu rõ lý do cho Bên B trong trường hợp Bên A có nhu cầu chấm dứt Hợp đồng ít nhất 03 (ba) ngày trước ngày dự định chấm dứt.</p>
+                    <p>3.5. Bên A được quyền kiểm tra, theo dõi, đánh giá, thẩm định chất lượng công việc do Bên B thực hiện.</p>
+                    <p>3.6. Các quyền và nghĩa vụ khác theo quy định của Hợp đồng và pháp luật hiện hành.</p>
+
+                    <p class="bold-text">ĐIỀU 4: TRÁCH NHIỆM CỦA BÊN B</p>
+                    <p>4.1. Thực hiện công việc theo đúng thỏa thuận giữa hai bên và theo quy định tại Điều 1 Hợp đồng, bao gồm nhưng không giới hạn cam kết đảm bảo chất lượng và thời hạn theo quy định của Hợp đồng.</p>
+                    <p>4.2. Tuân thủ các quy định làm việc và quy định nội bộ khác của Bên A trong thời gian thực hiện Hợp đồng.</p>
+                    <p>4.3. Trong trường hợp phát sinh bất kỳ khiếm khuyết nào đối với công việc, thì Bên B, bằng chi phí của mình, có nghĩa vụ khắc phục và/hoặc thực hiện lại đáp ứng các tiêu chuẩn, điều kiện của Bên A trong thời hạn do Bên A ấn định. Nếu Bên B vi phạm điều khoản này, Bên A có quyền thuê Bên Thứ Ba thực hiện công việc và mọi chi phí phát sinh sẽ do Bên B chịu trách nhiệm thanh toán.</p>
+                    <p>4.4. Trong quá trình thực hiện Hợp đồng, Bên B phải bảo mật tuyệt đối các thông tin nhận được từ Bên A. Trong trường hợp, Bên B vô ý hoặc cố ý tiết lộ các thông tin của Bên A mà chưa được Bên A chấp thuận trước bằng văn bản và/hoặc gây thiệt hại cho Bên A, Bên B sẽ phải chịu mọi trách nhiệm giải quyết cũng như bồi thường cho Bên A toàn bộ thiệt hại thực tế phát sinh.</p>
+                    <p>4.5. Phối hợp với bên A trong quá trình nghiệm thu kết quả thực hiện công việc/cung cấp dịch vụ theo quy định tại hợp đồng này.</p>
+                    <p>4.6. Các quyền và nghĩa vụ khác theo quy định tại Hợp đồng này và quy định của pháp luật.</p>
+
+                    <p class="bold-text">ĐIỀU 5. BẢO MẬT THÔNG TIN</p>
+                    <p>5.1. “Thông tin bảo mật” là tất cả các thông tin mà một trong hai Bên đã được cung cấp và/hoặc có được trong quá trình thực hiện Hợp đồng này, bao gồm nhưng không giới hạn các thông tin về Hợp đồng, chủ thể Hợp đồng, Dịch vụ, giá cả, bản chào thầu, công thức và/hoặc thông tin liên quan đến quy trình sản xuất, bản vẽ, mẫu thiết kế, danh sách khách hàng, kế hoạch, chiến lược kinh doanh, và toàn bộ các thông tin có liên quan khác.</p>
+                    <p>5.2. Tất cả các tài sản, phương tiện, thông tin, hồ sơ, tài liệu mà Bên B được giao, sử dụng hoặc nắm được trong quá trình thực hiện hợp đồng là tài sản của Bên A, Bên B không được quyền sao chép, tiết lộ, chuyển giao và cho người khác sử dụng hoặc sử dụng vì mục đích nào ngoài thực hiện Hợp đồng này trên cơ sở lợi ích của Bên A nếu không được sự chấp thuận trước bằng văn bản của Bên A. Mọi vi phạm sẽ dẫn đến việc chấm dứt Hợp đồng trước thời hạn, khi đó Bên A không phải chịu bất kỳ trách nhiệm nào vì chấm dứt Hợp đồng này trước thời hạn.</p>
+                    <p>5.3. Trong trường hợp những Thông tin bảo mật được yêu cầu cung cấp cho các cơ quan chính quyền theo luật định thì hai Bên phải thông báo cho nhau biết trong thời hạn 01 (một) ngày ngay sau khi nhận được yêu cầu từ cơ quan có thẩm quyền. Đồng thời các Bên cam kết chỉ tiết lộ các thông tin trong phạm vi được yêu cầu.</p>
+                    <p>5.4. Nếu Bên B vi phạm điều khoản này, dù gây thiệt hại/ảnh hưởng đến công việc kinh doanh của Bên A hay không, Bên B sẽ bị xử lý theo quy định của pháp luật hiện hành và phải bồi thường toàn bộ thiệt hại phát sinh cho Bên A. Để tránh hiểu nhầm, Bên A không có nghĩa vụ chứng minh các thiệt hại phát sinh trong trường hợp này.</p>
+
+                    <p class="bold-text">ĐIỀU 6: TẠM NGỪNG, CHẤM DỨT HỢP ĐỒNG</p>
+                    <p>6.1. Hợp đồng này có giá trị kể từ ngày ký kết và tự động thanh lý khi hai bên đã hoàn thành các nghĩa vụ quy định tại Hợp đồng này.</p>
+                    <p>6.2. Trong thời gian hợp đồng có hiệu lực, các bên có trách nhiệm thực hiện đúng nghĩa vụ của mình cho tới khi hợp đồng hết hiệu lực. Bên nào đơn phương chấm dứt hợp đồng trái các quy định tại Hợp đồng này và trái pháp luật sẽ phải chịu phạt một khoản tiền tương đương với 8% giá trị hợp đồng và có nghĩa vụ bồi thường cho bên còn lại toàn bộ các thiệt hại thực tế phát sinh do hành vi vi phạm theo quy định của pháp luật.</p>
+                    <p>6.3. Trường hợp bất khả kháng theo quy định của pháp luật dẫn đến việc một trong hai bên không có khả năng tiếp tục thực hiện Hợp đồng này thì phải báo cho bên kia biết trong vòng 15 (mười lăm) ngày kể từ ngày phát sinh sự kiện bất khả kháng.</p>
+                    <p>6.4. Bên A có quyền chấm dứt hợp đồng với bên B mà không bị phạt trong các trường hợp:</p>
+                    <p style="padding-left: 20px;">a. Bên B quá 03 (ba) lần cung cấp thông tin chậm so với thời gian được nêu ở Điều 1 hoặc cung cấp thông tin không chính xác, không đầy đủ theo yêu cầu của Bên A</p>
+                    <p style="padding-left: 20px;">b. Bên B thực hiện công việc không đảm bảo chất lượng, hoặc vi phạm quy định của Bên A, hoặc</p>
+                    <p style="padding-left: 20px;">c. Bên B gây thất thoát tài sản.</p>
+
+                    <p class="bold-text">ĐIỀU 7: ĐIỀU KHOẢN CHUNG</p>
+                    <p>7.1. Hai bên cam kết thực hiện đúng các điều khoản được ghi trong hợp đồng, bên nào vi phạm sẽ phải chịu trách nhiệm theo quy định của pháp luật và quy định trong Hợp đồng này.</p>
+                    <p>7.2. Hợp đồng này được điều chỉnh, diễn giải và thực hiện phù hợp với pháp luật Việt Nam. Trường hợp có tranh chấp xảy ra, Hai Bên sẽ cùng nhau bàn bạc tìm biện pháp giải quyết trên tinh thần thương lượng trong thời hạn 30 (ba mươi) ngày kể từ thời điểm phát sinh. Nếu Hai Bên không tự giải quyết được sau thời hạn này thì tranh chấp sẽ được đưa ra giải quyết tại Tòa án nhân dân có thẩm quyền. Phán quyết của Tòa án là chung thẩm buộc các Bên thực hiện và mọi chi phí giải quyết tranh chấp, bao gồm chi phí thuê luật sư của các Bên, sẽ do Bên thua kiện chi trả.</p>
+                    <p>7.3. Hợp đồng này được làm thành 02 (hai) bản bên A giữ 01 (một) bản, Bên B giữ 01 (một) bản có nội dung và giá trị pháp lý như nhau.</p>
+                    <br><br>
+                    <table class="no-border-table">
+                        <tr>
+                            <td class="center-text bold-text" style="width: 50%;">ĐẠI DIỆN BÊN A</td>
+                            <td class="center-text bold-text" style="width: 50%;">ĐẠI DIỆN BÊN B</td>
+                        </tr>
+                        <tr>
+                            <td class="center-text">(${benA.chucVu})</td>
+                            <td class="center-text"></td>
+                        </tr>
+                        <tr><td style="height: 80px;"></td><td style="height: 80px;"></td></tr>
+                        <tr>
+                            <td class="center-text bold-text">${benA.nguoiDaiDien.toUpperCase()}</td>
+                            <td class="center-text bold-text">${benB.ten.toUpperCase()}</td>
+                        </tr>
+                    </table>
+                `;
+                contractContent.innerHTML = contractHTML;
+                outputContainer.classList.remove('hidden');
+            });
+
+            // --- HÀM SAO CHÉP MỚI (COPY RICH TEXT) ---
+            copyButton.addEventListener('click', function() {
+                const content = document.getElementById('contractContent');
+                const range = document.createRange();
+                range.selectNode(content);
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+                
+                try {
+                    document.execCommand('copy');
+                    copyMessage.textContent = 'Đã sao chép vào clipboard!';
+                    copyMessage.classList.remove('hidden');
+                    copyMessage.classList.remove('text-red-600');
+                    copyMessage.classList.add('text-green-600');
+                } catch (err) {
+                    copyMessage.textContent = 'Lỗi! Không thể sao chép.';
+                    copyMessage.classList.remove('hidden');
+                    copyMessage.classList.remove('text-green-600');
+                    copyMessage.classList.add('text-red-600');
+                }
+                
+                window.getSelection().removeAllRanges();
+                setTimeout(() => {
+                    copyMessage.classList.add('hidden');
+                }, 3000);
+            });
+        });
+    </script>
+</body>
+</html>
