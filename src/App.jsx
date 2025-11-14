@@ -332,18 +332,18 @@ function App() {
   }, [filterIdKenh, filterSdt, filterNhanSu, filterNgay, filterLoaiShip, filterEditedStatus, filterBrand, filterSanPham]);
 
   // =================================================================
-  // EFFECT TẢI SẢN PHẨM THEO BRAND (ĐÃ THÊM)
+  // EFFECT TẢI SẢN PHẨM THEO BRAND (ĐÃ SỬA LỖI MULTI-BRAND)
   // =================================================================
   useEffect(() => {
       // Gọi hàm loadSanPhamsByBrand mỗi khi selectedBrand thay đổi
       loadSanPhamsByBrand(selectedBrand);
-      // Đồng thời, reset các sản phẩm đã chọn và thanh tìm kiếm khi Brand thay đổi
-      setSelectedSanPhams({}); 
+      // GIỮ LẠI: Chỉ reset thanh tìm kiếm để người dùng dễ dàng tìm kiếm trong Brand mới
       setProductSearchTerm(''); 
+      // ĐÃ BỎ: setSelectedSanPhams({}) để giữ các sản phẩm đã chọn của Brand cũ.
   }, [selectedBrand]);
   
   // =================================================================
-  // LOGIC HỢP ĐỒNG MỚI
+  // LOGIC HỢP ĐỒNG MỚC
   // =================================================================
 
   const handleContractFormChange = (e) => {
@@ -790,8 +790,10 @@ DIỆN BÊN A</td>
       const { data: donGuiData, error: donGuiError } = await supabase.from('donguis').insert(donGuiPayload).select().single();
       if (donGuiError) throw donGuiError;
       const chiTietData = Object.entries(selectedSanPhams).map(([sanPhamId, soLuong]) => ({ don_gui_id: donGuiData.id, sanpham_id: sanPhamId, so_luong: soLuong }));
-      const { error: chiTietError } = await supabase.from('chitiettonguis').insert(chiTietData);
-      if (chiTietError) throw chiTietError;
+      if (chiTietData.length > 0) {
+        const { error: chiTietError } = await supabase.from('chitiettonguis').insert(chiTietData);
+        if (chiTietError) throw chiTietError;
+      }
 
       alert('Tạo đơn gửi thành công!');
       setHoTen(''); setIdKenh(''); setSdt('');
@@ -1186,7 +1188,7 @@ DIỆN BÊN A</td>
                     </div>
                     </div>
                     <div><label style={{fontWeight: 'bold', color: '#27AE60'}}>Nhân sự gửi</label><select value={selectedNhanSu} onChange={e => setSelectedNhanSu(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box', border: '1px solid #27AE60', borderRadius: '4px' 
-                    }} required><option value="">-- Chọn nhân sự --</option>{nhanSus.map(nhansu => (<option key={nhansu.id} value={nhansu.id}>{nhansu.ten_nhansu}</option>))}</select></div> {/* <--- ĐÃ SỬA LỖI nhanSu -> nhansu.ten_nhansu */}
+                    }} required><option value="">-- Chọn nhân sự --</option>{nhanSus.map(nhansu => (<option key={nhansu.id} value={nhansu.id}>{nhansu.ten_nhansu}</option>))}</select></div>
     
                                 
                     <div>
@@ -1216,7 +1218,7 @@ DIỆN BÊN A</td>
               padding: '2rem', border: '1px solid #ddd', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
                     <h2 style={{ textAlign: 'center', color: '#C0392B', marginBottom: '1.5rem', borderBottom: '2px solid #C0392B', paddingBottom: '10px' }}>Tổng Hợp Sản Phẩm (Theo Ship)</h2>
                   
-                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}><input type="date" value={summaryDate} onChange={e => setSummaryDate(e.target.value)} style={{ padding: '7px', flex: 1, border: '1px solid #27AE60', borderRadius: '4px' }} 
+                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}><input type="date" value={summaryDate} onChange={e => setSummaryDate(e.target.value)} style={{ padding: '7px', boxSizing: 'border-box', flex: 1, border: '1px solid #27AE60', borderRadius: '4px' }} 
                     /><button onClick={handleGetSummary} disabled={isSummarizing} style={{ padding: '8px 16px', backgroundColor: '#C0392B', color: 'white', border: 'none', borderRadius: 
               '4px', cursor: 'pointer', fontWeight: 'bold' }}>{isSummarizing ?
                     'Đang xử lý...' : 'Tổng hợp'}</button></div>
@@ -1628,7 +1630,7 @@ DIỆN BÊN A</td>
               </tr>
           
                        
-                          ); // ĐÃ SỬA: Đảm bảo cú pháp đóng map function là `;`
+                          );
                       })}
                     </tbody>
                   </table>
