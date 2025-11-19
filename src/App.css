@@ -1,42 +1,229 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
+/* src/App.css */
+
+/* --- BẢNG MÀU NOEL --- */
+:root {
+  --santa-red: #D42426;       /* Đỏ tươi */
+  --pine-green: #165B33;      /* Xanh thông */
+  --snow-white: #ffffff;
+  --gold-bell: #F8B229;       /* Vàng chuông */
+  --ice-blue: #81D4FA;        /* XANH TINH THỂ (Sáng rực) */
+  --shadow-soft: 0 10px 30px -5px rgba(0, 0, 0, 0.3);
+}
+
+body {
+  font-family: 'Nunito', 'Segoe UI', sans-serif;
+  
+  /* NỀN NGOÀI MÀU NOEL (XANH ĐẬM -> ĐỎ ĐẬM) */
+  background: linear-gradient(135deg, #0f3e25 0%, #165B33 40%, #8f1516 100%);
+  background-attachment: fixed;
+  
+  color: #333;
+  min-height: 100vh;
+  position: relative;
+  margin: 0;
+}
+
+/* =========================================
+   1. HIỆU ỨNG TUYẾT RƠI (MÀU XANH TINH THỂ)
+   ========================================= */
+.snow-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+.snowflake {
+  position: absolute;
+  top: -20px;
+  
+  /* --- MÀU XANH TINH THỂ ĐÂY --- */
+  color: var(--ice-blue); 
+  /* Đổ bóng xanh sáng để tạo hiệu ứng phát sáng (Glow) */
+  text-shadow: 0 0 8px rgba(129, 212, 250, 0.9);
+  
+  opacity: 0.9;
+  font-size: 1em;
+  animation-name: fall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes fall {
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(360deg); opacity: 0.3; }
+}
+
+/* =========================================
+   2. CARD GIAO DIỆN (HỘP QUÀ)
+   ========================================= */
+.christmas-card {
+  background: var(--snow-white); /* Nền khung TRẮNG */
+  border-radius: 16px;
   padding: 2rem;
+  margin-bottom: 2rem;
+  box-shadow: var(--shadow-soft);
+  position: relative;
+  
+  /* Viền Gradient 3 màu */
+  border: 3px solid transparent;
+  background-image: 
+    linear-gradient(white, white), 
+    linear-gradient(to right, var(--santa-red), var(--gold-bell), var(--pine-green));
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+
+  transition: transform 0.3s ease;
+}
+
+.christmas-card:hover {
+  transform: translateY(-5px);
+}
+
+/* =========================================
+   3. TIÊU ĐỀ (MÀU TRẮNG NỔI BẬT)
+   ========================================= */
+
+/* H1: Tiêu đề chính (Ở ngoài) */
+h1 {
+  text-transform: uppercase;
+  letter-spacing: 2px;
   text-align: center;
+  margin-bottom: 1rem;
+  
+  color: #ffffff !important; 
+  background: none !important;
+  -webkit-text-fill-color: #ffffff !important;
+  
+  text-shadow: 0 4px 10px rgba(0, 0, 0, 0.6) !important;
+  font-weight: 900 !important;
+  font-size: 2.5rem;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
-}
-
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+/* H2: Tiêu đề con (Trong khung trắng) */
+h2 {
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  text-align: center;
+  margin-bottom: 1.5rem;
+  
+  background: -webkit-linear-gradient(45deg, var(--santa-red), var(--pine-green));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  
+  font-weight: 800;
+  text-shadow: none;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+/* Các dòng mô tả nhỏ màu trắng */
+header p, 
+div > p[style*="color: #27AE60"],
+.header-desc { 
+  color: #ffffff !important;
+  text-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+  font-weight: 600;
+  opacity: 0.9;
 }
 
-.card {
-  padding: 2em;
+/* =========================================
+   4. CÁC THÀNH PHẦN NHẬP LIỆU
+   ========================================= */
+input, select {
+  width: 100%;
+  padding: 12px 15px;
+  margin-top: 5px;
+  margin-bottom: 15px;
+  border: 2px solid #eee;
+  border-radius: 10px;
+  background-color: #fff;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  box-sizing: border-box;
 }
 
-.read-the-docs {
-  color: #888;
+input:focus, select:focus {
+  outline: none;
+  border-color: var(--santa-red);
+  box-shadow: 0 0 0 4px rgba(212, 36, 38, 0.1);
 }
+
+label {
+  font-weight: 700 !important;
+  color: var(--pine-green) !important;
+  font-size: 0.9rem;
+  margin-left: 5px;
+}
+
+button {
+  padding: 12px 24px !important;
+  border-radius: 50px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.3s ease !important;
+  border: none !important;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+/* Style cho các nút màu Đỏ */
+button[style*="background-color: rgb(192, 57, 43)"],
+button[style*="background-color: #C0392B"],
+button[style*="background-color: #D42426"] {
+  background: linear-gradient(135deg, #ff6b6b 0%, #D42426 100%) !important;
+  color: white !important;
+}
+
+button:hover {
+  transform: scale(1.05);
+  filter: brightness(1.1);
+}
+
+/* =========================================
+   5. BẢNG DỮ LIỆU
+   ========================================= */
+table {
+  width: 100%;
+  border-collapse: separate !important;
+  border-spacing: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #eee;
+  background-color: var(--snow-white);
+}
+
+thead {
+  background: linear-gradient(90deg, var(--pine-green), var(--santa-red)) !important;
+  color: white !important;
+}
+
+th {
+  padding: 15px !important;
+  border: none !important;
+  text-transform: uppercase;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+}
+
+td {
+  padding: 12px !important;
+  border-bottom: 1px solid #eee !important;
+  border-right: 1px solid #eee !important;
+  font-size: 14px;
+  background-color: white;
+}
+
+tr:last-child td {
+  border-bottom: none !important;
+}
+
+tbody tr:hover td {
+  background-color: #fff0f0 !important;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: var(--santa-red); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #b91c1e; }
