@@ -5,20 +5,26 @@ import { AppDataProvider } from './context/AppDataContext';
 import OrderTab from './components/OrderTab';
 import ContractTab from './components/ContractTab';
 import AirLinksTab from './components/AirLinksTab';
-import SnowEffect from './components/SnowEffect'; // <--- Import Tuyết
+import SnowEffect from './components/SnowEffect';
+import AIChat from './components/AIChat'; // <--- IMPORT CHATBOT
 
 function App() {
-  const [currentView, setCurrentView] = useState('orders');
+  // State quản lý tab đang xem
+  const [currentView, setCurrentView] = useState('orders'); // 'orders', 'contract', 'airlinks'
 
   return (
     <AppDataProvider>
       
-      {/* --- BẬT TUYẾT RƠI Ở ĐÂY --- */}
+      {/* --- 1. HIỆU ỨNG TUYẾT --- */}
       <SnowEffect />
 
+      {/* --- 2. TRỢ LÝ ẢO AI (MỚI THÊM) --- */}
+      <AIChat />
+
+      {/* --- 3. NỘI DUNG CHÍNH CỦA WEB --- */}
       <div style={{ padding: '2rem', position: 'relative', zIndex: 1 }}>
         
-        {/* Menu */}
+        {/* THANH MENU CHUYỂN TAB */}
         <div style={{ marginBottom: '2rem', textAlign: 'center' }}>
             <button 
                 onClick={() => setCurrentView('orders')} 
@@ -55,7 +61,7 @@ function App() {
             </button>
         </div>
 
-        {/* Nội dung */}
+        {/* HIỂN THỊ NỘI DUNG TAB TƯƠNG ỨNG */}
         {currentView === 'orders' && <OrderTab />}
         {currentView === 'contract' && <ContractTab />}
         {currentView === 'airlinks' && <AirLinksTab />}

@@ -46,7 +46,7 @@ const OrderTab = () => {
     <> 
       {/* Tiêu đề riêng cho Tab Order */}
       <div style={{ position: 'relative', textAlign: 'center', marginBottom: '2rem' }}>
-          <h1 style={{ fontSize: '2.5rem', fontWeight: '800', color: '#D42426', textShadow: '2px 2px 4px rgba(0,0,0,0.1)' }}>
+          <h1 style={{ fontSize: '2.5rem', fontWeight: '800', color: '#ffffff', textShadow: '2px 2px 4px rgba(0,0,0,0.5)' }}>
               <span style={{color: '#165B33'}}>🎄</span> QUẢN LÝ ĐƠN HÀNG KOC <span style={{color: '#165B33'}}>🎄</span>
           </h1>
         
@@ -57,7 +57,7 @@ const OrderTab = () => {
 
       <div style={{ display: 'flex', gap: '2rem', marginBottom: '2rem' }}>
         
-        {/* --- CỘT 1: FORM TẠO ĐƠN (ĐÃ THÊM CLASS CHRISTMAS-CARD) --- */}
+        {/* --- CỘT 1: FORM TẠO ĐƠN --- */}
         <div className="christmas-card" style={{ flex: 1 }}>
           <h2 style={{ textAlign: 'center', color: '#D42426', marginBottom: '1.5rem' }}>Tạo Đơn Gửi KOC</h2>
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -94,7 +94,7 @@ const OrderTab = () => {
            </form>
         </div>
 
-        {/* --- CỘT 2: TỔNG HỢP SẢN PHẨM (ĐÃ THÊM CLASS CHRISTMAS-CARD) --- */}
+        {/* --- CỘT 2: TỔNG HỢP SẢN PHẨM --- */}
         <div className="christmas-card" style={{ flex: 1 }}>
             <h2 style={{ textAlign: 'center', marginBottom: '1.5rem', color: '#165B33' }}>Tổng Hợp Sản Phẩm</h2>
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1rem' }}>
@@ -126,7 +126,7 @@ const OrderTab = () => {
         </div>
       </div>
 
-      {/* --- CỘT 3: BÁO CÁO (ĐÃ THÊM CLASS CHRISTMAS-CARD) --- */}
+      {/* --- CỘT 3: BÁO CÁO (MÀU TRẮNG & BÓNG ĐẸP) --- */}
       <div className="christmas-card" style={{ marginBottom: '2rem' }}>
         <h2 style={{ textAlign: 'center', color: '#D42426' }}>Báo Cáo Hiệu Suất Nhân Sự</h2>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem' }}>
@@ -187,10 +187,12 @@ const OrderTab = () => {
          )}
       </div>
 
-      {/* --- CỘT 4: DANH SÁCH ĐƠN (ĐÃ THÊM CLASS CHRISTMAS-CARD) --- */}
-      <div className="christmas-card">
+      {/* --- CỘT 4: DANH SÁCH ĐƠN (ĐÃ SỬA LẠI LAYOUT LỌC & PHÂN TRANG) --- */}
+      
+      {/* KHỐI LỌC (Dùng christmas-card riêng) */}
+      <div className="christmas-card" style={{ marginBottom: '1.5rem', padding: '1.5rem' }}>
         <h2 style={{ textAlign: 'center', color: '#D42426', marginBottom: '1rem' }}>Danh Sách Đơn Hàng</h2>
-         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', alignItems: 'end', marginBottom: '1.5rem', padding: '1rem', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', alignItems: 'end' }}>
             <input type="text" placeholder="ID kênh..." value={filterIdKenh} onChange={e => setFilterIdKenh(e.target.value)} />
             <input type="text" placeholder="SĐT..." value={filterSdt} onChange={e => setFilterSdt(e.target.value)} />
             <select value={filterBrand} onChange={e => setFilterBrand(e.target.value)}><option value="">Tất cả Brand</option>{brands.map(b => <option key={b.id} value={b.id}>{b.ten_brand}</option>)}</select>
@@ -210,19 +212,22 @@ const OrderTab = () => {
             <div style={{display: 'flex', gap: '0.5rem'}}>
               <button onClick={clearFilters} style={{ flex: 1, backgroundColor: '#95A5A6' }}>Xóa Lọc</button>
               <button onClick={handleBulkUpdateStatus} disabled={selectedOrders.size === 0} style={{ flex: 1, backgroundColor: selectedOrders.size > 0 ? '#D42426' : '#ccc' }}>
-                  Đóng ({selectedOrders.size}) đơn
+                  Đóng ({selectedOrders.size})
               </button>
             </div>
             <button onClick={handleExportAll} disabled={isLoading} style={{ backgroundColor: '#165B33' }}>
-                {isLoading ? '...' : 'Xuất File Excel'}
+                {isLoading ? '...' : 'Xuất Excel'}
             </button>
         </div>
-        
-        {/* PHÂN TRANG */}
-        <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-            <p style={{marginBottom: '10px', color: '#D42426', fontWeight: 'bold'}}>Tổng cộng: {totalOrderCount} đơn hàng ({ORDERS_PER_PAGE} đơn/trang) - Trang {currentPage}/{totalPages}</p>
+      </div>
+      
+      {/* PHÂN TRANG (Giống bên Air Links) */}
+      <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+            <p style={{marginBottom: '10px', color: '#ffffff', fontWeight: 'bold', textShadow: '0 2px 4px rgba(0,0,0,0.5)'}}>
+              Tổng cộng: {totalOrderCount} đơn hàng ({ORDERS_PER_PAGE} đơn/trang) - Trang {currentPage}/{totalPages}
+            </p>
             <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1 || isLoading} style={{ margin: '0 5px', backgroundColor: '#f8f9fa', color: '#333', border: '1px solid #ccc' }}>
-                &lt; Trước
+                Trang Trước
             </button>
             {pageNumbers.map(number => (
                 <button
@@ -235,12 +240,13 @@ const OrderTab = () => {
                 </button>
             ))}
             <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || isLoading} style={{ margin: '0 5px', backgroundColor: '#f8f9fa', color: '#333', border: '1px solid #ccc' }}>
-                Sau &gt;
+                Trang Sau
             </button>
-        </div>
+      </div>
 
-        {/* BẢNG DỮ LIỆU */}
-        <div style={{ width: '100%', overflow: 'auto' }}>
+      {/* BẢNG DỮ LIỆU (Trong Card, padding 0) */}
+      <div className="christmas-card" style={{ padding: '0', overflow: 'hidden' }}>
+        <div style={{ width: '100%', overflowX: 'auto' }}>
             <table style={{ width: '100%' }}>
             <thead>
               <tr>
