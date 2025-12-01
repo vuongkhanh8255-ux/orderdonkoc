@@ -34,11 +34,14 @@ const AirLinksTab = () => {
 
   const [newLink, setNewLink] = useState({
     link_air_koc: '', id_kenh: '', id_video: '', brand_id: '', san_pham: '', nhansu_id: '',
-    ngay_air: '', ngay_booking: new Date().toISOString().split('T')[0], cast: '', cms_brand: ''
+    ngay_air: '', // Để trống, sau này tool tự điền
+    ngay_booking: new Date().toISOString().split('T')[0], 
+    cast: '', cms_brand: '', view_count: 0
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleLinkChange = (e) => {
+  // --- LOGIC TÁCH ID VÀ AUTO-FILL ---
+  const handleLinkChange = async (e) => {
     const url = e.target.value;
     let extractedKenh = '';
     let extractedVideo = '';
@@ -54,7 +57,33 @@ const AirLinksTab = () => {
         }
       }
     } catch (error) { }
-    setNewLink(prev => ({ ...prev, link_air_koc: url, id_kenh: extractedKenh, id_video: extractedVideo }));
+
+    setNewLink(prev => ({
+      ...prev, link_air_koc: url, id_kenh: extractedKenh, id_video: extractedVideo
+    }));
+
+    // AUTO-FILL TỪ DATABASE
+    if (extractedKenh) {
+        try {
+            const { data, error } = await supabase
+                .from('air_links')
+                .select('brand_id, nhansu_id, "cast", cms_brand')
+                .eq('id_kenh', extractedKenh)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+
+            if (data && !error) {
+                setNewLink(prev => ({
+                    ...prev,
+                    brand_id: data.brand_id || '',
+                    nhansu_id: data.nhansu_id || '',
+                    cast: data.cast || '',
+                    cms_brand: data.cms_brand || ''
+                }));
+            }
+        } catch (err) { console.error("Lỗi auto-fill:", err); }
+    }
   };
 
   const handleAddLink = async (e) => {
@@ -65,12 +94,17 @@ const AirLinksTab = () => {
     }
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.from('air_links').insert([newLink]);
+      const dataToInsert = {
+        ...newLink,
+        ngay_air: newLink.ngay_air ? newLink.ngay_air : null 
+      };
+      const { error } = await supabase.from('air_links').insert([dataToInsert]);
       if (error) throw error;
       alert("Đã thêm link thành công! 🎉");
       setNewLink({
         link_air_koc: '', id_kenh: '', id_video: '', brand_id: '', san_pham: '', nhansu_id: '',
-        ngay_air: '', ngay_booking: new Date().toISOString().split('T')[0], cast: '', cms_brand: ''
+        ngay_air: '', ngay_booking: new Date().toISOString().split('T')[0], 
+        cast: '', cms_brand: '', view_count: 0
       });
       loadAirLinks();
       handleGenerateAirLinksReport(); 
@@ -123,6 +157,7 @@ const AirLinksTab = () => {
                     {PRODUCT_OPTIONS.map(prod => (<option key={prod} value={prod}>{prod}</option>))}
                 </select>
               </div>
+
               <div>
                 <label>Brand (*)</label>
                 <select value={newLink.brand_id} onChange={e => setNewLink({...newLink, brand_id: e.target.value})} required>
@@ -134,6 +169,7 @@ const AirLinksTab = () => {
                    <option value="">-- Chọn Nhân sự --</option>
                    {nhanSus.map(ns => <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>)}
                 </select>
+                
                 <div style={{ display: 'flex', gap: '1rem' }}>
                     <div style={{flex: 1}}>
                         <label>CAST (VND)</label>
@@ -144,8 +180,7 @@ const AirLinksTab = () => {
                         <input type="text" value={newLink.cms_brand} onChange={e => setNewLink({...newLink, cms_brand: e.target.value})} placeholder="10%" />
                     </div>
                 </div>
-                <label>Ngày Air (Ngày lên video)</label>
-                <input type="date" value={newLink.ngay_air} onChange={e => setNewLink({...newLink, ngay_air: e.target.value})} />
+                {/* Đã xóa Ngày Air */}
               </div>
             </div>
             <div style={{ textAlign: 'center', marginTop: '1rem' }}>
@@ -227,7 +262,7 @@ const AirLinksTab = () => {
                     <th>Link Air</th>
                     <th>ID Kênh</th>
                     <th>ID Video</th>
-                    <th>Ngày Air</th> {/* <--- ĐÃ THÊM LẠI CỘT NÀY */}
+                    <th>Ngày Air</th>
                     <th>Brand</th>
                     <th>Sản Phẩm</th>
                     <th>CAST</th>
@@ -245,7 +280,6 @@ const AirLinksTab = () => {
                           </td>
                           <td>{link.id_kenh}</td>
                           <td>{link.id_video}</td>
-                          {/* HIỂN THỊ NGÀY AIR */}
                           <td>{link.ngay_air ? new Date(link.ngay_air).toLocaleDateString('vi-VN') : ''}</td>
                           <td>{link.brands?.ten_brand}</td>
                           <td>{link.san_pham}</td>
