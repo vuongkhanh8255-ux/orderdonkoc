@@ -21,7 +21,8 @@ const OrderTab = () => {
     columnWidths, handleResize, handleQuantityChange, handleSubmit, handleIdKenhBlur,
     clearFilters, handleGetSummary, handleGenerateReport, requestSort, handleEdit,
     handleCancelEdit, handleUpdate, handleSelect, handleSelectAll, handleBulkUpdateStatus,
-    handleExport, handleExportAll, sortedReportRows, totalsRow, totalPages
+    handleExport, handleExportAll, sortedReportRows, totalsRow, totalPages,
+    handleDeleteOrder // <--- LẤY HÀM XÓA TỪ CONTEXT
   } = useAppData();
 
   // Logic phân trang
@@ -126,7 +127,7 @@ const OrderTab = () => {
         </div>
       </div>
 
-      {/* --- CỘT 3: BÁO CÁO (MÀU TRẮNG & BÓNG ĐẸP) --- */}
+      {/* --- CỘT 3: BÁO CÁO --- */}
       <div className="christmas-card" style={{ marginBottom: '2rem' }}>
         <h2 style={{ textAlign: 'center', color: '#D42426' }}>Báo Cáo Hiệu Suất Nhân Sự</h2>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem' }}>
@@ -187,9 +188,9 @@ const OrderTab = () => {
          )}
       </div>
 
-      {/* --- CỘT 4: DANH SÁCH ĐƠN (ĐÃ SỬA LẠI LAYOUT LỌC & PHÂN TRANG) --- */}
+      {/* --- CỘT 4: DANH SÁCH ĐƠN --- */}
       
-      {/* KHỐI LỌC (Dùng christmas-card riêng) */}
+      {/* KHỐI LỌC */}
       <div className="christmas-card" style={{ marginBottom: '1.5rem', padding: '1.5rem' }}>
         <h2 style={{ textAlign: 'center', color: '#D42426', marginBottom: '1rem' }}>Danh Sách Đơn Hàng</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', alignItems: 'end' }}>
@@ -221,7 +222,7 @@ const OrderTab = () => {
         </div>
       </div>
       
-      {/* PHÂN TRANG (Giống bên Air Links) */}
+      {/* PHÂN TRANG */}
       <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
             <p style={{marginBottom: '10px', color: '#ffffff', fontWeight: 'bold', textShadow: '0 2px 4px rgba(0,0,0,0.5)'}}>
               Tổng cộng: {totalOrderCount} đơn hàng ({ORDERS_PER_PAGE} đơn/trang) - Trang {currentPage}/{totalPages}
@@ -244,7 +245,7 @@ const OrderTab = () => {
             </button>
       </div>
 
-      {/* BẢNG DỮ LIỆU (Trong Card, padding 0) */}
+      {/* BẢNG DỮ LIỆU */}
       <div className="christmas-card" style={{ padding: '0', overflow: 'hidden' }}>
         <div style={{ width: '100%', overflowX: 'auto' }}>
             <table style={{ width: '100%' }}>
@@ -265,6 +266,7 @@ const OrderTab = () => {
                 <tr key={donHang.id}>
                   {editingDonHang?.id === donHang.id ? ( 
                   <>
+                      {/* CHẾ ĐỘ SỬA */}
                       <td style={{ width: `${columnWidths.select}px`, padding: '12px', border: '1px solid #ddd' }}></td>
                       <td style={{ width: `${columnWidths.stt}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.originalStt}</td>
                       <td style={{ width: `${columnWidths.ngayGui}px`, padding: '12px', border: '1px solid #ddd' }}>{new Date(donHang.ngay_gui).toLocaleString('vi-VN')}</td>
@@ -282,6 +284,7 @@ const OrderTab = () => {
                   </>
                   ) : ( 
                   <>
+                      {/* CHẾ ĐỘ XEM: NÚT SỬA VÀ XÓA */}
                       <td style={{ width: `${columnWidths.select}px`, padding: '12px', border: '1px solid #ddd' }}><input type="checkbox" checked={selectedOrders.has(donHang.id)} onChange={() => handleSelect(donHang.id)} /></td>
                       <td style={{ width: `${columnWidths.stt}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.originalStt}</td>
                       <td style={{ width: `${columnWidths.ngayGui}px`, padding: '12px', border: '1px solid #ddd' }}>{new Date(donHang.ngay_gui).toLocaleString('vi-VN')}</td>
@@ -295,7 +298,10 @@ const OrderTab = () => {
                       <td style={{ width: `${columnWidths.nhanSu}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.nhansu?.ten_nhansu}</td>
                       <td style={{ width: `${columnWidths.loaiShip}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.loai_ship, donHang.original_loai_ship) }}>{donHang.loai_ship}</td>
                       <td style={{ width: `${columnWidths.trangThai}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.trang_thai, donHang.original_trang_thai) }}>{donHang.trang_thai}</td>
-                      <td style={{ width: `${columnWidths.hanhDong}px`, padding: '12px', border: '1px solid #ddd' }}><button onClick={() => handleEdit(donHang)} style={{padding: '5px', backgroundColor: '#F8B229', color: '#333', border: 'none', borderRadius: '4px'}}>Sửa</button></td>
+                      <td style={{ width: `${columnWidths.hanhDong}px`, padding: '12px', border: '1px solid #ddd', whiteSpace: 'nowrap' }}>
+                          <button onClick={() => handleEdit(donHang)} style={{padding: '5px 10px', backgroundColor: '#F8B229', color: '#333', border: 'none', borderRadius: '4px', marginRight: '5px'}}>Sửa</button>
+                          <button onClick={() => handleDeleteOrder(donHang.id)} style={{padding: '5px 10px', backgroundColor: '#D42426', color: 'white', border: 'none', borderRadius: '4px'}}>Xóa</button>
+                      </td>
                   </>
                   )}
                 </tr>
