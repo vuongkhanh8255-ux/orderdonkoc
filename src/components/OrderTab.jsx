@@ -1,5 +1,3 @@
-// src/components/OrderTab.jsx
-
 import React from 'react';
 import { useAppData } from '../context/AppDataContext';
 import ResizableHeader from './ResizableHeader';
@@ -22,15 +20,17 @@ const OrderTab = () => {
     clearFilters, handleGetSummary, handleGenerateReport, requestSort, handleEdit,
     handleCancelEdit, handleUpdate, handleSelect, handleSelectAll, handleBulkUpdateStatus,
     handleExport, handleExportAll, sortedReportRows, totalsRow, totalPages,
-    handleDeleteOrder // <--- LẤY HÀM XÓA TỪ CONTEXT
+    handleDeleteOrder 
   } = useAppData();
 
   // Logic phân trang
   const ORDERS_PER_PAGE = 50; 
   const pageNumbers = [];
   const maxButtons = 5;
+
   let startPage = Math.max(1, currentPage - Math.floor(maxButtons / 2));
   let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+
   if (endPage - startPage + 1 < maxButtons) {
       startPage = Math.max(1, endPage - maxButtons + 1);
   }
@@ -38,10 +38,31 @@ const OrderTab = () => {
     pageNumbers.push(i);
   }
 
+  // --- HÀM CHECK TRẠNG THÁI "SÁT THỦ" (MỚI) ---
+  // Chỉ cần chứa cụm từ "đã đóng" là chặn ngay
+  const isDonDaDong = (status) => {
+    if (!status) return false;
+    // Chuyển về chữ thường hết để so sánh
+    const s = String(status).toLowerCase(); 
+    return s.includes("đã đóng"); // Chặn cả "Đã đóng đơn", "Đã đóng", "đã đóng đơn "...
+  };
+
+  // --- HÀM XỬ LÝ XÓA AN TOÀN ---
+  const handleSafeDelete = (id, status) => {
+    console.log("Check delete status:", status); // Log ra để kiểm tra nếu cần
+    if (isDonDaDong(status)) {
+        alert("❌ KHÔNG THỂ XÓA: Đơn hàng này ĐÃ ĐÓNG!");
+        return;
+    }
+    
+    if (window.confirm("Bạn có chắc chắn muốn xóa đơn này không?")) {
+        handleDeleteOrder(id);
+    }
+  };
+
   // Headers cho bảng
   const headers = [ { key: 'select', label: <input type="checkbox" onChange={handleSelectAll} /> }, { key: 'stt', label: 'STT' }, { key: 'ngayGui', label: 'Ngày Gửi' }, { key: 'hoTenKOC', label: 'Họ Tên KOC' }, { key: 'cccd', label: 'CCCD' }, { key: 'idKenh', label: 'ID Kênh' }, { key: 'sdt', label: 'SĐT' }, { key: 'diaChi', label: 'Địa chỉ' }, { key: 'brand', label: 'Brand' }, { key: 'sanPham', label: 'Sản Phẩm (SL)' }, { key: 'nhanSu', label: 'Nhân Sự Gửi' }, { key: 'loaiShip', label: 'Loại Ship' }, { key: 'trangThai', label: 'Trạng Thái' }, { key: 'hanhDong', label: 'Hành Động' }, ];
   const summaryExportHeaders = [ { label: "Loại Ship", key: "loai_ship"}, { label: "Sản Phẩm", key: "ten_san_pham" }, { label: "Barcode", key: "barcode" }, { label: "Brand", key: "ten_brand" }, { label: "Tổng Số Lượng", key: "total_quantity" } ];
-
 
   return (
     <> 
@@ -68,13 +89,14 @@ const OrderTab = () => {
             <div><label>Số điện thoại</label><input type="text" value={sdt} onChange={e => setSdt(e.target.value)} required placeholder="SĐT..." /></div>
             <div><label>Địa chỉ</label><input type="text" value={diaChi} onChange={e => setDiaChi(e.target.value)} required placeholder="Địa chỉ..." /></div>
             <div><label>CCCD</label><input type="text" value={cccd} onChange={e => setCccd(e.target.value)} required maxLength="12" minLength="12" pattern="[0-9]*" title="Vui lòng nhập đủ 12 chữ số." placeholder="CCCD..." /></div>
+ 
             <div><label>Brand</label><select value={selectedBrand} onChange={e => setSelectedBrand(e.target.value)} required><option value="">-- Chọn Brand --</option>{brands.map(brand => (<option key={brand.id} value={brand.id}>{brand.ten_brand}</option>))}</select></div>
             <div>
               <label>Sản phẩm</label>
               <input type="text" placeholder="Tìm sản phẩm..." value={productSearchTerm} onChange={e => setProductSearchTerm(e.target.value)} disabled={!selectedBrand} />
               <div style={{ border: '1px solid #eee', borderRadius: '8px', padding: '10px', maxHeight: '150px', overflowY: 'auto', backgroundColor: '#f9f9f9' }}>
                 {sanPhams.length > 0 ?
-                  sanPhams.filter(sp => sp.ten_sanpham.toLowerCase().includes(productSearchTerm.toLowerCase())).map(sp => (
+                 sanPhams.filter(sp => sp.ten_sanpham.toLowerCase().includes(productSearchTerm.toLowerCase())).map(sp => (
                     <div key={sp.id} style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
                       <label htmlFor={sp.id} style={{ flex: 1, fontWeight: 'normal !important', fontSize: '0.9rem' }}>{sp.ten_sanpham}</label>
                       <input type="number" min="0" id={sp.id} value={selectedSanPhams[sp.id] || ''} onChange={(e) => handleQuantityChange(sp.id, e.target.value)} style={{ width: '70px', padding: '5px', textAlign: 'center' }} placeholder="0" />
@@ -82,6 +104,7 @@ const OrderTab = () => {
                   )) : <p style={{ margin: 0, color: '#D42426', textAlign: 'center' }}>Vui lòng chọn Brand để xem sản phẩm</p>}
               </div>
             </div>
+            
             <div><label>Nhân sự gửi</label><select value={selectedNhanSu} onChange={e => setSelectedNhanSu(e.target.value)} required><option value="">-- Chọn nhân sự --</option>{nhanSus.map(nhansu => (<option key={nhansu.id} value={nhansu.id}>{nhansu.ten_nhansu}</option>))}</select></div>
             <div>
               <label>Loại hình vận chuyển</label>
@@ -97,7 +120,7 @@ const OrderTab = () => {
 
         {/* --- CỘT 2: TỔNG HỢP SẢN PHẨM --- */}
         <div className="christmas-card" style={{ flex: 1 }}>
-            <h2 style={{ textAlign: 'center', marginBottom: '1.5rem', color: '#165B33' }}>Tổng Hợp Sản Phẩm</h2>
+             <h2 style={{ textAlign: 'center', marginBottom: '1.5rem', color: '#165B33' }}>Tổng Hợp Sản Phẩm</h2>
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1rem' }}>
                 <input type="date" value={summaryDate} onChange={e => setSummaryDate(e.target.value)} style={{ flex: 1 }} />
                 <button onClick={handleGetSummary} disabled={isSummarizing} style={{ backgroundColor: '#165B33' }}>{isSummarizing ? '...' : 'Tổng hợp'}</button>
@@ -108,7 +131,7 @@ const OrderTab = () => {
                     <div style={{marginBottom: '1.5rem'}}>
                         <h3 style={{color: '#165B33', borderBottom: '1px solid #eee', paddingBottom: '5px', fontWeight: 'bold'}}>📦 Ship Thường</h3>
                         <table style={{ width: '100%' }}><thead><tr><th>Sản phẩm</th><th>SL</th></tr></thead>
-                        <tbody>{productSummary['Ship thường'].map(item => (<tr key={`${item.ten_san_pham}-thuong`}><td>{item.ten_san_pham}<br/><small style={{color: '#777'}}>{item.ten_brand} - {item.barcode}</small></td><td style={{textAlign: 'center'}}><strong>{item.total_quantity}</strong></td></tr>))}</tbody></table>
+                         <tbody>{productSummary['Ship thường'].map(item => (<tr key={`${item.ten_san_pham}-thuong`}><td>{item.ten_san_pham}<br/><small style={{color: '#777'}}>{item.ten_brand} - {item.barcode}</small></td><td style={{textAlign: 'center'}}><strong>{item.total_quantity}</strong></td></tr>))}</tbody></table>
                     </div>
                 )}
                 {productSummary['Hỏa tốc'].length > 0 && (
@@ -134,7 +157,7 @@ const OrderTab = () => {
             <select value={reportMonth} onChange={e => setReportMonth(e.target.value)} style={{ width: 'auto' }}>
                {Array.from({ length: 12 }, (_, i) => <option key={i+1} value={i+1}>Tháng {i+1}</option>)}
             </select>
-            <input type="number" value={reportYear} onChange={e => setReportYear(e.target.value)} style={{ width: '100px' }} />
+             <input type="number" value={reportYear} onChange={e => setReportYear(e.target.value)} style={{ width: '100px' }} />
             <button onClick={handleGenerateReport} disabled={isReportLoading} style={{ backgroundColor: '#D42426' }}>
                 {isReportLoading ? 'Đang tính toán...' : '📊 Xem Báo Cáo'}
             </button>
@@ -145,7 +168,7 @@ const OrderTab = () => {
               <thead>
                 <tr>
                   <th style={{ cursor: 'pointer' }} onClick={() => requestSort('ten_nhansu')}>Nhân Sự {sortConfig.key === 'ten_nhansu' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}</th>
-                  <th style={{ cursor: 'pointer', textAlign: 'center' }} onClick={() => requestSort('sl_order')}>SL Order {sortConfig.key === 'sl_order' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}</th>
+                   <th style={{ cursor: 'pointer', textAlign: 'center' }} onClick={() => requestSort('sl_order')}>SL Order {sortConfig.key === 'sl_order' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}</th>
                   <th style={{ textAlign: 'center' }} >AOV Đơn Order</th>
                   <th style={{ cursor: 'pointer', textAlign: 'center' }} onClick={() => requestSort('chi_phi_tong')}>Chi Phí Tổng {sortConfig.key === 'chi_phi_tong' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}</th>
                   {reportData.brandHeaders.map(brand => (
@@ -155,7 +178,7 @@ const OrderTab = () => {
                </thead>
               <tbody>
                 {sortedReportRows.map((item) => (
-                   <tr key={item.nhansu_id}>
+                    <tr key={item.nhansu_id}>
                       <td style={{ fontWeight: 'bold', color: '#165B33' }}>{item.ten_nhansu}</td>
                       <td style={{ textAlign: 'center' }}>{item.sl_order}</td>
                       <td style={{ textAlign: 'center' }}>{Math.round(item.aov_don_order).toLocaleString('vi-VN')} đ</td>
@@ -191,11 +214,12 @@ const OrderTab = () => {
       {/* --- CỘT 4: DANH SÁCH ĐƠN --- */}
       
       {/* KHỐI LỌC */}
-      <div className="christmas-card" style={{ marginBottom: '1.5rem', padding: '1.5rem' }}>
+       <div className="christmas-card" style={{ marginBottom: '1.5rem', padding: '1.5rem' }}>
         <h2 style={{ textAlign: 'center', color: '#D42426', marginBottom: '1rem' }}>Danh Sách Đơn Hàng</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', alignItems: 'end' }}>
             <input type="text" placeholder="ID kênh..." value={filterIdKenh} onChange={e => setFilterIdKenh(e.target.value)} />
             <input type="text" placeholder="SĐT..." value={filterSdt} onChange={e => setFilterSdt(e.target.value)} />
+            
             <select value={filterBrand} onChange={e => setFilterBrand(e.target.value)}><option value="">Tất cả Brand</option>{brands.map(b => <option key={b.id} value={b.id}>{b.ten_brand}</option>)}</select>
             <select value={filterSanPham} onChange={e => setFilterSanPham(e.target.value)} disabled={!filterBrand}><option value="">Tất cả Sản phẩm</option>{filterSanPhams.map(sp => <option key={sp.id} value={sp.id}>{sp.ten_sanpham}</option>)}</select>
             <select value={filterNhanSu} onChange={e => setFilterNhanSu(e.target.value)}><option value="">Tất cả nhân sự</option>{nhanSus.map(ns => <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>)}</select>
@@ -270,14 +294,17 @@ const OrderTab = () => {
                       <td style={{ width: `${columnWidths.select}px`, padding: '12px', border: '1px solid #ddd' }}></td>
                       <td style={{ width: `${columnWidths.stt}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.originalStt}</td>
                       <td style={{ width: `${columnWidths.ngayGui}px`, padding: '12px', border: '1px solid #ddd' }}>{new Date(donHang.ngay_gui).toLocaleString('vi-VN')}</td>
+                  
                       <td style={{ width: `${columnWidths.hoTenKOC}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{width: '90%'}} value={editingDonHang.koc_ho_ten} onChange={e => setEditingDonHang({...editingDonHang, koc_ho_ten: e.target.value})} /></td>
                       <td style={{ width: `${columnWidths.cccd}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{width: '90%'}} value={editingDonHang.koc_cccd} onChange={e => setEditingDonHang({...editingDonHang, koc_cccd: e.target.value})} /></td>
                       <td style={{ width: `${columnWidths.idKenh}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{width: '90%'}} value={editingDonHang.koc_id_kenh} onChange={e => setEditingDonHang({...editingDonHang, koc_id_kenh: e.target.value})} /></td>
                       <td style={{ width: `${columnWidths.sdt}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{width: '90%'}} value={editingDonHang.koc_sdt} onChange={e => setEditingDonHang({...editingDonHang, koc_sdt: e.target.value})} /></td>
                       <td style={{ width: `${columnWidths.diaChi}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{width: '90%'}} value={editingDonHang.koc_dia_chi} onChange={e => setEditingDonHang({...editingDonHang, koc_dia_chi: e.target.value})} /></td>
+             
                       <td style={{ width: `${columnWidths.brand}px`, padding: '12px', border: '1px solid #ddd' }}>{[...new Set(donHang.chitiettonguis.map(ct => ct.sanphams?.brands?.ten_brand))].map(b => <div key={b}>{b}</div>)}</td>
                       <td style={{ width: `${columnWidths.sanPham}px`, padding: '12px', border: '1px solid #ddd' }}>{sanPhamDisplay}</td>
                       <td style={{ width: `${columnWidths.nhanSu}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.nhansu?.ten_nhansu}</td>
+           
                       <td style={{ width: `${columnWidths.loaiShip}px`, padding: '12px', border: '1px solid #ddd' }}><select style={{width: '100%'}} value={editingDonHang.loai_ship} onChange={e => setEditingDonHang({...editingDonHang, loai_ship: e.target.value})}><option>Ship thường</option><option>Hỏa tốc</option></select></td>
                       <td style={{ width: `${columnWidths.trangThai}px`, padding: '12px', border: '1px solid #ddd' }}><select style={{width: '100%'}} value={editingDonHang.trang_thai} onChange={(e) => setEditingDonHang({...editingDonHang, trang_thai: e.target.value})}><option>Chưa đóng đơn</option><option>Đã đóng đơn</option></select></td>
                       <td style={{ width: `${columnWidths.hanhDong}px`, padding: '12px', border: '1px solid #ddd' }}><button onClick={handleUpdate} style={{padding: '5px', backgroundColor: '#27AE60', color: 'white', border: 'none', borderRadius: '4px', margin: '2px'}}>Lưu</button><button onClick={handleCancelEdit} style={{padding: '5px', backgroundColor: '#95A5A6', color: 'white', border: 'none', borderRadius: '4px', margin: '2px'}}>Hủy</button></td>
@@ -287,26 +314,49 @@ const OrderTab = () => {
                       {/* CHẾ ĐỘ XEM: NÚT SỬA VÀ XÓA */}
                       <td style={{ width: `${columnWidths.select}px`, padding: '12px', border: '1px solid #ddd' }}><input type="checkbox" checked={selectedOrders.has(donHang.id)} onChange={() => handleSelect(donHang.id)} /></td>
                       <td style={{ width: `${columnWidths.stt}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.originalStt}</td>
+          
                       <td style={{ width: `${columnWidths.ngayGui}px`, padding: '12px', border: '1px solid #ddd' }}>{new Date(donHang.ngay_gui).toLocaleString('vi-VN')}</td>
                       <td style={{ width: `${columnWidths.hoTenKOC}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.koc_ho_ten, donHang.original_koc_ho_ten) }}>{donHang.koc_ho_ten}</td>
                       <td style={{ width: `${columnWidths.cccd}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.koc_cccd, donHang.original_koc_cccd) }}>{donHang.koc_cccd}</td>
+         
                       <td style={{ width: `${columnWidths.idKenh}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.koc_id_kenh, donHang.original_koc_id_kenh) }}>{donHang.koc_id_kenh}</td>
                       <td style={{ width: `${columnWidths.sdt}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.koc_sdt, donHang.original_koc_sdt) }}>{donHang.koc_sdt}</td>
                       <td style={{ width: `${columnWidths.diaChi}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.koc_dia_chi, donHang.original_koc_dia_chi) }}>{donHang.koc_dia_chi}</td>
+       
                       <td style={{ width: `${columnWidths.brand}px`, padding: '12px', border: '1px solid #ddd' }}>{[...new Set(donHang.chitiettonguis.map(ct => ct.sanphams?.brands?.ten_brand))].map(tenBrand => ( <div key={tenBrand}>{tenBrand}</div> ))}</td>
                       <td style={{ width: `${columnWidths.sanPham}px`, padding: '12px', border: '1px solid #ddd' }}>{sanPhamDisplay}</td>
                       <td style={{ width: `${columnWidths.nhanSu}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.nhansu?.ten_nhansu}</td>
+   
                       <td style={{ width: `${columnWidths.loaiShip}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.loai_ship, donHang.original_loai_ship) }}>{donHang.loai_ship}</td>
                       <td style={{ width: `${columnWidths.trangThai}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.trang_thai, donHang.original_trang_thai) }}>{donHang.trang_thai}</td>
+                      
+                      {/* --- CỘT HÀNH ĐỘNG --- */}
                       <td style={{ width: `${columnWidths.hanhDong}px`, padding: '12px', border: '1px solid #ddd', whiteSpace: 'nowrap' }}>
                           <button onClick={() => handleEdit(donHang)} style={{padding: '5px 10px', backgroundColor: '#F8B229', color: '#333', border: 'none', borderRadius: '4px', marginRight: '5px'}}>Sửa</button>
-                          <button onClick={() => handleDeleteOrder(donHang.id)} style={{padding: '5px 10px', backgroundColor: '#D42426', color: 'white', border: 'none', borderRadius: '4px'}}>Xóa</button>
+                          
+                          {/* CHECK KỸ LƯỠNG */}
+                          {isDonDaDong(donHang.trang_thai) ? (
+                             <button 
+                                disabled
+                                style={{padding: '5px 10px', backgroundColor: '#bdc3c7', color: 'white', border: 'none', borderRadius: '4px', cursor: 'not-allowed', opacity: 0.6}}
+                                title="Đơn đã đóng không thể xóa"
+                             >
+                                Xóa
+                             </button>
+                          ) : (
+                             <button 
+                                onClick={() => handleSafeDelete(donHang.id, donHang.trang_thai)} 
+                                style={{padding: '5px 10px', backgroundColor: '#D42426', color: 'white', border: 'none', borderRadius: '4px'}}
+                             >
+                                Xóa
+                             </button>
+                          )}
                       </td>
                   </>
                   )}
                 </tr>
                 );
-              })}
+             })}
             </tbody>
             </table>
         </div>
