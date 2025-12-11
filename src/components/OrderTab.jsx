@@ -1,6 +1,8 @@
 import React from 'react';
 import { useAppData } from '../context/AppDataContext';
 import ResizableHeader from './ResizableHeader';
+// [QUAN TRỌNG] Import cái này để xóa trực tiếp không qua trung gian
+import { supabase } from '../supabaseClient'; 
 
 const OrderTab = () => {
   // Gọi tất cả state và logic từ "bộ não"
@@ -45,9 +47,8 @@ const OrderTab = () => {
     return s.includes("đã đóng");
   };
 
-  // --- HÀM XỬ LÝ XÓA AN TOÀN (Xóa lẻ) ---
+  // --- HÀM XỬ LÝ XÓA AN TOÀN (Xóa lẻ từng dòng) ---
   const handleSafeDelete = (id, status) => {
-    console.log("Check delete status:", status);
     if (isDonDaDong(status)) {
         alert("❌ KHÔNG THỂ XÓA: Đơn hàng này ĐÃ ĐÓNG!");
         return;
@@ -58,15 +59,12 @@ const OrderTab = () => {
     }
   };
 
-  // --- [TÍNH NĂNG MỚI] HÀM XỬ LÝ XÓA HÀNG LOẠT ---
+  // --- [FIXED] HÀM XÓA HÀNG LOẠT (HỎI 1 LẦN DUY NHẤT) ---
   const handleBulkDelete = async () => {
     if (selectedOrders.size === 0) return;
 
     // 1. Kiểm tra xem có đơn "Đã đóng" nào bị lẫn vào không
-    // Lọc ra danh sách các object đơn hàng đang được chọn
     const ordersToDelete = donHangs.filter(order => selectedOrders.has(order.id));
-    
-    // Check trạng thái
     const hasClosedOrder = ordersToDelete.some(order => isDonDaDong(order.trang_thai));
 
     if (hasClosedOrder) {
@@ -74,21 +72,32 @@ const OrderTab = () => {
         return;
     }
 
-    // 2. Popup xác nhận cuối cùng
-    const confirmMsg = `⚠️ CẢNH BÁO: Bạn đang yêu cầu xóa ${selectedOrders.size} đơn hàng.\nHành động này KHÔNG THỂ hoàn tác.\n\nBạn có chắc chắn muốn tiếp tục?`;
+    // 2. Popup xác nhận (CHỈ HIỆN 1 LẦN)
+    const confirmMsg = `⚠️ CẢNH BÁO NGUY HIỂM:\n\nBạn đang yêu cầu xóa vĩnh viễn ${selectedOrders.size} đơn hàng.\nHành động này KHÔNG THỂ hoàn tác.\n\nBạn có chắc chắn muốn xóa không?`;
+    
     if (window.confirm(confirmMsg)) {
-        // Lặp qua từng ID và xóa (Tận dụng hàm handleDeleteOrder của Context)
         try {
-            let count = 0;
-            for (const id of selectedOrders) {
-                await handleDeleteOrder(id);
-                count++;
-            }
-            // Thông báo xóa xong (Context thường sẽ tự reload lại bảng)
-             console.log(`Đã xóa xong ${count} đơn.`);
+            // Lấy danh sách ID cần xóa
+            const idsToDelete = Array.from(selectedOrders);
+
+            // 3. Gọi trực tiếp Supabase xóa 1 lệnh là bay hết
+            // LƯU Ý: Tên bảng trong DB của ông là 'don_hang' hay 'orders'? 
+            // Tui đang để mặc định là 'don_hang'. Nếu ko chạy ông đổi thành 'orders' nhé.
+            const { error } = await supabase
+                .from('don_hang') 
+                .delete()
+                .in('id', idsToDelete);
+
+            if (error) throw error;
+
+            alert(`✅ Đã xóa thành công ${idsToDelete.length} đơn hàng!`);
+            
+            // Reload lại trang để cập nhật bảng sạch sẽ
+            window.location.reload();
+
         } catch (error) {
             console.error("Lỗi khi xóa hàng loạt:", error);
-            alert("Có lỗi xảy ra trong quá trình xóa.");
+            alert("❌ Có lỗi xảy ra khi xóa: " + error.message);
         }
     }
   };
@@ -246,12 +255,12 @@ const OrderTab = () => {
          )}
       </div>
 
-      {/* --- CỘT 4: DANH SÁCH ĐƠN (Giao diện đã sửa) --- */}
+      {/* --- CỘT 4: DANH SÁCH ĐƠN --- */}
       
       <div className="christmas-card" style={{ marginBottom: '1.5rem', padding: '1.5rem' }}>
         <h2 style={{ textAlign: 'center', color: '#D42426', marginBottom: '1rem' }}>Danh Sách Đơn Hàng</h2>
         
-        {/* HÀNG 1: INPUT NHẬP LIỆU (Giữ Grid nhưng bỏ nút ra) */}
+        {/* HÀNG 1: INPUT NHẬP LIỆU */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
             <input type="text" placeholder="ID kênh..." value={filterIdKenh} onChange={e => setFilterIdKenh(e.target.value)} />
             <input type="text" placeholder="SĐT..." value={filterSdt} onChange={e => setFilterSdt(e.target.value)} />
@@ -275,12 +284,12 @@ const OrderTab = () => {
         {/* HÀNG 2: THANH CÔNG CỤ (Tách riêng, rộng rãi) */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #eee', paddingTop: '15px', flexWrap: 'wrap' }}>
              
-             {/* 1. Nút Xóa Lọc (Màu xám) */}
+             {/* 1. Nút Xóa Lọc */}
              <button onClick={clearFilters} style={{ backgroundColor: '#95A5A6', color: 'white', padding: '8px 15px', display: 'flex', alignItems: 'center', gap: '5px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
                 <i className="fa fa-filter"></i> Xóa Lọc
              </button>
 
-             {/* 2. Nút Đóng Đơn (Màu Cam) */}
+             {/* 2. Nút Đóng Đơn */}
              <button 
                 onClick={handleBulkUpdateStatus} 
                 disabled={selectedOrders.size === 0} 
@@ -295,7 +304,7 @@ const OrderTab = () => {
                   📦 Đóng Đơn ({selectedOrders.size})
               </button>
 
-              {/* 3. Nút Xóa (Màu Đỏ Đậm) */}
+              {/* 3. Nút Xóa (QUAN TRỌNG) */}
               <button 
                 onClick={handleBulkDelete} 
                 disabled={selectedOrders.size === 0} 
@@ -311,7 +320,7 @@ const OrderTab = () => {
                   🗑️ XÓA ({selectedOrders.size})
               </button>
             
-            {/* 4. Nút Xuất Excel (Màu Xanh lá) */}
+            {/* 4. Nút Xuất Excel */}
             <button onClick={handleExportAll} disabled={isLoading} style={{ backgroundColor: '#165B33', color: 'white', padding: '8px 20px', marginLeft: '10px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
                 {isLoading ? '...' : '📊 Xuất Excel'}
             </button>
