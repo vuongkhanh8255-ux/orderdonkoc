@@ -38,18 +38,16 @@ const OrderTab = () => {
     pageNumbers.push(i);
   }
 
-  // --- HÀM CHECK TRẠNG THÁI "SÁT THỦ" (MỚI) ---
-  // Chỉ cần chứa cụm từ "đã đóng" là chặn ngay
+  // --- HÀM CHECK TRẠNG THÁI "SÁT THỦ" ---
   const isDonDaDong = (status) => {
     if (!status) return false;
-    // Chuyển về chữ thường hết để so sánh
     const s = String(status).toLowerCase(); 
-    return s.includes("đã đóng"); // Chặn cả "Đã đóng đơn", "Đã đóng", "đã đóng đơn "...
+    return s.includes("đã đóng");
   };
 
-  // --- HÀM XỬ LÝ XÓA AN TOÀN ---
+  // --- HÀM XỬ LÝ XÓA AN TOÀN (Xóa lẻ) ---
   const handleSafeDelete = (id, status) => {
-    console.log("Check delete status:", status); // Log ra để kiểm tra nếu cần
+    console.log("Check delete status:", status);
     if (isDonDaDong(status)) {
         alert("❌ KHÔNG THỂ XÓA: Đơn hàng này ĐÃ ĐÓNG!");
         return;
@@ -60,10 +58,47 @@ const OrderTab = () => {
     }
   };
 
+  // --- [TÍNH NĂNG MỚI] HÀM XỬ LÝ XÓA HÀNG LOẠT ---
+  const handleBulkDelete = async () => {
+    if (selectedOrders.size === 0) return;
+
+    // 1. Kiểm tra xem có đơn "Đã đóng" nào bị lẫn vào không
+    // Lọc ra danh sách các object đơn hàng đang được chọn
+    const ordersToDelete = donHangs.filter(order => selectedOrders.has(order.id));
+    
+    // Check trạng thái
+    const hasClosedOrder = ordersToDelete.some(order => isDonDaDong(order.trang_thai));
+
+    if (hasClosedOrder) {
+        alert("❌ LỖI: Trong danh sách đã chọn có đơn hàng ĐÃ ĐÓNG.\nKhông thể xóa đơn đã đóng. Vui lòng kiểm tra lại!");
+        return;
+    }
+
+    // 2. Popup xác nhận cuối cùng
+    const confirmMsg = `⚠️ CẢNH BÁO: Bạn đang yêu cầu xóa ${selectedOrders.size} đơn hàng.\nHành động này KHÔNG THỂ hoàn tác.\n\nBạn có chắc chắn muốn tiếp tục?`;
+    if (window.confirm(confirmMsg)) {
+        // Lặp qua từng ID và xóa (Tận dụng hàm handleDeleteOrder của Context)
+        try {
+            let count = 0;
+            for (const id of selectedOrders) {
+                await handleDeleteOrder(id);
+                count++;
+            }
+            // Thông báo xóa xong (Context thường sẽ tự reload lại bảng)
+             console.log(`Đã xóa xong ${count} đơn.`);
+        } catch (error) {
+            console.error("Lỗi khi xóa hàng loạt:", error);
+            alert("Có lỗi xảy ra trong quá trình xóa.");
+        }
+    }
+  };
+  // ----------------------------------------------
+
   // Headers cho bảng
   const headers = [ { key: 'select', label: <input type="checkbox" onChange={handleSelectAll} /> }, { key: 'stt', label: 'STT' }, { key: 'ngayGui', label: 'Ngày Gửi' }, { key: 'hoTenKOC', label: 'Họ Tên KOC' }, { key: 'cccd', label: 'CCCD' }, { key: 'idKenh', label: 'ID Kênh' }, { key: 'sdt', label: 'SĐT' }, { key: 'diaChi', label: 'Địa chỉ' }, { key: 'brand', label: 'Brand' }, { key: 'sanPham', label: 'Sản Phẩm (SL)' }, { key: 'nhanSu', label: 'Nhân Sự Gửi' }, { key: 'loaiShip', label: 'Loại Ship' }, { key: 'trangThai', label: 'Trạng Thái' }, { key: 'hanhDong', label: 'Hành Động' }, ];
+  
   const summaryExportHeaders = [ { label: "Loại Ship", key: "loai_ship"}, { label: "Sản Phẩm", key: "ten_san_pham" }, { label: "Barcode", key: "barcode" }, { label: "Brand", key: "ten_brand" }, { label: "Tổng Số Lượng", key: "total_quantity" } ];
-
+  
   return (
     <> 
       {/* Tiêu đề riêng cho Tab Order */}
@@ -71,7 +106,6 @@ const OrderTab = () => {
           <h1 style={{ fontSize: '2.5rem', fontWeight: '800', color: '#ffffff', textShadow: '2px 2px 4px rgba(0,0,0,0.5)' }}>
               <span style={{color: '#165B33'}}>🎄</span> QUẢN LÝ ĐƠN HÀNG KOC <span style={{color: '#165B33'}}>🎄</span>
           </h1>
-        
           <p style={{ position: 'absolute', top: '0', left: '0', fontSize: '1rem', fontWeight: 'bold', color: '#D42426', backgroundColor: '#fff', padding: '5px 15px', borderRadius: '20px', border: '2px solid #D42426', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>
               🎅 Made by Khánh đẹp trai vkl
           </p>
@@ -109,10 +143,11 @@ const OrderTab = () => {
             <div>
               <label>Loại hình vận chuyển</label>
               <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.5rem', padding: '10px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}><input type="radio" value="Ship thường" checked={loaiShip === 'Ship thường'} onChange={e => setLoaiShip(e.target.value)} style={{ marginRight: '8px' }} />Ship thường</label>
+               <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}><input type="radio" value="Ship thường" checked={loaiShip === 'Ship thường'} onChange={e => setLoaiShip(e.target.value)} style={{ marginRight: '8px' }} />Ship thường</label>
                 <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}><input type="radio" value="Hỏa tốc" checked={loaiShip === 'Hỏa tốc'} onChange={e => setLoaiShip(e.target.value)} style={{ marginRight: '8px' }} />Hỏa tốc 🚀</label>
               </div>
             </div>
+        
             <button type="submit" disabled={isLoading || isPastDeadlineForNewOrders} style={{ marginTop: '1rem', backgroundColor: '#D42426' }}>{isLoading ? 'Đang xử lý...' : '🎁 GỬI ĐƠN NGAY'}</button>
             {isPastDeadlineForNewOrders && (<p style={{ color: '#D42426', textAlign: 'center', marginTop: '0.5rem', fontWeight: 'bold' }}>⚠️ Đã quá 16h30, không thể tạo đơn hàng mới.</p>)}
            </form>
@@ -120,7 +155,7 @@ const OrderTab = () => {
 
         {/* --- CỘT 2: TỔNG HỢP SẢN PHẨM --- */}
         <div className="christmas-card" style={{ flex: 1 }}>
-             <h2 style={{ textAlign: 'center', marginBottom: '1.5rem', color: '#165B33' }}>Tổng Hợp Sản Phẩm</h2>
+           <h2 style={{ textAlign: 'center', marginBottom: '1.5rem', color: '#165B33' }}>Tổng Hợp Sản Phẩm</h2>
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1rem' }}>
                 <input type="date" value={summaryDate} onChange={e => setSummaryDate(e.target.value)} style={{ flex: 1 }} />
                 <button onClick={handleGetSummary} disabled={isSummarizing} style={{ backgroundColor: '#165B33' }}>{isSummarizing ? '...' : 'Tổng hợp'}</button>
@@ -131,7 +166,7 @@ const OrderTab = () => {
                     <div style={{marginBottom: '1.5rem'}}>
                         <h3 style={{color: '#165B33', borderBottom: '1px solid #eee', paddingBottom: '5px', fontWeight: 'bold'}}>📦 Ship Thường</h3>
                         <table style={{ width: '100%' }}><thead><tr><th>Sản phẩm</th><th>SL</th></tr></thead>
-                         <tbody>{productSummary['Ship thường'].map(item => (<tr key={`${item.ten_san_pham}-thuong`}><td>{item.ten_san_pham}<br/><small style={{color: '#777'}}>{item.ten_brand} - {item.barcode}</small></td><td style={{textAlign: 'center'}}><strong>{item.total_quantity}</strong></td></tr>))}</tbody></table>
+                      <tbody>{productSummary['Ship thường'].map(item => (<tr key={`${item.ten_san_pham}-thuong`}><td>{item.ten_san_pham}<br/><small style={{color: '#777'}}>{item.ten_brand} - {item.barcode}</small></td><td style={{textAlign: 'center'}}><strong>{item.total_quantity}</strong></td></tr>))}</tbody></table>
                     </div>
                 )}
                 {productSummary['Hỏa tốc'].length > 0 && (
@@ -186,7 +221,7 @@ const OrderTab = () => {
                       {reportData.brandHeaders.map(brand => (
                            <td key={brand} style={{ textAlign: 'center' }}>{item.brand_counts[brand] || 0}</td>
                       ))}
-                    </tr>
+                     </tr>
                 ))}
               </tbody>
               <tfoot>
@@ -211,12 +246,13 @@ const OrderTab = () => {
          )}
       </div>
 
-      {/* --- CỘT 4: DANH SÁCH ĐƠN --- */}
+      {/* --- CỘT 4: DANH SÁCH ĐƠN (Giao diện đã sửa) --- */}
       
-      {/* KHỐI LỌC */}
-       <div className="christmas-card" style={{ marginBottom: '1.5rem', padding: '1.5rem' }}>
+      <div className="christmas-card" style={{ marginBottom: '1.5rem', padding: '1.5rem' }}>
         <h2 style={{ textAlign: 'center', color: '#D42426', marginBottom: '1rem' }}>Danh Sách Đơn Hàng</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', alignItems: 'end' }}>
+        
+        {/* HÀNG 1: INPUT NHẬP LIỆU (Giữ Grid nhưng bỏ nút ra) */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
             <input type="text" placeholder="ID kênh..." value={filterIdKenh} onChange={e => setFilterIdKenh(e.target.value)} />
             <input type="text" placeholder="SĐT..." value={filterSdt} onChange={e => setFilterSdt(e.target.value)} />
             
@@ -224,7 +260,7 @@ const OrderTab = () => {
             <select value={filterSanPham} onChange={e => setFilterSanPham(e.target.value)} disabled={!filterBrand}><option value="">Tất cả Sản phẩm</option>{filterSanPhams.map(sp => <option key={sp.id} value={sp.id}>{sp.ten_sanpham}</option>)}</select>
             <select value={filterNhanSu} onChange={e => setFilterNhanSu(e.target.value)}><option value="">Tất cả nhân sự</option>{nhanSus.map(ns => <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>)}</select>
             <select value={filterLoaiShip} onChange={e => setFilterLoaiShip(e.target.value)}>
-              <option value="">Tất cả loại ship</option>
+               <option value="">Tất cả loại ship</option>
               <option value="Ship thường">Ship thường</option>
               <option value="Hỏa tốc">Hỏa tốc</option>
             </select>
@@ -234,14 +270,50 @@ const OrderTab = () => {
                 <option value="unedited">Đơn chưa sửa</option>
             </select>
             <input type="date" value={filterNgay} onChange={e => setFilterNgay(e.target.value)} />
-            <div style={{display: 'flex', gap: '0.5rem'}}>
-              <button onClick={clearFilters} style={{ flex: 1, backgroundColor: '#95A5A6' }}>Xóa Lọc</button>
-              <button onClick={handleBulkUpdateStatus} disabled={selectedOrders.size === 0} style={{ flex: 1, backgroundColor: selectedOrders.size > 0 ? '#D42426' : '#ccc' }}>
-                  Đóng ({selectedOrders.size})
+        </div>
+
+        {/* HÀNG 2: THANH CÔNG CỤ (Tách riêng, rộng rãi) */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #eee', paddingTop: '15px', flexWrap: 'wrap' }}>
+             
+             {/* 1. Nút Xóa Lọc (Màu xám) */}
+             <button onClick={clearFilters} style={{ backgroundColor: '#95A5A6', color: 'white', padding: '8px 15px', display: 'flex', alignItems: 'center', gap: '5px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                <i className="fa fa-filter"></i> Xóa Lọc
+             </button>
+
+             {/* 2. Nút Đóng Đơn (Màu Cam) */}
+             <button 
+                onClick={handleBulkUpdateStatus} 
+                disabled={selectedOrders.size === 0} 
+                style={{ 
+                    backgroundColor: selectedOrders.size > 0 ? '#F39C12' : '#ecf0f1', // Cam
+                    color: selectedOrders.size > 0 ? 'white' : '#bdc3c7',
+                    fontWeight: 'bold',
+                    padding: '8px 15px',
+                    cursor: selectedOrders.size > 0 ? 'pointer' : 'not-allowed',
+                    border: 'none', borderRadius: '4px'
+                }}>
+                  📦 Đóng Đơn ({selectedOrders.size})
               </button>
-            </div>
-            <button onClick={handleExportAll} disabled={isLoading} style={{ backgroundColor: '#165B33' }}>
-                {isLoading ? '...' : 'Xuất Excel'}
+
+              {/* 3. Nút Xóa (Màu Đỏ Đậm) */}
+              <button 
+                onClick={handleBulkDelete} 
+                disabled={selectedOrders.size === 0} 
+                style={{ 
+                    backgroundColor: selectedOrders.size > 0 ? '#c0392b' : '#ecf0f1', // Đỏ đậm
+                    color: selectedOrders.size > 0 ? 'white' : '#bdc3c7',
+                    fontWeight: 'bold',
+                    padding: '8px 15px',
+                    cursor: selectedOrders.size > 0 ? 'pointer' : 'not-allowed',
+                    border: 'none', borderRadius: '4px'
+                }}
+              >
+                  🗑️ XÓA ({selectedOrders.size})
+              </button>
+            
+            {/* 4. Nút Xuất Excel (Màu Xanh lá) */}
+            <button onClick={handleExportAll} disabled={isLoading} style={{ backgroundColor: '#165B33', color: 'white', padding: '8px 20px', marginLeft: '10px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                {isLoading ? '...' : '📊 Xuất Excel'}
             </button>
         </div>
       </div>
@@ -261,7 +333,7 @@ const OrderTab = () => {
                     disabled={isLoading}
                     style={{ margin: '0 5px', backgroundColor: currentPage === number ? '#D42426' : '#f8f9fa', color: currentPage === number ? 'white' : '#333', border: '1px solid #ccc' }}
                 >
-                    {number}
+                     {number}
                 </button>
             ))}
             <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || isLoading} style={{ margin: '0 5px', backgroundColor: '#f8f9fa', color: '#333', border: '1px solid #ccc' }}>
@@ -278,7 +350,7 @@ const OrderTab = () => {
                {headers.map((header) => (
                   <ResizableHeader key={header.key} width={columnWidths[header.key]} onResize={handleResize(header.key)}>
                      {header.label}
-                  </ResizableHeader>
+                   </ResizableHeader>
               ))}
             </tr>
             </thead>
@@ -286,6 +358,7 @@ const OrderTab = () => {
               {donHangs.map((donHang) => {
                 const getCellStyle = (currentValue, originalValue) => (originalValue !== null && currentValue !== originalValue) ? { backgroundColor: '#D42426', color: 'white' } : {};
                 const sanPhamDisplay = donHang.chitiettonguis.map(ct => (<div key={ct.sanphams?.id}>{ct.sanphams?.ten_sanpham} (SL: {ct.so_luong})</div>));
+                
                 return (
                 <tr key={donHang.id}>
                   {editingDonHang?.id === donHang.id ? ( 
@@ -297,6 +370,7 @@ const OrderTab = () => {
                   
                       <td style={{ width: `${columnWidths.hoTenKOC}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{width: '90%'}} value={editingDonHang.koc_ho_ten} onChange={e => setEditingDonHang({...editingDonHang, koc_ho_ten: e.target.value})} /></td>
                       <td style={{ width: `${columnWidths.cccd}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{width: '90%'}} value={editingDonHang.koc_cccd} onChange={e => setEditingDonHang({...editingDonHang, koc_cccd: e.target.value})} /></td>
+                  
                       <td style={{ width: `${columnWidths.idKenh}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{width: '90%'}} value={editingDonHang.koc_id_kenh} onChange={e => setEditingDonHang({...editingDonHang, koc_id_kenh: e.target.value})} /></td>
                       <td style={{ width: `${columnWidths.sdt}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{width: '90%'}} value={editingDonHang.koc_sdt} onChange={e => setEditingDonHang({...editingDonHang, koc_sdt: e.target.value})} /></td>
                       <td style={{ width: `${columnWidths.diaChi}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{width: '90%'}} value={editingDonHang.koc_dia_chi} onChange={e => setEditingDonHang({...editingDonHang, koc_dia_chi: e.target.value})} /></td>
@@ -356,7 +430,7 @@ const OrderTab = () => {
                   )}
                 </tr>
                 );
-             })}
+              })}
             </tbody>
             </table>
         </div>
