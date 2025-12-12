@@ -3,6 +3,7 @@ import { AppDataProvider } from './context/AppDataContext';
 import OrderTab from './components/OrderTab';
 import ContractTab from './components/ContractTab';
 import AirLinksTab from './components/AirLinksTab';
+import ExpenseEcomTab from './components/ExpenseEcomTab'; // [THÊM MỚI]
 import SnowEffect from './components/SnowEffect';
 import AIChat from './components/AIChat';
 
@@ -13,7 +14,9 @@ function App() {
 
   // --- CẤU HÌNH KÍCH THƯỚC ---
   const WIDTH_OPEN = '280px';
-  const WIDTH_CLOSE = '90px'; // Đủ rộng để chứa icon trong hộp trắng
+  const WIDTH_CLOSE = '90px';
+
+  // Đủ rộng để chứa icon trong hộp trắng
   const currentWidth = isSidebarHovered ? WIDTH_OPEN : WIDTH_CLOSE;
 
   // --- STYLE SIDEBAR (NỀN ĐỎ ĐẬM) ---
@@ -103,20 +106,28 @@ function App() {
 
             {/* Menu List */}
             <div style={{ flex: 1, paddingTop: '20px' }}>
+                {/* TAB 1: ORDER */}
                 <div style={menuItemStyle(currentView === 'orders')} onClick={() => setCurrentView('orders')} title="Quản Lý Order">
                     <span style={{fontSize: '1.4rem'}}>📦</span> 
-                    {/* Chữ chỉ hiện khi Sidebar mở */}
                     <span style={{ display: isSidebarHovered ? 'block' : 'none', whiteSpace: 'nowrap' }}>Quản Lý Order</span>
                 </div>
 
+                {/* TAB 2: HỢP ĐỒNG */}
                 <div style={menuItemStyle(currentView === 'contract')} onClick={() => setCurrentView('contract')} title="Tạo Hợp Đồng">
                     <span style={{fontSize: '1.4rem'}}>📝</span>
                     <span style={{ display: isSidebarHovered ? 'block' : 'none', whiteSpace: 'nowrap' }}>Tạo Hợp Đồng</span>
                 </div>
 
+                {/* TAB 3: LINK AIR */}
                 <div style={menuItemStyle(currentView === 'airlinks')} onClick={() => setCurrentView('airlinks')} title="Quản Lý Link Air">
                     <span style={{fontSize: '1.4rem'}}>🎬</span>
                     <span style={{ display: isSidebarHovered ? 'block' : 'none', whiteSpace: 'nowrap' }}>Quản Lý Link Air</span>
+                </div>
+
+                {/* TAB 4: CHI PHÍ ECOM [THÊM MỚI] */}
+                <div style={menuItemStyle(currentView === 'expenses')} onClick={() => setCurrentView('expenses')} title="Quản Lý Chi Phí">
+                    <span style={{fontSize: '1.4rem'}}>💸</span>
+                    <span style={{ display: isSidebarHovered ? 'block' : 'none', whiteSpace: 'nowrap' }}>Quản Lý Chi Phí</span>
                 </div>
             </div>
 
@@ -130,6 +141,7 @@ function App() {
            {currentView === 'orders' && <OrderTab />}
            {currentView === 'contract' && <ContractTab />}
            {currentView === 'airlinks' && <AirLinksTab />}
+           {currentView === 'expenses' && <ExpenseEcomTab />} {/* [HIỂN THỊ COMPONENT MỚI] */}
         </div>
 
       </div>
