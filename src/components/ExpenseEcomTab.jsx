@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-// --- HÀM HELPER FORMAT TIỀN ---
+// --- HÀM HELPER ---
 const formatCurrency = (value) => {
-  if (!value && value !== 0) return '';
+  if (!value && value !== 0) return '0';
   const number = String(value).replace(/\D/g, '');
   return number.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 };
@@ -13,310 +14,418 @@ const parseMoney = (str) => {
     return parseFloat(String(str).replace(/[^\d]/g, '')) || 0;
 };
 
-const DEPARTMENT_OPTIONS = [
-    "Livestream",
-    "Ecom",
-    "Marketing",
-    "Design",
-    "Abm",
-    "Cs"
-];
+const formatDate = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleString('vi-VN');
+};
+
+const DEPARTMENT_OPTIONS = [ "Livestream", "Ecom", "Marketing", "Design", "Abm", "Cs" ];
+const COLORS = ['#4CAF50', '#FF9800', '#D42426', '#999999']; 
 
 const ExpenseEcomTab = () => {
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [budget, setBudget] = useState(0); 
   
-  // State form nhập liệu
+  // State nhập mới
   const [newExpense, setNewExpense] = useState({
       ngay_chi: new Date().toISOString().split('T')[0],
-      ho_ten: '',
-      khoan_chi: '',
-      phong_ban: '',
-      link_chung_tu: '',
-      vat: false
+      ho_ten: '', khoan_chi: '', phong_ban: '', noi_dung: '', link_chung_tu: '', vat: false
   });
-
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // State sửa & Lịch sử
+  const [editingId, setEditingId] = useState(null);
+  const [editFormData, setEditFormData] = useState({});
+  const [historyModalData, setHistoryModalData] = useState(null);
+
+  // --- STATE BỘ LỌC ---
+  const [filterMonth, setFilterMonth] = useState('');     
+  const [filterDept, setFilterDept] = useState('');       
+  const [filterName, setFilterName] = useState('');       
+  const [filterStatus, setFilterStatus] = useState('all'); 
+
   // --- 1. LOAD DỮ LIỆU ---
-  const loadExpenses = async () => {
+  const loadData = async () => {
       setLoading(true);
       try {
-          const { data, error } = await supabase
+          const { data: expData, error: expError } = await supabase
               .from('expenses_ecom')
               .select('*')
               .order('created_at', { ascending: false });
+          if (expError) throw expError;
+          setExpenses(expData || []);
+
+          const { data: budgetData, error: budgetError } = await supabase
+              .from('ecom_budget')
+              .select('total_amount')
+              .eq('id', 1)
+              .single();
           
-          if (error) throw error;
-          setExpenses(data || []);
+          if (!budgetError && budgetData) {
+              setBudget(budgetData.total_amount);
+          }
       } catch (error) {
-          console.error("Lỗi tải chi phí:", error);
+          console.error("Lỗi tải dữ liệu:", error);
       } finally {
           setLoading(false);
       }
   };
 
-  useEffect(() => {
-      loadExpenses();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
-  // --- 2. XỬ LÝ NHẬP LIỆU ---
+  // --- LOGIC LỌC DỮ LIỆU ---
+  const filteredExpenses = useMemo(() => {
+      return expenses.filter(item => {
+          if (filterMonth) {
+              const itemMonth = item.ngay_chi ? item.ngay_chi.substring(0, 7) : '';
+              if (itemMonth !== filterMonth) return false;
+          }
+          if (filterDept && item.phong_ban !== filterDept) return false;
+          if (filterName) {
+              const searchName = filterName.toLowerCase();
+              const itemName = item.ho_ten ? item.ho_ten.toLowerCase() : '';
+              if (!itemName.includes(searchName)) return false;
+          }
+          if (filterStatus === 'pending') {
+              const isDone = item.confirm_ketoan && item.confirm_thuchi && item.confirm_nguoichuyen;
+              if (isDone) return false;
+          }
+          if (filterStatus === 'done') {
+              const isDone = item.confirm_ketoan && item.confirm_thuchi && item.confirm_nguoichuyen;
+              if (!isDone) return false;
+          }
+          return true;
+      });
+  }, [expenses, filterMonth, filterDept, filterName, filterStatus]);
+
+  const clearFilters = () => {
+      setFilterMonth('');
+      setFilterDept('');
+      setFilterName('');
+      setFilterStatus('all');
+  };
+
+  // --- 2. TÍNH TOÁN THỐNG KÊ ---
+  const stats = useMemo(() => {
+      let daChi = 0;   
+      let choChi = 0;  
+      
+      expenses.forEach(item => {
+          const amount = item.khoan_chi || 0;
+          if (item.confirm_nguoichuyen) {
+              daChi += amount;
+          } else if (item.confirm_ketoan || item.confirm_thuchi) {
+              choChi += amount;
+          }
+      });
+
+      const conLai = budget - daChi - choChi;
+      return { daChi, choChi, conLai };
+  }, [expenses, budget]);
+
+  const chartData = [
+      { name: 'Còn Lại', value: stats.conLai > 0 ? stats.conLai : 0 },
+      { name: 'Chờ Giải Ngân', value: stats.choChi },
+      { name: 'Đã Chi (Bank)', value: stats.daChi },
+  ];
+
+  // --- 3. CẬP NHẬT NGÂN SÁCH ---
+  const handleUpdateBudget = async (e) => {
+      const val = parseMoney(e.target.value);
+      setBudget(val); 
+      await supabase.from('ecom_budget').upsert({ id: 1, total_amount: val });
+  };
+
+  // --- 4. THÊM KHOẢN CHI ---
   const handleAddExpense = async (e) => {
       e.preventDefault();
-      if (!newExpense.ho_ten || !newExpense.khoan_chi || !newExpense.phong_ban) {
-          alert("Vui lòng điền đủ: Họ tên, Khoản chi, Phòng ban!");
-          return;
+      if (!newExpense.ho_ten || !newExpense.khoan_chi || !newExpense.phong_ban || !newExpense.noi_dung) {
+          alert("Thiếu thông tin rồi sếp ơi!"); return;
       }
-
       setIsSubmitting(true);
       try {
           const dataToInsert = {
-              ngay_chi: newExpense.ngay_chi,
-              ho_ten: newExpense.ho_ten,
+              ...newExpense,
               khoan_chi: parseMoney(newExpense.khoan_chi),
-              phong_ban: newExpense.phong_ban,
-              link_chung_tu: newExpense.link_chung_tu,
-              vat: newExpense.vat
+              history_log: []
           };
-
           const { error } = await supabase.from('expenses_ecom').insert([dataToInsert]);
           if (error) throw error;
-
-          alert("Đã thêm khoản chi thành công!");
-          setNewExpense({
-              ngay_chi: new Date().toISOString().split('T')[0],
-              ho_ten: '',
-              khoan_chi: '',
-              phong_ban: '',
-              link_chung_tu: '',
-              vat: false
-          });
-          loadExpenses();
-      } catch (error) {
-          alert("Lỗi: " + error.message);
-      } finally {
-          setIsSubmitting(false);
-      }
+          alert("Đã thêm khoản chi!");
+          setNewExpense({ ngay_chi: new Date().toISOString().split('T')[0], ho_ten: '', khoan_chi: '', phong_ban: '', noi_dung: '', link_chung_tu: '', vat: false });
+          loadData();
+      } catch (error) { alert("Lỗi: " + error.message); } finally { setIsSubmitting(false); }
   };
 
-  // --- 3. XỬ LÝ CONFIRM (3 CẤP) ---
+  // --- 5. SỬA & GHI LOG ---
+  const handleEditClick = (item) => { setEditingId(item.id); setEditFormData({ ...item, khoan_chi: formatCurrency(item.khoan_chi) }); };
+  const handleSaveEdit = async () => {
+      try {
+          const oldData = expenses.find(e => e.id === editingId);
+          const newData = { ...editFormData, khoan_chi: parseMoney(editFormData.khoan_chi) };
+          const changes = [];
+          if (oldData.khoan_chi !== newData.khoan_chi) changes.push(`Tiền: ${formatCurrency(oldData.khoan_chi)} -> ${formatCurrency(newData.khoan_chi)}`);
+          if (oldData.noi_dung !== newData.noi_dung) changes.push(`Nội dung: ${oldData.noi_dung} -> ${newData.noi_dung}`);
+          
+          if (changes.length > 0) {
+            const newLog = { timestamp: new Date().toISOString(), detail: changes.join('; ') };
+            const updatedLogs = [newLog, ...(oldData.history_log || [])];
+            await supabase.from('expenses_ecom').update({ ...newData, history_log: updatedLogs }).eq('id', editingId);
+          } else {
+            await supabase.from('expenses_ecom').update(newData).eq('id', editingId);
+          }
+          alert("Đã lưu sửa đổi!"); setEditingId(null); loadData();
+      } catch (err) { alert("Lỗi: " + err.message); }
+  };
+
+  // --- 6. DUYỆT ---
   const handleToggleConfirm = async (id, field, currentValue) => {
-      try {
-          const { error } = await supabase
-              .from('expenses_ecom')
-              .update({ [field]: !currentValue }) // Đảo ngược giá trị true/false
-              .eq('id', id);
-
-          if (error) throw error;
-          loadExpenses(); // Load lại để cập nhật giao diện
-      } catch (error) {
-          alert("Lỗi cập nhật trạng thái: " + error.message);
-      }
+      await supabase.from('expenses_ecom').update({ [field]: !currentValue }).eq('id', id);
+      loadData();
   };
 
-  // --- 4. XÓA ---
-  const handleDelete = async (id) => {
-      if(!window.confirm("Bạn chắc chắn muốn xóa khoản chi này?")) return;
-      try {
-          const { error } = await supabase.from('expenses_ecom').delete().eq('id', id);
-          if(error) throw error;
-          loadExpenses();
-      } catch (error) {
-          alert("Lỗi xóa: " + error.message);
-      }
-  };
-
-  // STYLES
-  const cardStyle = { backgroundColor: '#ffffff', borderRadius: '12px', padding: '25px', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', marginBottom: '2rem', border: '1px solid rgba(0,0,0,0.02)' };
-  const inputStyle = { width:'100%', padding:'12px', borderRadius:'6px', border:'1px solid #ddd', outline:'none', fontSize: '1rem' };
-  const labelStyle = { display:'block', marginBottom:'8px', fontWeight:'600', fontSize:'0.95rem', color: '#333' };
+  // --- STYLES ---
+  const cardStyle = { backgroundColor: '#ffffff', borderRadius: '12px', padding: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', marginBottom: '20px' };
+  const statCardStyle = (bgColor, textColor) => ({
+      flex: 1, padding: '15px', borderRadius: '10px', backgroundColor: bgColor, color: textColor,
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.1)', minWidth: '180px'
+  });
   
-  // Style cho nút duyệt (Badge)
-  const getBadgeStyle = (isActive, color) => ({
-      padding: '5px 10px',
-      borderRadius: '20px',
-      fontSize: '11px',
-      fontWeight: 'bold',
-      cursor: 'pointer',
-      border: `1px solid ${isActive ? color : '#ccc'}`,
-      backgroundColor: isActive ? color : '#f5f5f5',
-      color: isActive ? 'white' : '#999',
-      marginRight: '5px',
-      transition: '0.2s',
-      display: 'inline-block',
-      minWidth: '70px',
-      textAlign: 'center'
+  // FIX: STYLE CỐ ĐỊNH CHIỀU CAO CHO INPUT VÀ BUTTON (45px)
+  const inputStyle = { 
+      width: '100%', 
+      height: '45px',           // Chiều cao cố định
+      padding: '0 10px',        // Padding ngang
+      borderRadius: '6px', 
+      border: '1px solid #ddd', 
+      outline: 'none',
+      boxSizing: 'border-box',  // Đảm bảo padding không làm phình to box
+      fontSize: '0.95rem'
+  };
+
+  const badgeStyle = (active, color) => ({
+      padding:'4px 8px', borderRadius:'15px', fontSize:'11px', fontWeight:'bold', cursor:'pointer',
+      border: `1px solid ${active ? color : '#ccc'}`, backgroundColor: active ? color : '#eee', color: active ? '#fff' : '#888',
+      marginRight:'4px', minWidth:'60px', textAlign:'center', display:'inline-block'
   });
 
   return (
     <div style={{ padding: '20px' }}>
-         {/* HEADER */}
-         <div style={{ marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-                <h1 style={{ fontSize: '2.5rem', fontWeight: '800', color: '#333', margin: 0, textTransform: 'uppercase', letterSpacing: '1px' }}>
-                   💸 QUẢN LÝ CHI PHÍ ECOM
-                </h1>
-                <p style={{ color: '#666', marginTop: '8px', fontSize: '1.1rem' }}>
-                    Nhập liệu và kiểm duyệt các khoản chi phí vận hành.
-                </p>
+        {/* MODAL LỊCH SỬ */}
+        {historyModalData && (
+            <div style={{position:'fixed', inset:0, zIndex:999, display:'flex', alignItems:'center', justifyContent:'center', backgroundColor: 'rgba(0,0,0,0.5)'}}>
+                <div style={{background:'white', padding:'20px', borderRadius:'10px', width:'500px', maxHeight:'80vh', overflow:'auto'}}>
+                    <h3>Lịch sử chỉnh sửa</h3>
+                    {historyModalData.logs?.map((l, i) => <div key={i} style={{borderBottom:'1px solid #eee', padding:'5px'}}><b>{formatDate(l.timestamp)}</b>: {l.detail}</div>)}
+                    <button onClick={() => setHistoryModalData(null)} style={{marginTop:'10px', width:'100%', padding:'10px'}}>Đóng</button>
+                </div>
             </div>
-        </div>
+        )}
 
-        {/* FORM NHẬP LIỆU */}
-        <div style={cardStyle}>
-            <h3 style={{ borderBottom: '2px solid #f0f0f0', paddingBottom: '15px', marginBottom: '25px', color: '#D42426', fontSize: '1.6rem', fontWeight: '800', textTransform: 'uppercase' }}>
-                ✏️ NHẬP KHOẢN CHI MỚI
-            </h3>
-            <form onSubmit={handleAddExpense}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
-                    
-                    {/* Hàng 1 */}
-                    <div>
-                        <label style={labelStyle}>Ngày chi</label>
-                        <input type="date" value={newExpense.ngay_chi} onChange={e => setNewExpense({...newExpense, ngay_chi: e.target.value})} style={inputStyle} required />
-                    </div>
-                    <div>
-                        <label style={labelStyle}>Họ tên người đề xuất (*)</label>
-                        <input type="text" placeholder="Nguyễn Văn A..." value={newExpense.ho_ten} onChange={e => setNewExpense({...newExpense, ho_ten: e.target.value})} style={inputStyle} required />
-                    </div>
-                    <div>
-                        <label style={labelStyle}>Phòng ban (*)</label>
-                        <select value={newExpense.phong_ban} onChange={e => setNewExpense({...newExpense, phong_ban: e.target.value})} style={inputStyle} required>
-                            <option value="">-- Chọn phòng ban --</option>
-                            {DEPARTMENT_OPTIONS.map(dept => <option key={dept} value={dept}>{dept}</option>)}
-                        </select>
-                    </div>
+        <h1 style={{ color: '#333', margin: '0 0 20px 0' }}>💸 QUẢN LÝ NGÂN SÁCH ECOM</h1>
 
-                    {/* Hàng 2 */}
+        {/* --- KHU VỰC THỐNG KÊ --- */}
+        <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', alignItems: 'stretch' }}>
+            <div style={{ flex: 3, display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ ...cardStyle, borderLeft: '5px solid #165B33', display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: 0 }}>
                     <div>
-                        <label style={labelStyle}>Khoản chi (VNĐ) (*)</label>
+                        <h3 style={{ margin: 0, color: '#165B33' }}>💰 TỔNG NGÂN SÁCH HIỆN CÓ</h3>
+                        <p style={{ margin: '5px 0 0 0', fontSize: '0.9rem', color: '#666' }}>Nhập số tiền công ty cấp vào đây để theo dõi.</p>
+                    </div>
+                    <div style={{ position: 'relative' }}>
                         <input 
                             type="text" 
-                            placeholder="Ví dụ: 1.500.000" 
-                            value={newExpense.khoan_chi} 
-                            onChange={e => setNewExpense({...newExpense, khoan_chi: formatCurrency(e.target.value)})} 
-                            style={{...inputStyle, fontWeight: 'bold', color: '#D42426'}} 
-                            required 
+                            value={formatCurrency(budget)} 
+                            onChange={handleUpdateBudget}
+                            style={{ 
+                                fontSize: '1.8rem', fontWeight: 'bold', color: '#165B33', 
+                                padding: '0 20px', height: '50px', // Riêng ô này cho cao hơn xíu
+                                border: '2px solid #165B33', borderRadius: '10px', width: '250px', 
+                                textAlign: 'right', outline: 'none', boxSizing: 'border-box'
+                            }}
                         />
-                    </div>
-                    <div>
-                        <label style={labelStyle}>Link chứng từ (Drive)</label>
-                        <input type="text" placeholder="https://..." value={newExpense.link_chung_tu} onChange={e => setNewExpense({...newExpense, link_chung_tu: e.target.value})} style={inputStyle} />
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', marginTop: '30px' }}>
-                        <input 
-                            type="checkbox" 
-                            id="vatCheck" 
-                            checked={newExpense.vat} 
-                            onChange={e => setNewExpense({...newExpense, vat: e.target.checked})} 
-                            style={{ width: '20px', height: '20px', marginRight: '10px', cursor: 'pointer' }} 
-                        />
-                        <label htmlFor="vatCheck" style={{ fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer' }}>Có xuất hóa đơn VAT</label>
+                        <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontWeight: 'bold', color: '#165B33' }}>đ</span>
                     </div>
                 </div>
 
-                <div style={{ textAlign: 'center', marginTop: '30px' }}>
-                    <button type="submit" disabled={isSubmitting} style={{ backgroundColor: '#D42426', color:'white', padding: '12px 50px', fontSize: '1.1rem', fontWeight:'bold', border:'none', borderRadius:'30px', cursor:'pointer', boxShadow:'0 4px 12px rgba(212, 36, 38, 0.3)' }}>
-                        {isSubmitting ? 'Đang lưu...' : 'LƯU KHOẢN CHI'}
+                <div style={{ display: 'flex', gap: '15px', flex: 1 }}>
+                    <div style={statCardStyle('#e8f5e9', '#2e7d32')}>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 'bold', textTransform: 'uppercase' }}>🔋 CÒN LẠI (DƯ)</span>
+                        <span style={{ fontSize: '1.6rem', fontWeight: '900', marginTop: '5px', color: stats.conLai < 0 ? 'red' : '#2e7d32' }}>
+                            {formatCurrency(stats.conLai)} đ
+                        </span>
+                        {stats.conLai < 0 && <span style={{color:'red', fontWeight:'bold', fontSize:'0.8rem'}}>⚠️ VƯỢT NGÂN SÁCH!</span>}
+                    </div>
+                    <div style={statCardStyle('#fff3e0', '#ef6c00')}>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 'bold', textTransform: 'uppercase' }}>⏳ CHỜ GIẢI NGÂN</span>
+                        <span style={{ fontSize: '1.6rem', fontWeight: '900', marginTop: '5px' }}>{formatCurrency(stats.choChi)} đ</span>
+                        <span style={{ fontSize: '0.75rem' }}>(Đã duyệt, chưa Bank)</span>
+                    </div>
+                    <div style={statCardStyle('#ffebee', '#c62828')}>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 'bold', textTransform: 'uppercase' }}>✅ ĐÃ CHI (BANK)</span>
+                        <span style={{ fontSize: '1.6rem', fontWeight: '900', marginTop: '5px' }}>{formatCurrency(stats.daChi)} đ</span>
+                        <span style={{ fontSize: '0.75rem' }}>(Hoàn tất)</span>
+                    </div>
+                </div>
+            </div>
+
+            <div style={{ flex: 1, ...cardStyle, marginBottom: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                <h4 style={{ margin: '0 0 10px 0', color: '#555', fontSize: '0.95rem' }}>TỶ TRỌNG NGÂN SÁCH</h4>
+                <div style={{ width: '100%', height: '180px' }}>
+                    <ResponsiveContainer>
+                        <PieChart>
+                            <Pie 
+                                data={chartData} 
+                                innerRadius={50} 
+                                outerRadius={70} 
+                                paddingAngle={5} 
+                                dataKey="value"
+                            >
+                                <Cell fill={stats.conLai >= 0 ? COLORS[0] : '#ff0000'} /> 
+                                <Cell fill={COLORS[1]} /> 
+                                <Cell fill={COLORS[2]} /> 
+                            </Pie>
+                            <Tooltip formatter={(val) => formatCurrency(val) + ' đ'} />
+                            <Legend verticalAlign="bottom" height={36} iconSize={10}/>
+                        </PieChart>
+                    </ResponsiveContainer>
+                </div>
+                <div style={{textAlign: 'center', fontSize: '0.8rem', color: '#888', marginTop: '-5px'}}>
+                    Giúp kiểm soát chi lố
+                </div>
+            </div>
+        </div>
+
+        {/* FORM NHẬP */}
+        <div style={cardStyle}>
+            <h3 style={{color: '#D42426', borderBottom:'1px solid #eee', paddingBottom:'10px'}}>✏️ NHẬP KHOẢN CHI MỚI</h3>
+            <form onSubmit={handleAddExpense} style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px' }}>
+                <input type="date" value={newExpense.ngay_chi} onChange={e => setNewExpense({...newExpense, ngay_chi: e.target.value})} style={inputStyle} />
+                <input placeholder="Họ tên (*)" value={newExpense.ho_ten} onChange={e => setNewExpense({...newExpense, ho_ten: e.target.value})} style={inputStyle} />
+                <select value={newExpense.phong_ban} onChange={e => setNewExpense({...newExpense, phong_ban: e.target.value})} style={inputStyle}><option value="">-Phòng ban-</option>{DEPARTMENT_OPTIONS.map(d=><option key={d} value={d}>{d}</option>)}</select>
+                <input placeholder="Số tiền (*)" value={newExpense.khoan_chi} onChange={e => setNewExpense({...newExpense, khoan_chi: formatCurrency(e.target.value)})} style={{...inputStyle, fontWeight:'bold', color:'#D42426'}} />
+                <input placeholder="Nội dung chi (*)" value={newExpense.noi_dung} onChange={e => setNewExpense({...newExpense, noi_dung: e.target.value})} style={{...inputStyle, gridColumn:'span 2'}} />
+                <input placeholder="Link chứng từ" value={newExpense.link_chung_tu} onChange={e => setNewExpense({...newExpense, link_chung_tu: e.target.value})} style={{...inputStyle, gridColumn:'span 2'}} />
+                
+                <div style={{ gridColumn: 'span 4', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '30px', marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #f9f9f9' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem', color: '#333', userSelect: 'none' }}>
+                        <input type="checkbox" checked={newExpense.vat} onChange={e => setNewExpense({...newExpense, vat: e.target.checked})} style={{ width: '20px', height: '20px', margin: '0 10px 0 0', cursor: 'pointer' }} /> 
+                        Xuất hóa đơn VAT
+                    </label>
+                    <button type="submit" disabled={isSubmitting} style={{ backgroundColor: '#D42426', color: 'white', padding: '0 60px', height: '45px', border: 'none', borderRadius: '30px', fontWeight: 'bold', cursor: 'pointer', fontSize: '1rem', boxShadow: '0 4px 12px rgba(212, 36, 38, 0.3)', transition: 'all 0.2s' }}>
+                        {isSubmitting ? 'ĐANG LƯU...' : 'LƯU KHOẢN CHI'}
                     </button>
                 </div>
             </form>
         </div>
 
-        {/* BẢNG DANH SÁCH */}
+        {/* DANH SÁCH CHI TIẾT KÈM BỘ LỌC */}
         <div style={cardStyle}>
-            <h3 style={{ color: '#333', fontSize:'1.4rem', marginBottom: '1rem', fontWeight:'800' }}>DANH SÁCH CHI PHÍ</h3>
-            
-            {loading ? <p>Đang tải dữ liệu...</p> : (
-                <div style={{ width: '100%', overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize:'0.9rem' }}>
-                        <thead style={{backgroundColor:'#f0f0f0', borderBottom:'2px solid #ddd'}}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '15px'}}>
+                <h3 style={{color: '#333', margin: 0}}>DANH SÁCH CHI TIẾT</h3>
+                <div style={{fontSize: '0.9rem', color: '#666'}}>Tìm thấy: <b>{filteredExpenses.length}</b> khoản chi</div>
+            </div>
+
+            {/* THANH BỘ LỌC */}
+            <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(5, 1fr)', 
+                gap: '10px', 
+                backgroundColor: '#f9f9f9', 
+                padding: '15px', 
+                borderRadius: '8px',
+                marginBottom: '20px',
+                border: '1px solid #eee'
+            }}>
+                <input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} style={inputStyle} title="Lọc theo tháng"/>
+                <input type="text" placeholder="🔍 Tên người đề xuất..." value={filterName} onChange={e => setFilterName(e.target.value)} style={inputStyle} />
+                <select value={filterDept} onChange={e => setFilterDept(e.target.value)} style={inputStyle}>
+                    <option value="">-- Tất cả Phòng --</option>
+                    {DEPARTMENT_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+                <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{...inputStyle, fontWeight: 'bold', color: filterStatus === 'pending' ? '#FF9800' : '#333'}}>
+                    <option value="all">📝 Tất cả trạng thái</option>
+                    <option value="pending">⏳ Chưa hoàn tất (Thiếu tick)</option>
+                    <option value="done">✅ Đã hoàn tất (Full tick)</option>
+                </select>
+
+                {/* FIX: NÚT XÓA LỌC DÙNG CHUNG STYLE INPUT */}
+                <button 
+                    onClick={clearFilters}
+                    style={{
+                        ...inputStyle, // Kế thừa height: 45px và boxSizing từ inputStyle
+                        backgroundColor: '#eee', 
+                        color: '#555', 
+                        fontWeight: 'bold', 
+                        cursor: 'pointer', 
+                        textAlign: 'center',
+                        transition: '0.2s',
+                        display: 'flex',          // Flex để căn giữa chữ
+                        alignItems: 'center',     // Căn giữa dọc
+                        justifyContent: 'center'  // Căn giữa ngang
+                    }}
+                >
+                    Xóa Lọc ✖
+                </button>
+            </div>
+
+            {/* BẢNG DỮ LIỆU */}
+            <div style={{overflowX:'auto'}}>
+                <table style={{width:'100%', borderCollapse:'collapse', fontSize:'0.9rem'}}>
+                    <thead style={{backgroundColor:'#f5f5f5'}}>
+                        <tr>
+                            <th style={{padding:'10px'}}>Ngày</th>
+                            <th style={{padding:'10px', textAlign:'left'}}>Họ tên</th>
+                            <th style={{padding:'10px'}}>Phòng</th>
+                            <th style={{padding:'10px', textAlign:'left', width: '25%'}}>Nội dung</th>
+                            <th style={{padding:'10px', textAlign:'right'}}>Tiền</th>
+                            <th style={{padding:'10px'}}>VAT</th>
+                            <th style={{padding:'10px'}}>Link</th>
+                            <th style={{padding:'10px'}}>Duyệt</th>
+                            <th style={{padding:'10px'}}>Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {filteredExpenses.map(item => {
+                            const isEdit = editingId === item.id;
+                            return (
+                                <tr key={item.id} style={{borderBottom:'1px solid #eee', backgroundColor: isEdit ? '#f0f8ff' : 'white'}}>
+                                    <td style={{padding:'10px', textAlign:'center'}}>{isEdit?<input type="date" value={editFormData.ngay_chi} onChange={e=>setEditFormData({...editFormData, ngay_chi:e.target.value})} style={inputStyle} />:item.ngay_chi}</td>
+                                    <td style={{padding:'10px'}}><b>{isEdit?<input value={editFormData.ho_ten} onChange={e=>setEditFormData({...editFormData, ho_ten:e.target.value})} style={inputStyle} />:item.ho_ten}</b></td>
+                                    <td style={{padding:'10px', textAlign:'center'}}>{isEdit?<select value={editFormData.phong_ban} onChange={e=>setEditFormData({...editFormData, phong_ban:e.target.value})} style={inputStyle}>{DEPARTMENT_OPTIONS.map(d=><option key={d} value={d}>{d}</option>)}</select>:item.phong_ban}</td>
+                                    <td style={{padding:'10px'}}>{isEdit?<input value={editFormData.noi_dung} onChange={e=>setEditFormData({...editFormData, noi_dung:e.target.value})} style={inputStyle} />:item.noi_dung}</td>
+                                    <td style={{padding:'10px', textAlign:'right', color:'#D42426', fontWeight:'bold'}}>{isEdit?<input value={editFormData.khoan_chi} onChange={e=>setEditFormData({...editFormData, khoan_chi:formatCurrency(e.target.value)})} style={inputStyle} />:formatCurrency(item.khoan_chi)}</td>
+                                    <td style={{padding:'10px', textAlign:'center'}}>{isEdit?<input type="checkbox" checked={editFormData.vat} onChange={e=>setEditFormData({...editFormData, vat:e.target.checked})}/>:(item.vat?<span style={{color:'green'}}>✔</span>:'-')}</td>
+                                    <td style={{padding:'10px', textAlign:'center'}}>{isEdit?<input value={editFormData.link_chung_tu} onChange={e=>setEditFormData({...editFormData, link_chung_tu:e.target.value})} style={inputStyle} />:(item.link_chung_tu?<a href={item.link_chung_tu} target="_blank" rel="noreferrer" style={{color:'#1976D2'}}>Link</a>:'-')}</td>
+                                    <td style={{padding:'10px', textAlign:'center', whiteSpace:'nowrap'}}>
+                                        {!isEdit && (
+                                            <>
+                                                <div onClick={() => handleToggleConfirm(item.id, 'confirm_ketoan', item.confirm_ketoan)} style={badgeStyle(item.confirm_ketoan, '#2196F3')}>KT</div>
+                                                <div onClick={() => handleToggleConfirm(item.id, 'confirm_thuchi', item.confirm_thuchi)} style={badgeStyle(item.confirm_thuchi, '#FF9800')}>TC</div>
+                                                <div onClick={() => handleToggleConfirm(item.id, 'confirm_nguoichuyen', item.confirm_nguoichuyen)} style={badgeStyle(item.confirm_nguoichuyen, '#4CAF50')}>Bank</div>
+                                            </>
+                                        )}
+                                    </td>
+                                    <td style={{padding:'10px', textAlign:'center'}}>
+                                        {isEdit ? 
+                                            <><button onClick={handleSaveEdit} style={{marginRight:'5px'}}>Lưu</button> <button onClick={()=>setEditingId(null)}>Hủy</button></> : 
+                                            <><button onClick={()=>handleEditClick(item)} style={{marginRight:'5px', cursor:'pointer'}}>Sửa</button> {item.history_log?.length>0 && <button onClick={()=>setHistoryModalData({logs:item.history_log})} style={{cursor:'pointer'}}>🕒</button>}</>
+                                        }
+                                    </td>
+                                </tr>
+                            )
+                        })}
+                        {filteredExpenses.length === 0 && (
                             <tr>
-                                <th style={{padding:'12px', textAlign:'center'}}>STT</th>
-                                <th style={{padding:'12px', textAlign:'center'}}>Ngày</th>
-                                <th style={{padding:'12px', textAlign:'left'}}>Họ tên</th>
-                                <th style={{padding:'12px', textAlign:'center'}}>Phòng ban</th>
-                                <th style={{padding:'12px', textAlign:'right'}}>Khoản chi</th>
-                                <th style={{padding:'12px', textAlign:'center'}}>VAT</th>
-                                <th style={{padding:'12px', textAlign:'center'}}>Chứng từ</th>
-                                <th style={{padding:'12px', textAlign:'center', minWidth: '250px'}}>QUY TRÌNH DUYỆT (Click để xác nhận)</th>
-                                <th style={{padding:'12px', textAlign:'center'}}>Hành động</th>
+                                <td colSpan="9" style={{textAlign:'center', padding:'20px', color:'#999'}}>Không tìm thấy kết quả nào phù hợp.</td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            {expenses.map((item, index) => (
-                                <tr key={item.id} style={{borderBottom:'1px solid #eee'}}>
-                                    <td style={{textAlign:'center', padding:'12px'}}>{index + 1}</td>
-                                    <td style={{textAlign:'center', padding:'12px'}}>{item.ngay_chi}</td>
-                                    <td style={{textAlign:'left', padding:'12px', fontWeight:'bold'}}>{item.ho_ten}</td>
-                                    <td style={{textAlign:'center', padding:'12px'}}>
-                                        <span style={{padding:'4px 8px', borderRadius:'4px', backgroundColor:'#e3f2fd', color:'#1976D2', fontSize:'11px', fontWeight:'bold'}}>
-                                            {item.phong_ban}
-                                        </span>
-                                    </td>
-                                    <td style={{textAlign:'right', padding:'12px', color:'#D42426', fontWeight:'bold', fontSize:'1rem'}}>
-                                        {formatCurrency(item.khoan_chi)} đ
-                                    </td>
-                                    <td style={{textAlign:'center', padding:'12px'}}>
-                                        {item.vat ? <span style={{color:'green'}}>✔</span> : <span style={{color:'#ccc'}}>-</span>}
-                                    </td>
-                                    <td style={{textAlign:'center', padding:'12px'}}>
-                                        {item.link_chung_tu ? (
-                                            <a href={item.link_chung_tu} target="_blank" rel="noopener noreferrer" style={{color:'#1976D2', fontWeight:'bold', textDecoration:'none'}}>Xem Link</a>
-                                        ) : <span style={{color:'#999', fontSize:'11px'}}>Chưa có</span>}
-                                    </td>
-                                    
-                                    {/* --- CỘT DUYỆT --- */}
-                                    <td style={{textAlign:'center', padding:'12px'}}>
-                                        <div style={{display:'flex', justifyContent:'center', gap:'5px'}}>
-                                            {/* 1. Kế toán */}
-                                            <div 
-                                                onClick={() => handleToggleConfirm(item.id, 'confirm_ketoan', item.confirm_ketoan)}
-                                                style={getBadgeStyle(item.confirm_ketoan, '#2196F3')}
-                                                title="Kế toán xác nhận"
-                                            >
-                                                {item.confirm_ketoan ? '✓ KT Đã Duyệt' : '○ Kế Toán'}
-                                            </div>
-
-                                            {/* 2. Thu chi */}
-                                            <div 
-                                                onClick={() => handleToggleConfirm(item.id, 'confirm_thuchi', item.confirm_thuchi)}
-                                                style={getBadgeStyle(item.confirm_thuchi, '#FF9800')}
-                                                title="Bộ phận Thu chi xác nhận"
-                                            >
-                                                {item.confirm_thuchi ? '✓ TC Đã Chi' : '○ Thu Chi'}
-                                            </div>
-
-                                            {/* 3. Người chuyển */}
-                                            <div 
-                                                onClick={() => handleToggleConfirm(item.id, 'confirm_nguoichuyen', item.confirm_nguoichuyen)}
-                                                style={getBadgeStyle(item.confirm_nguoichuyen, '#4CAF50')}
-                                                title="Người chuyển khoản xác nhận"
-                                            >
-                                                {item.confirm_nguoichuyen ? '✓ Đã Chuyển' : '○ Chuyển Tiền'}
-                                            </div>
-                                        </div>
-                                    </td>
-
-                                    <td style={{textAlign:'center', padding:'12px'}}>
-                                        <button 
-                                            onClick={() => handleDelete(item.id)}
-                                            style={{backgroundColor:'transparent', border:'1px solid #D42426', color:'#D42426', borderRadius:'4px', padding:'5px 10px', cursor:'pointer', fontSize:'11px', fontWeight:'bold'}}
-                                        >
-                                            Xóa
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                            {expenses.length === 0 && (
-                                <tr>
-                                    <td colSpan="9" style={{textAlign:'center', padding:'20px', color:'#999'}}>Chưa có dữ liệu chi phí nào.</td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            )}
+                        )}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
   );
