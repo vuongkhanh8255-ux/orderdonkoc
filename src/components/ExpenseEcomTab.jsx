@@ -28,10 +28,11 @@ const ExpenseEcomTab = () => {
   const [loading, setLoading] = useState(false);
   const [budget, setBudget] = useState(0); 
   
-  // State nhập mới
+  // State nhập mới (Thêm stk, ngan_hang)
   const [newExpense, setNewExpense] = useState({
       ngay_chi: new Date().toISOString().split('T')[0],
-      ho_ten: '', khoan_chi: '', phong_ban: '', noi_dung: '', link_chung_tu: '', vat: false
+      ho_ten: '', stk: '', ngan_hang: '', // [MỚI]
+      khoan_chi: '', phong_ban: '', noi_dung: '', link_chung_tu: '', vat: false
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -142,7 +143,7 @@ const ExpenseEcomTab = () => {
   const handleAddExpense = async (e) => {
       e.preventDefault();
       if (!newExpense.ho_ten || !newExpense.khoan_chi || !newExpense.phong_ban || !newExpense.noi_dung) {
-          alert("Thiếu thông tin rồi sếp ơi!"); return;
+          alert("Thiếu thông tin cơ bản rồi sếp ơi!"); return;
       }
       setIsSubmitting(true);
       try {
@@ -154,7 +155,12 @@ const ExpenseEcomTab = () => {
           const { error } = await supabase.from('expenses_ecom').insert([dataToInsert]);
           if (error) throw error;
           alert("Đã thêm khoản chi!");
-          setNewExpense({ ngay_chi: new Date().toISOString().split('T')[0], ho_ten: '', khoan_chi: '', phong_ban: '', noi_dung: '', link_chung_tu: '', vat: false });
+          // Reset form
+          setNewExpense({ 
+              ngay_chi: new Date().toISOString().split('T')[0], 
+              ho_ten: '', stk: '', ngan_hang: '', // Reset thêm 2 trường mới
+              khoan_chi: '', phong_ban: '', noi_dung: '', link_chung_tu: '', vat: false 
+          });
           loadData();
       } catch (error) { alert("Lỗi: " + error.message); } finally { setIsSubmitting(false); }
   };
@@ -168,6 +174,9 @@ const ExpenseEcomTab = () => {
           const changes = [];
           if (oldData.khoan_chi !== newData.khoan_chi) changes.push(`Tiền: ${formatCurrency(oldData.khoan_chi)} -> ${formatCurrency(newData.khoan_chi)}`);
           if (oldData.noi_dung !== newData.noi_dung) changes.push(`Nội dung: ${oldData.noi_dung} -> ${newData.noi_dung}`);
+          // Log thay đổi STK/Bank
+          if (oldData.stk !== newData.stk) changes.push(`STK: ${oldData.stk} -> ${newData.stk}`);
+          if (oldData.ngan_hang !== newData.ngan_hang) changes.push(`Bank: ${oldData.ngan_hang} -> ${newData.ngan_hang}`);
           
           if (changes.length > 0) {
             const newLog = { timestamp: new Date().toISOString(), detail: changes.join('; ') };
@@ -194,15 +203,14 @@ const ExpenseEcomTab = () => {
       boxShadow: '0 2px 8px rgba(0,0,0,0.1)', minWidth: '180px'
   });
   
-  // FIX: STYLE CỐ ĐỊNH CHIỀU CAO CHO INPUT VÀ BUTTON (45px)
   const inputStyle = { 
       width: '100%', 
-      height: '45px',           // Chiều cao cố định
-      padding: '0 10px',        // Padding ngang
+      height: '45px',           
+      padding: '0 10px',        
       borderRadius: '6px', 
       border: '1px solid #ddd', 
       outline: 'none',
-      boxSizing: 'border-box',  // Đảm bảo padding không làm phình to box
+      boxSizing: 'border-box',  
       fontSize: '0.95rem'
   };
 
@@ -242,7 +250,7 @@ const ExpenseEcomTab = () => {
                             onChange={handleUpdateBudget}
                             style={{ 
                                 fontSize: '1.8rem', fontWeight: 'bold', color: '#165B33', 
-                                padding: '0 20px', height: '50px', // Riêng ô này cho cao hơn xíu
+                                padding: '0 20px', height: '50px', 
                                 border: '2px solid #165B33', borderRadius: '10px', width: '250px', 
                                 textAlign: 'right', outline: 'none', boxSizing: 'border-box'
                             }}
@@ -305,17 +313,48 @@ const ExpenseEcomTab = () => {
             <form onSubmit={handleAddExpense} style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px' }}>
                 <input type="date" value={newExpense.ngay_chi} onChange={e => setNewExpense({...newExpense, ngay_chi: e.target.value})} style={inputStyle} />
                 <input placeholder="Họ tên (*)" value={newExpense.ho_ten} onChange={e => setNewExpense({...newExpense, ho_ten: e.target.value})} style={inputStyle} />
+                
+                {/* [MỚI] STK và Ngân hàng */}
+                <input placeholder="Số Tài Khoản" value={newExpense.stk} onChange={e => setNewExpense({...newExpense, stk: e.target.value})} style={inputStyle} />
+                <input placeholder="Ngân hàng" value={newExpense.ngan_hang} onChange={e => setNewExpense({...newExpense, ngan_hang: e.target.value})} style={inputStyle} />
+
                 <select value={newExpense.phong_ban} onChange={e => setNewExpense({...newExpense, phong_ban: e.target.value})} style={inputStyle}><option value="">-Phòng ban-</option>{DEPARTMENT_OPTIONS.map(d=><option key={d} value={d}>{d}</option>)}</select>
                 <input placeholder="Số tiền (*)" value={newExpense.khoan_chi} onChange={e => setNewExpense({...newExpense, khoan_chi: formatCurrency(e.target.value)})} style={{...inputStyle, fontWeight:'bold', color:'#D42426'}} />
                 <input placeholder="Nội dung chi (*)" value={newExpense.noi_dung} onChange={e => setNewExpense({...newExpense, noi_dung: e.target.value})} style={{...inputStyle, gridColumn:'span 2'}} />
-                <input placeholder="Link chứng từ" value={newExpense.link_chung_tu} onChange={e => setNewExpense({...newExpense, link_chung_tu: e.target.value})} style={{...inputStyle, gridColumn:'span 2'}} />
+                <input placeholder="Link chứng từ" value={newExpense.link_chung_tu} onChange={e => setNewExpense({...newExpense, link_chung_tu: e.target.value})} style={{...inputStyle, gridColumn:'span 4'}} />
                 
-                <div style={{ gridColumn: 'span 4', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '30px', marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #f9f9f9' }}>
+                {/* Hàng cuối */}
+                <div style={{
+                    gridColumn: 'span 4', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    gap: '30px', 
+                    marginTop: '15px',
+                    paddingTop: '15px',
+                    borderTop: '1px solid #f9f9f9'
+                }}>
                     <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem', color: '#333', userSelect: 'none' }}>
-                        <input type="checkbox" checked={newExpense.vat} onChange={e => setNewExpense({...newExpense, vat: e.target.checked})} style={{ width: '20px', height: '20px', margin: '0 10px 0 0', cursor: 'pointer' }} /> 
+                        <input 
+                            type="checkbox" 
+                            checked={newExpense.vat} 
+                            onChange={e => setNewExpense({...newExpense, vat: e.target.checked})} 
+                            style={{ width: '20px', height: '20px', margin: '0 10px 0 0', cursor: 'pointer' }} 
+                        /> 
                         Xuất hóa đơn VAT
                     </label>
-                    <button type="submit" disabled={isSubmitting} style={{ backgroundColor: '#D42426', color: 'white', padding: '0 60px', height: '45px', border: 'none', borderRadius: '30px', fontWeight: 'bold', cursor: 'pointer', fontSize: '1rem', boxShadow: '0 4px 12px rgba(212, 36, 38, 0.3)', transition: 'all 0.2s' }}>
+                    <button type="submit" disabled={isSubmitting} style={{
+                        backgroundColor: '#D42426', 
+                        color: 'white', 
+                        padding: '12px 60px', 
+                        border: 'none', 
+                        borderRadius: '30px', 
+                        fontWeight: 'bold', 
+                        cursor: 'pointer', 
+                        fontSize: '1rem',
+                        boxShadow: '0 4px 12px rgba(212, 36, 38, 0.3)',
+                        transition: 'all 0.2s'
+                    }}>
                         {isSubmitting ? 'ĐANG LƯU...' : 'LƯU KHOẢN CHI'}
                     </button>
                 </div>
@@ -352,20 +391,19 @@ const ExpenseEcomTab = () => {
                     <option value="done">✅ Đã hoàn tất (Full tick)</option>
                 </select>
 
-                {/* FIX: NÚT XÓA LỌC DÙNG CHUNG STYLE INPUT */}
                 <button 
                     onClick={clearFilters}
                     style={{
-                        ...inputStyle, // Kế thừa height: 45px và boxSizing từ inputStyle
+                        ...inputStyle, 
                         backgroundColor: '#eee', 
                         color: '#555', 
                         fontWeight: 'bold', 
                         cursor: 'pointer', 
                         textAlign: 'center',
                         transition: '0.2s',
-                        display: 'flex',          // Flex để căn giữa chữ
-                        alignItems: 'center',     // Căn giữa dọc
-                        justifyContent: 'center'  // Căn giữa ngang
+                        display: 'flex',          
+                        alignItems: 'center',     
+                        justifyContent: 'center'  
                     }}
                 >
                     Xóa Lọc ✖
@@ -379,8 +417,11 @@ const ExpenseEcomTab = () => {
                         <tr>
                             <th style={{padding:'10px'}}>Ngày</th>
                             <th style={{padding:'10px', textAlign:'left'}}>Họ tên</th>
+                            {/* [MỚI] THÊM CỘT STK */}
+                            <th style={{padding:'10px', textAlign:'left'}}>STK / Bank</th>
+                            
                             <th style={{padding:'10px'}}>Phòng</th>
-                            <th style={{padding:'10px', textAlign:'left', width: '25%'}}>Nội dung</th>
+                            <th style={{padding:'10px', textAlign:'left', width: '20%'}}>Nội dung</th>
                             <th style={{padding:'10px', textAlign:'right'}}>Tiền</th>
                             <th style={{padding:'10px'}}>VAT</th>
                             <th style={{padding:'10px'}}>Link</th>
@@ -395,6 +436,23 @@ const ExpenseEcomTab = () => {
                                 <tr key={item.id} style={{borderBottom:'1px solid #eee', backgroundColor: isEdit ? '#f0f8ff' : 'white'}}>
                                     <td style={{padding:'10px', textAlign:'center'}}>{isEdit?<input type="date" value={editFormData.ngay_chi} onChange={e=>setEditFormData({...editFormData, ngay_chi:e.target.value})} style={inputStyle} />:item.ngay_chi}</td>
                                     <td style={{padding:'10px'}}><b>{isEdit?<input value={editFormData.ho_ten} onChange={e=>setEditFormData({...editFormData, ho_ten:e.target.value})} style={inputStyle} />:item.ho_ten}</b></td>
+                                    
+                                    {/* [MỚI] HIỂN THỊ STK / BANK */}
+                                    <td style={{padding:'10px'}}>
+                                        {isEdit ? (
+                                            <div style={{display:'flex', flexDirection:'column', gap:'5px'}}>
+                                                <input placeholder="STK" value={editFormData.stk} onChange={e=>setEditFormData({...editFormData, stk:e.target.value})} style={{...inputStyle, height:'35px'}} />
+                                                <input placeholder="Bank" value={editFormData.ngan_hang} onChange={e=>setEditFormData({...editFormData, ngan_hang:e.target.value})} style={{...inputStyle, height:'35px'}} />
+                                            </div>
+                                        ) : (
+                                            (item.stk || item.ngan_hang) ? 
+                                            <div style={{fontSize:'0.85rem'}}>
+                                                <div style={{fontWeight:'bold', color:'#333'}}>{item.stk}</div>
+                                                <div style={{color:'#666'}}>{item.ngan_hang}</div>
+                                            </div> : <span style={{color:'#ccc'}}>-</span>
+                                        )}
+                                    </td>
+
                                     <td style={{padding:'10px', textAlign:'center'}}>{isEdit?<select value={editFormData.phong_ban} onChange={e=>setEditFormData({...editFormData, phong_ban:e.target.value})} style={inputStyle}>{DEPARTMENT_OPTIONS.map(d=><option key={d} value={d}>{d}</option>)}</select>:item.phong_ban}</td>
                                     <td style={{padding:'10px'}}>{isEdit?<input value={editFormData.noi_dung} onChange={e=>setEditFormData({...editFormData, noi_dung:e.target.value})} style={inputStyle} />:item.noi_dung}</td>
                                     <td style={{padding:'10px', textAlign:'right', color:'#D42426', fontWeight:'bold'}}>{isEdit?<input value={editFormData.khoan_chi} onChange={e=>setEditFormData({...editFormData, khoan_chi:formatCurrency(e.target.value)})} style={inputStyle} />:formatCurrency(item.khoan_chi)}</td>
@@ -420,7 +478,7 @@ const ExpenseEcomTab = () => {
                         })}
                         {filteredExpenses.length === 0 && (
                             <tr>
-                                <td colSpan="9" style={{textAlign:'center', padding:'20px', color:'#999'}}>Không tìm thấy kết quả nào phù hợp.</td>
+                                <td colSpan="11" style={{textAlign:'center', padding:'20px', color:'#999'}}>Không tìm thấy kết quả nào phù hợp.</td>
                             </tr>
                         )}
                     </tbody>
