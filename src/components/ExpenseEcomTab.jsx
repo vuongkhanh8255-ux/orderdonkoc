@@ -26,7 +26,7 @@ const DEPARTMENT_OPTIONS = [ "Livestream", "Ecom", "Marketing", "Design", "Abm",
 const COLORS = ['#4CAF50', '#FF9800', '#D42426', '#999999']; 
 
 // --- MẬT KHẨU BẢO MẬT ---
-const PASS_BUDGET = "AKhueleaderstella";
+const PASS_BUDGET = "211315";
 const PASS_APPROVE = "QuocKhanhalphamale";
 
 const ExpenseEcomTab = () => {
