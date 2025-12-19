@@ -318,7 +318,7 @@ export const AppDataProvider = ({ children }) => {
   const clearFilters = () => { setFilterIdKenh(''); setFilterSdt(''); setFilterBrand(''); setFilterSanPham(''); setFilterNhanSu(''); setFilterNgay(''); setFilterLoaiShip(''); setFilterEditedStatus('all'); };
   
   // =========================================================================
-  // --- HÀM TỔNG HỢP (ĐÃ SỬA LỖI COLUMN DOES NOT EXIST) ---
+  // --- HÀM TỔNG HỢP (FIXED: TÁCH RIÊNG THEO BRAND) ---
   // =========================================================================
   const handleGetSummary = async () => {
     if (!summaryDate) { alert('Vui lòng chọn ngày để tổng hợp!'); return; }
@@ -328,7 +328,6 @@ export const AppDataProvider = ({ children }) => {
     setRawSummaryData([]);
 
     try {
-        // [FIX] Thay vì dùng RPC bị lỗi, ta gọi trực tiếp bảng và tự cộng dồn
         const startDate = `${summaryDate}T00:00:00.000Z`;
         const endDate = `${summaryDate}T23:59:59.999Z`;
 
@@ -349,15 +348,21 @@ export const AppDataProvider = ({ children }) => {
 
         if (data) {
             data.forEach(item => {
-                // Tạo key duy nhất: Barcode + Loại Ship
-                const key = `${item.sanphams?.barcode}_${item.donguis?.loai_ship}`;
+                // [QUAN TRỌNG] Tạo key duy nhất bao gồm cả BRAND
+                // Key = TênBrand + Barcode + LoạiShip + TênSP
+                const brandName = item.sanphams?.brands?.ten_brand || 'Unknown';
+                const barcode = item.sanphams?.barcode || 'NoCode';
+                const ship = item.donguis?.loai_ship || 'Unknown';
+                const prodName = item.sanphams?.ten_sanpham || 'Unknown';
+
+                const key = `${brandName}_${barcode}_${ship}_${prodName}`;
                 
                 if (!mapSummary[key]) {
                     mapSummary[key] = {
-                        ten_san_pham: item.sanphams?.ten_sanpham,
-                        barcode: item.sanphams?.barcode,
-                        ten_brand: item.sanphams?.brands?.ten_brand,
-                        loai_ship: item.donguis?.loai_ship,
+                        ten_san_pham: prodName,
+                        barcode: barcode,
+                        ten_brand: brandName,
+                        loai_ship: ship,
                         total_quantity: 0
                     };
                 }
@@ -366,6 +371,9 @@ export const AppDataProvider = ({ children }) => {
         }
 
         const finalData = Object.values(mapSummary);
+
+        // Sắp xếp theo Brand cho đẹp
+        finalData.sort((a, b) => a.ten_brand.localeCompare(b.ten_brand));
 
         setRawSummaryData(finalData);
         setProductSummary({
