@@ -174,7 +174,7 @@ export const AppDataProvider = ({ children }) => {
       loaiShip: 120, trangThai: 120, hanhDong: 150 
   });
 
-  // STATE CONTRACT & AIR LINKS (Giữ nguyên)
+  // STATE CONTRACT & AIR LINKS
   const [contractData, setContractData] = useState({
         benB_ten: '', benB_sdt: '', benB_diaChi: '', benB_cccd: '', benB_mst: '', 
         benB_stk: '', benB_nganHang: '', benB_nguoiThuHuong: '',
@@ -207,14 +207,13 @@ export const AppDataProvider = ({ children }) => {
   const handleResize = (key) => (e, { size }) => { setColumnWidths(prev => ({ ...prev, [key]: size.width })); };
 
   // =====================================================================
-  // --- LOAD ORDER DATA (ĐÃ FIX: LỌC SERVER SIDE + TRIM) ---
+  // --- LOAD ORDER DATA (ĐÃ FIX TRIM & LỌC SERVER) ---
   // =====================================================================
   const loadInitialData = async () => { 
     setIsLoading(true);
     const startIndex = (currentPage - 1) * ORDERS_PER_PAGE;
     const endIndex = startIndex + ORDERS_PER_PAGE - 1;
 
-    // QUAN TRỌNG: Nếu có lọc Brand/SP thì phải dùng !inner để lọc ngay trong Database
     const hasProductFilter = !!filterBrand || !!filterSanPham;
     const ctRelation = hasProductFilter ? 'chitiettonguis!chitiettonguis_dongui_id_fkey_final!inner' : 'chitiettonguis!chitiettonguis_dongui_id_fkey_final';
     const spRelation = hasProductFilter ? 'sanphams!inner' : 'sanphams';
@@ -233,7 +232,6 @@ export const AppDataProvider = ({ children }) => {
         )
     `, { count: 'exact' });
 
-    // [FIX] Cắt khoảng trắng (TRIM) khi tìm kiếm để chính xác 100%
     if (filterIdKenh) query = query.ilike('koc_id_kenh', `%${filterIdKenh.trim()}%`);
     if (filterSdt) query = query.ilike('koc_sdt', `%${filterSdt.trim()}%`);
     
@@ -249,7 +247,6 @@ export const AppDataProvider = ({ children }) => {
         query = query.eq('da_sua', isEdited);
     }
 
-    // [FIX] Lọc Brand/SP trực tiếp trên Server (Database)
     if (filterBrand) {
         query = query.eq('chitiettonguis.sanphams.brand_id', filterBrand);
     }
@@ -265,7 +262,6 @@ export const AppDataProvider = ({ children }) => {
     if(error) { alert("Lỗi tải dữ liệu Order: " + error.message) } 
     else if (data) {
       const dataWithStt = data.map((item, index) => ({ ...item, originalStt: (count || 0) - (startIndex + index) }));
-      // Dữ liệu đã được lọc sạch từ Server, không cần lọc lại ở Client nữa
       setDonHangs(dataWithStt);
     }
     setIsLoading(false); 
@@ -320,7 +316,6 @@ export const AppDataProvider = ({ children }) => {
 
   const handleIdKenhBlur = async () => { 
       if (!idKenh) return;
-      // [FIX] Cắt khoảng trắng khi tìm KOC
       const cleanId = idKenh.trim();
       const { data } = await supabase.from('kocs').select().eq('id_kenh', cleanId).single(); 
       if (data) { setHoTen(data.ho_ten); setSdt(data.sdt); setDiaChi(data.dia_chi); setCccd(data.cccd); } 
@@ -328,7 +323,7 @@ export const AppDataProvider = ({ children }) => {
   const clearFilters = () => { setFilterIdKenh(''); setFilterSdt(''); setFilterBrand(''); setFilterSanPham(''); setFilterNhanSu(''); setFilterNgay(''); setFilterLoaiShip(''); setFilterEditedStatus('all'); };
   
   // =========================================================================
-  // --- HÀM TỔNG HỢP (ĐÃ FIX: TÁCH RIÊNG THEO BRAND) ---
+  // --- HÀM TỔNG HỢP (FIXED: TÁCH RIÊNG THEO BRAND) ---
   // =========================================================================
   const handleGetSummary = async () => {
     if (!summaryDate) { alert('Vui lòng chọn ngày để tổng hợp!'); return; }
@@ -443,21 +438,18 @@ export const AppDataProvider = ({ children }) => {
     else { setDonHangs(prevState => prevState.map(donHang => idsToUpdate.includes(donHang.id) ? { ...donHang, trang_thai: 'Đã đóng đơn' } : donHang ));
     setSelectedOrders(new Set()); alert(`Đã cập nhật trạng thái cho ${idsToUpdate.length} đơn hàng.`); } 
   };
-  // [FIX] Cập nhật export để hỗ trợ lọc Server-side
   const handleExport = ({ data, headers, filename }) => { 
     const orderedData = data.map(row => { const newRow = {}; headers.forEach(header => { if (header.key) { newRow[header.label] = row[header.key]; } }); return newRow; });
     const worksheet = XLSX.utils.json_to_sheet(orderedData); const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1"); XLSX.writeFile(workbook, filename); 
   };
   const handleExportAll = async () => {
     setIsLoading(true);
-    // [FIX] Cũng phải áp dụng logic !inner cho Export để khớp với danh sách hiển thị
     const hasProductFilter = !!filterBrand || !!filterSanPham;
     const ctRelation = hasProductFilter ? 'chitiettonguis!chitiettonguis_dongui_id_fkey_final!inner' : 'chitiettonguis!chitiettonguis_dongui_id_fkey_final';
     const spRelation = hasProductFilter ? 'sanphams!inner' : 'sanphams';
 
     let query = supabase.from('donguis').select(`id, ngay_gui, da_sua, loai_ship, original_loai_ship, trang_thai, original_trang_thai, koc_ho_ten, original_koc_ho_ten, koc_id_kenh, original_koc_id_kenh, koc_sdt, original_koc_sdt, koc_dia_chi, original_koc_dia_chi, koc_cccd, original_koc_cccd, nhansu ( id, ten_nhansu ), ${ctRelation} ( id, so_luong, ${spRelation} ( id, ten_sanpham, barcode, gia_tien, brands ( id, ten_brand ) ) )`).order('ngay_gui', { ascending: false });
     
-    // [FIX] Áp dụng lại toàn bộ bộ lọc Server-side
     if (filterIdKenh) query = query.ilike('koc_id_kenh', `%${filterIdKenh.trim()}%`); 
     if (filterSdt) query = query.ilike('koc_sdt', `%${filterSdt.trim()}%`); 
     if (filterNhanSu) query = query.eq('nhansu_id', filterNhanSu);
@@ -474,7 +466,6 @@ export const AppDataProvider = ({ children }) => {
     }
     
     let exportData = data || [];
-    // Không cần filter lại ở Client vì Server đã trả đúng rồi
     const finalExportData = exportData.flatMap((donHang, index) => {
         const baseData = { stt: index + 1, ngayGui: new Date(donHang.ngay_gui).toLocaleString('vi-VN'), tenKOC: donHang.koc_ho_ten, cccd: donHang.koc_cccd, idKenh: donHang.koc_id_kenh, sdt: donHang.koc_sdt, diaChi: donHang.koc_dia_chi, nhanSu: donHang.nhansu?.ten_nhansu, loaiShip: donHang.loai_ship, trangThai: donHang.trang_thai };
         if (donHang.chitiettonguis.length === 0) { return [{ ...baseData, sanPham: 'N/A', soLuong: 0, brand: 'N/A', barcode: 'N/A' }]; }
@@ -484,38 +475,39 @@ export const AppDataProvider = ({ children }) => {
     handleExport({ data: finalExportData, headers: mainExportHeaders, filename: 'danh-sach-don-hang-FULL.xlsx' });
     setIsLoading(false);
   };
+  
+  // =================================================================
+  // --- HÀM XÓA ĐƠN HÀNG "SÁT THỦ" (FIX LỖI FOREIGN KEY) ---
   // =================================================================
   const handleDeleteOrder = async (donHang) => {
-    let orderDate = null;
-    let orderId = donHang;
-    if (typeof donHang === 'object' && donHang.ngay_gui) {
-        orderDate = new Date(donHang.ngay_gui);
-        orderId = donHang.id;
-    } else {
-        orderId = donHang;
-    }
+    let orderId = (typeof donHang === 'object' && donHang.id) ? donHang.id : donHang;
 
-    if (orderDate) {
-        const homNay = new Date();
-        const diffTime = Math.abs(homNay - orderDate);
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        if (diffDays > 3) {
-            alert(`❌ KHÔNG THỂ XÓA!\n\nĐơn hàng này tạo ngày ${orderDate.toLocaleDateString('vi-VN')}.\nQuy định chỉ được xóa đơn trong vòng 3 ngày.`);
-            return;
+    if (window.confirm(`⚠️ CHỐT: Xóa vĩnh viễn đơn hàng #${orderId}?\n(Dữ liệu sẽ mất không thể khôi phục)`)) {
+        setIsLoading(true);
+        try {
+            // 1. Xóa Booking liên quan (Nếu có)
+            await supabase.from('bookings').delete().ilike('ghi_chu', `%Đơn hàng #${orderId}%`);
+            
+            // 2. [FIX] Xóa Chi tiết đơn hàng TRƯỚC (Bảng con)
+            // Lệnh này đảm bảo không bị lỗi Foreign Key nếu Database chưa set CASCADE
+            const { error: errCT } = await supabase.from('chitiettonguis').delete().eq('dongui_id', orderId);
+            if (errCT) throw new Error("Lỗi xóa chi tiết (Con): " + errCT.message);
+
+            // 3. Xóa Đơn Gốc (Bảng cha)
+            const { error: errDon } = await supabase.from('donguis').delete().eq('id', orderId);
+            if (errDon) throw new Error("Lỗi xóa đơn gốc (Cha): " + errDon.message);
+
+            alert("🗑️ Đã xóa thành công!");
+            setDonHangs(prev => prev.filter(item => item.id !== orderId));
+            setTotalOrderCount(prev => prev - 1);
+        } catch (err) {
+            alert("❌ Lỗi: " + err.message);
+        } finally {
+            setIsLoading(false);
         }
     }
-
-    if (window.confirm(`⚠️ Sếp có chắc muốn XÓA VĨNH VIỄN đơn hàng #${orderId} không?\n(Booking bên kia cũng sẽ bay màu theo)`)) {
-        setIsLoading(true);
-        const { error: errorBooking } = await supabase.from('bookings').delete().ilike('ghi_chu', `%Đơn hàng #${orderId}%`);
-        if (errorBooking) { console.warn("Lỗi xóa booking (hoặc không có booking nào):", errorBooking.message); }
-        const { error: errorChiTiet } = await supabase.from('chitiettonguis').delete().eq('dongui_id', orderId);
-        if (errorChiTiet) { alert("Lỗi khi xóa chi tiết đơn hàng: " + errorChiTiet.message); setIsLoading(false); return; }
-        const { error: errorDon } = await supabase.from('donguis').delete().eq('id', orderId);
-        if (errorDon) { alert("Lỗi khi xóa đơn gốc: " + errorDon.message); } else { alert("🗑️ Đã xóa đơn hàng & Booking liên quan thành công!"); setDonHangs(prev => prev.filter(item => item.id !== orderId)); setTotalOrderCount(prev => prev - 1); }
-        setIsLoading(false);
-    }
   };
+
   const handleContractFormChange = (e) => { const value = (e.target.type === 'number') ? parseFloat(e.target.value) || 0 : e.target.value;
   setContractData({ ...contractData, [e.target.id]: value }); };
   
@@ -656,6 +648,7 @@ export const AppDataProvider = ({ children }) => {
         let bValue = b[sortConfig.key];
         if (reportData.brandHeaders.includes(sortConfig.key)) {
           aValue = a.brand_counts[sortConfig.key] || 0;
+      
           bValue = b.brand_counts[sortConfig.key] || 0;
         }
         aValue = Number(aValue) || 0;
@@ -665,6 +658,7 @@ export const AppDataProvider = ({ children }) => {
         return 0;
       });
     }
+   
     return sortableItems;
   }, [reportData.reportRows, sortConfig, reportData.brandHeaders]);
 
@@ -677,6 +671,7 @@ export const AppDataProvider = ({ children }) => {
       acc.chi_phi_tong += Number(row.chi_phi_tong) || 0;
       reportData.brandHeaders.forEach(brand => { acc.brand_counts[brand] += (Number(row.brand_counts[brand]) || 0); });
       return acc;
+  
     }, initialTotals);
     totals.aov_don_order = totals.sl_order > 0 ? (totals.chi_phi_tong / totals.sl_order) : 0;
     return totals;
@@ -691,6 +686,7 @@ export const AppDataProvider = ({ children }) => {
         if (airReportData.brandHeaders.includes(airSortConfig.key)) {
           aValue = a.brand_counts_air[airSortConfig.key] || 0;
           bValue = b.brand_counts_air[airSortConfig.key] || 0;
+    
         }
         aValue = Number(aValue) || 0;
         bValue = Number(bValue) || 0;
@@ -712,36 +708,95 @@ export const AppDataProvider = ({ children }) => {
       return acc;
     }, initialTotals);
     return totals;
+ 
   }, [airReportData.reportRows, airReportData.brandHeaders]);
 
   // =================================================================
   // Cung cấp VALUE cho Context
   // =================================================================
   const value = {
+    // State chung
     brands, nhanSus, sanPhams, filterSanPhams,
+    
+    // State & Setters Tab Order
     isLoading, setIsLoading,
-    hoTen, setHoTen, idKenh, setIdKenh, sdt, setSdt, diaChi, setDiaChi, cccd, setCccd,
-    selectedBrand, setSelectedBrand, selectedSanPhams, setSelectedSanPhams, selectedNhanSu, setSelectedNhanSu, loaiShip, setLoaiShip,
-    donHangs, setDonHangs, selectedOrders, setSelectedOrders, currentPage, setCurrentPage, totalOrderCount, setTotalOrderCount,
-    filterIdKenh, setFilterIdKenh, filterSdt, setFilterSdt, filterBrand, setFilterBrand, filterSanPham, setFilterSanPham,
-    filterNhanSu, setFilterNhanSu, filterNgay, setFilterNgay, filterLoaiShip, setFilterLoaiShip, filterEditedStatus, setFilterEditedStatus,
-    productSearchTerm, setProductSearchTerm, summaryDate, setSummaryDate, productSummary, setProductSummary, rawSummaryData, setRawSummaryData,
-    isSummarizing, setIsSummarizing, reportMonth, setReportMonth, reportYear, setReportYear, reportData, setReportData,
-    isReportLoading, setIsReportLoading, sortConfig, setSortConfig, editingDonHang, setEditingDonHang, isPastDeadlineForNewOrders,
+    hoTen, setHoTen,
+    idKenh, setIdKenh,
+    sdt, setSdt,
+    diaChi, setDiaChi,
+    cccd, setCccd,
+    selectedBrand, setSelectedBrand,
+    selectedSanPhams, setSelectedSanPhams,
+    selectedNhanSu, setSelectedNhanSu,
+    loaiShip, setLoaiShip,
+    
+    donHangs, setDonHangs,
+    selectedOrders, setSelectedOrders,
+    currentPage, setCurrentPage,
+    totalOrderCount, setTotalOrderCount,
+    filterIdKenh, setFilterIdKenh,
+    filterSdt, setFilterSdt,
+    filterBrand, setFilterBrand,
+    filterSanPham, setFilterSanPham,
+    filterNhanSu, setFilterNhanSu,
+    filterNgay, setFilterNgay,
+    filterLoaiShip, setFilterLoaiShip,
+    filterEditedStatus, setFilterEditedStatus,
+    productSearchTerm, setProductSearchTerm,
+    summaryDate, setSummaryDate,
+    productSummary, setProductSummary,
+    rawSummaryData, setRawSummaryData,
+    isSummarizing, setIsSummarizing,
+    reportMonth, setReportMonth,
+    reportYear, setReportYear,
+    reportData, setReportData,
+    
+    isReportLoading, setIsReportLoading,
+    sortConfig, setSortConfig,
+    editingDonHang, setEditingDonHang,
+    isPastDeadlineForNewOrders,
     columnWidths, setColumnWidths,
+    
+    // Logic Tab Order
     handleResize, loadInitialData, loadSanPhamsByBrand, handleQuantityChange, handleSubmit, handleIdKenhBlur, 
     clearFilters, handleGetSummary, handleGenerateReport, requestSort, handleEdit, handleCancelEdit, 
     handleUpdate, handleSelect, handleSelectAll, handleBulkUpdateStatus, handleExport, handleExportAll,
+    
+    // Values đã tính (Memo)
     sortedReportRows, totalsRow, totalPages: Math.ceil(totalOrderCount / ORDERS_PER_PAGE),
-    contractData, setContractData, contractHTML, setContractHTML, isOutputVisible, setIsOutputVisible, copyMessage, setCopyMessage,
+
+    // State & Setters Tab Contract
+    contractData, setContractData, contractHTML, setContractHTML,
+   
+    isOutputVisible, setIsOutputVisible, copyMessage, setCopyMessage,
+    
+    // Logic Tab Contract
     handleContractFormChange, handleGenerateContract, handleCopyToClipboard,
-    airLinks, setAirLinks, isLoadingAirLinks, setIsLoadingAirLinks, filterAlKenh, setFilterAlKenh, filterAlBrand, setFilterAlBrand,
-    filterAlNhanSu, setFilterAlNhanSu, filterAlDate, setFilterAlDate, airLinksCurrentPage, setAirLinksCurrentPage, airLinksTotalCount,
-    loadAirLinks, handleDeleteAirLink, clearAirLinkFilters, totalPagesAirLinks: Math.ceil(airLinksTotalCount / AIRLINKS_PER_PAGE),
-    airReportMonth, setAirReportMonth, airReportYear, setAirReportYear, airReportData, setAirReportData, isAirReportLoading, setIsAirReportLoading,
-    airSortConfig, setAirSortConfig, handleGenerateAirLinksReport, requestAirSort, sortedAirReportRows, totalsRowAirReport,
+
+    // State & Setters Tab Air Links
+    airLinks, setAirLinks, isLoadingAirLinks, setIsLoadingAirLinks,
+    filterAlKenh, setFilterAlKenh, filterAlBrand, setFilterAlBrand,
+    filterAlNhanSu, setFilterAlNhanSu, filterAlDate, setFilterAlDate,
+    airLinksCurrentPage, setAirLinksCurrentPage, airLinksTotalCount,
+
+    // Logic Tab Air Links
+    loadAirLinks, handleDeleteAirLink, clearAirLinkFilters,
+    totalPagesAirLinks: Math.ceil(airLinksTotalCount / AIRLINKS_PER_PAGE),
+
+    // --- LOGIC MỚI CHO BÁO CÁO AIR LINKS ---
+    airReportMonth, setAirReportMonth, airReportYear, setAirReportYear,
+ 
+    airReportData, setAirReportData, isAirReportLoading, setIsAirReportLoading,
+    airSortConfig, setAirSortConfig, handleGenerateAirLinksReport, requestAirSort,
+    sortedAirReportRows, totalsRowAirReport,
+
+    // Auth
     user, handleLogin, handleLogout, isLoggingIn, loginError,
+
+    // --- HÀM XÓA ĐÃ UPDATE ---
     handleDeleteOrder, 
+    
+    // Placeholder (Nếu chưa dùng tới thì để trống để tránh lỗi)
     savedContracts, loadSavedContracts: () => {}, addContractLink: () => {}, deleteContractLink: () => {}, isLoadingContracts
   };
   return (
