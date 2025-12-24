@@ -4,11 +4,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-// --- HÀM HELPER ---
+// --- HÀM HELPER (ĐÃ FIX LỖI NHẬP SỐ) ---
 const formatCurrency = (value) => {
-  if (!value && value !== 0) return '0';
-  const number = String(value).replace(/\D/g, '');
-  return number.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  if (!value) return '';
+  // 1. Xóa tất cả ký tự không phải số (để tránh lỗi Math.abs cũ)
+  const rawNumber = String(value).replace(/\D/g, ''); 
+  // 2. Chèn dấu chấm
+  return rawNumber.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 };
 
 const parseMoney = (str) => {
@@ -26,28 +28,30 @@ const DEPARTMENT_OPTIONS = [ "Livestream", "Ecom", "Marketing", "Design", "Abm",
 const COLORS = ['#4CAF50', '#FF9800', '#D42426', '#999999']; 
 
 // --- MẬT KHẨU BẢO MẬT ---
-const PASS_BUDGET = "211315";
-const PASS_APPROVE = "QuocKhanhalphamale";
+const PASS_BUDGET = "211315"; // Pass cho Ngân sách
+const PASS_APPROVE = "QuocKhanhalphamale"; // Pass duyệt chi
 
 const ExpenseEcomTab = () => {
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [budget, setBudget] = useState(0);
   
+  // State nạp thêm ngân sách
+  const [addBudgetAmount, setAddBudgetAmount] = useState('');
+
   // State nhập mới
   const [newExpense, setNewExpense] = useState({
       ngay_chi: new Date().toISOString().split('T')[0],
       ho_ten: '', 
-      // Bỏ stk, ngan_hang -> Thay bằng file QR
       khoan_chi: '', phong_ban: '', noi_dung: '', link_chung_tu: '', vat: false
   });
-  const [fileQR, setFileQR] = useState(null); // State lưu file ảnh QR khi chọn
+  const [fileQR, setFileQR] = useState(null); 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // State sửa & Lịch sử
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState({});
-  const [editFileQR, setEditFileQR] = useState(null); // State lưu file ảnh QR khi sửa
+  const [editFileQR, setEditFileQR] = useState(null); 
   const [historyModalData, setHistoryModalData] = useState(null);
 
   // --- STATE BỘ LỌC ---
@@ -129,7 +133,7 @@ const ExpenseEcomTab = () => {
           }
       });
 
-      const conLai = budget - daChi - choChi;
+      const conLai = budget - daChi; 
       return { daChi, choChi, conLai };
   }, [expenses, budget]);
 
@@ -139,23 +143,20 @@ const ExpenseEcomTab = () => {
       { name: 'Đã Chi (Bank)', value: stats.daChi },
   ];
 
-  // --- HÀM UPLOAD ẢNH LÊN SUPABASE ---
+  // --- HÀM UPLOAD ẢNH ---
   const uploadImage = async (file) => {
       if (!file) return null;
       try {
-          // Tạo tên file unique
           const fileExt = file.name.split('.').pop();
           const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
           const filePath = `qr_codes/${fileName}`;
 
-          // Upload
           const { error: uploadError } = await supabase.storage
-              .from('expense-files') // Tên bucket phải tạo trên Supabase
+              .from('expense-files')
               .upload(filePath, file);
 
           if (uploadError) throw uploadError;
 
-          // Lấy Public URL
           const { data } = supabase.storage
               .from('expense-files')
               .getPublicUrl(filePath);
@@ -168,19 +169,48 @@ const ExpenseEcomTab = () => {
       }
   };
 
-  // --- 3. CẬP NHẬT NGÂN SÁCH (BẢO MẬT) ---
-  const handleUpdateBudgetClick = async () => {
-      const inputPass = prompt("Nhập mật khẩu để sửa ngân sách:");
+  // --- 3. CẬP NHẬT NGÂN SÁCH ---
+  
+  // NẠP THÊM TIỀN (Bấm nút mới hỏi mật khẩu)
+  const handleAddBudget = async () => {
+      if (!addBudgetAmount || addBudgetAmount === '0') {
+          alert("Vui lòng nhập số tiền cần nạp!");
+          return;
+      }
+      
+      const inputPass = prompt("🔒 Nhập mật khẩu (211315) để NẠP THÊM ngân sách:");
+      
       if (inputPass === PASS_BUDGET) {
-          const newBudgetStr = prompt("Nhập tổng ngân sách mới:", budget);
+          const amountToAdd = parseMoney(addBudgetAmount);
+          const newTotal = budget + amountToAdd; // Cộng dồn
+          
+          const { error } = await supabase.from('ecom_budget').upsert({ id: 1, total_amount: newTotal });
+          
+          if (error) {
+              alert("Lỗi cập nhật: " + error.message);
+          } else {
+              setBudget(newTotal);
+              setAddBudgetAmount(''); // Reset ô nhập
+              alert(`✅ Đã nạp thêm ${formatCurrency(amountToAdd)} đ.\n💰 Tổng ngân sách mới: ${formatCurrency(newTotal)} đ`);
+          }
+      } else if (inputPass !== null) {
+          alert("❌ Sai mật khẩu! Không được phép nạp.");
+      }
+  };
+
+  // SỬA TRỰC TIẾP TỔNG
+  const handleSetTotalBudget = async () => {
+      const inputPass = prompt("🔒 Nhập mật khẩu (211315) để ĐẶT LẠI tổng ngân sách:");
+      if (inputPass === PASS_BUDGET) {
+          const newBudgetStr = prompt("Nhập tổng ngân sách MỚI (Số này sẽ thay thế số cũ):", budget);
           if (newBudgetStr !== null) {
               const val = parseMoney(newBudgetStr);
               setBudget(val); 
               await supabase.from('ecom_budget').upsert({ id: 1, total_amount: val });
-              alert("Cập nhật ngân sách thành công!");
+              alert("✅ Đã đặt lại ngân sách thành công!");
           }
       } else if (inputPass !== null) {
-          alert("Sai mật khẩu!");
+          alert("❌ Sai mật khẩu!");
       }
   };
 
@@ -193,7 +223,6 @@ const ExpenseEcomTab = () => {
       }
       setIsSubmitting(true);
       try {
-          // Upload ảnh QR nếu có
           let qrUrl = '';
           if (fileQR) {
               qrUrl = await uploadImage(fileQR);
@@ -203,21 +232,20 @@ const ExpenseEcomTab = () => {
           const dataToInsert = {
               ...newExpense,
               khoan_chi: parseMoney(newExpense.khoan_chi),
-              link_qr: qrUrl, // Lưu link ảnh vào DB
+              link_qr: qrUrl,
               history_log: []
           };
           const { error } = await supabase.from('expenses_ecom').insert([dataToInsert]);
           if (error) throw error;
           alert("Đã thêm khoản chi!");
           
-          // Reset form
           setNewExpense({ 
               ngay_chi: new Date().toISOString().split('T')[0], 
               ho_ten: '', 
               khoan_chi: '', phong_ban: '', noi_dung: '', link_chung_tu: '', vat: false 
           });
-          setFileQR(null); // Reset file
-          document.getElementById('fileInputQR').value = ""; // Reset input file UI
+          setFileQR(null);
+          document.getElementById('fileInputQR').value = ""; 
 
           loadData();
       } catch (error) { alert("Lỗi: " + error.message); } finally { setIsSubmitting(false); }
@@ -227,7 +255,7 @@ const ExpenseEcomTab = () => {
   const handleEditClick = (item) => { 
       setEditingId(item.id);
       setEditFormData({ ...item, khoan_chi: formatCurrency(item.khoan_chi) });
-      setEditFileQR(null); // Reset file sửa
+      setEditFileQR(null);
   };
 
   const handleSaveEdit = async () => {
@@ -235,7 +263,6 @@ const ExpenseEcomTab = () => {
           const oldData = expenses.find(e => e.id === editingId);
           let newData = { ...editFormData, khoan_chi: parseMoney(editFormData.khoan_chi) };
           
-          // Xử lý upload ảnh mới nếu có chọn
           if (editFileQR) {
               const newQrUrl = await uploadImage(editFileQR);
               if (newQrUrl) {
@@ -304,20 +331,53 @@ const ExpenseEcomTab = () => {
 
         {/* --- KHU VỰC THỐNG KÊ --- */}
         <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', alignItems: 'stretch' }}>
+            {/* Cột trái: Ngân sách + Thẻ thống kê */}
             <div style={{ flex: 3, display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                
+                {/* KHUNG NHẬP NGÂN SÁCH MỚI */}
                 <div style={{ ...cardStyle, borderLeft: '5px solid #165B33', display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: 0 }}>
                     <div>
-                        <h3 style={{ margin: 0, color: '#165B33' }}>💰 TỔNG NGÂN SÁCH HIỆN CÓ</h3>
-                        <p style={{ margin: '5px 0 0 0', fontSize: '0.9rem', color: '#666' }}>Bấm vào số tiền bên phải để cập nhật (Cần mật khẩu).</p>
+                        <h3 style={{ margin: 0, color: '#165B33' }}>💰 TỔNG NGÂN SÁCH</h3>
+                        <p style={{ margin: '5px 0 0 0', fontSize: '0.8rem', color: '#666', fontStyle: 'italic' }}>
+                            (Số cũ: <b>{formatCurrency(budget)} đ</b>)
+                        </p>
                     </div>
-                    <div style={{ position: 'relative', cursor: 'pointer' }} onClick={handleUpdateBudgetClick}>
-                        <div style={{ 
-                                fontSize: '1.8rem', fontWeight: 'bold', color: '#165B33', 
-                                padding: '0 20px', height: '50px', lineHeight: '50px',
-                                border: '2px solid #165B33', borderRadius: '10px', minWidth: '250px', 
-                                textAlign: 'right', backgroundColor: '#fff'
-                            }}>
-                            {formatCurrency(budget)} đ
+                    
+                    <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
+                        {/* Ô nhập tiền nạp thêm */}
+                        <div style={{display:'flex', alignItems:'center'}}>
+                            <input 
+                                type="text" 
+                                value={addBudgetAmount} 
+                                onChange={e => setAddBudgetAmount(formatCurrency(e.target.value))} 
+                                placeholder="Nhập tiền nạp thêm..."
+                                style={{
+                                    height: '40px', padding: '0 15px', borderRadius: '20px 0 0 20px', 
+                                    border: '1px solid #165B33', borderRight: 'none', outline: 'none',
+                                    fontWeight: 'bold', width: '180px', color: '#165B33'
+                                }} 
+                            />
+                            <button 
+                                onClick={handleAddBudget}
+                                style={{
+                                    height: '42px', padding: '0 20px', backgroundColor: '#165B33', color: 'white',
+                                    border: 'none', borderRadius: '0 20px 20px 0', cursor: 'pointer', fontWeight: 'bold'
+                                }}
+                            >
+                                + NẠP
+                            </button>
+                        </div>
+
+                        {/* Số hiển thị tổng (Click vào để sửa thủ công nếu sai) */}
+                        <div onClick={handleSetTotalBudget} style={{cursor:'pointer', marginLeft: '10px'}} title="Click để đặt lại số tổng (nếu cần)">
+                            <div style={{ 
+                                    fontSize: '1.8rem', fontWeight: 'bold', color: '#165B33', 
+                                    padding: '0 20px', height: '50px', lineHeight: '50px',
+                                    border: '2px solid #165B33', borderRadius: '10px', minWidth: '200px', 
+                                    textAlign: 'right', backgroundColor: '#fff'
+                                }}>
+                                {formatCurrency(budget)} đ
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -326,7 +386,7 @@ const ExpenseEcomTab = () => {
                     <div style={statCardStyle('#e8f5e9', '#2e7d32')}>
                         <span style={{ fontSize: '0.9rem', fontWeight: 'bold', textTransform: 'uppercase' }}>🔋 CÒN LẠI (DƯ)</span>
                         <span style={{ fontSize: '1.6rem', fontWeight: '900', marginTop: '5px', color: stats.conLai < 0 ? 'red' : '#2e7d32' }}>
-                            {formatCurrency(stats.conLai)} đ
+                            {stats.conLai < 0 ? '-' : ''}{formatCurrency(stats.conLai)} đ
                         </span>
                         {stats.conLai < 0 && <span style={{color:'red', fontWeight:'bold', fontSize:'0.8rem'}}>⚠️ VƯỢT NGÂN SÁCH!</span>}
                     </div>
@@ -374,7 +434,7 @@ const ExpenseEcomTab = () => {
                 <input type="date" value={newExpense.ngay_chi} onChange={e => setNewExpense({...newExpense, ngay_chi: e.target.value})} style={inputStyle} />
                 <input placeholder="Họ tên (*)" value={newExpense.ho_ten} onChange={e => setNewExpense({...newExpense, ho_ten: e.target.value})} style={inputStyle} />
                 
-                {/* [THAY ĐỔI] Input File QR Code */}
+                {/* Input File QR Code */}
                 <div style={{...inputStyle, padding: '5px', display: 'flex', alignItems: 'center'}}>
                     <span style={{marginRight: '10px', fontSize: '0.8rem', color: '#666'}}>QR Bank:</span>
                     <input 
@@ -385,7 +445,6 @@ const ExpenseEcomTab = () => {
                         style={{border: 'none', outline: 'none', width: '100%'}} 
                     />
                 </div>
-                {/* Placeholder để giữ layout grid 4 cột đẹp, hoặc có thể thêm trường khác nếu cần */}
                 <div style={inputStyle}></div> 
 
                 <select value={newExpense.phong_ban} onChange={e => setNewExpense({...newExpense, phong_ban: e.target.value})} style={inputStyle}><option value="">-Phòng ban-</option>{DEPARTMENT_OPTIONS.map(d=><option key={d} value={d}>{d}</option>)}</select>
@@ -427,7 +486,6 @@ const ExpenseEcomTab = () => {
                             <th style={{padding:'10px', width: '50px'}}>STT</th>
                             <th style={{padding:'10px'}}>Ngày</th>
                             <th style={{padding:'10px', textAlign:'left'}}>Họ tên</th>
-                            {/* [THAY ĐỔI] Cột QR Code */}
                             <th style={{padding:'10px', textAlign:'center'}}>QR Code</th>
                             <th style={{padding:'10px'}}>Phòng</th>
                             <th style={{padding:'10px', textAlign:'left', width: '20%'}}>Nội dung</th>
@@ -449,7 +507,6 @@ const ExpenseEcomTab = () => {
                                     <td style={{padding:'10px', textAlign:'center'}}>{isEdit?<input type="date" value={editFormData.ngay_chi} onChange={e=>setEditFormData({...editFormData, ngay_chi:e.target.value})} style={inputStyle} />:item.ngay_chi}</td>
                                     <td style={{padding:'10px'}}><b>{isEdit?<input value={editFormData.ho_ten} onChange={e=>setEditFormData({...editFormData, ho_ten:e.target.value})} style={inputStyle} />:item.ho_ten}</b></td>
                                     
-                                    {/* [THAY ĐỔI] Hiển thị QR Code */}
                                     <td style={{padding:'10px', textAlign:'center'}}>
                                         {isEdit ? (
                                             <input type="file" accept="image/*" onChange={e => setEditFileQR(e.target.files[0])} style={{width:'120px'}} />
@@ -486,7 +543,7 @@ const ExpenseEcomTab = () => {
                             )
                         })}
                         {filteredExpenses.length === 0 && (
-                            <tr><td colSpan="12" style={{textAlign:'center', padding:'20px', color:'#999'}}>Không tìm thấy kết quả nào phù hợp.</td></tr>
+                            <tr><td colSpan="11" style={{textAlign:'center', padding:'20px', color:'#999'}}>Không tìm thấy kết quả nào phù hợp.</td></tr>
                         )}
                     </tbody>
                 </table>

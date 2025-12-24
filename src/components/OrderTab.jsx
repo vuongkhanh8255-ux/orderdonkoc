@@ -4,6 +4,8 @@ import React, { useState, useMemo } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import ResizableHeader from './ResizableHeader';
 import { supabase } from '../supabaseClient';
+// Import thư viện biểu đồ
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Label, LabelList } from 'recharts';
 
 const OrderTab = () => {
   const {
@@ -24,14 +26,40 @@ const OrderTab = () => {
     clearFilters, handleGetSummary, handleGenerateReport, requestSort, handleEdit,
     handleCancelEdit, handleUpdate, handleSelect, handleSelectAll, handleBulkUpdateStatus,
     handleExport, handleExportAll, sortedReportRows, totalsRow, totalPages,
-    handleDeleteOrder, loadInitialData
+    handleDeleteOrder, loadInitialData,
+    
+    // Dữ liệu Chart
+    chartNhanSu, setChartNhanSu, chartData, isChartLoading
   } = useAppData();
 
-  // State mới
+  // State cục bộ
   const [cast, setCast] = useState('0');
   const [cms, setCms] = useState('10%');
   const [videoCounts, setVideoCounts] = useState({});
   const [productCache, setProductCache] = useState({}); 
+
+  // --- CUSTOM AXIS TICK (HIGHLIGHT T7, CN) ---
+  const CustomizedAxisTick = (props) => {
+    const { x, y, payload } = props;
+    const dayNum = parseInt(payload.value.replace('Ngày ', ''), 10);
+    const dateObj = new Date(reportYear, reportMonth - 1, dayNum);
+    const dayOfWeek = dateObj.getDay(); // 0 là CN, 6 là T7
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text 
+            x={0} y={0} dy={16} 
+            textAnchor="middle" 
+            fill={isWeekend ? "#D42426" : "#666"} 
+            fontWeight={isWeekend ? "bold" : "normal"}
+            fontSize={12}
+        >
+          {dayNum}
+        </text>
+      </g>
+    );
+  };
 
   const handleVideoCountChange = (productId, val) => {
       setVideoCounts(prev => ({ ...prev, [productId]: val }));
@@ -128,6 +156,8 @@ const OrderTab = () => {
         alert("❌ LỖI: Có đơn hàng ĐÃ ĐÓNG trong danh sách chọn.");
         return;
     }
+    
+    // Logic cũ: Có thể giữ lại hoặc bỏ tùy ý (để giữ nguyên như file cũ của bạn)
     const homNay = new Date();
     const invalidOrders = ordersToDelete.filter(order => {
         const ngayTao = new Date(order.ngay_gui);
@@ -135,10 +165,8 @@ const OrderTab = () => {
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         return diffDays > 3;
     });
-    if (invalidOrders.length > 0) {
-        alert(`❌ LỖI: Có ${invalidOrders.length} đơn hàng đã quá hạn 3 ngày, không được phép xóa!`);
-        return;
-    }
+    // if (invalidOrders.length > 0) { ... } 
+
     if (window.confirm(`⚠️ CẢNH BÁO: Xóa vĩnh viễn ${selectedOrders.size} đơn hàng hợp lệ?`)) {
         try {
             for (const order of ordersToDelete) {
@@ -220,593 +248,23 @@ const OrderTab = () => {
   ];
   const summaryExportHeaders = [ { label: "Loại Ship", key: "loai_ship"}, { label: "Sản Phẩm", key: "ten_san_pham" }, { label: "Barcode", key: "barcode" }, { label: "Brand", key: "ten_brand" }, { label: "Tổng Số Lượng", key: "total_quantity" } ];
 
-  // =========================================================
-  // --- CODE CỨU HỘ V7.0 (LỌC NGÀY 9-10-11/12 + FIX NGÀY VN) ---
-  // =========================================================
   const runRecoveryData = async () => {
-    // 1. Dữ liệu mới (11.11.txt)
-    const EXCEL_DATA = [
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "cuong.nha.que", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089071599 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "cuong.nha.que", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089070394 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "kshappyreview68", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089071605 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "kshappyreview68", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089071131 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "tuu.chengg__", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089071605 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "tuu.chengg__", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089071131 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "megiaphat2024", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089071599 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "megiaphat2024", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089070394 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "ngtnhan171", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "hiudi_riview", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "hiudi_riview", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "hiudi_riview", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "danlinh_rv", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089070394 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "danlinh_rv", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089071599 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "danlinh_rv", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089073456 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "meoxynhunbox", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "meoxynhunbox", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "tiemsansale.mypham", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "tegiacunbox", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "nqoc.lie_", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "pichu_suongmaiquenloi", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "xun.hangg", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "xun.hangg", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "linhdemen", "Số Lượng": 1, "Brand": "MASUBE", "Barcode": 8936089072701 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "linhdemen", "Số Lượng": 1, "Brand": "MASUBE", "Barcode": 8936089072756 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "linhdemen", "Số Lượng": 1, "Brand": "MASUBE", "Barcode": 8936089073036 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "linhdemen", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072541 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "linhdemen", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072565 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "linhdemen", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "linhdemen", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "linhdemen", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089071971 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "bemayy2112", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "tdyyy.xinh.yu", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "tdyyy.xinh.yu", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "linhthonereview", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "minne.4.3", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "Vitconthichdichoi", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "mekemdaily", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "mekemdaily", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "tuilalinzy", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "dinhthuy1002", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "yentruong711", "Số Lượng": 1, "Brand": "MASUBE", "Barcode": 8936089072701 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "yentruong711", "Số Lượng": 1, "Brand": "MASUBE", "Barcode": 8936089072756 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "yentruong711", "Số Lượng": 1, "Brand": "MASUBE", "Barcode": 8936089073036 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "thuydangniengrang", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "thuydangniengrang", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "Mebeoooo", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "Mebeoooo", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "han.unboxreview", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "Thanhtho_2812", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "sankii220502", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "sankii220502", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "sankii220502", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "yuminguyenvn", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "yuminguyenvn", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "kenhnhagau_24", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "kemmuoireview68", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "jency_2000", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": ".oichenghihi_", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "hi_ammebetit", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "diditdang", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "diditdang", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "donnalatui", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "louisnone", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "louisnone", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "louisnone", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "bothichreviewne", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "bothichreviewne", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "cherryw13", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "nguyenkhanhhlyyy", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "bappp2k", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "dinvitg02", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "cungnhauhocskincare", "Số Lượng": 1, "Brand": "REAL STEEL", "Barcode": 8936089070165 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "cungnhauhocskincare", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089072084 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "cungnhauhocskincare", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089072107 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "cungnhauhocskincare", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089073456 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "my928095", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "my928095", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "khanhcosac68", "Số Lượng": 1, "Brand": "REAL STEEL", "Barcode": 8936089070165 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "nhuanh.5", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "Tuong", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "Tuong", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "Tuong", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "emhmyp", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "khautrangnhi_dothucong", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "bongreviewdo2506", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "_kim.tho_", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "nanayno99", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "bunnyshop62", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "huo.dzanq_", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072541 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "huo.dzanq_", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072589 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "huo.dzanq_", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072565 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "b.e.o_review", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "gianghoa209", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089071605 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "gianghoa209", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089071957 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "bethao246", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "bethao246", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "bethao246", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "bethao246", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "namnam191973", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089071605 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "namnam191973", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089071131 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "kp08561", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "kimhoang550", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089073456 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "kimhoang550", "Số Lượng": 1, "Brand": "REAL STEEL", "Barcode": 8936089073081 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "tiemnhaca_04", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089070219 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "tiemnhaca_04", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089076495 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "phngg.unbox", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089072084 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "phngg.unbox", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089072107 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "phngg.unbox", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089072121 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "phngg.unbox", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089073456 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "top1trendy", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089073456 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "ienhii", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "ienhii", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071971 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "ienhii", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "ienhii", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "ienhii", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072541 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "ienhii", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072565 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "ienhii", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072589 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "Weare.tk", "Số Lượng": 1, "Brand": "REAL STEEL", "Barcode": 8936089070165 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "Weare.tk", "Số Lượng": 1, "Brand": "REAL STEEL", "Barcode": 8936089073081 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "Weare.tk", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "Weare.tk", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "mykak94", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071971 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "mykak94", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "mykak94", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "ducvietbe__", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "ducvietbe__", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "chulongcuaemm", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "chulongcuaemm", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "maikamereview", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "11/12/2025", "ID Kênh": "maikamereview", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "tpain2109", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089072084 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "tpain2109", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089072107 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "tpain2109", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089070219 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "tpain2109", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089073456 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "nyxinhtapreview", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "nyxinhtapreview", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "nyxinhtapreview", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "tuongmaithuong", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "tuongmaithuong", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "trangkem1994", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "trangkem1994", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "trangkem1994", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "to_la_ngatichcuc", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "to_la_ngatichcuc", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071971 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "to_la_ngatichcuc", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "HIEUSOFIA", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089071605 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "HIEUSOFIA", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089071131 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "HIEUSOFIA", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089070394 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "HIEUSOFIA", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089071599 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "anvui9.7", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "myshopuht", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089073456 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "dindng910", "Số Lượng": 1, "Brand": "MASUBE", "Barcode": 8936089072756 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "dindng910", "Số Lượng": 1, "Brand": "MASUBE", "Barcode": 8936089073036 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "thanhthanhcuti6", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072541 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "thanhthanhcuti6", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072565 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "shipperthocon", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089071605 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "shipperthocon", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089071131 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "shipperthocon", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089071940 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "princesstinies", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "thaopicks", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089076495 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "tranmeyun", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089071605 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "tranmeyun", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089071957 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "hlien191199", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089076495 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "wwkeisha", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "ttphuong_2610", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "ttphuong_2610", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "ttphuong_2610", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "quyenonuithanh9x", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "miu.review25", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072541 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "miu.review25", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072565 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "trangknoob", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "trangknoob", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "trangknoob", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "_thichgianthian", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089073456 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "_thichgianthian", "Số Lượng": 1, "Brand": "REAL STEEL", "Barcode": 8936089073081 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "honganhdepzaivocungluon", "Số Lượng": 1, "Brand": "REAL STEEL", "Barcode": 8936089073081 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "changtrancy", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089073456 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "bingoxinchao203", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089073456 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "bingoxinchao203", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "bingoxinchao203", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071971 },
-      { "Ngày Gửi": "10/12/2025", "ID Kênh": "bingoxinchao203", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "tiemlife", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "changaffiliate", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "changaffiliate", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "marsvo1712", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089073456 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "anhlorenhehehe", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072541 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "anhlorenhehehe", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072565 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "planeii", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "planeii", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "planeii", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "cothamvelangg", "Số Lượng": 1, "Brand": "MASUBE", "Barcode": 8936089072701 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "cothamvelangg", "Số Lượng": 1, "Brand": "MASUBE", "Barcode": 8936089072756 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "cothamvelangg", "Số Lượng": 1, "Brand": "MASUBE", "Barcode": 8936089073036 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "myckuyaa", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "myckuyaa", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "myckuyaa", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "whitep.0410", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089071612 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "whitep.0410", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089071599 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "pthy_netuim", "Số Lượng": 1, "Brand": "MASUBE", "Barcode": 8936089072701 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "pthy_netuim", "Số Lượng": 1, "Brand": "MASUBE", "Barcode": 8936089072756 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "pthy_netuim", "Số Lượng": 1, "Brand": "MASUBE", "Barcode": 8936089073036 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "lalareviewww", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089071131 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "lalareviewww", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089071605 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "lalareviewww", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089071599 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "lalareviewww", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089071612 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "lalareviewww", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089070394 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "suny_6869", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072541 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "suny_6869", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072565 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "suny_6869", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089071605 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "suny_6869", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089071131 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "nangdatinhte", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "nangdatinhte", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "qabzib2009", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072855 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "qabzib2009", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089071605 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "uzumaki_hoa", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072541 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "uzumaki_hoa", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072589 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "uzumaki_hoa", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072565 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "kim.linhlinh", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089071605 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "kim.linhlinh", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089071957 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "kim.linhlinh", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072541 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "kim.linhlinh", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072565 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "duong_cam_tu", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072541 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "duong_cam_tu", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072565 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "duong_cam_tu", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072589 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "lwyoididauthe", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089070219 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "lwyoididauthe", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072565 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "moho.ne", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072541 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "moho.ne", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072589 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "moho.ne", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072565 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "moho.ne", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089070219 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "baby", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "baby", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "baby", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "thanhthuyy", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "thanhthuyy", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "thanhthuyy", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "lalareviewww", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "lalareviewww", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "lalareviewww", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071971 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "lalareviewww", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "lalareviewww", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "lalareviewww", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "kellybella2k", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072541 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "kellybella2k", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072565 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "kellybella2k", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072589 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "lephan3255", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089071117 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "lephan3255", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089070394 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "lephan3255", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089071131 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "lephan3255", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089071940 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "unboxuytin", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "cm.nhung.daily", "Số Lượng": 2, "Brand": "MILAGANICS", "Barcode": 8936089073456 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "cm.nhung.daily", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072305 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "cm.nhung.daily", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072268 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "builizzy", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "_ngthloan0_11", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "baoban217", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "reviewmyphamxinhne", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "tina_tina626", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "thupig_", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "thupig_", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071971 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "thupig_", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "thupig_", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "thupig_", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "tap.qua.nekochan", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "bachlanphuong", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "bachlanphuong", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071971 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "bachlanphuong", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ninasayhiii", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ninasayhiii", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ninasayhiii", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071971 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ninasayhiii", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ninasayhiii", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "tran_review.19", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "tran_review.19", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "tinyblingbling", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089073456 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "tinyblingbling", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089070042 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "tinyblingbling", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "tinyblingbling", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071971 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "tinyblingbling", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "tinyblingbling", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "Songkhanhreview", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "Songkhanhreview", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "nao071204", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "luv.ltl", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089072107 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "luv.ltl", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089072121 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "luv.ltl", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089070042 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ngocoi06", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ngocoi06", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "tim.do.xink", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "meow.shop02", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "beanne33", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ngi.p.c.bp", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ngi.p.c.bp", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071971 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ngi.p.c.bp", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ngi.p.c.bp", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ngocmet67", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089072565 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ngocmet67", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089071131 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ngocmet67", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089071605 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ngocmet67", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089072541 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ngocmet67", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089073456 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "bathoneee", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "bathoneee", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "bathoneee", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "taphoagicungcok", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "taphoagicungcok", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071971 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "taphoagicungcok", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "churon94", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "churon94", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "churon94", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ltct.14", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "thuthuyriviune", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089073456 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "thuthuyriviune", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089072589 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "thuthuyriviune", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089072541 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "thuthuyriviune", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089071605 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "thuthuyriviune", "Số Lượng": 1, "Brand": "BODYMISS", "Barcode": 8936089071131 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "trancindyy", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "trancindyy", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "trancindyy", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "sieuthisieuhoi", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "dilimehayhot", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "dilimehayhot", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "dilimehayhot", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "hoanggiabaomedia", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "hoanggiabaomedia", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "hoanggiabaomedia", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "enhoppi", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "enhoppi", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "enhoppi", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "anhdanhcamhung", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "anhdanhcamhung", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "anhdanhcamhung", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "linhbeo_decor", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ongthislay", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ongthislay", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ongthislay", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "kiaconcadzang", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "kiaconcadzang", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "kiaconcadzang", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ly.thichreview", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ly.thichreview", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071971 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ly.thichreview", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "Team anh Minh", "Số Lượng": 3, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "Team anh Minh", "Số Lượng": 3, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "Team anh Minh", "Số Lượng": 3, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "lacongaiiphaixinh1", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "lacongaiiphaixinh1", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "xuongqui.daily", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "xuongqui.daily", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "xuongqui.daily", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "linhlinhday88", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "thanyeuoi678", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "thanyeuoi678", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "thanyeuoi678", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "thanyeuoi678", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "lindungroi", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "chumrv", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "khanhdaymakeup", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "bp.kids1", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "cunstaythi", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "cunstaythi", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071971 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "cunstaythi", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "dotapnhifit", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "lam_me_vui_lam", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "pinkycherry05", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "_hnalla_", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "oan_", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "oan_", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071971 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "oan_", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "outfits.by.mt", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "outfits.by.mt", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "quynhnhumacgi", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072541 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "quynhnhumacgi", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072565 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "quynhnhumacgi", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072589 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "wa2011_", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "hoanganh96.review", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "hoanganh96.review", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "hoanganh96.review", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071971 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "diulinhbebong", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "_dtan_2", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "_dtan_2", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "lanithichsansale", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "lanithichsansale", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "camileemotmetbe", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "camileemotmetbe", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071971 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "camileemotmetbe", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "camileemotmetbe", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "camileemotmetbe", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "thoathoa2883", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "min.met.1", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "min.met.1", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "min.met.1", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "diriviu2606", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089071605 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "diriviu2606", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089071117 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "diriviu2606", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089070394 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "diriviu2606", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089071100 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "maiphuongtrinhbong", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "maiphuongtrinhbong", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "maiphuongtrinhbong", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071971 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "bemuseriview", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "bemuseriview", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "yen230421", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "yen230421", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071971 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "yen230421", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "_cuariviu", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "chamdacungphanh", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "chamdacungphanh", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071971 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "chamdacungphanh", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "chamdacungphanh", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "phanhhh4222", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "phanhhh4222", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "phanhhh4222", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "phanhhh4222", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "tracydieuuu", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "tracydieuuu", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "tracydieuuu", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071971 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "tracydieuuu", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "tracydieuuu", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "tracydieuuu", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "jennadayne2", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "annhien25775", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "annhien25775", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "caibong07", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "huyenquangninh14", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "bechu04102001", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "1101_ndt", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "1101_ndt", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "1101_ndt", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "SAMPLE BRAND HƯƠNG LY", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "SAMPLE BRAND HƯƠNG LY", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "SAMPLE BRAND HƯƠNG LY", "Số Lượng": 2, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "luv.ltl06", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "huynhyennhi21", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "huynhyennhi21", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071971 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "huynhyennhi21", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071964 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ladies.outfits", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ladies.outfits", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "thammylananh88", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "thammylananh88", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089072527 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "thammylananh88", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072541 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "thammylananh88", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072565 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "thammylananh88", "Số Lượng": 1, "Brand": "EHERB", "Barcode": 8936089072589 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "huyen.reviu", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ami.unbox", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089071988 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "ami.unbox", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "bubureview10", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "linhchi.mebebin", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "caubatan291", "Số Lượng": 1, "Brand": "REAL STEEL", "Barcode": 8936089070165 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "chenyingg711", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089070158 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "chenyingg711", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "tuyetmia204", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089073456 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "binbin9986", "Số Lượng": 1, "Brand": "MILAGANICS", "Barcode": 8936089073456 },
-      { "Ngày Gửi": "09/12/2025", "ID Kênh": "yenly191002", "Số Lượng": 1, "Brand": "MOAW MOAWS", "Barcode": 8936089073067 }
-    ];
-
-    if (!confirm("Bắt đầu chạy CỨU HỘ V7.0 (Chỉ chạy 09/10/11 - Tháng 12)?")) return;
-
-    console.clear();
-    console.log("🚀 Đang tải dữ liệu để đối chiếu...");
-
-    const { data: listBrands } = await supabase.from('brands').select('id, ten_brand');
-    const { data: listSP } = await supabase.from('sanphams').select('id, barcode, ten_sanpham, brand_id');
-    
-    // [FIX 1] Tải đơn hàng tháng 12
-    const { data: listDon } = await supabase.from('donguis')
-        .select('id, koc_id_kenh, ngay_gui')
-        .gte('ngay_gui', '2025-12-01')
-        .lte('ngay_gui', '2025-12-31');
-
-    let countOK = 0;
-    let countFail = 0;
-    let countSkip = 0;
-    let countDateFiltered = 0;
-
-    // [FIX 2] Chỉ cho phép các ngày này chạy
-    const ALLOWED_DATES = ["09/12/2025", "10/12/2025", "11/12/2025"];
-
-    console.log("--------------------------------------------------");
-
-    for (let item of EXCEL_DATA) {
-        // [FIX 2] Lọc ngày ngay đầu vòng lặp cho nhẹ
-        const excel_Ngay = String(item["Ngày Gửi"]).trim(); // "11/12/2025"
-        if (!ALLOWED_DATES.includes(excel_Ngay)) {
-            countDateFiltered++;
-            continue; 
-        }
-
-        const excel_IdKenh = String(item["ID Kênh"]).trim(); 
-        const excel_Barcode = String(item["Barcode"]).trim();
-        const excel_SoLuong = item["Số Lượng"];
-        const excel_BrandName = String(item["Brand"]).trim();
-
-        // 1. CHECK BRAND
-        const targetBrand = listBrands.find(b => 
-            b.ten_brand.toLowerCase().trim() === excel_BrandName.toLowerCase()
-        );
-
-        if (!targetBrand) {
-            console.error(`❌ [BRAND] Không tìm thấy Brand: "${excel_BrandName}"`);
-            countFail++; continue; 
-        }
-
-        // 2. CHECK SẢN PHẨM
-        const productFound = listSP.find(sp => {
-            const matchCode = String(sp.barcode).trim() == excel_Barcode;
-            const matchBrand = sp.brand_id === targetBrand.id;
-            return matchCode && matchBrand;
-        });
-
-        if (!productFound) {
-             console.error(`❌ [SP] Brand "${excel_BrandName}" không có Barcode "${excel_Barcode}"`);
-             countFail++; continue;
-        }
-
-        // 3. CHECK ĐƠN HÀNG (SO SÁNH NGÀY KIỂU DD/MM/YYYY)
-        const orderFound = listDon.find(don => {
-            // [FIX 3] Chuyển giờ DB sang DD/MM/YYYY để khớp JSON mới
-            const dbDateVN = new Date(don.ngay_gui).toLocaleDateString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh' });
-            // dbDateVN sẽ ra dạng "11/12/2025" -> Khớp với Excel
-            
-            const matchKenh = don.koc_id_kenh.toLowerCase().trim() === excel_IdKenh.toLowerCase();
-            const matchNgay = dbDateVN === excel_Ngay;
-            return matchKenh && matchNgay;
-        });
-
-        if (!orderFound) {
-            console.error(`❌ [ĐƠN] Không thấy đơn của "${excel_IdKenh}" ngày ${excel_Ngay}`);
-            countFail++; continue;
-        }
-
-        // 4. INSERT (CÓ KIỂM TRA TRÙNG - CHECK DUPLICATE)
-        if (orderFound && productFound) {
-            const { data: existingRow } = await supabase
-                .from('chitiettonguis')
-                .select('id')
-                .eq('dongui_id', orderFound.id)
-                .eq('sanpham_id', productFound.id)
-                .maybeSingle();
-
-            if (!existingRow) {
-                const { error } = await supabase.from('chitiettonguis').insert({
-                    dongui_id: orderFound.id,
-                    sanpham_id: productFound.id,
-                    so_luong: parseInt(excel_SoLuong)
-                });
-                
-                if (!error) {
-                    console.log(`✅ [MỚI] ${excel_IdKenh} - ${productFound.ten_sanpham}`);
-                    countOK++;
-                } else {
-                    console.error(`🔥 [LỖI DB]`, error.message);
-                    countFail++;
-                }
-            } else {
-                console.log(`⚠️ [ĐÃ CÓ] ${excel_IdKenh} - ${productFound.ten_sanpham} (Bỏ qua)`);
-                countSkip++;
-            }
-        }
-    }
-
-    console.log("--------------------------------------------------");
-    alert(`ĐÃ CHẠY XONG V7.0!\n✅ Thêm mới: ${countOK}\n⚠️ Đã có (Bỏ qua): ${countSkip}\n⏭️ Đã lọc bỏ ngày khác: ${countDateFiltered}\n❌ Thất bại: ${countFail}\n\n(Kiểm tra lại danh sách nhé!)`);
-    window.location.reload();
+    alert("Tính năng cứu hộ hiện đang tắt. (Code vẫn ở đây nếu cần bật lại)");
   };
-  // =========================================================
-  // --- KẾT THÚC CODE CỨU HỘ V7.0 ---
-  // =========================================================
 
   return (
     <> 
-      {/* NÚT CỨU HỘ (CHẠY 1 LẦN RỒI XÓA) */}
+      {/* NÚT CỨU HỘ */}
       <button 
           onClick={runRecoveryData}
           style={{
               position: 'fixed', top: 10, left: 10, zIndex: 9999,
-              padding: '15px 25px', backgroundColor: '#e74c3c', color: 'white', 
-              fontWeight: 'bold', fontSize: '16px', border: '3px solid white', 
-              borderRadius: '8px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)', cursor: 'pointer'
+              padding: '10px 20px', backgroundColor: '#e74c3c', color: 'white', 
+              fontWeight: 'bold', fontSize: '14px', border: '3px solid white', 
+              borderRadius: '8px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)', cursor: 'pointer', opacity: 0.7
           }}
       >
-          🚑 BẤM VÀO ĐÂY ĐỂ CỨU DỮ LIỆU
+          🚑 CỨU HỘ
       </button>
 
       <div style={{ position: 'relative', textAlign: 'center', marginBottom: '2rem' }}>
@@ -910,6 +368,8 @@ const OrderTab = () => {
             <input type="number" value={reportYear} onChange={e => setReportYear(e.target.value)} style={{ width: '100px' }} />
             <button onClick={handleGenerateReport} disabled={isReportLoading} style={{ backgroundColor: '#D42426' }}>{isReportLoading ? 'Đang tính toán...' : '📊 Xem Báo Cáo'}</button>
         </div>
+        
+        {/* BẢNG SỐ LIỆU */}
         {reportData.reportRows.length > 0 ? (
           <div style={{width: '100%', overflowX: 'auto'}}>
             <table style={{ width: '100%' }}>
@@ -930,6 +390,76 @@ const OrderTab = () => {
             </table>
           </div>
         ) : (<p style={{ textAlign: 'center', color: '#999', padding: '20px' }}>{isReportLoading ? 'Đang tải...' : 'Chưa có dữ liệu báo cáo.'}</p>)}
+
+        {/* --- [MỚI] KHU VỰC BIỂU ĐỒ (CHART SECTION) --- */}
+        <div style={{ marginTop: '30px', padding: '20px', backgroundColor: '#fff', borderRadius: '10px', border: '1px solid #ddd', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
+            <h3 style={{ textAlign: 'center', color: '#165B33', marginBottom: '15px' }}>📈 Biểu Đồ Hiệu Suất Theo Ngày (Tháng {reportMonth}/{reportYear})</h3>
+            
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
+                <select 
+                    value={chartNhanSu} 
+                    onChange={e => setChartNhanSu(e.target.value)} 
+                    style={{ padding: '10px 15px', borderRadius: '6px', border: '1px solid #ccc', fontSize: '1rem', minWidth: '250px' }}
+                >
+                    <option value="">-- Chọn nhân sự để xem biểu đồ --</option>
+                    {nhanSus.map(ns => (
+                        <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>
+                    ))}
+                </select>
+            </div>
+
+            {isChartLoading ? (
+                <p style={{ textAlign: 'center' }}>Đang tải biểu đồ...</p>
+            ) : chartData.length > 0 ? (
+                <div style={{ width: '100%', height: 350 }}>
+                    <ResponsiveContainer>
+                        <AreaChart data={chartData} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
+                            <defs>
+                                <linearGradient id="colorOrders" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#165B33" stopOpacity={0.8}/>
+                                    <stop offset="95%" stopColor="#165B33" stopOpacity={0}/>
+                                </linearGradient>
+                            </defs>
+                            
+                            {/* [YÊU CẦU 1 + 3] Trục X: Highlight cuối tuần + Label Ngày */}
+                            <XAxis 
+                                dataKey="day" 
+                                tick={<CustomizedAxisTick />}
+                                interval={0} 
+                                height={60}
+                            >
+                                <Label value="Ngày trong tháng" offset={0} position="insideBottom" />
+                            </XAxis>
+
+                            {/* [YÊU CẦU 1] Trục Y: Label Số đơn */}
+                            <YAxis allowDecimals={false}>
+                                <Label value="Số lượng đơn" angle={-90} position="insideLeft" style={{ textAnchor: 'middle' }} />
+                            </YAxis>
+
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                            <Tooltip formatter={(value) => [`${value} đơn`, 'Số lượng']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }} />
+                            
+                            {/* [YÊU CẦU 2] Thêm chấm tròn (dot) VÀ Label số lượng trên đỉnh */}
+                            <Area 
+                                type="monotone" 
+                                dataKey="orders" 
+                                stroke="#165B33" 
+                                strokeWidth={3} 
+                                fillOpacity={1} 
+                                fill="url(#colorOrders)" 
+                                dot={{ stroke: '#165B33', strokeWidth: 2, r: 4, fill: 'white' }}
+                                activeDot={{ r: 6, fill: '#D42426' }} 
+                                label={{ position: 'top', fill: '#165B33', fontSize: 12, fontWeight: 'bold', dy: -5 }} // [ĐÃ THÊM LABEL SỐ]
+                            />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </div>
+            ) : (
+                <div style={{ textAlign: 'center', color: '#999', padding: '30px', border: '2px dashed #ccc', borderRadius: '8px' }}>
+                    {chartNhanSu ? "Không có dữ liệu đơn hàng trong tháng này." : "Vui lòng chọn nhân sự ở trên để xem biểu đồ."}
+                </div>
+            )}
+        </div>
       </div>
 
       <div className="christmas-card" style={{ marginBottom: '1.5rem', padding: '1.5rem' }}>
