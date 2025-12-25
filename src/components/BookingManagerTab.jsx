@@ -1,6 +1,12 @@
+// src/components/BookingManagerTab.jsx
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
+// Import thư viện vẽ biểu đồ
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#d0ed57'];
 
 // --- HÀM HELPER FORMAT ---
 const formatCurrency = (val) => { 
@@ -32,10 +38,12 @@ const BookingManagerTab = () => {
     const [filterProduct, setFilterProduct] = useState('');
     const [filterStaff, setFilterStaff] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
+    // Mặc định lấy tháng hiện tại
     const [filterMonth, setFilterMonth] = useState(new Date().toISOString().slice(0, 7));
 
     const loadBookings = async () => {
         setLoading(true);
+        // Lấy tất cả booking sắp xếp mới nhất
         const { data, error } = await supabase.from('bookings').select('*').order('created_at', { ascending: false });
         if (!error) setBookings(data || []);
         setLoading(false);
@@ -57,8 +65,11 @@ const BookingManagerTab = () => {
     // --- LOGIC LỌC & THỐNG KÊ ---
     const processedData = useMemo(() => {
         const contextFiltered = bookings.filter(item => {
+            // Lọc theo Tháng (Quan trọng)
             if (filterMonth) {
-                const itemDate = item.ngay_gui_don ? item.ngay_gui_don.slice(0, 7) : '';
+                // Ưu tiên ngày gửi đơn, nếu ko có thì lấy ngày tạo
+                const dateToCheck = item.ngay_gui_don || item.created_at; 
+                const itemDate = dateToCheck ? dateToCheck.slice(0, 7) : '';
                 if (itemDate !== filterMonth) return false;
             }
             if (filterBrand && String(item.brand_id) !== String(filterBrand)) return false;
@@ -68,6 +79,7 @@ const BookingManagerTab = () => {
         });
 
         const stats = { pending: 0, done: 0, overdue: 0 };
+        
         contextFiltered.forEach(item => {
             if (item.status === 'done') stats.done++;
             else if (checkOverdue(item.ngay_gui_don, item.status)) stats.overdue++;
@@ -81,19 +93,38 @@ const BookingManagerTab = () => {
             if (filterStatus === 'overdue') return isOverdue;
             return true;
         });
+
         return { filtered: finalFiltered, stats };
     }, [bookings, filterBrand, filterProduct, filterStaff, filterStatus, filterMonth]);
+
+    const getBrandName = (id) => brands.find(b => b.id === id)?.ten_brand || 'Khác';
+    const getStaffName = (id) => nhanSus.find(n => n.id === id)?.ten_nhansu || 'Unknown';
+
+    // --- TÍNH TOÁN DỮ LIỆU BIỂU ĐỒ (Dựa trên kết quả đã lọc) ---
+    const chartData = useMemo(() => {
+        const data = processedData.filtered; // Dùng chính dữ liệu đang hiển thị ở bảng
+        const map = {};
+        
+        data.forEach(item => {
+            const bName = getBrandName(item.brand_id);
+            map[bName] = (map[bName] || 0) + 1;
+        });
+
+        return Object.keys(map).map(key => ({
+            name: key,
+            value: map[key]
+        })).sort((a, b) => b.value - a.value); // Sắp xếp từ cao xuống thấp
+    }, [processedData.filtered, brands]);
+
 
     // --- XỬ LÝ CHỌN BRAND ĐỂ LỌC SẢN PHẨM ---
     const handleManualBrandChange = (e) => {
         const newBrandId = e.target.value;
-        // 1. Cập nhật state form, reset ô sản phẩm về rỗng
         setManualBooking({
             ...manualBooking, 
             brand_id: newBrandId,
             san_pham: '' 
         });
-        // 2. Gọi hàm từ Context để tải sản phẩm của Brand này
         loadSanPhamsByBrand(newBrandId);
     };
 
@@ -135,7 +166,8 @@ const BookingManagerTab = () => {
     };
 
     const handleUpdateLink = async (bookingItem) => {
-        if (!tempLink) { alert("Vui lòng điền link video!"); return; }
+        if (!tempLink) { alert("Vui lòng điền link video!");
+            return; }
         const videoId = extractVideoId(tempLink);
         try {
             const { error: bookingError } = await supabase.from('bookings').update({ link_air: tempLink, status: 'done' }).eq('id', bookingItem.id);
@@ -154,9 +186,6 @@ const BookingManagerTab = () => {
         } catch (err) { alert("Lỗi: " + err.message); }
     };
 
-    const getBrandName = (id) => brands.find(b => b.id === id)?.ten_brand || 'Unknown';
-    const getStaffName = (id) => nhanSus.find(n => n.id === id)?.ten_nhansu || 'Unknown';
-    
     const generateTikTokLink = (idKenh) => {
         if (!idKenh) return '#';
         const cleanId = idKenh.replace('@', '').trim();
@@ -193,30 +222,22 @@ const BookingManagerTab = () => {
                         <input placeholder="ID Kênh (*)" value={manualBooking.id_kenh} onChange={e=>setManualBooking({...manualBooking, id_kenh:e.target.value})} style={inputStyle} required />
                         <input placeholder="Tên KOC" value={manualBooking.ho_ten} onChange={e=>setManualBooking({...manualBooking, ho_ten:e.target.value})} style={inputStyle} />
                         
-                        {/* --- SỬA LOGIC CHỌN BRAND --- */}
-                        <select 
-                            value={manualBooking.brand_id} 
-                            onChange={handleManualBrandChange} 
-                            style={inputStyle} 
-                            required
-                        >
+                        <select value={manualBooking.brand_id} onChange={handleManualBrandChange} style={inputStyle} required>
                             <option value="">-Brand-</option>
                             {brands.map(b=><option key={b.id} value={b.id}>{b.ten_brand}</option>)}
                         </select>
                         
-                        {/* --- SỬA LOGIC NHẬP SẢN PHẨM (SEARCH ĐƯỢC) --- */}
                         <div>
                             <input 
-                                list="manual_products_list" // ID này phải khớp với datalist bên dưới
+                                list="manual_products_list"
                                 placeholder="Sản phẩm (*)" 
                                 value={manualBooking.san_pham} 
                                 onChange={e=>setManualBooking({...manualBooking, san_pham:e.target.value})} 
                                 style={inputStyle} 
                                 required 
-                                disabled={!manualBooking.brand_id} // Khóa nếu chưa chọn Brand
+                                disabled={!manualBooking.brand_id}
                                 autoComplete="off"
                             />
-                            {/* Datalist chứa sản phẩm đã lọc */}
                             <datalist id="manual_products_list">
                                 {sanPhams.map(sp => (
                                     <option key={sp.id} value={sp.ten_sanpham} />
@@ -239,7 +260,7 @@ const BookingManagerTab = () => {
                 </div>
             )}
 
-            {/* DASHBOARD (CLICKABLE) */}
+            {/* DASHBOARD THỐNG KÊ SỐ LIỆU */}
             <div style={{ display: 'flex', gap: '20px', marginBottom: '30px' }}>
                 <div style={statCardStyle('#fff3e0', '#ef6c00', filterStatus === 'pending')} onClick={() => setFilterStatus(filterStatus === 'pending' ? 'all' : 'pending')}>
                     <span style={{fontSize:'2.5rem', fontWeight:'900'}}>{processedData.stats.pending}</span>
@@ -252,6 +273,56 @@ const BookingManagerTab = () => {
                 <div style={statCardStyle('#e8f5e9', '#2e7d32', filterStatus === 'done')} onClick={() => setFilterStatus(filterStatus === 'done' ? 'all' : 'done')}>
                     <span style={{fontSize:'2.5rem', fontWeight:'900'}}>{processedData.stats.done}</span>
                     <span style={{fontSize:'0.9rem', fontWeight:'bold', textTransform:'uppercase'}}>✅ ĐÃ AIR (DONE)</span>
+                </div>
+            </div>
+
+            {/* --- [MỚI] BIỂU ĐỒ TRÒN TỶ TRỌNG BOOKING --- */}
+            <div className="christmas-card" style={{ 
+                marginBottom: '20px', 
+                padding: '20px', 
+                backgroundColor: 'white', 
+                borderRadius: '12px', 
+                boxShadow: '0 4px 15px rgba(0,0,0,0.05)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '1px solid #eee'
+            }}>
+                <div style={{ width: '100%', height: '300px', display: 'flex', flexDirection: 'column' }}>
+                    <h3 style={{ textAlign: 'center', color: '#165B33', marginBottom: '10px' }}>
+                        📊 TỶ TRỌNG BOOKING (Tháng {filterMonth.split('-')[1]}/{filterMonth.split('-')[0]})
+                    </h3>
+                    <div style={{ flex: 1, position: 'relative' }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie
+                                    data={chartData}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={60}
+                                    outerRadius={90}
+                                    paddingAngle={2}
+                                    dataKey="value"
+                                >
+                                    {chartData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                </Pie>
+                                <Tooltip formatter={(val) => `${val} booking`} contentStyle={{borderRadius:'8px'}} />
+                                <Legend layout="horizontal" verticalAlign="bottom" align="center" />
+                            </PieChart>
+                        </ResponsiveContainer>
+                        {/* Số tổng ở giữa */}
+                        <div style={{ 
+                            position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', 
+                            textAlign: 'center', pointerEvents: 'none', zIndex: 1 
+                        }}>
+                            <h2 style={{ margin: 0, color: '#333', fontSize: '24px' }}>
+                                {chartData.reduce((a, b) => a + b.value, 0)}
+                            </h2>
+                            <span style={{ fontSize: '12px', color: '#888' }}>Total</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -274,7 +345,7 @@ const BookingManagerTab = () => {
                     <option value="done">✅ Chỉ hiện Done</option>
                 </select>
                 <button 
-                    onClick={() => { setFilterBrand(''); setFilterProduct(''); setFilterStaff(''); setFilterStatus('all'); setFilterMonth(''); }}
+                    onClick={() => { setFilterBrand(''); setFilterProduct(''); setFilterStaff(''); setFilterStatus('all'); setFilterMonth(new Date().toISOString().slice(0, 7)); }}
                     style={{backgroundColor:'#eee', border:'none', borderRadius:'4px', cursor:'pointer', fontWeight:'bold', color:'#555'}}
                 >
                     Xóa Lọc

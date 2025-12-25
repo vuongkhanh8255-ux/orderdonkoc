@@ -1,15 +1,20 @@
+// src/App.jsx
+
 import { useState } from 'react';
 import { AppDataProvider } from './context/AppDataContext';
 import OrderTab from './components/OrderTab';
 import ContractTab from './components/ContractTab';
 import AirLinksTab from './components/AirLinksTab';
 import ExpenseEcomTab from './components/ExpenseEcomTab';
-import BookingManagerTab from './components/BookingManagerTab'; // [QUAN TRỌNG] Import tab mới
+import BookingManagerTab from './components/BookingManagerTab';
+// [MỚI] Import DashboardTab để sử dụng
+import DashboardTab from './components/DashboardTab'; 
 import SnowEffect from './components/SnowEffect';
 import AIChat from './components/AIChat';
 
 function App() {
-  const [currentView, setCurrentView] = useState('orders');
+  // Đổi mặc định thành 'dashboard' để mở lên là thấy ngay báo cáo mới
+  const [currentView, setCurrentView] = useState('dashboard');
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
 
   // Cấu hình độ rộng Sidebar
@@ -90,6 +95,12 @@ function App() {
             {/* Menu Items */}
             <div style={{ flex: 1, paddingTop: '20px' }}>
                 
+                {/* 0. [MỚI] BÁO CÁO TỔNG (DASHBOARD) - Thêm vào đầu tiên */}
+                <div style={menuItemStyle(currentView === 'dashboard')} onClick={() => setCurrentView('dashboard')} title="Báo Cáo Tổng">
+                    <span style={{fontSize: '1.4rem'}}>📊</span>
+                    <span style={{ display: isSidebarHovered ? 'block' : 'none' }}>Báo Cáo Tổng</span>
+                </div>
+
                 {/* 1. Quản Lý Order */}
                 <div style={menuItemStyle(currentView === 'orders')} onClick={() => setCurrentView('orders')} title="Quản Lý Order">
                     <span style={{fontSize: '1.4rem'}}>📦</span> 
@@ -102,7 +113,7 @@ function App() {
                     <span style={{ display: isSidebarHovered ? 'block' : 'none' }}>Tạo Hợp Đồng</span>
                 </div>
 
-                {/* 3. [MỚI] Quản Lý Booking */}
+                {/* 3. Quản Lý Booking */}
                 <div style={menuItemStyle(currentView === 'booking')} onClick={() => setCurrentView('booking')} title="Quản Lý Booking">
                     <span style={{fontSize: '1.4rem'}}>📅</span>
                     <span style={{ display: isSidebarHovered ? 'block' : 'none' }}>Quản Lý Booking</span>
@@ -129,6 +140,9 @@ function App() {
 
         {/* --- MAIN CONTENT --- */}
         <div style={mainContentStyle}>
+           {/* [MỚI] Hiển thị Dashboard khi chọn tab này */}
+           {currentView === 'dashboard' && <DashboardTab />}
+           
            {currentView === 'orders' && <OrderTab />}
            {currentView === 'contract' && <ContractTab />}
            {currentView === 'booking' && <BookingManagerTab />} 
