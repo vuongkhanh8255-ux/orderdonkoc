@@ -3,23 +3,23 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import { supabase } from '../supabaseClient';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, LabelList } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, LabelList, Legend } from 'recharts';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#d0ed57', '#a4de6c', '#d0ed57'];
 
 const DashboardTab = () => {
   const { brands, nhanSus, airReportMonth, setAirReportMonth, airReportYear, setAirReportYear } = useAppData();
 
-  // STATE DỮ LIỆU
+  // STATE
   const [rawBookings, setRawBookings] = useState([]);
   const [rawAirLinks, setRawAirLinks] = useState([]);
   const [loading, setLoading] = useState(false);
   
-  // BỘ LỌC CHUNG
+  // FILTER
   const [filterBrand, setFilterBrand] = useState('');
   const [filterNhanSu, setFilterNhanSu] = useState(''); 
 
-  // TẢI DỮ LIỆU
+  // LOAD DATA
   useEffect(() => {
     const fetchData = async () => {
         setLoading(true);
@@ -38,24 +38,36 @@ const DashboardTab = () => {
   const getNhanSuName = (id) => nhanSus.find(n => String(n.id) === String(id))?.ten_nhansu || 'Khác';
   const formatMoney = (val) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
   const formatNumber = (val) => new Intl.NumberFormat('vi-VN').format(val);
-  const formatMoneyShort = (value) => {
-    if (value >= 1000000000) return (value / 1000000000).toFixed(1).replace('.', ',') + ' tỷ';
-    if (value >= 1000000) return (value / 1000000).toFixed(1).replace('.', ',') + 'tr';
-    return new Intl.NumberFormat('vi-VN').format(value);
+  
+  // Format tiền rút gọn (10.2tr)
+  const formatMoneyShort = (val) => {
+    if (!val) return '0';
+    if (val >= 1000000000) return (val / 1000000000).toFixed(1).replace('.', ',') + ' tỷ';
+    if (val >= 1000000) return (val / 1000000).toFixed(1).replace('.', ',') + 'tr';
+    return new Intl.NumberFormat('vi-VN').format(val);
   };
 
-  // --- LỌC DỮ LIỆU ---
+  // --- HÀM LỌC "NỒI ĐỒNG CỐI ĐÁ" (FIX LỆCH 500K) ---
+  // Không dùng new Date() nữa vì dễ lệch múi giờ.
+  // Dùng so sánh chuỗi (String) để khớp 100% với dữ liệu gốc.
   const filterData = (data, dateField) => {
       return data.filter(item => {
-          const dateStr = item[dateField] || item.created_at;
+          // Lấy chuỗi ngày, ví dụ: "2025-12-05T..." hoặc "2025-12-05"
+          const dateStr = item[dateField] || item.created_at; 
           if (!dateStr) return false;
-          
-          const y = parseInt(dateStr.substring(0, 4));
-          const m = parseInt(dateStr.substring(5, 7));
-          
-          if (m !== parseInt(airReportMonth) || y !== parseInt(airReportYear)) return false;
+
+          // Tạo chuỗi "YYYY-MM" cần tìm. Ví dụ: "2025-12"
+          // padStart(2, '0') để đảm bảo tháng 1 là "01"
+          const targetString = `${airReportYear}-${String(airReportMonth).padStart(2, '0')}`;
+
+          // Kiểm tra xem ngày của item có BẮT ĐẦU bằng chuỗi đó không
+          // Ví dụ: "2025-12-05" bắt đầu bằng "2025-12" -> ĐÚNG
+          if (!dateStr.startsWith(targetString)) return false;
+
+          // Các bộ lọc khác (Brand, Nhân sự)
           if (filterBrand && String(item.brand_id) !== String(filterBrand)) return false;
           if (filterNhanSu && String(item.nhansu_id) !== String(filterNhanSu)) return false;
+          
           return true;
       });
   };
@@ -63,37 +75,31 @@ const DashboardTab = () => {
   const filteredBookings = useMemo(() => filterData(rawBookings, 'ngay_gui_don'), [rawBookings, airReportMonth, airReportYear, filterBrand, filterNhanSu]);
   const filteredAirLinks = useMemo(() => filterData(rawAirLinks, 'ngay_air'), [rawAirLinks, airReportMonth, airReportYear, filterBrand, filterNhanSu]);
 
-  // --- TÍNH TOÁN DATA ---
-
-  // 1. Link Air -> Sản phẩm
+  // --- CHART DATA ---
   const chart1Data = useMemo(() => {
       const map = {};
       filteredAirLinks.forEach(i => { const k = i.san_pham || 'SP Khác'; map[k] = (map[k] || 0) + 1; });
       return Object.keys(map).map(k => ({ name: k, value: map[k] })).sort((a,b) => b.value - a.value);
   }, [filteredAirLinks]);
 
-  // 2. Booking -> Brand
   const chart2Data = useMemo(() => {
       const map = {};
       filteredBookings.forEach(i => { const k = getBrandName(i.brand_id); map[k] = (map[k] || 0) + 1; });
       return Object.keys(map).map(k => ({ name: k, value: map[k] })).sort((a,b) => b.value - a.value);
   }, [filteredBookings, brands]);
 
-  // 3. Năng suất -> Nhân sự
   const chart3Data = useMemo(() => {
       const map = {};
       filteredAirLinks.forEach(i => { const k = getNhanSuName(i.nhansu_id); map[k] = (map[k] || 0) + 1; });
       return Object.keys(map).map(k => ({ name: k, value: map[k] })).sort((a,b) => b.value - a.value);
   }, [filteredAirLinks, nhanSus]);
 
-  // 5. Ngân sách -> Brand
   const chart5Data = useMemo(() => {
       const map = {};
       filteredAirLinks.forEach(i => { const k = getBrandName(i.brand_id); map[k] = (map[k] || 0) + parseFloat(i.cast || 0); });
       return Object.keys(map).map(k => ({ name: k, value: map[k] })).filter(i => i.value > 0).sort((a,b) => b.value - a.value);
   }, [filteredAirLinks, brands]);
 
-  // 6. Chi phí TB
   const chart6Data = useMemo(() => {
       let tCast = 0;
       let tVid = filteredAirLinks.length;
@@ -103,20 +109,23 @@ const DashboardTab = () => {
   }, [filteredAirLinks]);
 
 
-  // --- CHART BOX (Nhánh chỉa ra + Chữ to + Số giữa tâm) ---
+  // --- CHART BOX (ĐÃ CĂN TÂM + VIỀN BÌNH THƯỜNG + CÓ CHÚ THÍCH) ---
   const ChartBox = ({ data, title, unit, isMoney }) => {
     const total = data.reduce((s, i) => s + i.value, 0);
     const displayTotal = isMoney ? formatMoneyShort(total) : formatNumber(total);
 
     return (
-        <div className="christmas-card" style={{ height: '420px', backgroundColor: '#fff', borderRadius: '12px', padding: '15px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column' }}>
-            <h4 style={{ textAlign: 'center', color: '#165B33', marginBottom: '10px', fontSize: '16px', fontWeight: '800', textTransform: 'uppercase' }}>{title}</h4>
+        <div className="christmas-card" style={{ height: '450px', backgroundColor: '#fff', borderRadius: '16px', padding: '20px', boxShadow: '0 8px 25px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column' }}>
+            <h4 style={{ textAlign: 'center', color: '#165B33', marginBottom: '15px', fontSize: '15px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{title}</h4>
             
             <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
                 {/* SỐ TỔNG CĂN GIỮA TUYỆT ĐỐI */}
+                {/* top: 45% để khớp với tâm biểu đồ Pie */}
                 <div style={{ 
                     position: 'absolute', 
-                    inset: 0, 
+                    top: '45%', 
+                    left: '50%', 
+                    transform: 'translate(-50%, -50%)', 
                     display: 'flex', 
                     flexDirection: 'column', 
                     alignItems: 'center', 
@@ -125,26 +134,30 @@ const DashboardTab = () => {
                     zIndex: 0 
                 }}>
                     <span style={{ fontSize: '28px', fontWeight: '800', color: '#333', lineHeight: 1 }}>{displayTotal}</span>
-                    <span style={{ fontSize: '13px', color: '#888' }}>{unit}</span>
+                    <span style={{ fontSize: '13px', color: '#888', marginTop: '5px' }}>{unit}</span>
                 </div>
 
                 <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
+                        {/* innerRadius=70: Viền mỏng vừa phải, đẹp */}
+                        {/* cy="45%": Đẩy biểu đồ lên để nhường chỗ cho Legend ở dưới */}
                         <Pie 
                             data={data} 
                             cx="50%" 
-                            cy="50%" 
+                            cy="45%" 
                             innerRadius={70} 
                             outerRadius={90} 
-                            paddingAngle={2} 
+                            paddingAngle={3} 
                             dataKey="value"
-                            // HIỆN NHÁNH CHỈA RA (Label Line)
                             label={({ name, value, percent }) => `${name}: ${formatNumber(value)} (${(percent * 100).toFixed(0)}%)`}
                             labelLine={true}
                         >
                             {data.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                         </Pie>
-                        <Tooltip formatter={(val) => isMoney ? formatMoney(val) : formatNumber(val)} />
+                        <Tooltip formatter={(val) => isMoney ? formatMoney(val) : formatNumber(val)} contentStyle={{borderRadius:'8px', border:'none', boxShadow:'0 4px 12px rgba(0,0,0,0.15)'}} />
+                        
+                        {/* CHÚ THÍCH (LEGEND) NẰM DƯỚI */}
+                        <Legend iconType="circle" layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: '11px', paddingTop: '0px' }} />
                     </PieChart>
                 </ResponsiveContainer>
             </div>
@@ -152,95 +165,111 @@ const DashboardTab = () => {
     );
   };
 
+  // --- STYLE ---
+  const filterContainerStyle = {
+      marginBottom: '30px',
+      padding: '15px 25px',
+      background: '#fff',
+      borderRadius: '16px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '30px',
+      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+      flexWrap: 'wrap',
+      zIndex: 20,
+      position: 'relative'
+  };
+
+  const inputStyle = {
+      height: '42px',
+      padding: '0 15px',
+      borderRadius: '10px',
+      border: '1px solid #d1d5db',
+      backgroundColor: '#fff',
+      color: '#1f2937',
+      fontSize: '14px',
+      fontWeight: '600',
+      outline: 'none',
+      cursor: 'pointer'
+  };
+
+  const labelStyle = { fontWeight: '800', color: '#165B33', fontSize: '13px', textTransform: 'uppercase', whiteSpace: 'nowrap' };
+
   return (
-    <div style={{ padding: '10px' }}>
+    <div style={{ padding: '20px', position: 'relative', zIndex: 1 }}>
       
-      {/* --- FILTER BAR (ĐÃ SỬA CĂN CHỈNH THẲNG HÀNG) --- */}
-      <div style={{ 
-          marginBottom: '20px', 
-          padding: '15px', 
-          background: '#fff', 
-          borderRadius: '12px', 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: '20px', // Khoảng cách giữa các nhóm
-          borderLeft: '5px solid #165B33',
-          overflowX: 'auto', // Cuộn ngang nếu màn hình quá nhỏ
-          whiteSpace: 'nowrap' // Bắt buộc không xuống dòng
-      }}>
-          {/* Nhóm Thời gian */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontWeight: 'bold' }}>📅 Thời gian:</span>
-              <select value={airReportMonth} onChange={e => setAirReportMonth(e.target.value)} style={{ padding: '6px', borderRadius: '4px', border: '1px solid #ccc', cursor: 'pointer' }}>
+      {/* FILTER BAR */}
+      <div style={filterContainerStyle}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={labelStyle}>📅 Thời gian:</span>
+              <select value={airReportMonth} onChange={e => setAirReportMonth(e.target.value)} style={{ ...inputStyle, width: '130px' }}>
                   {Array.from({length: 12}, (_, i) => <option key={i+1} value={i+1}>Tháng {i+1}</option>)}
               </select>
-              <input type="number" value={airReportYear} onChange={e => setAirReportYear(e.target.value)} style={{ width: '70px', padding: '6px', borderRadius: '4px', border: '1px solid #ccc' }} />
+              <input type="number" value={airReportYear} onChange={e => setAirReportYear(e.target.value)} style={{ ...inputStyle, width: '80px', textAlign: 'center' }} />
           </div>
           
-          {/* Nhóm Lọc Chung */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontWeight: 'bold' }}>🔍 Lọc Chung:</span>
-              <select value={filterBrand} onChange={e => setFilterBrand(e.target.value)} style={{ padding: '6px', borderRadius: '4px', border: '1px solid #ccc', minWidth: '180px', cursor: 'pointer' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, borderLeft: '2px solid #eee', paddingLeft: '30px' }}>
+              <span style={labelStyle}>🔍 Lọc:</span>
+              <select value={filterBrand} onChange={e => setFilterBrand(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '160px' }}>
                   <option value="">-- Tất cả Brand --</option>
                   {brands.map(b => <option key={b.id} value={b.id}>{b.ten_brand}</option>)}
               </select>
-              <select value={filterNhanSu} onChange={e => setFilterNhanSu(e.target.value)} style={{ padding: '6px', borderRadius: '4px', border: '1px solid #ccc', minWidth: '180px', cursor: 'pointer' }}>
+              <select value={filterNhanSu} onChange={e => setFilterNhanSu(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '160px' }}>
                   <option value="">-- Tất cả Nhân sự --</option>
                   {nhanSus.map(n => <option key={n.id} value={n.id}>{n.ten_nhansu}</option>)}
               </select>
           </div>
-
-          {loading && <span style={{color:'green', fontWeight:'bold', marginLeft:'auto'}}>⏳ Đang tải...</span>}
+          {loading && <span style={{color:'#165B33', fontWeight:'bold', fontSize:'13px', marginLeft: 'auto'}}>⏳ Đang tải...</span>}
       </div>
 
-
-      <h2 style={{ textAlign: 'center', color: '#fff', marginBottom: '20px', textTransform: 'uppercase', textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
-          TỔNG QUAN HIỆU SUẤT (Tháng {airReportMonth}/{airReportYear})
-      </h2>
+      {/* TIÊU ĐỀ TRẮNG ĐẬM */}
+      <div style={{ textAlign: 'center', marginBottom: '35px' }}>
+          <div style={{ 
+              color: '#FFFFFF',
+              fontSize: '32px', 
+              fontWeight: '900',
+              textTransform: 'uppercase', 
+              letterSpacing: '1px',
+              fontFamily: 'Arial, sans-serif'
+          }}>
+              TỔNG QUAN HIỆU SUẤT (Tháng {airReportMonth}/{airReportYear})
+          </div>
+      </div>
 
       {/* HÀNG 1 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px', marginBottom: '15px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '25px', marginBottom: '25px' }}>
           <ChartBox data={chart1Data} title="📦 Tỷ Trọng Sản Phẩm (Link Air)" unit="Links" />
           <ChartBox data={chart2Data} title="🔥 Tỷ Trọng Booking (Đơn hàng)" unit="Booking" />
           <ChartBox data={chart3Data} title="👷 Năng Suất Nhân Sự (Link Air)" unit="Links" />
       </div>
 
-      {/* HÀNG 2: 5 & 6 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px' }}>
+      {/* HÀNG 2 */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '25px' }}>
           
-          {/* Chart 5: Ngân sách */}
           <ChartBox data={chart5Data} title="💸 Ngân Sách Đã Chi (Theo Brand)" unit="VNĐ" isMoney={true} />
 
-          {/* Chart 6: Chi phí TB */}
-          <div className="christmas-card" style={{ height: '420px', backgroundColor: '#fff', borderRadius: '12px', padding: '15px', boxShadow: '0 4px 10px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column' }}>
-              <h4 style={{ textAlign: 'center', color: '#165B33', marginBottom: '10px', fontSize: '16px', fontWeight: '800', textTransform: 'uppercase' }}>
+          {/* Biểu đồ Cột */}
+          <div className="christmas-card" style={{ height: '450px', backgroundColor: '#fff', borderRadius: '16px', padding: '20px', boxShadow: '0 8px 25px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column' }}>
+              <h4 style={{ textAlign: 'center', color: '#165B33', marginBottom: '15px', fontSize: '15px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                   💰 Chi Phí Trung Bình / 1 Video
               </h4>
               <div style={{ flex: 1 }}>
                   <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={chart6Data} barCategoryGap="30%" margin={{ top: 30, right: 10, left: 10, bottom: 0 }}>
                           <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 11, fontWeight: 'bold', dy: 10}} />
-                          <Tooltip formatter={(value) => formatMoney(value)} cursor={{fill: 'transparent'}} />
+                          <Tooltip formatter={(value) => formatMoney(value)} cursor={{fill: 'transparent', opacity: 0.1}} contentStyle={{borderRadius:'8px', border:'none', boxShadow:'0 4px 12px rgba(0,0,0,0.15)'}} />
                           <Bar dataKey="value" radius={[8, 8, 0, 0]}>
                               {chart6Data.map((entry, index) => (
                                   <Cell key={`cell-${index}`} fill={entry.fill} />
                               ))}
-                              <LabelList 
-                                  dataKey="value" 
-                                  position="top" 
-                                  formatter={(val) => formatMoney(val)} 
-                                  style={{ fontWeight: 'bold', fontSize: '12px', fill: '#333' }} 
-                              />
+                              <LabelList dataKey="value" position="top" formatter={(val) => formatMoney(val)} style={{ fontWeight: 'bold', fontSize: '12px', fill: '#333' }} />
                           </Bar>
                       </BarChart>
                   </ResponsiveContainer>
               </div>
-              {/* Spacer */}
-              <div style={{ height: '30px' }}></div>
           </div>
 
-          {/* Ô TRỐNG */}
-          <div></div> 
+          <div></div>
       </div>
     </div>
   );

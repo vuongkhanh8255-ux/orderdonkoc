@@ -3,13 +3,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import * as XLSX from 'xlsx'; // <--- THƯ VIỆN EXCEL XỊN
 
-// --- HÀM HELPER (ĐÃ FIX LỖI NHẬP SỐ) ---
+// --- HÀM HELPER ---
 const formatCurrency = (value) => {
   if (!value) return '';
-  // 1. Xóa tất cả ký tự không phải số (để tránh lỗi Math.abs cũ)
   const rawNumber = String(value).replace(/\D/g, ''); 
-  // 2. Chèn dấu chấm
   return rawNumber.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 };
 
@@ -38,7 +37,7 @@ const ExpenseEcomTab = () => {
   
   // State nạp thêm ngân sách
   const [addBudgetAmount, setAddBudgetAmount] = useState('');
-
+  
   // State nhập mới
   const [newExpense, setNewExpense] = useState({
       ngay_chi: new Date().toISOString().split('T')[0],
@@ -59,6 +58,12 @@ const ExpenseEcomTab = () => {
   const [filterDept, setFilterDept] = useState('');
   const [filterName, setFilterName] = useState('');       
   const [filterStatus, setFilterStatus] = useState('all');
+
+  // --- STATE MODAL MẬT KHẨU (ĐỂ ẨN PASS) ---
+  const [showPassModal, setShowPassModal] = useState(false);
+  const [passInput, setPassInput] = useState('');
+  const [passAction, setPassAction] = useState(null); // 'ADD', 'RESET', 'APPROVE'
+  const [pendingData, setPendingData] = useState(null); // Lưu dữ liệu chờ duyệt
 
   // --- 1. LOAD DỮ LIỆU ---
   const loadData = async () => {
@@ -154,13 +159,11 @@ const ExpenseEcomTab = () => {
           const { error: uploadError } = await supabase.storage
               .from('expense-files')
               .upload(filePath, file);
-
           if (uploadError) throw uploadError;
 
           const { data } = supabase.storage
               .from('expense-files')
               .getPublicUrl(filePath);
-          
           return data.publicUrl;
       } catch (error) {
           console.error("Lỗi upload ảnh:", error);
@@ -169,39 +172,56 @@ const ExpenseEcomTab = () => {
       }
   };
 
-  // --- 3. CẬP NHẬT NGÂN SÁCH ---
+  // --- 3. CẬP NHẬT NGÂN SÁCH & DUYỆT (DÙNG MODAL ĐỂ ẨN PASS) ---
   
-  // NẠP THÊM TIỀN (Bấm nút mới hỏi mật khẩu)
-  const handleAddBudget = async () => {
+  // Trigger Nạp tiền
+  const handleAddBudgetClick = () => {
       if (!addBudgetAmount || addBudgetAmount === '0') {
           alert("Vui lòng nhập số tiền cần nạp!");
           return;
       }
-      
-      const inputPass = prompt("🔒 Nhập mật khẩu (211315) để NẠP THÊM ngân sách:");
-      
-      if (inputPass === PASS_BUDGET) {
-          const amountToAdd = parseMoney(addBudgetAmount);
-          const newTotal = budget + amountToAdd; // Cộng dồn
-          
-          const { error } = await supabase.from('ecom_budget').upsert({ id: 1, total_amount: newTotal });
-          
-          if (error) {
-              alert("Lỗi cập nhật: " + error.message);
-          } else {
-              setBudget(newTotal);
-              setAddBudgetAmount(''); // Reset ô nhập
-              alert(`✅ Đã nạp thêm ${formatCurrency(amountToAdd)} đ.\n💰 Tổng ngân sách mới: ${formatCurrency(newTotal)} đ`);
-          }
-      } else if (inputPass !== null) {
-          alert("❌ Sai mật khẩu! Không được phép nạp.");
-      }
+      setPassAction('ADD');
+      setPassInput('');
+      setShowPassModal(true);
   };
 
-  // SỬA TRỰC TIẾP TỔNG
-  const handleSetTotalBudget = async () => {
-      const inputPass = prompt("🔒 Nhập mật khẩu (211315) để ĐẶT LẠI tổng ngân sách:");
-      if (inputPass === PASS_BUDGET) {
+  // Trigger Reset tổng
+  const handleSetTotalBudgetClick = () => {
+      setPassAction('RESET');
+      setPassInput('');
+      setShowPassModal(true);
+  };
+
+  // Trigger Duyệt đơn
+  const handleToggleConfirmClick = (id, field, currentValue) => {
+      setPassAction('APPROVE');
+      setPendingData({ id, field, currentValue });
+      setPassInput('');
+      setShowPassModal(true);
+  };
+
+  // Xử lý xác nhận mật khẩu
+  const handleConfirmPassword = async () => {
+      let requiredPass = PASS_BUDGET; 
+      if (passAction === 'APPROVE') requiredPass = PASS_APPROVE;
+
+      if (passInput !== requiredPass) {
+          alert("❌ Sai mật khẩu!");
+          return;
+      }
+
+      setShowPassModal(false); // Đóng bảng
+
+      if (passAction === 'ADD') {
+          const amountToAdd = parseMoney(addBudgetAmount);
+          const newTotal = budget + amountToAdd;
+          const { error } = await supabase.from('ecom_budget').upsert({ id: 1, total_amount: newTotal });
+          if (!error) {
+              setBudget(newTotal);
+              setAddBudgetAmount('');
+              alert(`✅ Đã nạp thêm thành công!`);
+          }
+      } else if (passAction === 'RESET') {
           const newBudgetStr = prompt("Nhập tổng ngân sách MỚI (Số này sẽ thay thế số cũ):", budget);
           if (newBudgetStr !== null) {
               const val = parseMoney(newBudgetStr);
@@ -209,8 +229,10 @@ const ExpenseEcomTab = () => {
               await supabase.from('ecom_budget').upsert({ id: 1, total_amount: val });
               alert("✅ Đã đặt lại ngân sách thành công!");
           }
-      } else if (inputPass !== null) {
-          alert("❌ Sai mật khẩu!");
+      } else if (passAction === 'APPROVE' && pendingData) {
+          const { id, field, currentValue } = pendingData;
+          await supabase.from('expenses_ecom').update({ [field]: !currentValue }).eq('id', id);
+          loadData();
       }
   };
 
@@ -238,7 +260,6 @@ const ExpenseEcomTab = () => {
           const { error } = await supabase.from('expenses_ecom').insert([dataToInsert]);
           if (error) throw error;
           alert("Đã thêm khoản chi!");
-          
           setNewExpense({ 
               ngay_chi: new Date().toISOString().split('T')[0], 
               ho_ten: '', 
@@ -286,15 +307,54 @@ const ExpenseEcomTab = () => {
       } catch (err) { alert("Lỗi: " + err.message); }
   };
 
-  // --- 6. DUYỆT (BẢO MẬT) ---
-  const handleToggleConfirm = async (id, field, currentValue) => {
-      const inputPass = prompt(`Nhập mật khẩu để duyệt/hủy duyệt ${field === 'confirm_thuchi' ? 'THỦ CHI' : 'BANK'}:`);
-      if (inputPass === PASS_APPROVE) {
-          await supabase.from('expenses_ecom').update({ [field]: !currentValue }).eq('id', id);
-          loadData();
-      } else if (inputPass !== null) {
-          alert("Sai mật khẩu duyệt!");
-      }
+  // --- 6. TÍNH NĂNG MỚI: XUẤT EXCEL (DÙNG THƯ VIỆN XLSX) ---
+  // Cách này đảm bảo 100% không lỗi Font, không lỗi cột
+  const handleExportExcel = () => {
+    // 1. Chuẩn bị dữ liệu cho Excel
+    const dataToExport = filteredExpenses.map((item, index) => {
+        let trangthai = "Chờ duyệt";
+        if (item.confirm_nguoichuyen) trangthai = "Đã Chi (Bank)";
+        else if (item.confirm_thuchi) trangthai = "Chờ Giải Ngân";
+
+        return {
+            "STT": filteredExpenses.length - index,
+            "Ngày Chi": item.ngay_chi || "",
+            "Họ Tên": item.ho_ten || "",
+            "Phòng Ban": item.phong_ban || "",
+            "Nội Dung": item.noi_dung || "",
+            "Số Tiền (VNĐ)": item.khoan_chi || 0,
+            "VAT": item.vat ? "Có" : "Không",
+            "Link Chứng Từ": item.link_chung_tu || "",
+            "Link QR": item.link_qr || "",
+            "Trạng Thái": trangthai
+        };
+    });
+
+    // 2. Tạo Worksheet từ dữ liệu JSON
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+
+    // 3. Chỉnh độ rộng cột (cho đẹp)
+    const wscols = [
+        {wch: 5},  // STT
+        {wch: 12}, // Ngày
+        {wch: 20}, // Họ tên
+        {wch: 10}, // Phòng
+        {wch: 40}, // Nội dung
+        {wch: 15}, // Tiền
+        {wch: 5},  // VAT
+        {wch: 30}, // Link
+        {wch: 30}, // Link QR
+        {wch: 15}  // Trạng thái
+    ];
+    ws['!cols'] = wscols;
+
+    // 4. Tạo Workbook và thêm sheet vào
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Danh Sach Chi Phi");
+
+    // 5. Xuất file .xlsx (Tên file theo ngày)
+    const fileName = `Bao_Cao_Chi_Phi_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(wb, fileName);
   };
 
   // --- STYLES ---
@@ -327,14 +387,40 @@ const ExpenseEcomTab = () => {
             </div>
         )}
 
+        {/* MODAL NHẬP MẬT KHẨU (ĐỂ ẨN PASS) */}
+        {showPassModal && (
+            <div style={{position:'fixed', inset:0, zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', backgroundColor: 'rgba(0,0,0,0.7)'}}>
+                <div style={{background:'white', padding:'30px', borderRadius:'12px', width:'400px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', textAlign: 'center'}}>
+                    <h3 style={{color: '#165B33', marginBottom: '15px'}}>🔒 YÊU CẦU BẢO MẬT</h3>
+                    <p style={{marginBottom: '20px', color: '#666'}}>
+                        {passAction === 'APPROVE' ? 'Nhập mật khẩu DUYỆT CHI' : 'Nhập mật khẩu QUẢN LÝ NGÂN SÁCH'}
+                    </p>
+                    
+                    {/* INPUT TYPE=PASSWORD ĐỂ HIỆN DẤU CHẤM */}
+                    <input 
+                        type="password" 
+                        autoFocus
+                        value={passInput}
+                        onChange={(e) => setPassInput(e.target.value)}
+                        placeholder="••••••"
+                        style={{...inputStyle, textAlign: 'center', fontSize: '24px', marginBottom: '20px', border: '2px solid #165B33', letterSpacing: '5px'}}
+                        onKeyDown={(e) => { if(e.key === 'Enter') handleConfirmPassword() }}
+                    />
+
+                    <div style={{display: 'flex', gap: '10px', justifyContent: 'center'}}>
+                        <button onClick={() => setShowPassModal(false)} style={{padding: '10px 20px', borderRadius: '8px', border: '1px solid #ccc', background: '#eee', cursor: 'pointer'}}>Hủy</button>
+                        <button onClick={handleConfirmPassword} style={{padding: '10px 20px', borderRadius: '8px', border: 'none', background: '#165B33', color: 'white', cursor: 'pointer', fontWeight: 'bold'}}>Xác nhận</button>
+                    </div>
+                </div>
+            </div>
+        )}
+
         <h1 style={{ color: '#333', margin: '0 0 20px 0' }}>💸 QUẢN LÝ NGÂN SÁCH ECOM</h1>
 
         {/* --- KHU VỰC THỐNG KÊ --- */}
         <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', alignItems: 'stretch' }}>
             {/* Cột trái: Ngân sách + Thẻ thống kê */}
             <div style={{ flex: 3, display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                
-                {/* KHUNG NHẬP NGÂN SÁCH MỚI */}
                 <div style={{ ...cardStyle, borderLeft: '5px solid #165B33', display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: 0 }}>
                     <div>
                         <h3 style={{ margin: 0, color: '#165B33' }}>💰 TỔNG NGÂN SÁCH</h3>
@@ -344,7 +430,6 @@ const ExpenseEcomTab = () => {
                     </div>
                     
                     <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
-                        {/* Ô nhập tiền nạp thêm */}
                         <div style={{display:'flex', alignItems:'center'}}>
                             <input 
                                 type="text" 
@@ -358,7 +443,7 @@ const ExpenseEcomTab = () => {
                                 }} 
                             />
                             <button 
-                                onClick={handleAddBudget}
+                                onClick={handleAddBudgetClick} 
                                 style={{
                                     height: '42px', padding: '0 20px', backgroundColor: '#165B33', color: 'white',
                                     border: 'none', borderRadius: '0 20px 20px 0', cursor: 'pointer', fontWeight: 'bold'
@@ -368,8 +453,7 @@ const ExpenseEcomTab = () => {
                             </button>
                         </div>
 
-                        {/* Số hiển thị tổng (Click vào để sửa thủ công nếu sai) */}
-                        <div onClick={handleSetTotalBudget} style={{cursor:'pointer', marginLeft: '10px'}} title="Click để đặt lại số tổng (nếu cần)">
+                        <div onClick={handleSetTotalBudgetClick} style={{cursor:'pointer', marginLeft: '10px'}} title="Click để đặt lại số tổng">
                             <div style={{ 
                                     fontSize: '1.8rem', fontWeight: 'bold', color: '#165B33', 
                                     padding: '0 20px', height: '50px', lineHeight: '50px',
@@ -434,7 +518,6 @@ const ExpenseEcomTab = () => {
                 <input type="date" value={newExpense.ngay_chi} onChange={e => setNewExpense({...newExpense, ngay_chi: e.target.value})} style={inputStyle} />
                 <input placeholder="Họ tên (*)" value={newExpense.ho_ten} onChange={e => setNewExpense({...newExpense, ho_ten: e.target.value})} style={inputStyle} />
                 
-                {/* Input File QR Code */}
                 <div style={{...inputStyle, padding: '5px', display: 'flex', alignItems: 'center'}}>
                     <span style={{marginRight: '10px', fontSize: '0.8rem', color: '#666'}}>QR Bank:</span>
                     <input 
@@ -476,7 +559,13 @@ const ExpenseEcomTab = () => {
                 <input type="text" placeholder="🔍 Tên người đề xuất..." value={filterName} onChange={e => setFilterName(e.target.value)} style={inputStyle} />
                 <select value={filterDept} onChange={e => setFilterDept(e.target.value)} style={inputStyle}><option value="">-- Tất cả Phòng --</option>{DEPARTMENT_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}</select>
                 <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{...inputStyle, fontWeight: 'bold', color: filterStatus === 'pending' ? '#FF9800' : '#333'}}><option value="all">📝 Tất cả trạng thái</option><option value="pending">⏳ Chưa hoàn tất</option><option value="done">✅ Đã hoàn tất</option></select>
-                <button onClick={clearFilters} style={{ ...inputStyle, backgroundColor: '#eee', color: '#555', fontWeight: 'bold', cursor: 'pointer', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Xóa Lọc ✖</button>
+                
+                {/* NÚT TÍNH NĂNG */}
+                <div style={{display: 'flex', gap: '5px'}}>
+                    <button onClick={clearFilters} style={{ ...inputStyle, flex: 1, backgroundColor: '#eee', color: '#555', fontWeight: 'bold', cursor: 'pointer', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Xóa Lọc ✖</button>
+                    {/* SỬA: Nút Xuất Excel dùng hàm mới */}
+                    <button onClick={handleExportExcel} style={{ ...inputStyle, flex: 1, backgroundColor: '#2E7D32', color: 'white', fontWeight: 'bold', cursor: 'pointer', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Xuất Excel 📥</button>
+                </div>
             </div>
 
             <div style={{overflowX:'auto'}}>
@@ -511,7 +600,8 @@ const ExpenseEcomTab = () => {
                                         {isEdit ? (
                                             <input type="file" accept="image/*" onChange={e => setEditFileQR(e.target.files[0])} style={{width:'120px'}} />
                                         ) : (
-                                            item.link_qr ? (
+                                            item.link_qr ?
+                                            (
                                                 <a href={item.link_qr} target="_blank" rel="noreferrer">
                                                     <img src={item.link_qr} alt="QR" style={{width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #ddd'}} />
                                                 </a>
@@ -528,8 +618,9 @@ const ExpenseEcomTab = () => {
                                     <td style={{padding:'10px', textAlign:'center', whiteSpace:'nowrap'}}>
                                         {!isEdit && (
                                             <>
-                                                <div onClick={() => handleToggleConfirm(item.id, 'confirm_thuchi', item.confirm_thuchi)} style={badgeStyle(item.confirm_thuchi, '#FF9800')}>TC</div>
-                                                <div onClick={() => handleToggleConfirm(item.id, 'confirm_nguoichuyen', item.confirm_nguoichuyen)} style={badgeStyle(item.confirm_nguoichuyen, '#4CAF50')}>Bank</div>
+                                                {/* SỬA: Gọi Modal thay vì prompt */}
+                                                <div onClick={() => handleToggleConfirmClick(item.id, 'confirm_thuchi', item.confirm_thuchi)} style={badgeStyle(item.confirm_thuchi, '#FF9800')}>TC</div>
+                                                <div onClick={() => handleToggleConfirmClick(item.id, 'confirm_nguoichuyen', item.confirm_nguoichuyen)} style={badgeStyle(item.confirm_nguoichuyen, '#4CAF50')}>Bank</div>
                                             </>
                                         )}
                                     </td>
