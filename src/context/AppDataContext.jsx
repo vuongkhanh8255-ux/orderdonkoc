@@ -9,76 +9,76 @@ import * as XLSX from 'xlsx';
 // ============================================================================
 const mangso = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
 function dochangchuc(so, daydu) {
-    let chuoi = "";
-    let chuc = Math.floor(so / 10);
-    let donvi = so % 10;
-    if (chuc > 1) {
-        chuoi = " " + mangso[chuc] + " mươi";
-        if (donvi == 1) { chuoi += " mốt"; }
-    } else if (chuc == 1) {
-        chuoi = " mười";
-        if (donvi == 5) { chuoi += " lăm"; }
-    } else if (daydu && donvi > 0) {
-        chuoi = " lẻ";
-    }
-    if (donvi == 5 && chuc > 1) {
-        chuoi += " lăm";
-    } else if (donvi > 0 && donvi != 1 && donvi != 5) {
-        chuoi += " " + mangso[donvi];
-    } else if (donvi == 1 && chuc < 1) {
-        chuoi += " " + mangso[donvi];
-    }
-    return chuoi;
+  let chuoi = "";
+  let chuc = Math.floor(so / 10);
+  let donvi = so % 10;
+  if (chuc > 1) {
+    chuoi = " " + mangso[chuc] + " mươi";
+    if (donvi == 1) { chuoi += " mốt"; }
+  } else if (chuc == 1) {
+    chuoi = " mười";
+    if (donvi == 5) { chuoi += " lăm"; }
+  } else if (daydu && donvi > 0) {
+    chuoi = " lẻ";
+  }
+  if (donvi == 5 && chuc > 1) {
+    chuoi += " lăm";
+  } else if (donvi > 0 && donvi != 1 && donvi != 5) {
+    chuoi += " " + mangso[donvi];
+  } else if (donvi == 1 && chuc < 1) {
+    chuoi += " " + mangso[donvi];
+  }
+  return chuoi;
 }
 
 function dochangtram(so, daydu) {
-    let chuoi = "";
-    let tram = Math.floor(so / 100);
-    so = so % 100;
-    if (daydu || tram > 0) {
-        chuoi = " " + mangso[tram] + " trăm";
-        chuoi += dochangchuc(so, true);
-    } else {
-        chuoi = dochangchuc(so, false);
-    }
-    return chuoi;
+  let chuoi = "";
+  let tram = Math.floor(so / 100);
+  so = so % 100;
+  if (daydu || tram > 0) {
+    chuoi = " " + mangso[tram] + " trăm";
+    chuoi += dochangchuc(so, true);
+  } else {
+    chuoi = dochangchuc(so, false);
+  }
+  return chuoi;
 }
 
 function dochangtrieu(so, daydu) {
-    let chuoi = "";
-    let trieu = Math.floor(so / 1000000);
-    so = so % 1000000;
-    if (trieu > 0) {
-        chuoi = dochangtram(trieu, daydu) + " triệu";
-        daydu = true;
-    }
-    let nghin = Math.floor(so / 1000);
-    so = so % 1000;
-    if (nghin > 0) {
-        chuoi += dochangtram(nghin, daydu) + " nghìn";
-        daydu = true;
-    }
-    if (so > 0) {
-        chuoi += dochangtram(so, daydu);
-    }
-    return chuoi;
+  let chuoi = "";
+  let trieu = Math.floor(so / 1000000);
+  so = so % 1000000;
+  if (trieu > 0) {
+    chuoi = dochangtram(trieu, daydu) + " triệu";
+    daydu = true;
+  }
+  let nghin = Math.floor(so / 1000);
+  so = so % 1000;
+  if (nghin > 0) {
+    chuoi += dochangtram(nghin, daydu) + " nghìn";
+    daydu = true;
+  }
+  if (so > 0) {
+    chuoi += dochangtram(so, daydu);
+  }
+  return chuoi;
 }
 
 function to_vietnamese_string(so) {
-    if (so == 0) return mangso[0].charAt(0).toUpperCase() + mangso[0].slice(1);
-    let chuoi = "", hauto = "";
-    do {
-        let ty = so % 1000000000;
-        so = Math.floor(so / 1000000000);
-        if (so > 0) {
-            chuoi = dochangtram(ty, true) + hauto + chuoi;
-        } else {
-            chuoi = dochangtram(ty, false) + hauto + chuoi;
-        }
-        hauto = " tỷ";
-    } while (so > 0);
-    let finalString = chuoi.trim();
-    return finalString.charAt(0).toUpperCase() + finalString.slice(1);
+  if (so == 0) return mangso[0].charAt(0).toUpperCase() + mangso[0].slice(1);
+  let chuoi = "", hauto = "";
+  do {
+    let ty = so % 1000000000;
+    so = Math.floor(so / 1000000000);
+    if (so > 0) {
+      chuoi = dochangtram(ty, true) + hauto + chuoi;
+    } else {
+      chuoi = dochangtram(ty, false) + hauto + chuoi;
+    }
+    hauto = " tỷ";
+  } while (so > 0);
+  let finalString = chuoi.trim();
+  return finalString.charAt(0).toUpperCase() + finalString.slice(1);
 }
 
 // Cấu hình Phân trang
@@ -91,13 +91,13 @@ export const AppDataProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState('');
-  
+
   // STATE CHUNG
   const [brands, setBrands] = useState([]);
   const [nhanSus, setNhanSus] = useState([]);
   const [sanPhams, setSanPhams] = useState([]);
   const [filterSanPhams, setFilterSanPhams] = useState([]);
-  
+
   // STATE ORDER
   const [isLoading, setIsLoading] = useState(false);
   const [hoTen, setHoTen] = useState('');
@@ -113,7 +113,7 @@ export const AppDataProvider = ({ children }) => {
   const [selectedOrders, setSelectedOrders] = useState(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const [totalOrderCount, setTotalOrderCount] = useState(0);
-  
+
   // Filters Order
   const [filterIdKenh, setFilterIdKenh] = useState('');
   const [filterSdt, setFilterSdt] = useState('');
@@ -123,13 +123,13 @@ export const AppDataProvider = ({ children }) => {
   const [filterNgay, setFilterNgay] = useState('');
   const [filterLoaiShip, setFilterLoaiShip] = useState('');
   const [filterEditedStatus, setFilterEditedStatus] = useState('all');
-  
+
   const [productSearchTerm, setProductSearchTerm] = useState('');
   const [summaryDate, setSummaryDate] = useState(new Date().toISOString().split('T')[0]);
   const [productSummary, setProductSummary] = useState({ 'Ship thường': [], 'Hỏa tốc': [] });
   const [rawSummaryData, setRawSummaryData] = useState([]);
   const [isSummarizing, setIsSummarizing] = useState(false);
-  
+
   // Reports
   const [reportMonth, setReportMonth] = useState(new Date().getMonth() + 1);
   const [reportYear, setReportYear] = useState(new Date().getFullYear());
@@ -137,9 +137,9 @@ export const AppDataProvider = ({ children }) => {
   const [isReportLoading, setIsReportLoading] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: 'chi_phi_tong', direction: 'desc' });
   const [editingDonHang, setEditingDonHang] = useState(null);
-  
+
   // --- [TÍNH NĂNG MỚI] CHART PERFORMANCE ---
-  const [chartNhanSu, setChartNhanSu] = useState(''); 
+  const [chartNhanSu, setChartNhanSu] = useState('');
   const [chartData, setChartData] = useState([]);
   const [isChartLoading, setIsChartLoading] = useState(false);
 
@@ -152,21 +152,21 @@ export const AppDataProvider = ({ children }) => {
     const minutes = now.getMinutes();
     return hours > 16 || (hours === 16 && minutes >= 30);
   });
-  const [columnWidths, setColumnWidths] = useState({ 
-      select: 40, stt: 50, ngayGui: 160, hoTenKOC: 150, cccd: 120, idKenh: 120, 
-      sdt: 120, diaChi: 250, brand: 120, sanPham: 200, nhanSu: 120, 
-      loaiShip: 120, trangThai: 120, hanhDong: 150 
+  const [columnWidths, setColumnWidths] = useState({
+    select: 40, stt: 50, ngayGui: 160, hoTenKOC: 150, cccd: 120, idKenh: 120,
+    sdt: 120, diaChi: 250, brand: 120, sanPham: 200, nhanSu: 120,
+    loaiShip: 120, trangThai: 120, hanhDong: 150
   });
-  
+
   // STATE CONTRACT & AIR LINKS
   const [contractData, setContractData] = useState({
-        benB_ten: '', benB_sdt: '', benB_diaChi: '', benB_cccd: '', benB_mst: '', 
-        benB_stk: '', benB_nganHang: '', benB_nguoiThuHuong: '',
-        soHopDong: '', ngayKy: new Date().toISOString().split('T')[0], 
-        ngayThucHien: new Date().toISOString().split('T')[0],
-        sanPham: '', linkSanPham: '', linkKenh: '', soLuong: 1, donGia: 0,
-        benA_ten: "CÔNG TY TNHH ĐỘNG \nHỌC STELLA", benA_diaChi: "9/11 Nguyễn Huy Tưởng, Phường Gia Định, Thành phố Hồ Chí Minh",
-        benA_mst: "0314421133", benA_nguoiDaiDien: "VÕ HUÂN", benA_chucVu: "Giám đốc",
+    benB_ten: '', benB_sdt: '', benB_diaChi: '', benB_cccd: '', benB_mst: '',
+    benB_stk: '', benB_nganHang: '', benB_nguoiThuHuong: '',
+    soHopDong: '', ngayKy: new Date().toISOString().split('T')[0],
+    ngayThucHien: new Date().toISOString().split('T')[0],
+    sanPham: '', linkSanPham: '', linkKenh: '', soLuong: 1, donGia: 0,
+    benA_ten: "CÔNG TY TNHH ĐỘNG \nHỌC STELLA", benA_diaChi: "9/11 Nguyễn Huy Tưởng, Phường Gia Định, Thành phố Hồ Chí Minh",
+    benA_mst: "0314421133", benA_nguoiDaiDien: "VÕ HUÂN", benA_chucVu: "Giám đốc",
   });
   const [contractHTML, setContractHTML] = useState('');
   const [isOutputVisible, setIsOutputVisible] = useState(false);
@@ -188,7 +188,8 @@ export const AppDataProvider = ({ children }) => {
   const [airSortConfig, setAirSortConfig] = useState({ key: 'chi_phi_cast', direction: 'desc' });
 
   // --- LOGIC ---
-  const handleResize = (key) => (e, { size }) => { setColumnWidths(prev => ({ ...prev, [key]: size.width }));
+  const handleResize = (key) => (e, { size }) => {
+    setColumnWidths(prev => ({ ...prev, [key]: size.width }));
   };
 
   // AUTH EFFECT
@@ -199,8 +200,8 @@ export const AppDataProvider = ({ children }) => {
     };
     checkSession();
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-        setUser(session?.user || null);
-        if (event === 'SIGNED_IN') loadInitialData();
+      setUser(session?.user || null);
+      if (event === 'SIGNED_IN') loadInitialData();
     });
     return () => { authListener.subscription.unsubscribe(); };
   }, []);
@@ -211,155 +212,200 @@ export const AppDataProvider = ({ children }) => {
     setIsLoggingIn(false);
   };
   const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setDonHangs([]); setAirLinks([]); };
-  
+
   // =====================================================================
   // --- LOAD ORDER DATA ---
   // =====================================================================
-  const loadInitialData = async () => { 
+  /* [REFACTORED] Two-Step Query to ensure ALL products are shown even when filtering */
+  const loadInitialData = async () => {
     setIsLoading(true);
     const startIndex = (currentPage - 1) * ORDERS_PER_PAGE;
     const endIndex = startIndex + ORDERS_PER_PAGE - 1;
-    const hasProductFilter = !!filterBrand || !!filterSanPham;
-    const ctRelation = hasProductFilter ? 'chitiettonguis!chitiettonguis_dongui_id_fkey_final!inner' : 'chitiettonguis!chitiettonguis_dongui_id_fkey_final';
-    const spRelation = hasProductFilter ?
-    'sanphams!inner' : 'sanphams';
 
-    let query = supabase.from('donguis').select(`
+    // STEP 1: Find IDs of matching Orders
+    // We use !inner here if filtering by product/brand to find the relevant Order IDs
+    const hasProductFilter = !!filterBrand || !!filterSanPham;
+
+    let idQuery = supabase.from('donguis').select(`
+        id, ngay_gui,
+        chitiettonguis!inner (
+            id,
+            sanphams!inner ( id, brand_id )
+        )
+    `, { count: 'exact', head: false });
+
+    // If NO product filter, we don't strictly need !inner, but for simplicity of logic flow we can keep the query structure
+    // or simply skip the join if we only need counts/ids.
+    if (!hasProductFilter) {
+      idQuery = supabase.from('donguis').select('id, ngay_gui', { count: 'exact' });
+    }
+
+    // Apply Filters to ID Query
+    if (filterIdKenh) idQuery = idQuery.ilike('koc_id_kenh', `%${filterIdKenh.trim()}%`);
+    if (filterSdt) idQuery = idQuery.ilike('koc_sdt', `%${filterSdt.trim()}%`);
+    if (filterNhanSu) idQuery = idQuery.eq('nhansu_id', filterNhanSu);
+    if (filterLoaiShip) idQuery = idQuery.eq('loai_ship', filterLoaiShip);
+    if (filterNgay) {
+      const startDate = `${filterNgay}T00:00:00.000Z`;
+      const endDate = `${filterNgay}T23:59:59.999Z`;
+      idQuery = idQuery.gte('ngay_gui', startDate).lte('ngay_gui', endDate);
+    }
+    if (filterEditedStatus !== 'all') {
+      const isEdited = filterEditedStatus === 'edited';
+      idQuery = idQuery.eq('da_sua', isEdited);
+    }
+    if (filterBrand) idQuery = idQuery.eq('chitiettonguis.sanphams.brand_id', filterBrand);
+    if (filterSanPham) idQuery = idQuery.eq('chitiettonguis.sanphams.id', filterSanPham);
+
+    // Execute Step 1
+    const { data: idData, count, error: countError } = await idQuery.order('ngay_gui', { ascending: false }).range(startIndex, endIndex);
+
+    if (countError) {
+      alert("Lỗi tải danh sách (Step 1): " + countError.message);
+      setIsLoading(false);
+      return;
+    }
+    setTotalOrderCount(count || 0);
+
+    if (!idData || idData.length === 0) {
+      setDonHangs([]);
+      setIsLoading(false);
+      return;
+    }
+
+    // STEP 2: Fetch Full Data for these IDs
+    const pageIds = idData.map(d => d.id);
+    const { data: fullData, error: fetchError } = await supabase.from('donguis').select(`
         id, ngay_gui, da_sua, loai_ship, original_loai_ship, trang_thai, original_trang_thai, 
         koc_ho_ten, original_koc_ho_ten, koc_id_kenh, original_koc_id_kenh, koc_sdt, original_koc_sdt, 
         koc_dia_chi, original_koc_dia_chi, koc_cccd, original_koc_cccd, 
         nhansu ( id, ten_nhansu ), 
-        ${ctRelation} ( 
+        chitiettonguis ( 
             id, so_luong, 
-            ${spRelation} ( 
+            sanphams ( 
                 id, ten_sanpham, barcode, gia_tien, brand_id, 
                 brands ( id, ten_brand ) 
             ) 
         )
-    `, { count: 'exact' });
-    if (filterIdKenh) query = query.ilike('koc_id_kenh', `%${filterIdKenh.trim()}%`);
-    if (filterSdt) query = query.ilike('koc_sdt', `%${filterSdt.trim()}%`);
-    if (filterNhanSu) query = query.eq('nhansu_id', filterNhanSu);
-    if (filterLoaiShip) query = query.eq('loai_ship', filterLoaiShip);
-    if (filterNgay) {
-        const startDate = `${filterNgay}T00:00:00.000Z`;
-        const endDate = `${filterNgay}T23:59:59.999Z`;
-        query = query.gte('ngay_gui', startDate).lte('ngay_gui', endDate);
-    }
-    if (filterEditedStatus !== 'all') {
-        const isEdited = filterEditedStatus === 'edited';
-        query = query.eq('da_sua', isEdited);
-    }
-    if (filterBrand) query = query.eq('chitiettonguis.sanphams.brand_id', filterBrand);
-    if (filterSanPham) query = query.eq('chitiettonguis.sanphams.id', filterSanPham);
-    const { count, error: countError } = await query.order('ngay_gui', { ascending: false }).range(0, 0);
-    if (countError) { alert("Lỗi tải tổng số đơn hàng: " + countError.message); setIsLoading(false); return;
-    }
-    setTotalOrderCount(count || 0); 
-    
-    const { data, error } = await query.order('ngay_gui', { ascending: false }).range(startIndex, endIndex);
-    if(error) { alert("Lỗi tải dữ liệu Order: " + error.message) } 
-    else if (data) {
-      const dataWithStt = data.map((item, index) => ({ ...item, originalStt: (count || 0) - (startIndex + index) }));
+    `)
+      .in('id', pageIds)
+      .order('ngay_gui', { ascending: false });
+
+    if (fetchError) {
+      alert("Lỗi tải dữ liệu chi tiết (Step 2): " + fetchError.message);
+    } else if (fullData) {
+      const dataWithStt = fullData.map((item, index) => ({ ...item, originalStt: (count || 0) - (startIndex + index) }));
       setDonHangs(dataWithStt);
     }
-    setIsLoading(false); 
+    setIsLoading(false);
   };
 
   const loadSanPhamsByBrand = async (brandId) => {
-      if (!brandId) { setSanPhams([]);
-      setFilterSanPhams([]); return; }
-      const { data: sanPhamsData, error } = await supabase.from('sanphams').select(`id, ten_sanpham, barcode, gia_tien, brand_id`).eq('brand_id', brandId);
-      if (error) { console.error("Lỗi tải sản phẩm theo Brand:", error.message);
-      } 
-      else { setSanPhams(sanPhamsData || []); setFilterSanPhams(sanPhamsData || []); }
+    if (!brandId) {
+      setSanPhams([]);
+      setFilterSanPhams([]); return;
+    }
+    const { data: sanPhamsData, error } = await supabase.from('sanphams').select(`id, ten_sanpham, barcode, gia_tien, brand_id`).eq('brand_id', brandId);
+    if (error) {
+      console.error("Lỗi tải sản phẩm theo Brand:", error.message);
+    }
+    else { setSanPhams(sanPhamsData || []); } // Removed setFilterSanPhams to separate Form/List logic
   };
   const handleQuantityChange = (productId, newQuantity) => {
     const quantity = parseInt(newQuantity, 10);
-    setSelectedSanPhams(prevSelected => { 
-        const newSelected = { ...prevSelected }; 
-        if (isNaN(quantity) || quantity <= 0) { delete newSelected[productId]; } 
-        else { newSelected[productId] = quantity; } 
-        return newSelected; 
+    setSelectedSanPhams(prevSelected => {
+      const newSelected = { ...prevSelected };
+      if (isNaN(quantity) || quantity <= 0) { delete newSelected[productId]; }
+      else { newSelected[productId] = quantity; }
+      return newSelected;
     });
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (cccd.length !== 12 || !/^\d{12}$/.test(cccd)) { alert('Vui lòng nhập CCCD đủ 12 chữ số.'); return;
+    if (cccd.length !== 12 || !/^\d{12}$/.test(cccd)) {
+      alert('Vui lòng nhập CCCD đủ 12 chữ số.'); return;
     }
-    if (Object.keys(selectedSanPhams).length === 0) { alert('Vui lòng chọn ít nhất một sản phẩm với số lượng lớn hơn 0!');
-    return; }
+    if (Object.keys(selectedSanPhams).length === 0) {
+      alert('Vui lòng chọn ít nhất một sản phẩm với số lượng lớn hơn 0!');
+      return;
+    }
     setIsLoading(true);
     try {
       const donGuiPayload = { koc_ho_ten: hoTen, original_koc_ho_ten: hoTen, koc_id_kenh: idKenh, original_koc_id_kenh: idKenh, koc_sdt: sdt, original_koc_sdt: sdt, koc_dia_chi: diaChi, original_koc_dia_chi: diaChi, koc_cccd: cccd, original_koc_cccd: cccd, nhansu_id: selectedNhanSu, loai_ship: loaiShip, original_loai_ship: loaiShip, trang_thai: 'Chưa đóng đơn', original_trang_thai: 'Chưa đóng đơn', };
       const { data: donGuiData, error: donGuiError } = await supabase.from('donguis').insert(donGuiPayload).select().single();
       if (donGuiError) throw donGuiError;
       const chiTietData = Object.entries(selectedSanPhams).map(([sanPhamId, soLuong]) => ({ dongui_id: donGuiData.id, sanpham_id: sanPhamId, so_luong: soLuong }));
-      if (chiTietData.length > 0) { 
-          const { error: chiTietError } = await supabase.from('chitiettonguis').insert(chiTietData);
-          if (chiTietError) throw chiTietError; 
+      if (chiTietData.length > 0) {
+        const { error: chiTietError } = await supabase.from('chitiettonguis').insert(chiTietData);
+        if (chiTietError) throw chiTietError;
       }
       alert('Tạo đơn gửi thành công!');
       setHoTen(''); setIdKenh(''); setSdt(''); setDiaChi(''); setCccd('');
       setSelectedBrand(''); setSelectedSanPhams({}); setSelectedNhanSu(''); setLoaiShip('Ship thường');
       loadInitialData();
       const newOrderDate = new Date();
-      if (newOrderDate.getMonth() + 1 === parseInt(reportMonth, 10) && newOrderDate.getFullYear() === parseInt(reportYear, 10)) { await handleGenerateReport();
+      if (newOrderDate.getMonth() + 1 === parseInt(reportMonth, 10) && newOrderDate.getFullYear() === parseInt(reportYear, 10)) {
+        await handleGenerateReport();
       }
-    } catch (error) { alert('Đã có lỗi xảy ra: ' + error.message); } finally { setIsLoading(false);
+    } catch (error) { alert('Đã có lỗi xảy ra: ' + error.message); } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleIdKenhBlur = async () => { 
-      if (!idKenh) return;
-      const cleanId = idKenh.trim();
-      const { data } = await supabase.from('kocs').select().eq('id_kenh', cleanId).single(); 
-      if (data) { setHoTen(data.ho_ten); setSdt(data.sdt); setDiaChi(data.dia_chi); setCccd(data.cccd);
-      } 
+  const handleIdKenhBlur = async () => {
+    if (!idKenh) return;
+    const cleanId = idKenh.trim();
+    const { data } = await supabase.from('kocs').select().eq('id_kenh', cleanId).single();
+    if (data) {
+      setHoTen(data.ho_ten); setSdt(data.sdt); setDiaChi(data.dia_chi); setCccd(data.cccd);
+    }
   };
   const clearFilters = () => { setFilterIdKenh(''); setFilterSdt(''); setFilterBrand(''); setFilterSanPham(''); setFilterNhanSu(''); setFilterNgay(''); setFilterLoaiShip(''); setFilterEditedStatus('all'); };
-  
+
   // =========================================================================
   // --- HÀM TỔNG HỢP ---
   // =========================================================================
   const handleGetSummary = async () => {
-    if (!summaryDate) { alert('Vui lòng chọn ngày để tổng hợp!');
-    return; }
-    setIsSummarizing(true); 
-    setProductSummary({ 'Ship thường': [], 'Hỏa tốc': [] }); 
+    if (!summaryDate) {
+      alert('Vui lòng chọn ngày để tổng hợp!');
+      return;
+    }
+    setIsSummarizing(true);
+    setProductSummary({ 'Ship thường': [], 'Hỏa tốc': [] });
     setRawSummaryData([]);
     try {
-        const startDate = `${summaryDate}T00:00:00.000Z`;
-        const endDate = `${summaryDate}T23:59:59.999Z`;
-        const { data, error } = await supabase.from('chitiettonguis').select(`so_luong, donguis!inner ( loai_ship, ngay_gui ), sanphams ( ten_sanpham, barcode, brands ( ten_brand ) )`).gte('donguis.ngay_gui', startDate).lte('donguis.ngay_gui', endDate);
-        if (error) throw error;
-        const mapSummary = {};
-        if (data) {
-            data.forEach(item => {
-                const brandName = item.sanphams?.brands?.ten_brand || 'Unknown';
-                const barcode = item.sanphams?.barcode || 'NoCode';
-                const ship = item.donguis?.loai_ship || 'Unknown';
-             
-                const prodName = item.sanphams?.ten_sanpham || 'Unknown';
-                const key = `${brandName}_${barcode}_${ship}_${prodName}`;
-                if (!mapSummary[key]) { mapSummary[key] = { ten_san_pham: prodName, barcode: barcode, ten_brand: brandName, loai_ship: ship, total_quantity: 0 }; }
-                mapSummary[key].total_quantity += (item.so_luong || 0);
-            });
-        }
-        const finalData = Object.values(mapSummary);
-        finalData.sort((a, b) => a.ten_brand.localeCompare(b.ten_brand));
-        setRawSummaryData(finalData);
-        setProductSummary({ 'Ship thường': finalData.filter(item => item.loai_ship === 'Ship thường'), 'Hỏa tốc': finalData.filter(item => item.loai_ship === 'Hỏa tốc') });
+      const startDate = `${summaryDate}T00:00:00.000Z`;
+      const endDate = `${summaryDate}T23:59:59.999Z`;
+      const { data, error } = await supabase.from('chitiettonguis').select(`so_luong, donguis!inner ( loai_ship, ngay_gui ), sanphams ( ten_sanpham, barcode, brands ( ten_brand ) )`).gte('donguis.ngay_gui', startDate).lte('donguis.ngay_gui', endDate);
+      if (error) throw error;
+      const mapSummary = {};
+      if (data) {
+        data.forEach(item => {
+          const brandName = item.sanphams?.brands?.ten_brand || 'Unknown';
+          const barcode = item.sanphams?.barcode || 'NoCode';
+          const ship = item.donguis?.loai_ship || 'Unknown';
+
+          const prodName = item.sanphams?.ten_sanpham || 'Unknown';
+          const key = `${brandName}_${barcode}_${ship}_${prodName}`;
+          if (!mapSummary[key]) { mapSummary[key] = { ten_san_pham: prodName, barcode: barcode, ten_brand: brandName, loai_ship: ship, total_quantity: 0 }; }
+          mapSummary[key].total_quantity += (item.so_luong || 0);
+        });
+      }
+      const finalData = Object.values(mapSummary);
+      finalData.sort((a, b) => a.ten_brand.localeCompare(b.ten_brand));
+      setRawSummaryData(finalData);
+      setProductSummary({ 'Ship thường': finalData.filter(item => item.loai_ship === 'Ship thường'), 'Hỏa tốc': finalData.filter(item => item.loai_ship === 'Hỏa tốc') });
     } catch (error) { alert('Lỗi khi lấy tổng hợp: ' + error.message); } finally { setIsSummarizing(false); }
   };
-  
+
   // --- BÁO CÁO ---
   const handleGenerateReport = async () => {
     setIsReportLoading(true);
     setReportData({ reportRows: [], brandHeaders: [] });
     const { data, error } = await supabase.rpc('generate_performance_report', { target_month: reportMonth, target_year: reportYear });
-    if (error) { alert("Lỗi tải báo cáo (Order): " + error.message); setIsReportLoading(false); return;
+    if (error) {
+      alert("Lỗi tải báo cáo (Order): " + error.message); setIsReportLoading(false); return;
     }
     const brandSet = new Set();
     const reportRows = data.map(row => {
@@ -371,100 +417,130 @@ export const AppDataProvider = ({ children }) => {
 
   // --- CHART PERFORMANCE (GIỮ NGUYÊN) ---
   const fetchChartData = async (nhanSuId) => {
-      if (!nhanSuId) {
-          setChartData([]);
-          return;
-      }
-      setIsChartLoading(true);
-      const startDate = `${reportYear}-${String(reportMonth).padStart(2,'0')}-01T00:00:00.000Z`;
-      const lastDay = new Date(reportYear, reportMonth, 0).getDate();
-      const endDate = `${reportYear}-${String(reportMonth).padStart(2,'0')}-${lastDay}T23:59:59.999Z`;
+    if (!nhanSuId) {
+      setChartData([]);
+      return;
+    }
+    setIsChartLoading(true);
+    const startDate = `${reportYear}-${String(reportMonth).padStart(2, '0')}-01T00:00:00.000Z`;
+    const lastDay = new Date(reportYear, reportMonth, 0).getDate();
+    const endDate = `${reportYear}-${String(reportMonth).padStart(2, '0')}-${lastDay}T23:59:59.999Z`;
 
-      const { data, error } = await supabase
-          .from('donguis')
-          .select('ngay_gui')
-          .eq('nhansu_id', nhanSuId)
-          .gte('ngay_gui', startDate)
-          .lte('ngay_gui', endDate);
-      if (error) {
-          console.error("Lỗi tải chart:", error);
-          setChartData([]);
-      } else {
-          const dailyCounts = {};
-          for(let d=1; d<=lastDay; d++) { dailyCounts[d] = 0; }
-          data.forEach(item => {
-              const day = new Date(item.ngay_gui).getDate();
-              if (dailyCounts[day] !== undefined) { dailyCounts[day] += 1; }
-          });
-          const chartArray = Object.keys(dailyCounts).map(d => ({ day: `Ngày ${d}`, orders: dailyCounts[d] }));
-          setChartData(chartArray);
-      }
-      setIsChartLoading(false);
+    const { data, error } = await supabase
+      .from('donguis')
+      .select('ngay_gui')
+      .eq('nhansu_id', nhanSuId)
+      .gte('ngay_gui', startDate)
+      .lte('ngay_gui', endDate);
+    if (error) {
+      console.error("Lỗi tải chart:", error);
+      setChartData([]);
+    } else {
+      const dailyCounts = {};
+      for (let d = 1; d <= lastDay; d++) { dailyCounts[d] = 0; }
+      data.forEach(item => {
+        const day = new Date(item.ngay_gui).getDate();
+        if (dailyCounts[day] !== undefined) { dailyCounts[day] += 1; }
+      });
+      const chartArray = Object.keys(dailyCounts).map(d => ({ day: `Ngày ${d}`, orders: dailyCounts[d] }));
+      setChartData(chartArray);
+    }
+    setIsChartLoading(false);
   };
 
   // Trigger load chart khi đổi nhân sự hoặc tháng
   useEffect(() => {
-      if (chartNhanSu) {
-          fetchChartData(chartNhanSu);
-      } else {
-          setChartData([]);
-      }
+    if (chartNhanSu) {
+      fetchChartData(chartNhanSu);
+    } else {
+      setChartData([]);
+    }
   }, [chartNhanSu, reportMonth, reportYear]);
-  
-  const requestSort = (key) => { let direction = 'desc';
-  if (sortConfig.key === key && sortConfig.direction === 'desc') { direction = 'asc'; } setSortConfig({ key, direction }); };
+
+  const requestSort = (key) => {
+    let direction = 'desc';
+    if (sortConfig.key === key && sortConfig.direction === 'desc') { direction = 'asc'; } setSortConfig({ key, direction });
+  };
   const handleEdit = (donHang) => { setEditingDonHang({ ...donHang }); };
   const handleCancelEdit = () => { setEditingDonHang(null); };
-  const handleUpdate = async () => { if (!editingDonHang) return;
-  if (!editingDonHang.koc_cccd || editingDonHang.koc_cccd.length !== 12 || !/^\d{12}$/.test(editingDonHang.koc_cccd)) { alert('Vui lòng nhập CCCD đủ 12 chữ số.'); return;
-  } const updatePayload = { koc_ho_ten: editingDonHang.koc_ho_ten, koc_id_kenh: editingDonHang.koc_id_kenh, koc_sdt: editingDonHang.koc_sdt, koc_dia_chi: editingDonHang.koc_dia_chi, koc_cccd: editingDonHang.koc_cccd, loai_ship: editingDonHang.loai_ship, trang_thai: editingDonHang.trang_thai, da_sua: true, };
-  const { error } = await supabase.from('donguis').update(updatePayload).eq('id', editingDonHang.id); if (error) { alert('Lỗi cập nhật đơn gửi: ' + error.message); return;
-  } await loadInitialData(); const editedOrderDate = new Date(editingDonHang.ngay_gui); if (editedOrderDate.getMonth() + 1 === parseInt(reportMonth, 10) && editedOrderDate.getFullYear() === parseInt(reportYear, 10)) { await handleGenerateReport();
-  } setEditingDonHang(null); };
-  const handleSelect = (orderId) => { setSelectedOrders(prevSelected => { const newSelected = new Set(prevSelected); if (newSelected.has(orderId)) { newSelected.delete(orderId); } else { newSelected.add(orderId); } return newSelected; });
+  const handleUpdate = async () => {
+    if (!editingDonHang) return;
+    if (!editingDonHang.koc_cccd || editingDonHang.koc_cccd.length !== 12 || !/^\d{12}$/.test(editingDonHang.koc_cccd)) {
+      alert('Vui lòng nhập CCCD đủ 12 chữ số.'); return;
+    } const updatePayload = { koc_ho_ten: editingDonHang.koc_ho_ten, koc_id_kenh: editingDonHang.koc_id_kenh, koc_sdt: editingDonHang.koc_sdt, koc_dia_chi: editingDonHang.koc_dia_chi, koc_cccd: editingDonHang.koc_cccd, loai_ship: editingDonHang.loai_ship, trang_thai: editingDonHang.trang_thai, da_sua: true, };
+    const { error } = await supabase.from('donguis').update(updatePayload).eq('id', editingDonHang.id); if (error) {
+      alert('Lỗi cập nhật đơn gửi: ' + error.message); return;
+    } await loadInitialData(); const editedOrderDate = new Date(editingDonHang.ngay_gui); if (editedOrderDate.getMonth() + 1 === parseInt(reportMonth, 10) && editedOrderDate.getFullYear() === parseInt(reportYear, 10)) {
+      await handleGenerateReport();
+    } setEditingDonHang(null);
   };
-  const handleSelectAll = (e) => { if (e.target.checked) { const allDisplayedIds = new Set(donHangs.map(dh => dh.id)); setSelectedOrders(allDisplayedIds);
-  } else { setSelectedOrders(new Set()); } };
-  const handleBulkUpdateStatus = async () => { if (selectedOrders.size === 0) { alert("Vui lòng chọn ít nhất một đơn hàng.");
-  return; } const idsToUpdate = Array.from(selectedOrders); const { error } = await supabase.from('donguis').update({ trang_thai: 'Đã đóng đơn' }).in('id', idsToUpdate);
-  if (error) { alert("Lỗi khi cập nhật hàng loạt: " + error.message);
-  } else { setDonHangs(prevState => prevState.map(donHang => idsToUpdate.includes(donHang.id) ? { ...donHang, trang_thai: 'Đã đóng đơn' } : donHang ));
-  setSelectedOrders(new Set()); alert(`Đã cập nhật trạng thái cho ${idsToUpdate.length} đơn hàng.`); } };
-  const handleExport = ({ data, headers, filename }) => { const orderedData = data.map(row => { const newRow = {}; headers.forEach(header => { if (header.key) { newRow[header.label] = row[header.key]; } }); return newRow; });
-  const worksheet = XLSX.utils.json_to_sheet(orderedData); const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1"); XLSX.writeFile(workbook, filename); };
-  const handleExportAll = async () => { setIsLoading(true); const hasProductFilter = !!filterBrand || !!filterSanPham; const ctRelation = hasProductFilter ?
-  'chitiettonguis!chitiettonguis_dongui_id_fkey_final!inner' : 'chitiettonguis!chitiettonguis_dongui_id_fkey_final'; const spRelation = hasProductFilter ? 'sanphams!inner' : 'sanphams';
-  let query = supabase.from('donguis').select(`id, ngay_gui, da_sua, loai_ship, original_loai_ship, trang_thai, original_trang_thai, koc_ho_ten, original_koc_ho_ten, koc_id_kenh, original_koc_id_kenh, original_koc_id_kenh, koc_sdt, original_koc_sdt, koc_dia_chi, original_koc_dia_chi, koc_cccd, original_koc_cccd, nhansu ( id, ten_nhansu ), ${ctRelation} ( id, so_luong, ${spRelation} ( id, ten_sanpham, barcode, gia_tien, brands ( id, ten_brand ) ) )`).order('ngay_gui', { ascending: false });
-  if (filterIdKenh) query = query.ilike('koc_id_kenh', `%${filterIdKenh.trim()}%`); if (filterSdt) query = query.ilike('koc_sdt', `%${filterSdt.trim()}%`); if (filterNhanSu) query = query.eq('nhansu_id', filterNhanSu);
-  if (filterLoaiShip) query = query.eq('loai_ship', filterLoaiShip); if (filterNgay) { const startDate = `${filterNgay}T00:00:00.000Z`; const endDate = `${filterNgay}T23:59:59.999Z`;
-  query = query.gte('ngay_gui', startDate).lte('ngay_gui', endDate); } if (filterEditedStatus !== 'all') { const isEdited = filterEditedStatus === 'edited';
-  query = query.eq('da_sua', isEdited); } if (filterBrand) query = query.eq('chitiettonguis.sanphams.brand_id', filterBrand); if (filterSanPham) query = query.eq('chitiettonguis.sanphams.id', filterSanPham);
-  const { data, error } = await query; if (error) { alert("Lỗi tải dữ liệu để xuất file: " + error.message);
-  setIsLoading(false); return; } let exportData = data || []; const finalExportData = exportData.flatMap((donHang, index) => { const baseData = { stt: index + 1, ngayGui: new Date(donHang.ngay_gui).toLocaleString('vi-VN'), tenKOC: donHang.koc_ho_ten, cccd: donHang.koc_cccd, idKenh: donHang.koc_id_kenh, sdt: donHang.koc_sdt, diaChi: donHang.koc_dia_chi, nhanSu: donHang.nhansu?.ten_nhansu, loaiShip: donHang.loai_ship, trangThai: donHang.trang_thai }; if (donHang.chitiettonguis.length === 0) { return [{ ...baseData, sanPham: 'N/A', soLuong: 0, brand: 'N/A', barcode: 'N/A' }]; } return donHang.chitiettonguis.map(ct => ({ ...baseData, sanPham: ct.sanphams?.ten_sanpham, soLuong: ct.so_luong, brand: ct.sanphams?.brands?.ten_brand, barcode: ct.sanphams?.barcode, })); });
-  const mainExportHeaders = [ { label: "STT", key: "stt"}, { label: "Ngày Gửi", key: "ngayGui" }, { label: "Tên KOC", key: "tenKOC" }, { label: "CCCD", key: "cccd" }, { label: "ID Kênh", key: "idKenh" }, { label: "SĐT", key: "sdt" }, { label: "Địa chỉ", key: "diaChi" }, { label: "Sản Phẩm", key: "sanPham" }, { label: "Số Lượng", key: "soLuong"}, { label: "Brand", key: "brand" }, { label: "Barcode", key: "barcode" }, { label: "Nhân Sự Gửi", key: "nhanSu" }, { label: "Loại Ship", key: "loaiShip" }, { label: "Trạng Thái", key: "trangThai" }, ];
-  handleExport({ data: finalExportData, headers: mainExportHeaders, filename: 'danh-sach-don-hang-FULL.xlsx' }); setIsLoading(false); };
-  
+  const handleSelect = (orderId) => {
+    setSelectedOrders(prevSelected => { const newSelected = new Set(prevSelected); if (newSelected.has(orderId)) { newSelected.delete(orderId); } else { newSelected.add(orderId); } return newSelected; });
+  };
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      const allDisplayedIds = new Set(donHangs.map(dh => dh.id)); setSelectedOrders(allDisplayedIds);
+    } else { setSelectedOrders(new Set()); }
+  };
+  const handleBulkUpdateStatus = async () => {
+    if (selectedOrders.size === 0) {
+      alert("Vui lòng chọn ít nhất một đơn hàng.");
+      return;
+    } const idsToUpdate = Array.from(selectedOrders); const { error } = await supabase.from('donguis').update({ trang_thai: 'Đã đóng đơn' }).in('id', idsToUpdate);
+    if (error) {
+      alert("Lỗi khi cập nhật hàng loạt: " + error.message);
+    } else {
+      setDonHangs(prevState => prevState.map(donHang => idsToUpdate.includes(donHang.id) ? { ...donHang, trang_thai: 'Đã đóng đơn' } : donHang));
+      setSelectedOrders(new Set()); alert(`Đã cập nhật trạng thái cho ${idsToUpdate.length} đơn hàng.`);
+    }
+  };
+  const handleExport = ({ data, headers, filename }) => {
+    const orderedData = data.map(row => { const newRow = {}; headers.forEach(header => { if (header.key) { newRow[header.label] = row[header.key]; } }); return newRow; });
+    const worksheet = XLSX.utils.json_to_sheet(orderedData); const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1"); XLSX.writeFile(workbook, filename);
+  };
+  const handleExportAll = async () => {
+    setIsLoading(true); const hasProductFilter = !!filterBrand || !!filterSanPham; const ctRelation = hasProductFilter ?
+      'chitiettonguis!chitiettonguis_dongui_id_fkey_final!inner' : 'chitiettonguis!chitiettonguis_dongui_id_fkey_final'; const spRelation = hasProductFilter ? 'sanphams!inner' : 'sanphams';
+    let query = supabase.from('donguis').select(`id, ngay_gui, da_sua, loai_ship, original_loai_ship, trang_thai, original_trang_thai, koc_ho_ten, original_koc_ho_ten, koc_id_kenh, original_koc_id_kenh, original_koc_id_kenh, koc_sdt, original_koc_sdt, koc_dia_chi, original_koc_dia_chi, koc_cccd, original_koc_cccd, nhansu ( id, ten_nhansu ), ${ctRelation} ( id, so_luong, ${spRelation} ( id, ten_sanpham, barcode, gia_tien, brands ( id, ten_brand ) ) )`).order('ngay_gui', { ascending: false });
+    if (filterIdKenh) query = query.ilike('koc_id_kenh', `%${filterIdKenh.trim()}%`); if (filterSdt) query = query.ilike('koc_sdt', `%${filterSdt.trim()}%`); if (filterNhanSu) query = query.eq('nhansu_id', filterNhanSu);
+    if (filterLoaiShip) query = query.eq('loai_ship', filterLoaiShip); if (filterNgay) {
+      const startDate = `${filterNgay}T00:00:00.000Z`; const endDate = `${filterNgay}T23:59:59.999Z`;
+      query = query.gte('ngay_gui', startDate).lte('ngay_gui', endDate);
+    } if (filterEditedStatus !== 'all') {
+      const isEdited = filterEditedStatus === 'edited';
+      query = query.eq('da_sua', isEdited);
+    } if (filterBrand) query = query.eq('chitiettonguis.sanphams.brand_id', filterBrand); if (filterSanPham) query = query.eq('chitiettonguis.sanphams.id', filterSanPham);
+    const { data, error } = await query; if (error) {
+      alert("Lỗi tải dữ liệu để xuất file: " + error.message);
+      setIsLoading(false); return;
+    } let exportData = data || []; const finalExportData = exportData.flatMap((donHang, index) => { const baseData = { stt: index + 1, ngayGui: new Date(donHang.ngay_gui).toLocaleString('vi-VN'), tenKOC: donHang.koc_ho_ten, cccd: donHang.koc_cccd, idKenh: donHang.koc_id_kenh, sdt: donHang.koc_sdt, diaChi: donHang.koc_dia_chi, nhanSu: donHang.nhansu?.ten_nhansu, loaiShip: donHang.loai_ship, trangThai: donHang.trang_thai }; if (donHang.chitiettonguis.length === 0) { return [{ ...baseData, sanPham: 'N/A', soLuong: 0, brand: 'N/A', barcode: 'N/A' }]; } return donHang.chitiettonguis.map(ct => ({ ...baseData, sanPham: ct.sanphams?.ten_sanpham, soLuong: ct.so_luong, brand: ct.sanphams?.brands?.ten_brand, barcode: ct.sanphams?.barcode, })); });
+    const mainExportHeaders = [{ label: "STT", key: "stt" }, { label: "Ngày Gửi", key: "ngayGui" }, { label: "Tên KOC", key: "tenKOC" }, { label: "CCCD", key: "cccd" }, { label: "ID Kênh", key: "idKenh" }, { label: "SĐT", key: "sdt" }, { label: "Địa chỉ", key: "diaChi" }, { label: "Sản Phẩm", key: "sanPham" }, { label: "Số Lượng", key: "soLuong" }, { label: "Brand", key: "brand" }, { label: "Barcode", key: "barcode" }, { label: "Nhân Sự Gửi", key: "nhanSu" }, { label: "Loại Ship", key: "loaiShip" }, { label: "Trạng Thái", key: "trangThai" },];
+    handleExport({ data: finalExportData, headers: mainExportHeaders, filename: 'danh-sach-don-hang-FULL.xlsx' }); setIsLoading(false);
+  };
+
   // --- HÀM XÓA ĐƠN HÀNG (BẤT CHẤP LỖI FOREIGN KEY) ---
   const handleDeleteOrder = async (donHang) => {
     let orderId = (typeof donHang === 'object' && donHang.id) ?
-    donHang.id : donHang;
+      donHang.id : donHang;
     if (window.confirm(`⚠️ CHỐT: Xóa vĩnh viễn đơn hàng #${orderId}?\n(Dữ liệu sẽ mất không thể khôi phục)`)) {
-        setIsLoading(true);
-    try {
-            await supabase.from('bookings').delete().ilike('ghi_chu', `%Đơn hàng #${orderId}%`);
-    const { error: errCT } = await supabase.from('chitiettonguis').delete().eq('dongui_id', orderId);
-            if (errCT) throw new Error("Lỗi xóa chi tiết (Con): " + errCT.message);
-    const { error: errDon } = await supabase.from('donguis').delete().eq('id', orderId);
-            if (errDon) throw new Error("Lỗi xóa đơn gốc (Cha): " + errDon.message);
-    alert("🗑️ Đã xóa thành công!");
-            setDonHangs(prev => prev.filter(item => item.id !== orderId));
-            setTotalOrderCount(prev => prev - 1);
-    } catch (err) { alert("❌ Lỗi: " + err.message); } finally { setIsLoading(false); }
+      setIsLoading(true);
+      try {
+        await supabase.from('bookings').delete().ilike('ghi_chu', `%Đơn hàng #${orderId}%`);
+        const { error: errCT } = await supabase.from('chitiettonguis').delete().eq('dongui_id', orderId);
+        if (errCT) throw new Error("Lỗi xóa chi tiết (Con): " + errCT.message);
+        const { error: errDon } = await supabase.from('donguis').delete().eq('id', orderId);
+        if (errDon) throw new Error("Lỗi xóa đơn gốc (Cha): " + errDon.message);
+        alert("🗑️ Đã xóa thành công!");
+        setDonHangs(prev => prev.filter(item => item.id !== orderId));
+        setTotalOrderCount(prev => prev - 1);
+      } catch (err) { alert("❌ Lỗi: " + err.message); } finally { setIsLoading(false); }
     }
   };
-  const handleContractFormChange = (e) => { const value = (e.target.type === 'number') ? parseFloat(e.target.value) || 0 : e.target.value;
-  setContractData({ ...contractData, [e.target.id]: value }); };
-  
+  const handleContractFormChange = (e) => {
+    const value = (e.target.type === 'number') ? parseFloat(e.target.value) || 0 : e.target.value;
+    setContractData({ ...contractData, [e.target.id]: value });
+  };
+
   // --- HỢP ĐỒNG FULL (KHÔNG RÚT GỌN) ---
   const handleGenerateContract = (event) => {
     event.preventDefault();
@@ -478,15 +554,15 @@ export const AppDataProvider = ({ children }) => {
     const thueTNCNChu = to_vietnamese_string(thueTNCN) + ' đồng';
     const thucTeThanhToanChu = to_vietnamese_string(thucTeThanhToan) + ' đồng chẵn';
     const formatDate = (dateString) => {
-        const dateObj = new Date(dateString);
-        const ngay = String(dateObj.getDate()).padStart(2, '0');
-        const thang = String(dateObj.getMonth() + 1).padStart(2, '0');
-        const nam = dateObj.getFullYear();
-    return { ngay, thang, nam, full: `ngày ${ngay} tháng ${thang} năm ${nam}` };
+      const dateObj = new Date(dateString);
+      const ngay = String(dateObj.getDate()).padStart(2, '0');
+      const thang = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const nam = dateObj.getFullYear();
+      return { ngay, thang, nam, full: `ngày ${ngay} tháng ${thang} năm ${nam}` };
     };
     const ngayKy = formatDate(data.ngayKy);
     const ngayThucHien = formatDate(data.ngayThucHien);
-    
+
     // NGUYÊN VĂN HTML DÀI NGOẰNG
     const contractTemplate = `
 <style>
@@ -781,7 +857,7 @@ export const AppDataProvider = ({ children }) => {
     setIsOutputVisible(true);
     setCopyMessage({ text: '', type: 'hidden' });
   };
-  
+
   const handleCopyToClipboard = () => {
     const tempElement = document.createElement('div');
     tempElement.innerHTML = contractHTML;
@@ -791,12 +867,15 @@ export const AppDataProvider = ({ children }) => {
     window.getSelection().removeAllRanges();
     window.getSelection().addRange(range);
     try {
-        const success = document.execCommand('copy');
-    if (success) { setCopyMessage({ text: 'Đã sao chép vào clipboard!', type: 'success' });
-    } 
-        else { setCopyMessage({ text: 'Lỗi! Trình duyệt chặn sao chép.', type: 'error' });
-    }
-    } catch (err) { setCopyMessage({ text: 'Lỗi! Không thể sao chép.', type: 'error' });
+      const success = document.execCommand('copy');
+      if (success) {
+        setCopyMessage({ text: 'Đã sao chép vào clipboard!', type: 'success' });
+      }
+      else {
+        setCopyMessage({ text: 'Lỗi! Trình duyệt chặn sao chép.', type: 'error' });
+      }
+    } catch (err) {
+      setCopyMessage({ text: 'Lỗi! Không thể sao chép.', type: 'error' });
     }
     window.getSelection().removeAllRanges();
     document.body.removeChild(tempElement);
@@ -822,23 +901,24 @@ export const AppDataProvider = ({ children }) => {
     if (filterAlDate) {
       const startDate = `${filterAlDate}T00:00:00.000Z`;
       const endDate = `${filterAlDate}T23:59:59.999Z`;
-    query = query.gte('ngay_air', startDate).lte('ngay_air', endDate);
+      query = query.gte('ngay_air', startDate).lte('ngay_air', endDate);
     }
 
     const { data, error, count } = await query
       .order('created_at', { ascending: false })
       .range(startIndex, endIndex);
-    if (error) { alert("Lỗi tải danh sách Link Air: " + error.message);
-    } 
+    if (error) {
+      alert("Lỗi tải danh sách Link Air: " + error.message);
+    }
     else { setAirLinks(data || []); setAirLinksTotalCount(count || 0); }
     setIsLoadingAirLinks(false);
   };
   const handleDeleteAirLink = async (linkId, linkUrl) => {
     if (window.confirm(`Bạn có chắc muốn XÓA link này không?\n\n${linkUrl}`)) {
       setIsLoadingAirLinks(true);
-    const { error } = await supabase.from('air_links').delete().eq('id', linkId);
+      const { error } = await supabase.from('air_links').delete().eq('id', linkId);
       if (error) alert("Lỗi khi xóa link: " + error.message);
-    else { alert("Đã xóa link thành công!"); loadAirLinks(); }
+      else { alert("Đã xóa link thành công!"); loadAirLinks(); }
       setIsLoadingAirLinks(false);
     }
   };
@@ -847,9 +927,10 @@ export const AppDataProvider = ({ children }) => {
     setIsAirReportLoading(true);
     setAirReportData({ reportRows: [], brandHeaders: [] });
     const { data, error } = await supabase.rpc('generate_air_links_report', { target_month: airReportMonth, target_year: airReportYear });
-    if (error) { alert("Lỗi tải báo cáo Air Links: " + error.message); setIsAirReportLoading(false); return;
+    if (error) {
+      alert("Lỗi tải báo cáo Air Links: " + error.message); setIsAirReportLoading(false); return;
     }
-    
+
     const brandSet = new Set();
     const reportRows = data.map(row => {
       const brandCounts = row.brand_counts_air || {};
@@ -861,17 +942,19 @@ export const AppDataProvider = ({ children }) => {
     setIsAirReportLoading(false);
   };
 
-  const requestAirSort = (key) => { let direction = 'desc';
-  if (airSortConfig.key === key && airSortConfig.direction === 'desc') { direction = 'asc'; } setAirSortConfig({ key, direction }); };
-  
+  const requestAirSort = (key) => {
+    let direction = 'desc';
+    if (airSortConfig.key === key && airSortConfig.direction === 'desc') { direction = 'asc'; } setAirSortConfig({ key, direction });
+  };
+
   // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
   // [MỚI] TẢI DỮ LIỆU BOOKING - (Lấy từ bảng bookings để hiện đúng 705 đơn)
   // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
   const loadBookingList = async () => {
-      // Chỉ lấy các cột cần thiết, không join để tránh lỗi
-      const { data, error } = await supabase
-        .from('bookings')
-        .select(`
+    // Chỉ lấy các cột cần thiết, không join để tránh lỗi
+    const { data, error } = await supabase
+      .from('bookings')
+      .select(`
             id, 
             created_at,
             ngay_booking,
@@ -880,12 +963,12 @@ export const AppDataProvider = ({ children }) => {
             nhansu_id,
             status
         `);
-      
-      if (error) console.error("Lỗi tải booking list:", error);
-      else setBookingList(data || []);
+
+    if (error) console.error("Lỗi tải booking list:", error);
+    else setBookingList(data || []);
   };
   // Tải dữ liệu ngay khi App chạy
-  useEffect(() => { loadBookingList(); }, []); 
+  useEffect(() => { loadBookingList(); }, []);
 
   // =================================================================
   // USE EFFECT (Tác Vụ)
@@ -903,8 +986,18 @@ export const AppDataProvider = ({ children }) => {
   useEffect(() => { if (currentPage !== 1) { setCurrentPage(1); } }, [filterIdKenh, filterSdt, filterNhanSu, filterNgay, filterLoaiShip, filterEditedStatus, filterBrand, filterSanPham]);
   useEffect(() => { loadSanPhamsByBrand(selectedBrand); setProductSearchTerm(''); }, [selectedBrand]);
   useEffect(() => { loadAirLinks(); }, [airLinksCurrentPage, filterAlKenh, filterAlBrand, filterAlNhanSu, filterAlDate]);
+
+  // [FIX] Load products for List Filter separately from Form
+  useEffect(() => {
+    const fetchFilterProducts = async () => {
+      if (!filterBrand) { setFilterSanPhams([]); return; }
+      const { data } = await supabase.from('sanphams').select('id, ten_sanpham, brand_id').eq('brand_id', filterBrand);
+      setFilterSanPhams(data || []);
+    };
+    fetchFilterProducts();
+  }, [filterBrand]);
   useEffect(() => { if (airLinksCurrentPage !== 1) { setAirLinksCurrentPage(1); } }, [filterAlKenh, filterAlBrand, filterAlNhanSu, filterAlDate]);
-  
+
   // =================================================================
   // USE MEMO (Tính toán)
   // =================================================================
@@ -917,7 +1010,7 @@ export const AppDataProvider = ({ children }) => {
         let bValue = b[sortConfig.key];
         if (reportData.brandHeaders.includes(sortConfig.key)) {
           aValue = a.brand_counts[sortConfig.key] || 0;
-      
+
           bValue = b.brand_counts[sortConfig.key] || 0;
         }
         aValue = Number(aValue) || 0;
@@ -926,9 +1019,9 @@ export const AppDataProvider = ({ children }) => {
         if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
         return 0;
       });
- 
-   }
-   
+
+    }
+
     return sortableItems;
   }, [reportData.reportRows, sortConfig, reportData.brandHeaders]);
   const totalsRow = useMemo(() => {
@@ -940,9 +1033,9 @@ export const AppDataProvider = ({ children }) => {
       acc.chi_phi_tong += Number(row.chi_phi_tong) || 0;
       reportData.brandHeaders.forEach(brand => { acc.brand_counts[brand] += (Number(row.brand_counts[brand]) || 0); });
       return acc;
-  
+
     }, initialTotals);
-    
+
     totals.aov_don_order = totals.sl_order > 0 ? (totals.chi_phi_tong / totals.sl_order) : 0;
     return totals;
   }, [reportData.reportRows, reportData.brandHeaders]);
@@ -956,7 +1049,7 @@ export const AppDataProvider = ({ children }) => {
         if (airReportData.brandHeaders.includes(airSortConfig.key)) {
           aValue = a.brand_counts_air[airSortConfig.key] || 0;
           bValue = b.brand_counts_air[airSortConfig.key] || 0;
-    
+
         }
         aValue = Number(aValue) || 0;
         bValue = Number(bValue) || 0;
@@ -978,7 +1071,7 @@ export const AppDataProvider = ({ children }) => {
       return acc;
     }, initialTotals);
     return totals;
- 
+
   }, [airReportData.reportRows, airReportData.brandHeaders]);
 
   // =================================================================
@@ -987,7 +1080,7 @@ export const AppDataProvider = ({ children }) => {
   const value = {
     // State chung
     brands, nhanSus, sanPhams, filterSanPhams,
-    
+
     // State & Setters Tab Order
     isLoading, setIsLoading,
     hoTen, setHoTen,
@@ -999,7 +1092,7 @@ export const AppDataProvider = ({ children }) => {
     selectedSanPhams, setSelectedSanPhams,
     selectedNhanSu, setSelectedNhanSu,
     loaiShip, setLoaiShip,
-   
+
     donHangs, setDonHangs,
     selectedOrders, setSelectedOrders,
     currentPage, setCurrentPage,
@@ -1019,29 +1112,29 @@ export const AppDataProvider = ({ children }) => {
     isSummarizing, setIsSummarizing,
     reportMonth, setReportMonth,
     reportYear, setReportYear,
-    
+
     reportData, setReportData,
-    
+
     isReportLoading, setIsReportLoading,
     sortConfig, setSortConfig,
     editingDonHang, setEditingDonHang,
     isPastDeadlineForNewOrders,
     columnWidths, setColumnWidths,
-    
+
     // Logic Tab Order
-    handleResize, loadInitialData, loadSanPhamsByBrand, handleQuantityChange, handleSubmit, handleIdKenhBlur, 
-    clearFilters, handleGetSummary, handleGenerateReport, requestSort, handleEdit, handleCancelEdit, 
+    handleResize, loadInitialData, loadSanPhamsByBrand, handleQuantityChange, handleSubmit, handleIdKenhBlur,
+    clearFilters, handleGetSummary, handleGenerateReport, requestSort, handleEdit, handleCancelEdit,
     handleUpdate, handleSelect, handleSelectAll, handleBulkUpdateStatus, handleExport, handleExportAll,
-    
+
     // Values đã tính (Memo)
     sortedReportRows, totalsRow, totalPages: Math.ceil(totalOrderCount / ORDERS_PER_PAGE),
 
     // State & Setters Tab Contract
- 
+
     contractData, setContractData, contractHTML, setContractHTML,
-   
+
     isOutputVisible, setIsOutputVisible, copyMessage, setCopyMessage,
-    
+
     // Logic Tab Contract
     handleContractFormChange, handleGenerateContract, handleCopyToClipboard,
 
@@ -1057,7 +1150,7 @@ export const AppDataProvider = ({ children }) => {
 
     // --- LOGIC MỚI CHO BÁO CÁO AIR LINKS ---
     airReportMonth, setAirReportMonth, airReportYear, setAirReportYear,
- 
+
     airReportData, setAirReportData, isAirReportLoading, setIsAirReportLoading,
     airSortConfig, setAirSortConfig, handleGenerateAirLinksReport, requestAirSort,
     sortedAirReportRows, totalsRowAirReport,
@@ -1066,11 +1159,11 @@ export const AppDataProvider = ({ children }) => {
     user, handleLogin, handleLogout, isLoggingIn, loginError,
 
     // --- HÀM XÓA ĐÃ UPDATE ---
-    handleDeleteOrder, 
-    
+    handleDeleteOrder,
+
     // Placeholder (Nếu chưa dùng tới thì để trống để tránh lỗi)
-    savedContracts, loadSavedContracts: () => {}, addContractLink: () => {}, deleteContractLink: () => {}, isLoadingContracts,
-    
+    savedContracts, loadSavedContracts: () => { }, addContractLink: () => { }, deleteContractLink: () => { }, isLoadingContracts,
+
     // --- [NEW EXPORTS] ---
     chartNhanSu, setChartNhanSu, chartData, isChartLoading,
     // [MỚI] Export Booking List cho Dashboard dùng

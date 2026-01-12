@@ -3,276 +3,627 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import { supabase } from '../supabaseClient';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, LabelList, Legend } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, LabelList, Legend, Label } from 'recharts';
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#d0ed57', '#a4de6c', '#d0ed57'];
+const COLORS = ['#FF6600', '#10B981', '#F59E0B', '#3B82F6', '#8B5CF6', '#EC4899', '#6366F1'];
+const ITEMS_PER_PAGE = 10;
 
-const DashboardTab = () => {
-  const { brands, nhanSus, airReportMonth, setAirReportMonth, airReportYear, setAirReportYear } = useAppData();
+// --- HELPER COMPONENT: SEARCHABLE DROPDOWN (MULTI-SELECT SUPPORT) ---
+const SearchableDropdown = ({ options, value, onChange, placeholder, style, isMulti = false, showSearch = true }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    const wrapperRef = React.useRef(null);
 
-  // STATE
-  const [rawBookings, setRawBookings] = useState([]);
-  const [rawAirLinks, setRawAirLinks] = useState([]);
-  const [loading, setLoading] = useState(false);
-  
-  // FILTER
-  const [filterBrand, setFilterBrand] = useState('');
-  const [filterNhanSu, setFilterNhanSu] = useState(''); 
+    // Close when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
-  // LOAD DATA
-  useEffect(() => {
-    const fetchData = async () => {
-        setLoading(true);
-        const { data: bookingData } = await supabase.from('bookings').select('*');
-        if (bookingData) setRawBookings(bookingData);
+    const filteredOptions = options.filter(opt =>
+        opt.label.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
-        const { data: airData } = await supabase.from('air_links').select('*');
-        if (airData) setRawAirLinks(airData);
-        setLoading(false);
+    const handleSelect = (selectedValue) => {
+        if (isMulti) {
+            const newValue = value.includes(selectedValue)
+                ? value.filter(v => v !== selectedValue)
+                : [...value, selectedValue];
+            onChange(newValue);
+        } else {
+            onChange(selectedValue);
+            setIsOpen(false);
+            setSearchTerm('');
+        }
     };
-    fetchData();
-  }, []);
 
-  // --- HELPER FORMAT ---
-  const getBrandName = (id) => brands.find(b => String(b.id) === String(id))?.ten_brand || 'Khác';
-  const getNhanSuName = (id) => nhanSus.find(n => String(n.id) === String(id))?.ten_nhansu || 'Khác';
-  const formatMoney = (val) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
-  const formatNumber = (val) => new Intl.NumberFormat('vi-VN').format(val);
-  
-  // Format tiền rút gọn (10.2tr)
-  const formatMoneyShort = (val) => {
-    if (!val) return '0';
-    if (val >= 1000000000) return (val / 1000000000).toFixed(1).replace('.', ',') + ' tỷ';
-    if (val >= 1000000) return (val / 1000000).toFixed(1).replace('.', ',') + 'tr';
-    return new Intl.NumberFormat('vi-VN').format(val);
-  };
-
-  // --- HÀM LỌC "NỒI ĐỒNG CỐI ĐÁ" (FIX LỆCH 500K) ---
-  // Không dùng new Date() nữa vì dễ lệch múi giờ.
-  // Dùng so sánh chuỗi (String) để khớp 100% với dữ liệu gốc.
-  const filterData = (data, dateField) => {
-      return data.filter(item => {
-          // Lấy chuỗi ngày, ví dụ: "2025-12-05T..." hoặc "2025-12-05"
-          const dateStr = item[dateField] || item.created_at; 
-          if (!dateStr) return false;
-
-          // Tạo chuỗi "YYYY-MM" cần tìm. Ví dụ: "2025-12"
-          // padStart(2, '0') để đảm bảo tháng 1 là "01"
-          const targetString = `${airReportYear}-${String(airReportMonth).padStart(2, '0')}`;
-
-          // Kiểm tra xem ngày của item có BẮT ĐẦU bằng chuỗi đó không
-          // Ví dụ: "2025-12-05" bắt đầu bằng "2025-12" -> ĐÚNG
-          if (!dateStr.startsWith(targetString)) return false;
-
-          // Các bộ lọc khác (Brand, Nhân sự)
-          if (filterBrand && String(item.brand_id) !== String(filterBrand)) return false;
-          if (filterNhanSu && String(item.nhansu_id) !== String(filterNhanSu)) return false;
-          
-          return true;
-      });
-  };
-
-  const filteredBookings = useMemo(() => filterData(rawBookings, 'ngay_gui_don'), [rawBookings, airReportMonth, airReportYear, filterBrand, filterNhanSu]);
-  const filteredAirLinks = useMemo(() => filterData(rawAirLinks, 'ngay_air'), [rawAirLinks, airReportMonth, airReportYear, filterBrand, filterNhanSu]);
-
-  // --- CHART DATA ---
-  const chart1Data = useMemo(() => {
-      const map = {};
-      filteredAirLinks.forEach(i => { const k = i.san_pham || 'SP Khác'; map[k] = (map[k] || 0) + 1; });
-      return Object.keys(map).map(k => ({ name: k, value: map[k] })).sort((a,b) => b.value - a.value);
-  }, [filteredAirLinks]);
-
-  const chart2Data = useMemo(() => {
-      const map = {};
-      filteredBookings.forEach(i => { const k = getBrandName(i.brand_id); map[k] = (map[k] || 0) + 1; });
-      return Object.keys(map).map(k => ({ name: k, value: map[k] })).sort((a,b) => b.value - a.value);
-  }, [filteredBookings, brands]);
-
-  const chart3Data = useMemo(() => {
-      const map = {};
-      filteredAirLinks.forEach(i => { const k = getNhanSuName(i.nhansu_id); map[k] = (map[k] || 0) + 1; });
-      return Object.keys(map).map(k => ({ name: k, value: map[k] })).sort((a,b) => b.value - a.value);
-  }, [filteredAirLinks, nhanSus]);
-
-  const chart5Data = useMemo(() => {
-      const map = {};
-      filteredAirLinks.forEach(i => { const k = getBrandName(i.brand_id); map[k] = (map[k] || 0) + parseFloat(i.cast || 0); });
-      return Object.keys(map).map(k => ({ name: k, value: map[k] })).filter(i => i.value > 0).sort((a,b) => b.value - a.value);
-  }, [filteredAirLinks, brands]);
-
-  const chart6Data = useMemo(() => {
-      let tCast = 0;
-      let tVid = filteredAirLinks.length;
-      filteredAirLinks.forEach(i => tCast += parseFloat(i.cast || 0));
-      const avg = tVid > 0 ? tCast / tVid : 0;
-      return [{ name: 'DỰ KIẾN', value: 200000, fill: '#FFDDC1' }, { name: 'THỰC TẾ', value: avg, fill: '#FF6B6B' }];
-  }, [filteredAirLinks]);
-
-
-  // --- CHART BOX (ĐÃ CĂN TÂM + VIỀN BÌNH THƯỜNG + CÓ CHÚ THÍCH) ---
-  const ChartBox = ({ data, title, unit, isMoney }) => {
-    const total = data.reduce((s, i) => s + i.value, 0);
-    const displayTotal = isMoney ? formatMoneyShort(total) : formatNumber(total);
+    const getDisplayValue = () => {
+        if (isMulti) {
+            if (!value || value.length === 0) return placeholder;
+            if (value.length === 1) return value[0];
+            return `${value.length} sản phẩm đã chọn`;
+        }
+        return value ? options.find(o => o.value === value)?.label || value : placeholder;
+    };
 
     return (
-        <div className="christmas-card" style={{ height: '450px', backgroundColor: '#fff', borderRadius: '16px', padding: '20px', boxShadow: '0 8px 25px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column' }}>
-            <h4 style={{ textAlign: 'center', color: '#165B33', marginBottom: '15px', fontSize: '15px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{title}</h4>
-            
-            <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
-                {/* SỐ TỔNG CĂN GIỮA TUYỆT ĐỐI */}
-                {/* top: 45% để khớp với tâm biểu đồ Pie */}
-                <div style={{ 
-                    position: 'absolute', 
-                    top: '45%', 
-                    left: '50%', 
-                    transform: 'translate(-50%, -50%)', 
-                    display: 'flex', 
-                    flexDirection: 'column', 
-                    alignItems: 'center', 
-                    justifyContent: 'center', 
-                    pointerEvents: 'none', 
-                    zIndex: 0 
+        <div ref={wrapperRef} style={{ position: 'relative', ...style, padding: 0, border: 'none', background: 'transparent' }}>
+            {/* TRIGGER AREA */}
+            <div
+                onClick={() => setIsOpen(!isOpen)}
+                style={{
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #d1d5db',
+                    backgroundColor: '#fff',
+                    color: (isMulti ? value.length > 0 : value) ? '#374151' : '#9CA3AF',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    minHeight: '38px' // Match other inputs
+                }}
+            >
+                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px', fontWeight: (isMulti ? value.length > 0 : value) ? '600' : '400' }}>
+                    {getDisplayValue()}
+                </span>
+                <span style={{ fontSize: '10px', color: '#666' }}>▼</span>
+            </div>
+
+            {/* DROPDOWN MENU */}
+            {isOpen && (
+                <div style={{
+                    position: 'absolute',
+                    top: '105%',
+                    left: 0,
+                    width: '100%',
+                    minWidth: '250px',
+                    maxHeight: '300px',
+                    overflowY: 'auto',
+                    backgroundColor: '#fff',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 15px rgba(0,0,0,0.15)',
+                    border: '1px solid #e5e7eb',
+                    zIndex: 1000,
+                    animation: 'fadeIn 0.2s'
                 }}>
-                    <span style={{ fontSize: '28px', fontWeight: '800', color: '#333', lineHeight: 1 }}>{displayTotal}</span>
-                    <span style={{ fontSize: '13px', color: '#888', marginTop: '5px' }}>{unit}</span>
+                    {showSearch && (
+                        <div style={{ position: 'sticky', top: 0, padding: '8px', backgroundColor: '#fff', borderBottom: '1px solid #f3f4f6' }}>
+                            <input
+                                type="text"
+                                placeholder="🔍 Tìm..."
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                                autoFocus
+                                style={{
+                                    width: '100%',
+                                    padding: '6px 10px',
+                                    borderRadius: '6px',
+                                    border: '1px solid #ddd',
+                                    fontSize: '13px',
+                                    outline: 'none'
+                                }}
+                            />
+                        </div>
+                    )}
+                    <div>
+                        {!isMulti && (
+                            <div
+                                onClick={() => handleSelect('')}
+                                style={{
+                                    padding: '8px 12px',
+                                    cursor: 'pointer',
+                                    fontSize: '14px',
+                                    color: '#666',
+                                    borderBottom: '1px dashed #eee',
+                                    fontStyle: 'italic'
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                                onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                            >
+                                -- {placeholder} --
+                            </div>
+                        )}
+                        {filteredOptions.length > 0 ? filteredOptions.map(opt => {
+                            const isSelected = isMulti ? value.includes(opt.value) : value === opt.value;
+                            return (
+                                <div
+                                    key={opt.value}
+                                    onClick={() => handleSelect(opt.value)}
+                                    style={{
+                                        padding: '8px 4px', // Tighter left padding for alignment
+                                        cursor: 'pointer',
+                                        fontSize: '14px',
+                                        color: isSelected ? '#FF6600' : '#374151',
+                                        backgroundColor: isSelected ? '#FFF7ED' : 'transparent',
+                                        fontWeight: isSelected ? '600' : '400',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'flex-start',
+                                        gap: '8px'
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#FFF7ED'}
+                                    onMouseLeave={e => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                >
+                                    {isMulti && (
+                                        <input
+                                            type="checkbox"
+                                            checked={isSelected}
+                                            onChange={() => { }}
+                                            style={{ cursor: 'pointer', accentColor: '#FF6600' }}
+                                        />
+                                    )}
+                                    {opt.label}
+                                </div>
+                            );
+                        }) : (
+                            <div style={{ padding: '10px', textAlign: 'center', color: '#999', fontSize: '13px' }}>
+                                Không tìm thấy
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const DashboardTab = () => {
+    const { brands, nhanSus, airReportMonth, setAirReportMonth, airReportYear, setAirReportYear } = useAppData();
+
+    // STATE
+    const [rawBookings, setRawBookings] = useState([]);
+    const [rawAirLinks, setRawAirLinks] = useState([]);
+    const [dashboardSanPhams, setDashboardSanPhams] = useState([]); // [FIX] Fetch riêng cho Dashboard
+    const [loading, setLoading] = useState(false);
+
+    // PAGINATION STATE
+    const [bookingPage, setBookingPage] = useState(1);
+    const [airPage, setAirPage] = useState(1);
+
+    // FILTER
+    const [filterBrand, setFilterBrand] = useState('');
+    const [filterSanPham, setFilterSanPham] = useState('');
+    const [filterNhanSu, setFilterNhanSu] = useState('');
+
+    // RESET PAGINATION WHEN FILTER CHANGES
+    useEffect(() => {
+        setBookingPage(1);
+        setAirPage(1);
+    }, [airReportMonth, airReportYear, filterBrand, filterSanPham, filterNhanSu]);
+
+    // LOAD DATA
+    useEffect(() => {
+        const fetchData = async () => {
+            setLoading(true);
+
+            // Calculate Date Range for Server-Side Filtering
+            // This prevents fetching 11k+ rows and hitting the 1000 limit (which hides recent data).
+            const startDate = `${airReportYear}-${String(airReportMonth).padStart(2, '0')}-01T00:00:00.000Z`;
+            // Calculate end date (last day of month)
+            const nextMonth = airReportMonth === 12 ? 1 : airReportMonth + 1;
+            const nextYear = airReportMonth === 12 ? airReportYear + 1 : airReportYear;
+            const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01T00:00:00.000Z`;
+
+            // [REFACTOR] Fetch from 'chitiettonguis' with Server-Side Filtering
+            const { data: detailData, error } = await supabase
+                .from('chitiettonguis')
+                .select(`
+                    id,
+                    donguis!inner ( ngay_gui, koc_ho_ten, nhansu_id, koc_id_kenh ),
+                    sanphams ( ten_sanpham, brand_id )
+                `)
+                .gte('donguis.ngay_gui', startDate)
+                .lt('donguis.ngay_gui', endDate)
+                .limit(5000); // Safety limit, but monthly data should fit
+
+            if (detailData) {
+                const mappedBookings = detailData.map(item => ({
+                    id: item.id,
+                    ngay_gui_don: item.donguis?.ngay_gui,
+                    created_at: item.donguis?.ngay_gui, // Fallback to ngay_gui
+                    ho_ten: item.donguis?.koc_ho_ten,
+                    id_kenh: item.donguis?.koc_id_kenh,
+                    nhansu_id: item.donguis?.nhansu_id,
+                    brand_id: item.sanphams?.brand_id,
+                    san_pham: item.sanphams?.ten_sanpham
+                }));
+                setRawBookings(mappedBookings);
+            } else if (error) {
+                console.error("Error fetching dashboard data:", error);
+            }
+
+            // AirLinks doesn't support easy date filtering on 'ngay_air' (text field?). 
+            // If needed, we can optimize this too, but for now kept client-side filtering for AirLinks or simple select.
+            const { data: airData } = await supabase.from('air_links').select('*');
+            if (airData) setRawAirLinks(airData);
+
+            // [FIX] Load danh sách sản phẩm để lọc
+            const { data: spData } = await supabase.from('sanphams').select('id, ten_sanpham, brand_id');
+            if (spData) setDashboardSanPhams(spData);
+
+            setLoading(false);
+        };
+        fetchData();
+    }, [airReportMonth, airReportYear]); // Re-fetch when month changes
+
+    // --- HELPER FORMAT ---
+    const getBrandName = (id) => brands.find(b => String(b.id) === String(id))?.ten_brand || 'Khác';
+    const getNhanSuName = (id) => nhanSus.find(n => String(n.id) === String(id))?.ten_nhansu || 'Khác';
+    const formatMoney = (val) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
+    const formatNumber = (val) => new Intl.NumberFormat('vi-VN').format(val);
+
+    // Format tiền rút gọn (10.2tr)
+    const formatMoneyShort = (val) => {
+        if (!val) return '0';
+        if (val >= 1000000000) return (val / 1000000000).toFixed(1).replace('.', ',') + ' tỷ';
+        if (val >= 1000000) return (val / 1000000).toFixed(1).replace('.', ',') + 'tr';
+        return new Intl.NumberFormat('vi-VN').format(val);
+    };
+
+    // --- HÀM LỌC ---
+    // --- HÀM LỌC ---
+    const filterData = (data, dateField) => {
+        return data.filter(item => {
+            const dateStr = item[dateField] || item.created_at;
+            if (!dateStr) return false;
+            const targetString = `${airReportYear}-${String(airReportMonth).padStart(2, '0')}`;
+            if (!dateStr.startsWith(targetString)) return false;
+            if (filterBrand && String(item.brand_id) !== String(filterBrand)) return false;
+            if (filterSanPham && item.san_pham !== filterSanPham) return false;
+            if (filterNhanSu && String(item.nhansu_id) !== String(filterNhanSu)) return false;
+            return true;
+        });
+    };
+
+    const filteredBookings = useMemo(() => {
+        let data = filterData(rawBookings, 'ngay_gui_don');
+
+        // [FIX] Deduplicate logic: Group by [Date + KOC + Brand] to count as 1 Booking
+        // BUT if filtering by Product, we want to see exact counts (Orders), so SKIP deduplication.
+        // BUT if filtering by Product, we want to see exact counts (Orders), so SKIP deduplication.
+        if (filterSanPham) {
+            return data;
+        }
+
+        const uniqueMap = new Map();
+        data.forEach(item => {
+            const key = `${item.ngay_gui_don}_${item.ho_ten}_${item.brand_id}`;
+            if (!uniqueMap.has(key)) {
+                uniqueMap.set(key, item);
+            }
+        });
+        return Array.from(uniqueMap.values());
+    }, [rawBookings, airReportMonth, airReportYear, filterBrand, filterSanPham, filterNhanSu]);
+
+    const filteredAirLinks = useMemo(() => filterData(rawAirLinks, 'ngay_air'), [rawAirLinks, airReportMonth, airReportYear, filterBrand, filterSanPham, filterNhanSu]);
+
+    // PAGINATION LOGIC
+    const getPaginatedData = (data, page) => {
+        const startIndex = (page - 1) * ITEMS_PER_PAGE;
+        return data.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+    };
+
+    const totalBookingPages = Math.ceil(filteredBookings.length / ITEMS_PER_PAGE);
+    const totalAirPages = Math.ceil(filteredAirLinks.length / ITEMS_PER_PAGE);
+
+    // --- CHART DATA ---
+    const chart1Data = useMemo(() => {
+        const map = {};
+        // Chart 1 is Top Products (Air Links), distinct? No, products are distinct items.
+        filteredAirLinks.forEach(i => { const k = i.san_pham || 'SP Khác'; map[k] = (map[k] || 0) + 1; });
+        return Object.keys(map).map(k => ({ name: k, value: map[k] })).sort((a, b) => b.value - a.value);
+    }, [filteredAirLinks]);
+
+    const chart2Data = useMemo(() => {
+        const map = {};
+        filteredBookings.forEach(i => { const k = getBrandName(i.brand_id); map[k] = (map[k] || 0) + 1; });
+        return Object.keys(map).map(k => ({ name: k, value: map[k] })).sort((a, b) => b.value - a.value);
+    }, [filteredBookings, brands]);
+
+    const chart3Data = useMemo(() => {
+        const map = {};
+        filteredAirLinks.forEach(i => { const k = getNhanSuName(i.nhansu_id); map[k] = (map[k] || 0) + 1; });
+        return Object.keys(map).map(k => ({ name: k, value: map[k] })).sort((a, b) => b.value - a.value);
+    }, [filteredAirLinks, nhanSus]);
+
+    const chart5Data = useMemo(() => {
+        const map = {};
+        filteredAirLinks.forEach(i => { const k = getBrandName(i.brand_id); map[k] = (map[k] || 0) + parseFloat(i.cast || 0); });
+        return Object.keys(map).map(k => ({ name: k, value: map[k] })).filter(i => i.value > 0).sort((a, b) => b.value - a.value);
+    }, [filteredAirLinks, brands]);
+
+    const chart6Data = useMemo(() => {
+        let tCast = 0;
+        let tVid = filteredAirLinks.length;
+        filteredAirLinks.forEach(i => tCast += parseFloat(i.cast || 0));
+        const avg = tVid > 0 ? tCast / tVid : 0;
+        return [{ name: 'DỰ KIẾN', value: 200000, fill: '#FFDDC1' }, { name: 'THỰC TẾ', value: avg, fill: '#FF6B6B' }];
+    }, [filteredAirLinks]);
+
+
+    // --- CHART BOX - MIRINDA STYLE ---
+    const ChartBox = ({ data, title, unit, isMoney = false }) => {
+        // [ĐÃ SỬA] KHÔNG GỘP NHÓM "KHÁK" THEO YÊU CẦU
+        return (
+            <div className="mirinda-card" style={{ height: '500px', display: 'flex', flexDirection: 'column' }}>
+                <h4 style={{ textAlign: 'center', marginBottom: '10px' }}><span className="section-title">{title}</span></h4>
+                <div style={{ flex: 1, minHeight: 0 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                            <Pie
+                                data={data} // Dùng data gốc
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={85}
+                                outerRadius={115}
+                                paddingAngle={3}
+                                dataKey="value"
+                                stroke="none"
+                                cornerRadius={8}
+                            >
+                                {data.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                ))}
+                                {/* HIỆN TỔNG SỐ Ở GIỮA - DÙNG LABEL CHUẨN KHI PIE Ở GIỮA (50%) */}
+                                <Label
+                                    value={data.reduce((acc, cur) => acc + cur.value, 0)}
+                                    position="center"
+                                    fill="#000"
+                                    style={{ fontSize: '24px', fontWeight: '700', fontFamily: 'Inter', textAnchor: 'middle' }}
+                                />
+                            </Pie>
+
+                            <Tooltip formatter={(val) => isMoney ? formatMoney(val) : val + ' ' + unit} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} />
+                            <Legend layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: '12px', width: '100%', marginBottom: '10px' }} />
+                        </PieChart>
+                    </ResponsiveContainer>
+                </div>
+            </div >
+        );
+    };
+
+
+    // --- STYLE ---
+    const filterContainerStyle = {
+        marginBottom: '30px', padding: '20px', background: '#fff', borderRadius: '16px',
+        display: 'flex', alignItems: 'center', gap: '20px',
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.02)',
+        flexWrap: 'wrap'
+    };
+    const inputStyle = { padding: '8px 12px', borderRadius: '8px', border: '1px solid #d1d5db', backgroundColor: '#fff', color: '#374151', fontSize: '14px', outline: 'none', cursor: 'pointer' };
+    const labelStyle = { fontWeight: '600', color: '#374151', fontSize: '0.9rem', whiteSpace: 'nowrap' };
+
+    // Pagination Controls Component
+    const PaginationControls = ({ page, totalPages, setPage }) => (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: '20px', gap: '10px' }}>
+            <button
+                onClick={() => setPage(prev => Math.max(1, prev - 1))}
+                disabled={page === 1}
+                className="btn-pagination btn-pagination-text"
+            >
+                Prev
+            </button>
+            <span style={{ fontWeight: '500', color: '#374151', fontSize: '0.95rem', padding: '0 10px' }}>trang {page} / {totalPages || 1}</span>
+            <button
+                onClick={() => setPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={page === totalPages || totalPages === 0}
+                className="btn-pagination btn-pagination-text"
+            >
+                Next
+            </button>
+        </div>
+    );
+
+    return (
+        <div style={{ padding: '0 20px 40px 20px', maxWidth: '1600px', margin: '0 auto', fontFamily: 'Inter, sans-serif' }}>
+
+            {/* FILTER BAR */}
+            <div style={filterContainerStyle}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={labelStyle}>📅 Thời gian:</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <select value={airReportMonth} onChange={e => setAirReportMonth(e.target.value)} style={{ ...inputStyle, width: '130px' }}>
+                            {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>Tháng {i + 1}</option>)}
+                        </select>
+                        <input type="number" value={airReportYear} onChange={e => setAirReportYear(e.target.value)} style={{ ...inputStyle, width: '100px', textAlign: 'center' }} />
+                    </div>
                 </div>
 
-                <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                        {/* innerRadius=70: Viền mỏng vừa phải, đẹp */}
-                        {/* cy="45%": Đẩy biểu đồ lên để nhường chỗ cho Legend ở dưới */}
-                        <Pie 
-                            data={data} 
-                            cx="50%" 
-                            cy="45%" 
-                            innerRadius={70} 
-                            outerRadius={90} 
-                            paddingAngle={3} 
-                            dataKey="value"
-                            label={({ name, value, percent }) => `${name}: ${formatNumber(value)} (${(percent * 100).toFixed(0)}%)`}
-                            labelLine={true}
-                        >
-                            {data.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                        </Pie>
-                        <Tooltip formatter={(val) => isMoney ? formatMoney(val) : formatNumber(val)} contentStyle={{borderRadius:'8px', border:'none', boxShadow:'0 4px 12px rgba(0,0,0,0.15)'}} />
-                        
-                        {/* CHÚ THÍCH (LEGEND) NẰM DƯỚI */}
-                        <Legend iconType="circle" layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: '11px', paddingTop: '0px' }} />
-                    </PieChart>
-                </ResponsiveContainer>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, borderLeft: '2px solid #eee', paddingLeft: '15px' }}>
+                    <span style={labelStyle}>🛍️ Brand:</span>
+                    <select value={filterBrand} onChange={e => { setFilterBrand(e.target.value); setFilterSanPham(''); }} style={{ ...inputStyle, flex: 1 }}>
+                        <option value="">Tất cả Brand</option>
+                        {brands.map(b => <option key={b.id} value={b.id}>{b.ten_brand}</option>)}
+                    </select>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, borderLeft: '2px solid #eee', paddingLeft: '15px', position: 'relative', zIndex: 10 }}>
+                    <span style={labelStyle}>📦 Sản phẩm:</span>
+                    <SearchableDropdown
+                        showSearch={false}
+                        options={dashboardSanPhams
+                            .filter(sp => !filterBrand || String(sp.brand_id) === String(filterBrand))
+                            .map(sp => ({ value: sp.ten_sanpham, label: sp.ten_sanpham }))}
+                        value={filterSanPham}
+                        onChange={setFilterSanPham}
+                        placeholder="Tất cả Sản phẩm"
+                        style={{ ...inputStyle, flex: 1 }}
+                    />
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, borderLeft: '2px solid #eee', paddingLeft: '15px' }}>
+                    <span style={labelStyle}>👤 Nhân sự:</span>
+                    <select value={filterNhanSu} onChange={e => setFilterNhanSu(e.target.value)} style={{ ...inputStyle, flex: 1 }}>
+                        <option value="">Tất cả Nhân sự</option>
+                        {nhanSus.map(n => <option key={n.id} value={n.id}>{n.ten_nhansu}</option>)}
+                    </select>
+                </div>
+
+                {loading && <span style={{ color: '#165B33', fontWeight: 'bold', fontSize: '13px', marginLeft: 'auto' }}>⏳ Đang tải...</span>}
+            </div>
+
+            {/* HEADER */}
+            <h1 className="page-header">
+                TỔNG QUAN HIỆU SUẤT (Tháng {airReportMonth}/{airReportYear})
+            </h1>
+
+            {/* HÀNG 1 */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '25px', marginBottom: '25px' }}>
+                <ChartBox data={chart1Data} title="🔥 Top Sản Phẩm (Air Links)" unit="Air" />
+                <ChartBox data={chart2Data} title="🏷️ Tỷ trọng Brand (Booking)" unit="Job" />
+                <ChartBox data={chart3Data} title="🏆 Top Nhân Sự (Air Links)" unit="Link" />
+            </div>
+
+            {/* HÀNG 2 */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '25px' }}>
+                <div className="mirinda-card" style={{ height: '450px', display: 'flex', flexDirection: 'column' }}>
+                    <h4 style={{ textAlign: 'center', marginBottom: '15px' }}><span className="section-title">💸 Ngân Sách Đã Chi</span></h4>
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
+                        <div style={{ fontSize: '2.5rem', fontWeight: '900', color: '#FF6600', textShadow: '2px 2px 0 #000' }}>
+                            {formatMoney(chart5Data.reduce((acc, cur) => acc + cur.value, 0))}
+                        </div>
+                        <div style={{ marginTop: '20px', width: '100%', height: '300px' }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={chart5Data} margin={{ top: 5, right: 5, left: 5, bottom: 50 }}>
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold', width: 50 }} interval={0} />
+                                    <Tooltip />
+                                    <Bar dataKey="value" fill="#00CC00" radius={[10, 10, 0, 0]}>
+                                        <LabelList dataKey="value" position="top" formatter={(val) => formatMoney(val)} style={{ fontWeight: '900', fontSize: '12px', fill: '#000' }} />
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mirinda-card" style={{ height: '450px', display: 'flex', flexDirection: 'column', gridColumn: 'span 2' }}>
+                    <h4 style={{ textAlign: 'center', marginBottom: '15px' }}><span className="section-title">💰 Chi Phí Trung Bình / 1 Video</span></h4>
+                    <div style={{ flex: 1 }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={chart6Data} barCategoryGap="20%" margin={{ top: 30, right: 10, left: 10, bottom: 0 }}>
+                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 'bold', dy: 10 }} />
+                                <Tooltip formatter={(value) => formatMoney(value)} cursor={{ fill: '#eee' }} contentStyle={{ borderRadius: '12px', border: '3px solid #000', boxShadow: '4px 4px 0 #000' }} />
+                                <Bar dataKey="value" radius={[8, 8, 0, 0]}>
+                                    {chart6Data.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.value > 2000000 ? '#FF6600' : '#00CC00'} stroke="#000" strokeWidth={2} />)}
+                                    <LabelList dataKey="value" position="top" formatter={(val) => formatMoney(val)} style={{ fontWeight: '900', fontSize: '12px', fill: '#000' }} />
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            </div>
+
+            {/* BOOKING TABLE */}
+            <div className="mirinda-card" style={{ marginTop: '40px' }}>
+                <div style={{ marginBottom: '20px', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
+                    <span className="section-title">📄 Danh Sách Booking Chi Tiết</span>
+                    <span style={{ fontSize: '1.2rem', fontWeight: '900', marginLeft: '15px' }}>({filteredBookings.length} đơn)</span>
+                </div>
+
+                <div style={{ overflowX: 'auto', borderRadius: '10px', border: '1px solid #eee' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead style={{ backgroundColor: '#fff7ed', color: '#ea580c', textTransform: 'uppercase', fontSize: '0.85rem' }}>
+                            <tr>
+                                <th style={{ padding: '12px 15px', textAlign: 'left' }}>Ngày gửi</th>
+                                <th style={{ padding: '12px 15px', textAlign: 'left' }}>KOC</th>
+                                <th style={{ padding: '12px 15px', textAlign: 'left' }}>Brand</th>
+                                <th style={{ padding: '12px 15px', textAlign: 'left' }}>Nhân sự</th>
+                                <th style={{ padding: '12px 15px', textAlign: 'center' }}>Trạng thái</th>
+                                <th style={{ padding: '12px 15px', textAlign: 'center' }}>Chi phí</th>
+
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredBookings.length === 0 ? (
+                                <tr><td colSpan="6" style={{ padding: '20px', textAlign: 'center', color: '#888', fontStyle: 'italic' }}>Không có booking nào trong tháng này.</td></tr>
+                            ) : (
+                                getPaginatedData(filteredBookings, bookingPage).map((item, idx) => (
+                                    <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
+                                        <td style={{ padding: '12px 15px' }}>{item.ngay_gui_don ? new Date(item.ngay_gui_don).toLocaleDateString('vi-VN') : '-'}</td>
+                                        <td style={{ padding: '12px 15px', fontWeight: 'bold' }}>{item.id_kenh}</td>
+                                        <td style={{ padding: '12px 15px' }}>
+                                            <span className="badge" style={{ backgroundColor: '#e3f2fd', color: '#1565c0', padding: '4px 8px', borderRadius: '4px', fontSize: '0.85rem' }}>{getBrandName(item.brand_id)}</span>
+                                        </td>
+                                        <td style={{ padding: '12px 15px' }}>{getNhanSuName(item.nhansu_id)}</td>
+                                        <td style={{ padding: '12px 15px', textAlign: 'center' }}>
+                                            <span className="badge" style={{
+                                                backgroundColor: item.trang_thai === 'Đã đóng đơn' || item.status === 'done' ? '#00CC00' : '#FFCC00',
+                                                color: '#000',
+                                                padding: '6px 12px',
+                                            }}>
+                                                {item.status === 'done' ? 'Đã xong' : (item.trang_thai || 'Pending')}
+                                            </span>
+                                        </td>
+                                        <td style={{ padding: '12px 15px', textAlign: 'center', fontWeight: 'bold' }}>{formatMoneyShort(item.chi_phi_du_kien)}</td>
+
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+                <PaginationControls page={bookingPage} totalPages={totalBookingPages} setPage={setBookingPage} />
+            </div>
+
+            {/* AIR LINK TABLE */}
+            <div className="mirinda-card" style={{ marginTop: '40px' }}>
+                <div style={{ marginBottom: '20px', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
+                    <span className="section-title">📽️ Danh Sách Link Air Chi Tiết</span>
+                    <span style={{ fontSize: '1.2rem', fontWeight: '900', marginLeft: '15px' }}>({filteredAirLinks.length} link)</span>
+                </div>
+
+                <div style={{ overflowX: 'auto', borderRadius: '10px', border: '1px solid #eee' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead style={{ backgroundColor: '#fff7ed', color: '#ea580c', textTransform: 'uppercase', fontSize: '0.85rem' }}>
+                            <tr>
+                                <th style={{ padding: '12px 15px', textAlign: 'left' }}>Ngày Air</th>
+                                <th style={{ padding: '12px 15px', textAlign: 'left' }}>KOC</th>
+                                <th style={{ padding: '12px 15px', textAlign: 'left' }}>Brand / Sản phẩm</th>
+                                <th style={{ padding: '12px 15px', textAlign: 'left' }}>Nhân sự</th>
+                                <th style={{ padding: '12px 15px', textAlign: 'left' }}>Link Air</th>
+                                <th style={{ padding: '12px 15px', textAlign: 'center' }}>Cast (VNĐ)</th>
+                                <th style={{ padding: '12px 15px', textAlign: 'center' }}>Nền tảng</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredAirLinks.length > 0 ? (
+                                getPaginatedData(filteredAirLinks, airPage).map((item, idx) => (
+                                    <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
+                                        <td style={{ padding: '12px 15px' }}>{item.ngay_air ? new Date(item.ngay_air).toLocaleDateString('vi-VN') : '-'}</td>
+                                        <td style={{ padding: '12px 15px', fontWeight: 'bold' }}>{item.id_kenh}</td>
+                                        <td style={{ padding: '12px 15px' }}>
+                                            <div style={{ fontWeight: 'bold' }}>{getBrandName(item.brand_id)}</div>
+                                            <div style={{ fontSize: '12px', color: '#666' }}>{item.san_pham}</div>
+                                        </td>
+                                        <td style={{ padding: '12px 15px' }}>{getNhanSuName(item.nhansu_id)}</td>
+                                        <td style={{ padding: '12px 15px' }}>
+                                            <a href={item.link_air_koc} target="_blank" rel="noopener noreferrer" style={{ color: '#D42426', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 'bold' }}>
+                                                👀 Video
+                                            </a>
+                                        </td>
+                                        <td style={{ padding: '12px 15px', textAlign: 'center' }}>{formatMoneyShort(item.cast)}</td>
+                                        <td style={{ padding: '12px 15px', textAlign: 'center' }}>{item.cms_brand}</td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan="7" style={{ padding: '30px', textAlign: 'center', color: '#999', fontStyle: 'italic' }}>Không có dữ liệu link air nào trong tháng này.</td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+                <PaginationControls page={airPage} totalPages={totalAirPages} setPage={setAirPage} />
             </div>
         </div>
     );
-  };
-
-  // --- STYLE ---
-  const filterContainerStyle = {
-      marginBottom: '30px',
-      padding: '15px 25px',
-      background: '#fff',
-      borderRadius: '16px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '30px',
-      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-      flexWrap: 'wrap',
-      zIndex: 20,
-      position: 'relative'
-  };
-
-  const inputStyle = {
-      height: '42px',
-      padding: '0 15px',
-      borderRadius: '10px',
-      border: '1px solid #d1d5db',
-      backgroundColor: '#fff',
-      color: '#1f2937',
-      fontSize: '14px',
-      fontWeight: '600',
-      outline: 'none',
-      cursor: 'pointer'
-  };
-
-  const labelStyle = { fontWeight: '800', color: '#165B33', fontSize: '13px', textTransform: 'uppercase', whiteSpace: 'nowrap' };
-
-  return (
-    <div style={{ padding: '20px', position: 'relative', zIndex: 1 }}>
-      
-      {/* FILTER BAR */}
-      <div style={filterContainerStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span style={labelStyle}>📅 Thời gian:</span>
-              <select value={airReportMonth} onChange={e => setAirReportMonth(e.target.value)} style={{ ...inputStyle, width: '130px' }}>
-                  {Array.from({length: 12}, (_, i) => <option key={i+1} value={i+1}>Tháng {i+1}</option>)}
-              </select>
-              <input type="number" value={airReportYear} onChange={e => setAirReportYear(e.target.value)} style={{ ...inputStyle, width: '80px', textAlign: 'center' }} />
-          </div>
-          
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, borderLeft: '2px solid #eee', paddingLeft: '30px' }}>
-              <span style={labelStyle}>🔍 Lọc:</span>
-              <select value={filterBrand} onChange={e => setFilterBrand(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '160px' }}>
-                  <option value="">-- Tất cả Brand --</option>
-                  {brands.map(b => <option key={b.id} value={b.id}>{b.ten_brand}</option>)}
-              </select>
-              <select value={filterNhanSu} onChange={e => setFilterNhanSu(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '160px' }}>
-                  <option value="">-- Tất cả Nhân sự --</option>
-                  {nhanSus.map(n => <option key={n.id} value={n.id}>{n.ten_nhansu}</option>)}
-              </select>
-          </div>
-          {loading && <span style={{color:'#165B33', fontWeight:'bold', fontSize:'13px', marginLeft: 'auto'}}>⏳ Đang tải...</span>}
-      </div>
-
-      {/* TIÊU ĐỀ TRẮNG ĐẬM */}
-      <div style={{ textAlign: 'center', marginBottom: '35px' }}>
-          <div style={{ 
-              color: '#FFFFFF',
-              fontSize: '32px', 
-              fontWeight: '900',
-              textTransform: 'uppercase', 
-              letterSpacing: '1px',
-              fontFamily: 'Arial, sans-serif'
-          }}>
-              TỔNG QUAN HIỆU SUẤT (Tháng {airReportMonth}/{airReportYear})
-          </div>
-      </div>
-
-      {/* HÀNG 1 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '25px', marginBottom: '25px' }}>
-          <ChartBox data={chart1Data} title="📦 Tỷ Trọng Sản Phẩm (Link Air)" unit="Links" />
-          <ChartBox data={chart2Data} title="🔥 Tỷ Trọng Booking (Đơn hàng)" unit="Booking" />
-          <ChartBox data={chart3Data} title="👷 Năng Suất Nhân Sự (Link Air)" unit="Links" />
-      </div>
-
-      {/* HÀNG 2 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '25px' }}>
-          
-          <ChartBox data={chart5Data} title="💸 Ngân Sách Đã Chi (Theo Brand)" unit="VNĐ" isMoney={true} />
-
-          {/* Biểu đồ Cột */}
-          <div className="christmas-card" style={{ height: '450px', backgroundColor: '#fff', borderRadius: '16px', padding: '20px', boxShadow: '0 8px 25px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column' }}>
-              <h4 style={{ textAlign: 'center', color: '#165B33', marginBottom: '15px', fontSize: '15px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  💰 Chi Phí Trung Bình / 1 Video
-              </h4>
-              <div style={{ flex: 1 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={chart6Data} barCategoryGap="30%" margin={{ top: 30, right: 10, left: 10, bottom: 0 }}>
-                          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 11, fontWeight: 'bold', dy: 10}} />
-                          <Tooltip formatter={(value) => formatMoney(value)} cursor={{fill: 'transparent', opacity: 0.1}} contentStyle={{borderRadius:'8px', border:'none', boxShadow:'0 4px 12px rgba(0,0,0,0.15)'}} />
-                          <Bar dataKey="value" radius={[8, 8, 0, 0]}>
-                              {chart6Data.map((entry, index) => (
-                                  <Cell key={`cell-${index}`} fill={entry.fill} />
-                              ))}
-                              <LabelList dataKey="value" position="top" formatter={(val) => formatMoney(val)} style={{ fontWeight: 'bold', fontSize: '12px', fill: '#333' }} />
-                          </Bar>
-                      </BarChart>
-                  </ResponsiveContainer>
-              </div>
-          </div>
-
-          <div></div>
-      </div>
-    </div>
-  );
 };
 
 export default DashboardTab;

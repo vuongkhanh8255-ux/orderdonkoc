@@ -1,3 +1,256 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* 🍊 Minimal Orange Theme - EzMart Style */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+    --primary-orange: #FF6600;
+    --primary-orange-light: #FFF7ED;
+    --text-main: #1f2937;
+    --text-secondary: #9CA3AF;
+    /* Lighter Gray for Inactive */
+    --border-color: #F3F4F6;
+    /* Extremely light */
+    --bg-main: #FFF7ED;
+    /* Warm Beige */
+    --card-bg: #FFFFFF;
+    --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.03);
+}
+
+body {
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* === MINIMAL CARD === */
+.mirinda-card {
+    background: var(--card-bg);
+    border: none;
+    /* No Border */
+    border-radius: 20px;
+    /* Big Radius */
+    padding: 24px;
+    box-shadow: var(--shadow-soft);
+    margin-bottom: 24px;
+    transition: all 0.3s ease;
+}
+
+.mirinda-card:hover {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
+    transform: translateY(-2px);
+}
+
+/* === HEADERS === */
+.page-header {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-main);
+    text-align: left;
+    margin-bottom: 1.5rem;
+    letter-spacing: -0.5px;
+}
+
+.section-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-main);
+    letter-spacing: -0.3px;
+    margin-bottom: 10px;
+    display: inline-block;
+}
+
+/* === FORM ELEMENTS === */
+input,
+select,
+textarea {
+    background-color: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    border-radius: 10px;
+    /* Modern rounded */
+    padding: 12px 16px;
+    /* Bigger padding */
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--text-main);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+    /* Subtle depth */
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 100%;
+    box-sizing: border-box;
+    /* CRITICAL: Fix overflow */
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--primary-orange);
+    background-color: #FFF;
+    box-shadow: 0 0 0 4px rgba(255, 102, 0, 0.15);
+    /* Pro focus ring */
+    transform: translateY(-1px);
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: #9CA3AF;
+    font-weight: 400;
+}
+
+/* === BUTTONS === */
+button {
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    border-radius: 12px;
+    transition: all 0.2s;
+}
+
+.btn-primary {
+    background-color: var(--primary-orange);
+    color: white;
+    border: none;
+    box-shadow: 0 4px 12px rgba(255, 102, 0, 0.2);
+}
+
+.btn-primary:hover {
+    background-color: #EA580C;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 15px rgba(255, 102, 0, 0.25);
+}
+
+.btn-secondary {
+    background-color: white;
+    border: 1px solid #E5E7EB;
+    color: var(--text-main);
+}
+
+.btn-secondary:hover {
+    border-color: var(--primary-orange);
+    color: var(--primary-orange);
+    background-color: #FFF7ED;
+}
+
+/* === PAGINATION === */
+.btn-pagination {
+    background-color: white;
+    color: #374151;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 4px;
+    /* Gap between numbers */
+    font-weight: 600;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-pagination:hover:not(:disabled) {
+    background-color: #FFF7ED;
+    color: var(--primary-orange);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.btn-pagination:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background-color: #F3F4F6;
+    box-shadow: none;
+}
+
+.btn-pagination-active {
+    background-color: #D42426;
+    /* Red as requested */
+    color: white;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 4px;
+    font-weight: 700;
+    box-shadow: 0 4px 10px rgba(212, 36, 38, 0.3);
+    cursor: default;
+}
+
+/* Next/Prev buttons - Pill shape override */
+button.btn-pagination-text {
+    width: auto;
+    padding: 0 20px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+}
+
+/* === SIDEBAR HOVER UTILS === */
+.sidebar-item-hover:hover {
+    color: var(--primary-orange) !important;
+    background-color: #FFF7ED;
+    /* Light orange tint on hover */
+}
+
+/* === TABLES === */
+tbody tr {
+    transition: background-color 0.15s ease;
+}
+
+tbody tr:hover td {
+    background-color: #FFF7ED !important;
+    /* Light Orange Tint */
+    color: #111827;
+    /* Darker text for contrast */
+}
+
+tbody tr:last-child td {
+    border-bottom: none;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+thead th {
+    background-color: #FAFAFA;
+    color: var(--text-secondary);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    padding: 16px;
+    text-align: left;
+    border-bottom: 1px solid #E5E7EB;
+}
+
+tbody td {
+    border-bottom: 1px solid #F3F4F6;
+    padding: 16px;
+    color: var(--text-main);
+    font-size: 0.9rem;
+}
+
+/* === SCROLLBAR === */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #D1D5DB;
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}

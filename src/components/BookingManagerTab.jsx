@@ -4,25 +4,25 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
 // Import thư viện vẽ biểu đồ
-import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, Label } from 'recharts';
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#d0ed57'];
+const COLORS = ['#FF6600', '#10B981', '#F59E0B', '#3B82F6', '#8B5CF6', '#EC4899', '#6366F1'];
 
 // --- HÀM HELPER FORMAT ---
-const formatCurrency = (val) => { 
-    if(!val) return '';
-    return String(val).replace(/\D/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, "."); 
+const formatCurrency = (val) => {
+    if (!val) return '';
+    return String(val).replace(/\D/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 };
 const parseMoney = (str) => { return parseFloat(String(str).replace(/[^\d]/g, '')) || 0; };
-const formatDate = (dateStr) => { if(!dateStr) return ''; return new Date(dateStr).toLocaleDateString('vi-VN'); };
+const formatDate = (dateStr) => { if (!dateStr) return ''; return new Date(dateStr).toLocaleDateString('vi-VN'); };
 
 const BookingManagerTab = () => {
     // 1. Lấy thêm sanPhams và hàm loadSanPhamsByBrand từ Context
     const { brands, nhanSus, sanPhams, loadSanPhamsByBrand } = useAppData();
-    
+
     const [bookings, setBookings] = useState([]);
     const [loading, setLoading] = useState(false);
-    
+
     // State sửa link
     const [editingId, setEditingId] = useState(null);
     const [tempLink, setTempLink] = useState('');
@@ -58,7 +58,7 @@ const BookingManagerTab = () => {
         const sentDate = new Date(dateStr);
         const today = new Date();
         const diffTime = Math.abs(today - sentDate);
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         return diffDays > 20;
     };
 
@@ -68,7 +68,7 @@ const BookingManagerTab = () => {
             // Lọc theo Tháng (Quan trọng)
             if (filterMonth) {
                 // Ưu tiên ngày gửi đơn, nếu ko có thì lấy ngày tạo
-                const dateToCheck = item.ngay_gui_don || item.created_at; 
+                const dateToCheck = item.ngay_gui_don || item.created_at;
                 const itemDate = dateToCheck ? dateToCheck.slice(0, 7) : '';
                 if (itemDate !== filterMonth) return false;
             }
@@ -79,7 +79,7 @@ const BookingManagerTab = () => {
         });
 
         const stats = { pending: 0, done: 0, overdue: 0 };
-        
+
         contextFiltered.forEach(item => {
             if (item.status === 'done') stats.done++;
             else if (checkOverdue(item.ngay_gui_don, item.status)) stats.overdue++;
@@ -104,7 +104,7 @@ const BookingManagerTab = () => {
     const chartData = useMemo(() => {
         const data = processedData.filtered; // Dùng chính dữ liệu đang hiển thị ở bảng
         const map = {};
-        
+
         data.forEach(item => {
             const bName = getBrandName(item.brand_id);
             map[bName] = (map[bName] || 0) + 1;
@@ -121,9 +121,9 @@ const BookingManagerTab = () => {
     const handleManualBrandChange = (e) => {
         const newBrandId = e.target.value;
         setManualBooking({
-            ...manualBooking, 
+            ...manualBooking,
             brand_id: newBrandId,
-            san_pham: '' 
+            san_pham: ''
         });
         loadSanPhamsByBrand(newBrandId);
     };
@@ -131,7 +131,7 @@ const BookingManagerTab = () => {
     // Action: Thêm Booking Ngoài
     const handleManualAdd = async (e) => {
         e.preventDefault();
-        if(!manualBooking.id_kenh || !manualBooking.brand_id || !manualBooking.san_pham) {
+        if (!manualBooking.id_kenh || !manualBooking.brand_id || !manualBooking.san_pham) {
             alert("Vui lòng điền đủ thông tin!");
             return;
         }
@@ -140,7 +140,7 @@ const BookingManagerTab = () => {
                 ngay_gui_don: new Date().toISOString().split('T')[0],
                 id_kenh: manualBooking.id_kenh,
                 ho_ten: manualBooking.ho_ten || manualBooking.id_kenh,
-                cast_amount: parseMoney(manualBooking.cast), 
+                cast_amount: parseMoney(manualBooking.cast),
                 cms: manualBooking.cms,
                 brand_id: manualBooking.brand_id,
                 san_pham: manualBooking.san_pham,
@@ -149,7 +149,7 @@ const BookingManagerTab = () => {
                 link_air: '',
                 ghi_chu: 'Booking ngoài'
             }]);
-            if(error) throw error;
+            if (error) throw error;
             alert("Đã thêm booking thành công!");
             setManualBooking({ id_kenh: '', ho_ten: '', brand_id: '', san_pham: '', nhansu_id: '', cast: '0', cms: '10%' });
             setShowManualForm(false);
@@ -158,16 +158,18 @@ const BookingManagerTab = () => {
     };
 
     // Action: Update Link Air
-    const extractVideoId = (url) => { 
-        try { 
+    const extractVideoId = (url) => {
+        try {
             if (url.includes('video/')) return url.split('video/')[1].split('?')[0].replace('/', '');
-            return ''; 
-        } catch (e) { return ''; } 
+            return '';
+        } catch (e) { return ''; }
     };
 
     const handleUpdateLink = async (bookingItem) => {
-        if (!tempLink) { alert("Vui lòng điền link video!");
-            return; }
+        if (!tempLink) {
+            alert("Vui lòng điền link video!");
+            return;
+        }
         const videoId = extractVideoId(tempLink);
         try {
             const { error: bookingError } = await supabase.from('bookings').update({ link_air: tempLink, status: 'done' }).eq('id', bookingItem.id);
@@ -193,142 +195,124 @@ const BookingManagerTab = () => {
     };
 
     // Styles
-    const inputStyle = { padding:'8px', border:'1px solid #ddd', borderRadius:'4px', width:'100%', boxSizing:'border-box' };
+    // Styles
+    const inputStyle = { width: '100%', boxSizing: 'border-box' }; // Global CSS handles padding/border
     const statCardStyle = (bgColor, color, isActive) => ({
-        flex: 1, padding: '20px', borderRadius: '12px', 
-        backgroundColor: isActive ? color : bgColor, 
+        flex: 1, padding: '20px', borderRadius: '12px',
+        backgroundColor: isActive ? color : bgColor,
         color: isActive ? 'white' : color,
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        boxShadow: isActive ? '0 4px 15px rgba(0,0,0,0.2)' : '0 4px 10px rgba(0,0,0,0.05)', 
-        minWidth: '150px', cursor: 'pointer', 
+        boxShadow: isActive ? '0 4px 15px rgba(0,0,0,0.2)' : '0 4px 10px rgba(0,0,0,0.05)',
+        minWidth: '150px', cursor: 'pointer',
         transition: 'all 0.2s ease',
         border: isActive ? '2px solid transparent' : `1px solid ${color}`
     });
-    const getStatusStyle = (status) => status === 'done' 
-        ? { backgroundColor: '#e8f5e9', color: 'green', padding: '5px 10px', borderRadius: '15px', fontWeight: 'bold', fontSize: '11px' } 
+    const getStatusStyle = (status) => status === 'done'
+        ? { backgroundColor: '#e8f5e9', color: 'green', padding: '5px 10px', borderRadius: '15px', fontWeight: 'bold', fontSize: '11px' }
         : { backgroundColor: '#fff3e0', color: '#ef6c00', padding: '5px 10px', borderRadius: '15px', fontWeight: 'bold', fontSize: '11px' };
 
     return (
         <div style={{ padding: '20px' }}>
             {/* FORM NHẬP TAY */}
-            {showManualForm ? (
-                <div style={{ backgroundColor:'#e8f5e9', padding:'20px', borderRadius:'10px', marginBottom:'20px', border:'2px solid #2e7d32', animation: 'fadeIn 0.3s' }}>
-                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'15px'}}>
-                        <h3 style={{marginTop:0, color:'#2e7d32', margin:0}}>THÊM BOOKING NGOÀI (CÓ SẴN HÀNG)</h3>
-                        <button onClick={() => setShowManualForm(false)} style={{background:'transparent', border:'none', cursor:'pointer', color:'#666'}}>Đóng X</button>
-                    </div>
-                    <form onSubmit={handleManualAdd} style={{display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'15px'}}>
-                        
-                        <input placeholder="ID Kênh (*)" value={manualBooking.id_kenh} onChange={e=>setManualBooking({...manualBooking, id_kenh:e.target.value})} style={inputStyle} required />
-                        <input placeholder="Tên KOC" value={manualBooking.ho_ten} onChange={e=>setManualBooking({...manualBooking, ho_ten:e.target.value})} style={inputStyle} />
-                        
-                        <select value={manualBooking.brand_id} onChange={handleManualBrandChange} style={inputStyle} required>
-                            <option value="">-Brand-</option>
-                            {brands.map(b=><option key={b.id} value={b.id}>{b.ten_brand}</option>)}
-                        </select>
-                        
-                        <div>
-                            <input 
-                                list="manual_products_list"
-                                placeholder="Sản phẩm (*)" 
-                                value={manualBooking.san_pham} 
-                                onChange={e=>setManualBooking({...manualBooking, san_pham:e.target.value})} 
-                                style={inputStyle} 
-                                required 
-                                disabled={!manualBooking.brand_id}
-                                autoComplete="off"
-                            />
-                            <datalist id="manual_products_list">
-                                {sanPhams.map(sp => (
-                                    <option key={sp.id} value={sp.ten_sanpham} />
-                                ))}
-                            </datalist>
-                        </div>
+            {/* FORM NHẬP TAY - LUÔN HIỆN */}
+            <div style={{ backgroundColor: '#fff7ed', padding: '20px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #fed7aa' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                    <h3 style={{ marginTop: 0, color: '#ea580c', margin: 0, fontSize: '1.1rem', fontWeight: '700' }}>THÊM BOOKING NGOÀI</h3>
+                </div>
+                <form onSubmit={handleManualAdd} style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px' }}>
 
-                        <select value={manualBooking.nhansu_id} onChange={e=>setManualBooking({...manualBooking, nhansu_id:e.target.value})} style={inputStyle}><option value="">-Nhân sự-</option>{nhanSus.map(n=><option key={n.id} value={n.id}>{n.ten_nhansu}</option>)}</select>
-                        <input placeholder="Cast (VNĐ)" value={manualBooking.cast} onChange={e=>setManualBooking({...manualBooking, cast:formatCurrency(e.target.value)})} style={inputStyle} />
-                        <input placeholder="CMS (%)" value={manualBooking.cms} onChange={e=>setManualBooking({...manualBooking, cms:e.target.value})} style={inputStyle} />
-                        
-                        <button type="submit" style={{backgroundColor:'#2e7d32', color:'white', border:'none', borderRadius:'4px', cursor:'pointer', fontWeight:'bold'}}>LƯU BOOKING</button>
-                    </form>
-                </div>
-            ) : (
-                <div style={{display:'flex', justifyContent:'flex-end', marginBottom:'20px'}}>
-                     <button onClick={() => setShowManualForm(true)} style={{backgroundColor:'#165B33', color:'white', padding:'10px 20px', border:'none', borderRadius:'20px', cursor:'pointer', fontWeight:'bold', boxShadow:'0 4px 10px rgba(0,0,0,0.1)'}}>
-                        + Thêm Booking Ngoài
-                    </button>
-                </div>
-            )}
+                    <input placeholder="ID Kênh (*)" value={manualBooking.id_kenh} onChange={e => setManualBooking({ ...manualBooking, id_kenh: e.target.value })} style={inputStyle} required />
+                    <input placeholder="Tên KOC" value={manualBooking.ho_ten} onChange={e => setManualBooking({ ...manualBooking, ho_ten: e.target.value })} style={inputStyle} />
+
+                    <select value={manualBooking.brand_id} onChange={handleManualBrandChange} style={inputStyle} required>
+                        <option value="">-Brand-</option>
+                        {brands.map(b => <option key={b.id} value={b.id}>{b.ten_brand}</option>)}
+                    </select>
+
+                    <div>
+                        <input
+                            list="manual_products_list"
+                            placeholder="Sản phẩm (*)"
+                            value={manualBooking.san_pham}
+                            onChange={e => setManualBooking({ ...manualBooking, san_pham: e.target.value })}
+                            style={inputStyle}
+                            required
+                            disabled={!manualBooking.brand_id}
+                            autoComplete="off"
+                        />
+                        <datalist id="manual_products_list">
+                            {sanPhams.map(sp => (
+                                <option key={sp.id} value={sp.ten_sanpham} />
+                            ))}
+                        </datalist>
+                    </div>
+
+                    <select value={manualBooking.nhansu_id} onChange={e => setManualBooking({ ...manualBooking, nhansu_id: e.target.value })} style={inputStyle}><option value="">-Nhân sự-</option>{nhanSus.map(n => <option key={n.id} value={n.id}>{n.ten_nhansu}</option>)}</select>
+                    <input placeholder="Cast (VNĐ)" value={manualBooking.cast} onChange={e => setManualBooking({ ...manualBooking, cast: formatCurrency(e.target.value) })} style={inputStyle} />
+                    <input placeholder="CMS (%)" value={manualBooking.cms} onChange={e => setManualBooking({ ...manualBooking, cms: e.target.value })} style={inputStyle} />
+
+                    <button type="submit" className="btn-primary">LƯU BOOKING</button>
+                </form>
+            </div>
 
             {/* DASHBOARD THỐNG KÊ SỐ LIỆU */}
             <div style={{ display: 'flex', gap: '20px', marginBottom: '30px' }}>
                 <div style={statCardStyle('#fff3e0', '#ef6c00', filterStatus === 'pending')} onClick={() => setFilterStatus(filterStatus === 'pending' ? 'all' : 'pending')}>
-                    <span style={{fontSize:'2.5rem', fontWeight:'900'}}>{processedData.stats.pending}</span>
-                    <span style={{fontSize:'0.9rem', fontWeight:'bold', textTransform:'uppercase'}}>⏳ ĐANG CHỜ (PENDING)</span>
+                    <span style={{ fontSize: '2.5rem', fontWeight: '900' }}>{processedData.stats.pending}</span>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 'bold', textTransform: 'uppercase' }}>⏳ ĐANG CHỜ (PENDING)</span>
                 </div>
                 <div style={statCardStyle('#ffebee', '#c62828', filterStatus === 'overdue')} onClick={() => setFilterStatus(filterStatus === 'overdue' ? 'all' : 'overdue')}>
-                    <span style={{fontSize:'2.5rem', fontWeight:'900'}}>{processedData.stats.overdue}</span>
-                    <span style={{fontSize:'0.9rem', fontWeight:'bold', textTransform:'uppercase'}}>🔥 QUÁ HẠN (&gt;20 NGÀY)</span>
+                    <span style={{ fontSize: '2.5rem', fontWeight: '900' }}>{processedData.stats.overdue}</span>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 'bold', textTransform: 'uppercase' }}>🔥 QUÁ HẠN (&gt;20 NGÀY)</span>
                 </div>
                 <div style={statCardStyle('#e8f5e9', '#2e7d32', filterStatus === 'done')} onClick={() => setFilterStatus(filterStatus === 'done' ? 'all' : 'done')}>
-                    <span style={{fontSize:'2.5rem', fontWeight:'900'}}>{processedData.stats.done}</span>
-                    <span style={{fontSize:'0.9rem', fontWeight:'bold', textTransform:'uppercase'}}>✅ ĐÃ AIR (DONE)</span>
+                    <span style={{ fontSize: '2.5rem', fontWeight: '900' }}>{processedData.stats.done}</span>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 'bold', textTransform: 'uppercase' }}>✅ ĐÃ AIR (DONE)</span>
                 </div>
             </div>
 
             {/* --- [MỚI] BIỂU ĐỒ TRÒN TỶ TRỌNG BOOKING --- */}
-            <div className="christmas-card" style={{ 
-                marginBottom: '20px', 
-                padding: '20px', 
-                backgroundColor: 'white', 
-                borderRadius: '12px', 
-                boxShadow: '0 4px 15px rgba(0,0,0,0.05)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '1px solid #eee'
-            }}>
-                <div style={{ width: '100%', height: '300px', display: 'flex', flexDirection: 'column' }}>
-                    <h3 style={{ textAlign: 'center', color: '#165B33', marginBottom: '10px' }}>
-                        📊 TỶ TRỌNG BOOKING (Tháng {filterMonth.split('-')[1]}/{filterMonth.split('-')[0]})
-                    </h3>
-                    <div style={{ flex: 1, position: 'relative' }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie
-                                    data={chartData}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={60}
-                                    outerRadius={90}
-                                    paddingAngle={2}
-                                    dataKey="value"
-                                >
-                                    {chartData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))}
-                                </Pie>
-                                <Tooltip formatter={(val) => `${val} booking`} contentStyle={{borderRadius:'8px'}} />
-                                <Legend layout="horizontal" verticalAlign="bottom" align="center" />
-                            </PieChart>
-                        </ResponsiveContainer>
-                        {/* Số tổng ở giữa */}
-                        <div style={{ 
-                            position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', 
-                            textAlign: 'center', pointerEvents: 'none', zIndex: 1 
-                        }}>
-                            <h2 style={{ margin: 0, color: '#333', fontSize: '24px' }}>
-                                {chartData.reduce((a, b) => a + b.value, 0)}
-                            </h2>
-                            <span style={{ fontSize: '12px', color: '#888' }}>Total</span>
-                        </div>
-                    </div>
+            <div className="mirinda-card" style={{ height: '500px', display: 'flex', flexDirection: 'column' }}>
+
+                <h4 style={{ textAlign: 'center', marginBottom: '10px' }}>
+                    <span className="section-title">📊 TỶ TRỌNG BOOKING (Tháng {filterMonth.split('-')[1]}/{filterMonth.split('-')[0]})</span>
+                </h4>
+                <div style={{ flex: 1, position: 'relative' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                            <Pie
+                                data={chartData}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={80}
+                                outerRadius={120}
+                                paddingAngle={2}
+                                dataKey="value"
+                                stroke="#000"
+                                strokeWidth={2}
+                            >
+                                {chartData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                ))}
+                                <Label
+                                    value={chartData.reduce((a, b) => a + b.value, 0)}
+                                    position="center"
+                                    fill="#374151"
+                                    style={{ fontSize: '24px', fontWeight: '700', fontFamily: 'Inter', textAnchor: 'middle' }}
+                                />
+                            </Pie>
+                            <Tooltip formatter={(val) => `${val} booking`} contentStyle={{ borderRadius: '8px', border: '1px solid #ddd', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }} />
+                            <Legend layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: '12px', width: '100%', marginBottom: '10px' }} />
+                        </PieChart>
+                    </ResponsiveContainer>
                 </div>
             </div>
 
+
+
             {/* THANH BỘ LỌC */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr) 100px', gap: '10px', marginBottom: '20px', backgroundColor: 'white', padding: '15px', borderRadius: '10px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
-                <input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} style={{...inputStyle, fontWeight:'bold', color:'#165B33'}} />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr) 100px', gap: '10px', marginBottom: '20px', backgroundColor: 'white', padding: '20px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', border: '1px solid #f3f4f6' }}>
+                <input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} style={{ ...inputStyle, fontWeight: 'bold', color: '#165B33' }} />
                 <select value={filterBrand} onChange={e => setFilterBrand(e.target.value)} style={inputStyle}>
                     <option value="">-- Tất cả Brand --</option>
                     {brands.map(b => <option key={b.id} value={b.id}>{b.ten_brand}</option>)}
@@ -344,17 +328,17 @@ const BookingManagerTab = () => {
                     <option value="overdue">🔥 Chỉ hiện Quá Hạn</option>
                     <option value="done">✅ Chỉ hiện Done</option>
                 </select>
-                <button 
+                <button
                     onClick={() => { setFilterBrand(''); setFilterProduct(''); setFilterStaff(''); setFilterStatus('all'); setFilterMonth(new Date().toISOString().slice(0, 7)); }}
-                    style={{backgroundColor:'#eee', border:'none', borderRadius:'4px', cursor:'pointer', fontWeight:'bold', color:'#555'}}
+                    className="mirinda-button secondary"
                 >
                     Xóa Lọc
                 </button>
             </div>
-            
+
             {/* BẢNG CHI TIẾT */}
             <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
-                <div style={{marginBottom:'10px', fontSize:'0.9rem', color:'#666'}}>Tìm thấy: <b>{processedData.filtered.length}</b> booking</div>
+                <div style={{ marginBottom: '10px', fontSize: '0.9rem', color: '#666' }}>Tìm thấy: <b>{processedData.filtered.length}</b> booking</div>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
                     <thead style={{ backgroundColor: '#f5f5f5', borderBottom: '2px solid #ddd' }}>
                         <tr>
@@ -379,39 +363,38 @@ const BookingManagerTab = () => {
                                     <td style={{ textAlign: 'center', padding: '10px' }}>{index + 1}</td>
                                     <td style={{ textAlign: 'center', padding: '10px' }}>
                                         {formatDate(item.ngay_gui_don)}
-                                        {isOverdue && <div style={{color:'red', fontSize:'0.7rem', fontWeight:'bold', marginTop:'3px'}}>⚠️ &gt; 20 ngày</div>}
+                                        {isOverdue && <div style={{ color: 'red', fontSize: '0.7rem', fontWeight: 'bold', marginTop: '3px' }}>⚠️ &gt; 20 ngày</div>}
                                     </td>
                                     <td style={{ textAlign: 'left', padding: '10px' }}>
-                                        <a href={channelLink} target="_blank" rel="noreferrer" style={{ color: '#1976D2', fontWeight: 'bold', display:'block' }}>{item.id_kenh}</a>
-                                        <div style={{fontSize:'0.8rem', color:'#666'}}>{item.ho_ten}</div>
-                                        <div style={{fontSize:'0.75rem', color:'#555', marginTop:'2px'}}>Cast: {parseInt(item.cast_amount || 0).toLocaleString('vi-VN')} | CMS: {item.cms}</div>
+                                        <a href={channelLink} target="_blank" rel="noreferrer" style={{ color: '#1976D2', fontWeight: 'bold', display: 'block' }}>{item.id_kenh}</a>
+                                        <div style={{ fontSize: '0.8rem', color: '#666' }}>{item.ho_ten}</div>
+                                        <div style={{ fontSize: '0.75rem', color: '#555', marginTop: '2px' }}>Cast: {parseInt(item.cast_amount || 0).toLocaleString('vi-VN')} | CMS: {item.cms}</div>
                                     </td>
                                     <td style={{ textAlign: 'left', padding: '10px' }}>
                                         {isEditing ? (
                                             <input type="text" placeholder="Paste link..." value={tempLink} onChange={e => setTempLink(e.target.value)} style={{ width: '100%', padding: '8px', border: '1px solid #1976D2', borderRadius: '4px' }} autoFocus />
                                         ) : (
-                                            item.link_air ? 
-                                            <a href={item.link_air} target="_blank" rel="noreferrer" style={{ color: '#D42426' }}>Link Video</a> : 
-                                            <span style={getStatusStyle(item.status)}>{isOverdue ? 'Chưa trả bài!' : (item.status === 'done' ? 'Đã Air' : 'Đang chờ...')}</span>
+                                            item.link_air ?
+                                                <a href={item.link_air} target="_blank" rel="noreferrer" style={{ color: '#D42426' }}>Link Video</a> :
+                                                <span style={getStatusStyle(item.status)}>{isOverdue ? 'Chưa trả bài!' : (item.status === 'done' ? 'Đã Air' : 'Đang chờ...')}</span>
                                         )}
                                     </td>
                                     <td style={{ textAlign: 'center', padding: '10px', fontSize: '0.8rem', color: '#666' }}>{videoId || '-'}</td>
                                     <td style={{ textAlign: 'center', padding: '10px' }}>
-                                        <div style={{fontWeight:'bold'}}>{getBrandName(item.brand_id)}</div>
-                                        <div style={{fontSize:'0.85rem'}}>{item.san_pham}</div>
-                                        {item.ghi_chu && <div style={{fontSize:'0.7rem', color:'purple', fontStyle:'italic'}}>{item.ghi_chu}</div>}
+                                        <div style={{ fontWeight: 'bold' }}>{getBrandName(item.brand_id)}</div>
+                                        <div style={{ fontSize: '0.85rem' }}>{item.san_pham}</div>
+                                        {item.ghi_chu && <div style={{ fontSize: '0.7rem', color: 'purple', fontStyle: 'italic' }}>{item.ghi_chu}</div>}
                                     </td>
                                     <td style={{ textAlign: 'center', padding: '10px' }}>{getStaffName(item.nhansu_id)}</td>
                                     <td style={{ textAlign: 'center', padding: '10px' }}>
                                         {isEditing ? (
-                                            <div style={{display:'flex', gap:'5px', justifyContent:'center'}}>
-                                                <button onClick={() => handleUpdateLink(item)} style={{ backgroundColor: '#165B33', color: 'white', border: 'none', borderRadius: '4px', padding: '5px 10px', cursor: 'pointer', fontSize:'11px' }}>Lưu</button>
-                                                <button onClick={() => {setEditingId(null); setTempLink('');}} style={{ backgroundColor: '#777', color: 'white', border: 'none', borderRadius: '4px', padding: '5px 10px', cursor: 'pointer', fontSize:'11px' }}>Hủy</button>
+                                            <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
+                                                <button onClick={() => { setEditingId(null); setTempLink(''); }} style={{ backgroundColor: '#777', color: 'white', border: 'none', borderRadius: '4px', padding: '5px 10px', cursor: 'pointer', fontSize: '11px' }}>Hủy</button>
                                             </div>
                                         ) : (
-                                            <button 
-                                                onClick={() => { setEditingId(item.id); setTempLink(item.link_air || ''); }} 
-                                                style={{ backgroundColor: 'white', border: '1px solid #1976D2', color: '#1976D2', borderRadius: '4px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold', fontSize:'11px' }}
+                                            <button
+                                                onClick={() => { setEditingId(item.id); setTempLink(item.link_air || ''); }}
+                                                style={{ backgroundColor: 'white', border: '1px solid #1976D2', color: '#1976D2', borderRadius: '4px', padding: '5px 10px', cursor: 'pointer', fontWeight: 'bold', fontSize: '11px' }}
                                             >
                                                 {item.link_air ? 'Sửa' : '➕ Link'}
                                             </button>
@@ -423,7 +406,7 @@ const BookingManagerTab = () => {
                     </tbody>
                 </table>
             </div>
-        </div>
+        </div >
     );
 };
 

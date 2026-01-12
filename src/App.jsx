@@ -8,146 +8,174 @@ import AirLinksTab from './components/AirLinksTab';
 import ExpenseEcomTab from './components/ExpenseEcomTab';
 import BookingManagerTab from './components/BookingManagerTab';
 // [MỚI] Import DashboardTab để sử dụng
-import DashboardTab from './components/DashboardTab'; 
-import SnowEffect from './components/SnowEffect';
+import DashboardTab from './components/DashboardTab';
 import AIChat from './components/AIChat';
 
 function App() {
   // Đổi mặc định thành 'dashboard' để mở lên là thấy ngay báo cáo mới
   const [currentView, setCurrentView] = useState('dashboard');
-  const [isSidebarHovered, setIsSidebarHovered] = useState(false);
 
-  // Cấu hình độ rộng Sidebar
-  const WIDTH_OPEN = '280px';
-  const WIDTH_CLOSE = '90px';
-  const currentWidth = isSidebarHovered ? WIDTH_OPEN : WIDTH_CLOSE;
+  // Cấu hình độ rộng Sidebar - FIXED
+  const SIDEBAR_WIDTH = '280px';
 
   // --- STYLES ---
   const sidebarStyle = {
-    width: currentWidth,
-    background: 'linear-gradient(180deg, #8B0000 0%, #5c0000 100%)', 
-    color: '#fff',
+    width: SIDEBAR_WIDTH,
+    background: '#FFFFFF', // White Sidebar
     display: 'flex',
     flexDirection: 'column',
     height: '100vh',
     position: 'fixed',
     left: 0,
     top: 0,
-    boxShadow: '4px 0 15px rgba(0,0,0,0.5)',
     zIndex: 1000,
-    fontFamily: "'Segoe UI', sans-serif",
-    transition: 'width 0.3s ease-in-out',
-    overflow: 'hidden',
-    whiteSpace: 'nowrap'
+    fontFamily: "'Inter', sans-serif",
+    borderRight: '1px solid #F3F4F6', // Restore border for clean separation
+    whiteSpace: 'nowrap',
+    boxShadow: '4px 0 24px rgba(0,0,0,0.02)'
   };
 
   const menuItemStyle = (isActive) => ({
-    justifyContent: isSidebarHovered ? 'flex-start' : 'center',
-    margin: '10px 15px', 
-    padding: '15px', 
+    justifyContent: 'flex-start',
+    margin: '8px 16px',
+    padding: '12px 16px',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
-    gap: '15px',
-    backgroundColor: isActive ? '#FFFFFF' : 'rgba(255, 255, 255, 0.85)', 
-    borderRadius: '15px', 
-    color: isActive ? '#D42426' : '#333', 
-    fontWeight: '700',
-    boxShadow: isActive ? '0 4px 10px rgba(0,0,0,0.2)' : 'none',
+    gap: '14px',
+    backgroundColor: isActive ? '#FF6600' : 'transparent', // Orange Active Block
+    borderRadius: '12px',
+    color: isActive ? '#FFFFFF' : '#9CA3AF', // White Active, Gray Inactive
+    fontWeight: isActive ? '600' : '500',
     transition: 'all 0.2s ease',
-    height: '55px', 
+    height: '48px',
+    fontSize: '0.95rem',
+    border: 'none'
   });
 
   const mainContentStyle = {
-    marginLeft: currentWidth, 
-    background: 'linear-gradient(135deg, #0f3d24 0%, #165B33 40%, #5c0000 100%)', 
+    marginLeft: SIDEBAR_WIDTH,
+    background: '#FFF7ED', // Warm Beige Background
     minHeight: '100vh',
-    padding: '30px',
+    padding: '32px',
     position: 'relative',
     flex: 1,
     transition: 'margin-left 0.3s ease-in-out'
   };
 
+  // --- TET COUNTDOWN LOGIC ---
+  const today = new Date();
+  const tetDate = new Date('2026-02-17T00:00:00'); // Mùng 1 Tết Bính Ngọ 2026
+  const diffTime = tetDate - today;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
   return (
     <AppDataProvider>
-      <SnowEffect />
       <AIChat />
 
       <div style={{ display: 'flex' }}>
         {/* --- SIDEBAR --- */}
-        <div 
-            style={sidebarStyle}
-            onMouseEnter={() => setIsSidebarHovered(true)} 
-            onMouseLeave={() => setIsSidebarHovered(false)}
-        >
-            {/* Header Sidebar */}
-            <div style={{ padding: '30px 0', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', minHeight: '120px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                {isSidebarHovered ? (
-                    <div style={{animation: 'fadeIn 0.3s'}}>
-                        <h2 style={{ margin: 0, fontSize: '2rem', fontWeight: '900', color: '#FFFFFF', textTransform: 'uppercase', letterSpacing: '1px' }}>DATA SYSTEM</h2>
-                        <div style={{ marginTop: '5px', fontSize: '0.75rem', color: '#FFD700', fontStyle: 'italic' }}>🔥 Made by Khánh đẹp trai vkl 🔥</div>
-                    </div>
-                ) : (
-                    <div style={{ fontSize: '2.5rem', animation: 'fadeIn 0.3s' }}>🎄</div>
-                )}
+        <div style={sidebarStyle}>
+          {/* Header Sidebar - UPDATED DESIGN */}
+          <div style={{ padding: '24px 0', textAlign: 'center', minHeight: '100px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
+              <div style={{ width: '40px', height: '40px', background: '#FF6600', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFF', fontWeight: '900', fontSize: '1.5rem', marginBottom: '5px' }}>Q</div>
+              <span style={{ fontSize: '0.8rem', color: '#6B7280', fontStyle: 'italic' }}>made by</span>
+              <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '900', color: '#FF6600', letterSpacing: '0.5px', textTransform: 'uppercase', lineHeight: '1.1' }}>
+                QUỐC KHÁNH
+              </h2>
+            </div>
+          </div>
+
+          {/* Menu Items */}
+          <div style={{ flex: 1, paddingTop: '10px', overflowY: 'auto' }}>
+
+            {/* 0. [MỚI] BÁO CÁO TỔNG (DASHBOARD) - Thêm vào đầu tiên */}
+            <div
+              style={menuItemStyle(currentView === 'dashboard')}
+              onClick={() => setCurrentView('dashboard')}
+              onMouseEnter={(e) => { if (currentView !== 'dashboard') { e.currentTarget.style.backgroundColor = '#FFF7ED'; e.currentTarget.style.color = '#FF6600'; } }}
+              onMouseLeave={(e) => { if (currentView !== 'dashboard') { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#9CA3AF'; } }}
+            >
+              <span>📊</span>
+              <span>Dashboard</span>
             </div>
 
-            {/* Menu Items */}
-            <div style={{ flex: 1, paddingTop: '20px' }}>
-                
-                {/* 0. [MỚI] BÁO CÁO TỔNG (DASHBOARD) - Thêm vào đầu tiên */}
-                <div style={menuItemStyle(currentView === 'dashboard')} onClick={() => setCurrentView('dashboard')} title="Báo Cáo Tổng">
-                    <span style={{fontSize: '1.4rem'}}>📊</span>
-                    <span style={{ display: isSidebarHovered ? 'block' : 'none' }}>Báo Cáo Tổng</span>
-                </div>
-
-                {/* 1. Quản Lý Order */}
-                <div style={menuItemStyle(currentView === 'orders')} onClick={() => setCurrentView('orders')} title="Quản Lý Order">
-                    <span style={{fontSize: '1.4rem'}}>📦</span> 
-                    <span style={{ display: isSidebarHovered ? 'block' : 'none' }}>Quản Lý Order</span>
-                </div>
-
-                {/* 2. Tạo Hợp Đồng */}
-                <div style={menuItemStyle(currentView === 'contract')} onClick={() => setCurrentView('contract')} title="Tạo Hợp Đồng">
-                    <span style={{fontSize: '1.4rem'}}>📝</span>
-                    <span style={{ display: isSidebarHovered ? 'block' : 'none' }}>Tạo Hợp Đồng</span>
-                </div>
-
-                {/* 3. Quản Lý Booking */}
-                <div style={menuItemStyle(currentView === 'booking')} onClick={() => setCurrentView('booking')} title="Quản Lý Booking">
-                    <span style={{fontSize: '1.4rem'}}>📅</span>
-                    <span style={{ display: isSidebarHovered ? 'block' : 'none' }}>Quản Lý Booking</span>
-                </div>
-
-                {/* 4. Quản Lý Link Air */}
-                <div style={menuItemStyle(currentView === 'airlinks')} onClick={() => setCurrentView('airlinks')} title="Quản Lý Link Air">
-                    <span style={{fontSize: '1.4rem'}}>🎬</span>
-                    <span style={{ display: isSidebarHovered ? 'block' : 'none' }}>Quản Lý Link Air</span>
-                </div>
-
-                {/* 5. Quản Lý Chi Phí */}
-                <div style={menuItemStyle(currentView === 'expenses')} onClick={() => setCurrentView('expenses')} title="Quản Lý Chi Phí">
-                    <span style={{fontSize: '1.4rem'}}>💸</span>
-                    <span style={{ display: isSidebarHovered ? 'block' : 'none' }}>Quản Lý Chi Phí</span>
-                </div>
+            <div
+              style={menuItemStyle(currentView === 'order')}
+              onClick={() => setCurrentView('order')}
+              onMouseEnter={(e) => { if (currentView !== 'order') { e.currentTarget.style.backgroundColor = '#FFF7ED'; e.currentTarget.style.color = '#FF6600'; } }}
+              onMouseLeave={(e) => { if (currentView !== 'order') { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#9CA3AF'; } }}
+            >
+              <span>🛒</span>
+              <span>Đơn Hàng KOC</span>
             </div>
 
-            {/* Footer Sidebar */}
-            <div style={{ padding: '20px', fontSize: '0.7rem', textAlign: 'center', opacity: 0.6, display: isSidebarHovered ? 'block' : 'none' }}>
-                v2.0 Automation
+            <div
+              style={menuItemStyle(currentView === 'airlinks')}
+              onClick={() => setCurrentView('airlinks')}
+              onMouseEnter={(e) => { if (currentView !== 'airlinks') { e.currentTarget.style.backgroundColor = '#FFF7ED'; e.currentTarget.style.color = '#FF6600'; } }}
+              onMouseLeave={(e) => { if (currentView !== 'airlinks') { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#9CA3AF'; } }}
+            >
+              <span>🔗</span>
+              <span>Quản Lý Link Air</span>
             </div>
+
+            <div
+              style={menuItemStyle(currentView === 'booking')}
+              onClick={() => setCurrentView('booking')}
+              onMouseEnter={(e) => { if (currentView !== 'booking') { e.currentTarget.style.backgroundColor = '#FFF7ED'; e.currentTarget.style.color = '#FF6600'; } }}
+              onMouseLeave={(e) => { if (currentView !== 'booking') { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#9CA3AF'; } }}
+            >
+              <span>📅</span>
+              <span>Booking Manager</span>
+            </div>
+
+            <div
+              style={menuItemStyle(currentView === 'contract')}
+              onClick={() => setCurrentView('contract')}
+              onMouseEnter={(e) => { if (currentView !== 'contract') { e.currentTarget.style.backgroundColor = '#FFF7ED'; e.currentTarget.style.color = '#FF6600'; } }}
+              onMouseLeave={(e) => { if (currentView !== 'contract') { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#9CA3AF'; } }}
+            >
+              <span>📝</span>
+              <span>Hợp Đồng</span>
+            </div>
+
+            <div
+              style={menuItemStyle(currentView === 'expense')}
+              onClick={() => setCurrentView('expense')}
+              onMouseEnter={(e) => { if (currentView !== 'expense') { e.currentTarget.style.backgroundColor = '#FFF7ED'; e.currentTarget.style.color = '#FF6600'; } }}
+              onMouseLeave={(e) => { if (currentView !== 'expense') { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#9CA3AF'; } }}
+            >
+              <span>💸</span>
+              <span>Ngân Sách Ecom</span>
+            </div>
+            {/* TET COUNTDOWN WIDGET */}
+            <div style={{ margin: '16px', padding: '15px', backgroundColor: '#FFF7ED', borderRadius: '16px', border: '2px solid #FFEDD5', textAlign: 'center' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '5px' }}>🌸</div>
+              <div style={{ fontSize: '0.85rem', color: '#666', marginBottom: '5px', fontWeight: '500' }}>Cùng đếm ngược nào!</div>
+              <div style={{ fontSize: '1.2rem', color: '#D42426', fontWeight: '900' }}>
+                Còn <span style={{ fontSize: '1.8rem', color: '#FF6600' }}>{diffDays}</span> ngày
+              </div>
+              <div style={{ fontSize: '0.9rem', color: '#D42426', fontWeight: '700' }}>nữa là đến TẾT 🐎</div>
+            </div>
+          </div>
+
+          <div style={{ padding: '16px', borderTop: '1px solid #F3F4F6', fontSize: '0.75rem', color: '#9CA3AF', textAlign: 'center' }}>
+            v2.6 Mirinda Edition
+          </div>
         </div>
 
         {/* --- MAIN CONTENT --- */}
         <div style={mainContentStyle}>
-           {/* [MỚI] Hiển thị Dashboard khi chọn tab này */}
-           {currentView === 'dashboard' && <DashboardTab />}
-           
-           {currentView === 'orders' && <OrderTab />}
-           {currentView === 'contract' && <ContractTab />}
-           {currentView === 'booking' && <BookingManagerTab />} 
-           {currentView === 'airlinks' && <AirLinksTab />}
-           {currentView === 'expenses' && <ExpenseEcomTab />} 
+
+          {currentView === 'dashboard' && <DashboardTab />}
+          {currentView === 'order' && <OrderTab />}
+          {currentView === 'contract' && <ContractTab />}
+          {currentView === 'airlinks' && <AirLinksTab />}
+          {currentView === 'expense' && <ExpenseEcomTab />}
+          {currentView === 'booking' && <BookingManagerTab />}
+
         </div>
       </div>
     </AppDataProvider>
