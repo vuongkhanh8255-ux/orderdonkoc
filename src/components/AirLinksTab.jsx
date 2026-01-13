@@ -3,6 +3,7 @@ import { useAppData } from '../context/AppDataContext';
 import { supabase } from '../supabaseClient';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, Label } from 'recharts';
 import { read, utils } from 'xlsx';
+import SearchableDropdown from './SearchableDropdown';
 
 const COLORS = ['#FF6600', '#10B981', '#F59E0B', '#3B82F6', '#8B5CF6', '#EC4899', '#6366F1'];
 const CHART_HEIGHT = 500;
@@ -150,10 +151,21 @@ const AirLinksTab = () => {
                 setAvailableProducts([]);
                 return;
             }
+            // [FIX] Nếu là eHerb HCM, lấy ID của brand chính "eHerb" để load full sản phẩm
+            let searchBrandId = newLink.brand_id;
+            const selectedBrandName = brands.find(b => String(b.id) === String(newLink.brand_id))?.ten_brand?.toLowerCase() || '';
+
+            if (selectedBrandName === 'eherb hcm') {
+                const mainEherb = brands.find(b => b.ten_brand.toLowerCase() === 'eherb');
+                if (mainEherb) {
+                    searchBrandId = mainEherb.id;
+                }
+            }
+
             const { data, error } = await supabase
                 .from('sanphams')
                 .select('ten_sanpham, brand_id')
-                .eq('brand_id', newLink.brand_id);
+                .eq('brand_id', searchBrandId);
 
             if (!error && data) {
                 let productList = data.map(d => d.ten_sanpham);
@@ -569,14 +581,15 @@ const AirLinksTab = () => {
 
                             <div>
                                 <label style={labelStyle}>Sản Phẩm (*)</label>
-                                <select value={newLink.san_pham} onChange={e => setNewLink({ ...newLink, san_pham: e.target.value })} required style={inputStyle}>
-                                    <option value="">-- Chọn Sản Phẩm --</option>
-                                    {availableProducts.length > 0 ? (
-                                        availableProducts.map((prod, idx) => (<option key={idx} value={prod}>{prod}</option>))
-                                    ) : (
-                                        <option value="" disabled>Vui lòng chọn Brand trước</option>
-                                    )}
-                                </select>
+                                <SearchableDropdown
+                                    options={availableProducts.length > 0
+                                        ? availableProducts.map(prod => ({ value: prod, label: prod }))
+                                        : []}
+                                    value={newLink.san_pham}
+                                    onChange={(val) => setNewLink({ ...newLink, san_pham: val })}
+                                    placeholder={availableProducts.length > 0 ? "-- Chọn Sản Phẩm --" : "Vui lòng chọn Brand trước"}
+                                    style={inputStyle}
+                                />
                             </div>
                         </div>
 
