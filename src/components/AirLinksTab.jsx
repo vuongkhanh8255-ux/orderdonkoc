@@ -156,7 +156,16 @@ const AirLinksTab = () => {
                 .eq('brand_id', newLink.brand_id);
 
             if (!error && data) {
-                setAvailableProducts(data.map(d => d.ten_sanpham));
+                let productList = data.map(d => d.ten_sanpham);
+
+                // [FIX] Thêm Bodymist thủ công cho các Brand này
+                const currentBrandName = brands.find(b => String(b.id) === String(newLink.brand_id))?.ten_brand?.toLowerCase() || '';
+                if (currentBrandName.includes('bodymiss') || currentBrandName.includes('eherb')) {
+                    const extraProducts = ['Bodymist', 'Bodymist nhũ'];
+                    productList = [...new Set([...productList, ...extraProducts])];
+                }
+
+                setAvailableProducts(productList);
             } else {
                 setAvailableProducts([]);
             }
