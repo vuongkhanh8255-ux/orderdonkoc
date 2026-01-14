@@ -239,10 +239,30 @@ const DashboardTab = () => {
                 console.error("Error fetching dashboard data:", error);
             }
 
-            // AirLinks doesn't support easy date filtering on 'ngay_air' (text field?). 
-            // If needed, we can optimize this too, but for now kept client-side filtering for AirLinks or simple select.
-            const { data: airData } = await supabase.from('air_links').select('*');
-            if (airData) setRawAirLinks(airData);
+            // [FIX] Loop to fetch ALL air links (bypass 1000 limit)
+            let allAirLinks = [];
+            let from = 0;
+            const size = 500; // Reduce chunk size to be safe
+            let more = true;
+            while (more) {
+                const { data, error } = await supabase
+                    .from('air_links')
+                    .select('*')
+                    .order('created_at', { ascending: false })
+                    .range(from, from + size - 1);
+
+                if (error || !data || data.length === 0) {
+                    more = false;
+                } else {
+                    allAirLinks = [...allAirLinks, ...data];
+                    from += size;
+                    // If we got fewer than requested, we reached the end
+                    if (data.length < size) more = false;
+                }
+                if (allAirLinks.length > 50000) more = false; // Safety break 50k
+            }
+            console.log("Total AirLinks Fetched:", allAirLinks.length);
+            setRawAirLinks(allAirLinks);
 
             // [FIX] Load danh sách sản phẩm để lọc
             const { data: spData } = await supabase.from('sanphams').select('id, ten_sanpham, brand_id');
@@ -271,10 +291,29 @@ const DashboardTab = () => {
     // --- HÀM LỌC ---
     const filterData = (data, dateField) => {
         return data.filter(item => {
-            const dateStr = item[dateField] || item.created_at;
+            let dateStr = item[dateField];
+            // Fallback to created_at if dateField is null/empty
+            if (!dateStr) dateStr = item.created_at;
             if (!dateStr) return false;
-            const targetString = `${airReportYear}-${String(airReportMonth).padStart(2, '0')}`;
-            if (!dateStr.startsWith(targetString)) return false;
+
+            let d = new Date(dateStr);
+            // Support DD/MM/YYYY format if ISO parse fails or gives wrong result for non-US
+            // Example: 01/05/2026 -> May 1st? or Jan 5th? In VN usually DD/MM.
+            // If dateStr has '/', parse manually
+            if (typeof dateStr === 'string' && dateStr.includes('/')) {
+                const parts = dateStr.split('/');
+                if (parts.length === 3) {
+                    // Assume DD/MM/YYYY
+                    d = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+                }
+            }
+
+            if (isNaN(d.getTime())) return false;
+
+            // Check Month & Year
+            // Note: airReportMonth is 1-12, getMonth() is 0-11
+            if (d.getMonth() + 1 !== airReportMonth || d.getFullYear() !== airReportYear) return false;
+
             if (filterBrand && String(item.brand_id) !== String(filterBrand)) return false;
             if (filterSanPham && item.san_pham !== filterSanPham) return false;
             if (filterNhanSu && String(item.nhansu_id) !== String(filterNhanSu)) return false;
@@ -470,9 +509,9 @@ const DashboardTab = () => {
             </div>
 
             {/* HEADER */}
-            <h1 className="page-header">
+            <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#111827', margin: 0 }}>
                 TỔNG QUAN HIỆU SUẤT (Tháng {airReportMonth}/{airReportYear})
-            </h1>
+            </h3>
 
             {/* HÀNG 1 */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '25px', marginBottom: '25px' }}>

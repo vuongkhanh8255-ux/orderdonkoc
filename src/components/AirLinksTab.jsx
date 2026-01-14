@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import { supabase } from '../supabaseClient';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, Label } from 'recharts';
-import { read, utils } from 'xlsx';
+import { read, utils, writeFile } from 'xlsx';
 import SearchableDropdown from './SearchableDropdown';
 
 const COLORS = ['#FF6600', '#10B981', '#F59E0B', '#3B82F6', '#8B5CF6', '#EC4899', '#6366F1'];
@@ -112,7 +112,9 @@ const AirLinksTab = () => {
         airLinksTotalCount, totalPagesAirLinks,
         airReportMonth, setAirReportMonth, airReportYear, setAirReportYear,
         airReportData, isAirReportLoading, handleGenerateAirLinksReport, requestAirSort,
-        sortedAirReportRows, totalsRowAirReport
+        sortedAirReportRows, totalsRowAirReport,
+        filterAlLinkAir, setFilterAlLinkAir,
+        filterAlDate, setFilterAlDate
     } = useAppData();
 
     const [newLink, setNewLink] = useState({
@@ -173,7 +175,7 @@ const AirLinksTab = () => {
                 // [FIX] Thêm Bodymist thủ công cho các Brand này
                 const currentBrandName = brands.find(b => String(b.id) === String(newLink.brand_id))?.ten_brand?.toLowerCase() || '';
                 if (currentBrandName.includes('bodymiss') || currentBrandName.includes('eherb')) {
-                    const extraProducts = ['Bodymist', 'Bodymist nhũ'];
+                    const extraProducts = ['Bodymist', 'Bodymist nhũ', 'Nước hoa sáp'];
                     productList = [...new Set([...productList, ...extraProducts])];
                 }
 
@@ -437,6 +439,84 @@ const AirLinksTab = () => {
         reader.readAsBinaryString(file);
     };
 
+    // --- EXPORT EXCEL (FULL DATA) ---
+    const handleExportExcel = async () => {
+        const confirmExport = window.confirm(`Bạn có muốn xuất toàn bộ dữ liệu đã lọc không? \n(Quá trình này có thể mất vài giây nếu dữ liệu lớn)`);
+        if (!confirmExport) return;
+
+        try {
+            let allData = [];
+            let from = 0;
+            const size = 1000;
+            let more = true;
+
+            while (more) {
+                // Replicate Filter Logic but use RANGE
+                let query = supabase.from('air_links').select(`
+                    id, created_at, link_air_koc, id_kenh, id_video,
+                    "cast", cms_brand, 
+                    ngay_air, san_pham, ngay_booking,
+                    brands ( ten_brand ),
+                    nhansu ( ten_nhansu )
+                `);
+
+                if (filterAlKenh) query = query.ilike('id_kenh', `%${filterAlKenh}%`);
+                if (filterAlLinkAir) query = query.ilike('link_air_koc', `%${filterAlLinkAir}%`);
+                if (filterAlBrand) query = query.eq('brand_id', filterAlBrand);
+                if (filterAlNhanSu) query = query.eq('nhansu_id', filterAlNhanSu);
+                if (filterAlDate) {
+                    const startDate = `${filterAlDate}T00:00:00.000Z`;
+                    const endDate = `${filterAlDate}T23:59:59.999Z`;
+                    query = query.gte('ngay_air', startDate).lte('ngay_air', endDate);
+                }
+
+                const { data, error } = await query
+                    .order('created_at', { ascending: false })
+                    .range(from, from + size - 1);
+
+                if (error) throw error;
+
+                if (data && data.length > 0) {
+                    allData = [...allData, ...data];
+                    from += size;
+                    if (data.length < size) more = false;
+                } else {
+                    more = false;
+                }
+                if (allData.length > 50000) more = false; // Safety break
+            }
+
+            if (allData.length === 0) {
+                alert("Không tìm thấy dữ liệu nào để xuất!");
+                return;
+            }
+
+            const dataToExport = allData.map((item, index) => ({
+                "STT": allData.length - index,
+                "Link Air": item.link_air_koc || '',
+                "ID Kênh": item.id_kenh || '',
+                "ID Video": item.id_video || '',
+                "Brand": item.brands?.ten_brand || '',
+                "Sản Phẩm": item.san_pham || '',
+                "Cast": item.cast ? Number(item.cast) : 0,
+                "CMS": item.cms_brand || '',
+                "Nhân Sự": item.nhansu?.ten_nhansu || '',
+                "Ngày Air": item.ngay_air || '',
+                "Ngày Booking": item.ngay_booking || ''
+            }));
+
+            const ws = utils.json_to_sheet(dataToExport);
+            const wb = utils.book_new();
+            utils.book_append_sheet(wb, ws, "AirLinks_Full");
+            writeFile(wb, `Air_Links_Full_${new Date().toISOString().split('T')[0]}.xlsx`);
+            alert(`Đã xuất thành công ${data.length} dòng!`);
+
+        } catch (err) {
+            console.error(err);
+            alert("Lỗi khi xuất Excel: " + err.message);
+        }
+    };
+
     useEffect(() => { handleGenerateAirLinksReport(); }, [airReportMonth, airReportYear]);
 
     // --- LOGIC HIỂN THỊ VÀ EDIT TRỰC TIẾP ---
@@ -467,18 +547,19 @@ const AirLinksTab = () => {
     };
 
     // START EDIT
+    // START EDIT (Fixed for Crash: Default to empty string)
     const handleEditClick = (link) => {
         setEditingRowId(link.id);
         setEditFormData({
             id: link.id,
-            link_air_koc: link.link_air_koc,
-            id_kenh: link.id_kenh,
-            id_video: link.id_video,
-            brand_id: link.brand_id,
-            san_pham: link.san_pham,
-            nhansu_id: link.nhansu_id,
+            link_air_koc: link.link_air_koc || '',
+            id_kenh: link.id_kenh || '',
+            id_video: link.id_video || '',
+            brand_id: link.brand_id || '',
+            san_pham: link.san_pham || '',
+            nhansu_id: link.nhansu_id || '',
             cast: formatCurrency(link.cast),
-            cms_brand: link.cms_brand
+            cms_brand: link.cms_brand || ''
         });
     };
 
@@ -821,10 +902,15 @@ const AirLinksTab = () => {
                             🗑️ XÓA {selectedRowIds.length} MỤC ĐÃ CHỌN
                         </button>
                     )}
+                    <input type="text" placeholder="Tìm Link Air..." value={filterAlLinkAir} onChange={e => setFilterAlLinkAir(e.target.value)} style={{ flex: '1 1 200px' }} />
                     <input type="text" placeholder="Lọc ID Kênh..." value={filterAlKenh} onChange={e => setFilterAlKenh(e.target.value)} style={{ flex: '1 1 150px' }} />
                     <select value={filterAlBrand} onChange={e => setFilterAlBrand(e.target.value)} style={{ flex: '1 1 200px' }}><option value="">Tất cả Brand</option>{brands.map(b => <option key={b.id} value={b.id}>{b.ten_brand}</option>)}</select>
                     <select value={filterAlNhanSu} onChange={e => setFilterAlNhanSu(e.target.value)} style={{ flex: '1 1 180px' }}><option value="">Tất cả Nhân sự</option>{nhanSus.map(ns => <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>)}</select>
+                    <select value={filterAlNhanSu} onChange={e => setFilterAlNhanSu(e.target.value)} style={{ flex: '1 1 180px' }}><option value="">Tất cả Nhân sự</option>{nhanSus.map(ns => <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>)}</select>
                     <button onClick={clearAirLinkFilters} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>Xóa Lọc</button>
+                    <button onClick={handleExportExcel} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: '#10B981', border: 'none' }}>
+                        📥 Xuất Excel
+                    </button>
                 </div>
                 {isLoadingAirLinks ? <p>Đang tải...</p> : (
                     <div style={{ width: '100%', overflow: 'auto' }}>
@@ -848,7 +934,7 @@ const AirLinksTab = () => {
                             </thead>
                             <tbody>
                                 {airLinks.map((link, index) => {
-                                    const isEditing = editingRowId === link.id;
+                                    const isEditing = String(editingRowId) === String(link.id);
 
                                     return (
                                         <tr key={link.id} style={{ borderBottom: '1px solid #eee', backgroundColor: isEditing ? '#fefce8' : 'transparent' }}>

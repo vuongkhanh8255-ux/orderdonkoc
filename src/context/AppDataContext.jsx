@@ -179,6 +179,7 @@ export const AppDataProvider = ({ children }) => {
   const [filterAlBrand, setFilterAlBrand] = useState('');
   const [filterAlNhanSu, setFilterAlNhanSu] = useState('');
   const [filterAlDate, setFilterAlDate] = useState('');
+  const [filterAlLinkAir, setFilterAlLinkAir] = useState('');
   const [airLinksCurrentPage, setAirLinksCurrentPage] = useState(1);
   const [airLinksTotalCount, setAirLinksTotalCount] = useState(0);
   const [airReportMonth, setAirReportMonth] = useState(new Date().getMonth() + 1);
@@ -896,6 +897,7 @@ export const AppDataProvider = ({ children }) => {
       nhansu ( ten_nhansu )
     `, { count: 'exact' });
     if (filterAlKenh) query = query.ilike('id_kenh', `%${filterAlKenh}%`);
+    if (filterAlLinkAir) query = query.ilike('link_air_koc', `%${filterAlLinkAir}%`);
     if (filterAlBrand) query = query.eq('brand_id', filterAlBrand);
     if (filterAlNhanSu) query = query.eq('nhansu_id', filterAlNhanSu);
     if (filterAlDate) {
@@ -922,7 +924,7 @@ export const AppDataProvider = ({ children }) => {
       setIsLoadingAirLinks(false);
     }
   };
-  const clearAirLinkFilters = () => { setFilterAlKenh(''); setFilterAlBrand(''); setFilterAlNhanSu(''); setFilterAlDate(''); };
+  const clearAirLinkFilters = () => { setFilterAlKenh(''); setFilterAlBrand(''); setFilterAlNhanSu(''); setFilterAlDate(''); setFilterAlLinkAir(''); };
   const handleGenerateAirLinksReport = async () => {
     setIsAirReportLoading(true);
     setAirReportData({ reportRows: [], brandHeaders: [] });
@@ -985,7 +987,7 @@ export const AppDataProvider = ({ children }) => {
   useEffect(() => { loadInitialData(); }, [currentPage, filterIdKenh, filterSdt, filterNhanSu, filterNgay, filterLoaiShip, filterEditedStatus, filterBrand, filterSanPham]);
   useEffect(() => { if (currentPage !== 1) { setCurrentPage(1); } }, [filterIdKenh, filterSdt, filterNhanSu, filterNgay, filterLoaiShip, filterEditedStatus, filterBrand, filterSanPham]);
   useEffect(() => { loadSanPhamsByBrand(selectedBrand); setProductSearchTerm(''); }, [selectedBrand]);
-  useEffect(() => { loadAirLinks(); }, [airLinksCurrentPage, filterAlKenh, filterAlBrand, filterAlNhanSu, filterAlDate]);
+  useEffect(() => { loadAirLinks(); }, [airLinksCurrentPage, filterAlKenh, filterAlBrand, filterAlNhanSu, filterAlDate, filterAlLinkAir]);
 
   // [FIX] Load products for List Filter separately from Form
   useEffect(() => {
@@ -996,7 +998,7 @@ export const AppDataProvider = ({ children }) => {
     };
     fetchFilterProducts();
   }, [filterBrand]);
-  useEffect(() => { if (airLinksCurrentPage !== 1) { setAirLinksCurrentPage(1); } }, [filterAlKenh, filterAlBrand, filterAlNhanSu, filterAlDate]);
+  useEffect(() => { if (airLinksCurrentPage !== 1) { setAirLinksCurrentPage(1); } }, [filterAlKenh, filterAlBrand, filterAlNhanSu, filterAlDate, filterAlLinkAir]);
 
   // =================================================================
   // USE MEMO (Tính toán)
@@ -1142,6 +1144,7 @@ export const AppDataProvider = ({ children }) => {
     airLinks, setAirLinks, isLoadingAirLinks, setIsLoadingAirLinks,
     filterAlKenh, setFilterAlKenh, filterAlBrand, setFilterAlBrand,
     filterAlNhanSu, setFilterAlNhanSu, filterAlDate, setFilterAlDate,
+    filterAlLinkAir, setFilterAlLinkAir,
     airLinksCurrentPage, setAirLinksCurrentPage, airLinksTotalCount,
 
     // Logic Tab Air Links
