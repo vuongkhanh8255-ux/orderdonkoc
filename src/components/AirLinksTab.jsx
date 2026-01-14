@@ -306,6 +306,14 @@ const AirLinksTab = () => {
 
     const handleBulkDelete = async () => {
         if (selectedRowIds.length === 0) return;
+
+        // PASSWORD PROTECTION
+        const password = prompt("🔒 Nhập mật khẩu để XÓA (Admin):");
+        if (password !== 'Khanh8255') {
+            alert("❌ Mật khẩu không đúng! Không thể xóa.");
+            return;
+        }
+
         if (!window.confirm(`Bạn có chắc chắn muốn xóa ${selectedRowIds.length} dòng đã chọn?`)) return;
 
         try {
@@ -1017,7 +1025,14 @@ const AirLinksTab = () => {
                                                     ) : (
                                                         <>
                                                             <button onClick={() => handleEditClick(link)} style={{ padding: '6px 12px', backgroundColor: '#fff', border: '1px solid #1976D2', color: '#1976D2', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Sửa</button>
-                                                            <button onClick={() => handleDeleteAirLink(link.id, link.link_air_koc)} style={{ padding: '6px 12px', backgroundColor: '#fff', border: '1px solid #D42426', color: '#D42426', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Xóa</button>
+                                                            <button onClick={() => {
+                                                                const pass = prompt("🔒 Nhập mật khẩu Admin để XÓA:");
+                                                                if (pass === 'Khanh8255') {
+                                                                    handleDeleteAirLink(link.id, link.link_air_koc);
+                                                                } else if (pass) {
+                                                                    alert("❌ Sai mật khẩu!");
+                                                                }
+                                                            }} style={{ padding: '6px 12px', backgroundColor: '#fff', border: '1px solid #D42426', color: '#D42426', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Xóa</button>
                                                         </>
                                                     )}
                                                 </div>
