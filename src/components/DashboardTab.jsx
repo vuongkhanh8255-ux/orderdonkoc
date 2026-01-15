@@ -200,7 +200,7 @@ const DashboardTab = () => {
 
     // LOAD DATA
     useEffect(() => {
-        const fetchData = async () => {
+        const fetchBookings = async () => {
             setLoading(true);
 
             // Calculate Date Range for Server-Side Filtering
@@ -239,11 +239,19 @@ const DashboardTab = () => {
                 console.error("Error fetching dashboard data:", error);
             }
 
-            // [FIX] Loop to fetch ALL air links (bypass 1000 limit)
+            setLoading(false);
+        };
+        fetchBookings();
+    }, [airReportMonth, airReportYear]);
+
+    // [OPTIMIZATION] FETCH ALL AIR LINKS ONCE (Prevent Refetch on Month Change)
+    useEffect(() => {
+        const fetchAllAirLinks = async () => {
             let allAirLinks = [];
             let from = 0;
-            const size = 500; // Reduce chunk size to be safe
+            const size = 1000; // Increased chunk size
             let more = true;
+
             while (more) {
                 const { data, error } = await supabase
                     .from('air_links')
@@ -256,22 +264,20 @@ const DashboardTab = () => {
                 } else {
                     allAirLinks = [...allAirLinks, ...data];
                     from += size;
-                    // If we got fewer than requested, we reached the end
                     if (data.length < size) more = false;
                 }
-                if (allAirLinks.length > 50000) more = false; // Safety break 50k
+                if (allAirLinks.length > 50000) more = false;
             }
-            console.log("Total AirLinks Fetched:", allAirLinks.length);
+            console.log("Loaded All AirLinks:", allAirLinks.length);
             setRawAirLinks(allAirLinks);
 
-            // [FIX] Load danh sách sản phẩm để lọc
+            // Load products for filtering
             const { data: spData } = await supabase.from('sanphams').select('id, ten_sanpham, brand_id');
             if (spData) setDashboardSanPhams(spData);
-
-            setLoading(false);
         };
-        fetchData();
-    }, [airReportMonth, airReportYear]); // Re-fetch when month changes
+
+        fetchAllAirLinks();
+    }, []); // Empty dependency = Run once on mount
 
     // --- HELPER FORMAT ---
     const getBrandName = (id) => brands.find(b => String(b.id) === String(id))?.ten_brand || 'Khác';
@@ -312,7 +318,8 @@ const DashboardTab = () => {
 
             // Check Month & Year
             // Note: airReportMonth is 1-12, getMonth() is 0-11
-            if (d.getMonth() + 1 !== airReportMonth || d.getFullYear() !== airReportYear) return false;
+            // [FIX] Ensure type safety (String vs Number)
+            if (d.getMonth() + 1 !== Number(airReportMonth) || d.getFullYear() !== Number(airReportYear)) return false;
 
             if (filterBrand && String(item.brand_id) !== String(filterBrand)) return false;
             if (filterSanPham && item.san_pham !== filterSanPham) return false;
@@ -388,7 +395,7 @@ const DashboardTab = () => {
 
 
     // --- CHART BOX - MIRINDA STYLE ---
-    const ChartBox = ({ data, title, unit, isMoney = false }) => {
+    const ChartBox = ({ data, title, unit, isMoney = false, showLegend = true }) => {
         // [ĐÃ SỬA] KHÔNG GỘP NHÓM "KHÁK" THEO YÊU CẦU
         return (
             <div className="mirinda-card" style={{ height: '500px', display: 'flex', flexDirection: 'column' }}>
@@ -420,7 +427,7 @@ const DashboardTab = () => {
                             </Pie>
 
                             <Tooltip formatter={(val) => isMoney ? formatMoney(val) : val + ' ' + unit} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} />
-                            <Legend layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: '12px', width: '100%', marginBottom: '10px' }} />
+                            {showLegend && <Legend layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: '12px', width: '100%', marginBottom: '10px' }} />}
                         </PieChart>
                     </ResponsiveContainer>
                 </div>
@@ -515,7 +522,7 @@ const DashboardTab = () => {
 
             {/* HÀNG 1 */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '25px', marginBottom: '25px' }}>
-                <ChartBox data={chart1Data} title="🔥 Top Sản Phẩm (Air Links)" unit="Air" />
+                <ChartBox data={chart1Data} title="🔥 Top Sản Phẩm (Air Links)" unit="Air" showLegend={false} />
                 <ChartBox data={chart2Data} title="🏷️ Tỷ trọng Brand (Booking)" unit="Job" />
                 <ChartBox data={chart3Data} title="🏆 Top Nhân Sự (Air Links)" unit="Link" />
             </div>
