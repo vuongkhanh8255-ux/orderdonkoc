@@ -282,7 +282,14 @@ const AirLinksTab = () => {
             alert("Đã thêm link thành công! 🎉");
             setNewLink({ link_air_koc: '', id_kenh: '', id_video: '', brand_id: '', san_pham: '', nhansu_id: '', ngay_air: '', ngay_booking: new Date().toISOString().split('T')[0], cast: '', cms_brand: '', view_count: 0 });
             loadAirLinks(); handleGenerateAirLinksReport();
-        } catch (error) { alert("Lỗi khi lưu: " + error.message); } finally { setIsSubmitting(false); }
+            loadAirLinks(); handleGenerateAirLinksReport();
+        } catch (error) {
+            if (error.code === '23505') {
+                alert("⛔ HIỆN TẠI DATABASE ĐANG CHẶN TRÙNG LINK!\n\nĐể nhập được nhiều dòng cùng 1 link (để tính KPI), bạn cần:\n1. Vào Supabase > Table 'air_links'\n2. Bấm Edit cột 'link_air_koc'\n3. Bỏ tích ô 'Is Unique'\n4. Lưu lại là xong!");
+            } else {
+                alert("Lỗi khi lưu: " + error.message);
+            }
+        } finally { setIsSubmitting(false); }
     };
 
     // --- BULK DELETE HANDLERS ---
@@ -426,12 +433,17 @@ const AirLinksTab = () => {
                 const uniqueValidRows = Array.from(uniqueRowsMap.values());
 
                 if (uniqueValidRows.length > 0) {
-                    // UPSERT: Nếu trùng link_air_koc thì CẬP NHẬT thông tin mới
-                    const { error } = await supabase.from('air_links').upsert(uniqueValidRows, { onConflict: 'link_air_koc' });
+                    // [MODIFIED] INSERT INSTEAD OF UPSERT (Allow Duplicates)
+                    // We now insert ALL valid rows, even if they share the same link
+                    const { error } = await supabase.from('air_links').insert(uniqueValidRows);
                     if (error) throw error;
                     successCount = uniqueValidRows.length;
+
+                    // Warning about internal file duplicates (we still dedup within the file itself to prevent accidental double-paste)
                     const duplicatesInFile = validRows.length - uniqueValidRows.length;
-                    alert(`Xử lý thành công: ${successCount} dòng.\n(Đã tự động lọc bỏ ${duplicatesInFile} dòng trùng trong file).\nThất bại/Bỏ qua: ${failCount} dòng.`);
+                    alert(`Xử lý thành công: ${successCount} dòng.\n(Đã tự động lọc bỏ ${duplicatesInFile} dòng trùng trong chính file excel này).\nThất bại/Bỏ qua: ${failCount} dòng.`);
+                    loadAirLinks(); handleGenerateAirLinksReport();
+                    alert(`Xử lý thành công: ${successCount} dòng.\n(Đã tự động lọc bỏ ${duplicatesInFile} dòng trùng trong chính file excel này).\nThất bại/Bỏ qua: ${failCount} dòng.`);
                     loadAirLinks(); handleGenerateAirLinksReport();
                 } else {
                     alert("Không tìm thấy dòng dữ liệu hợp lệ nào (Kiểm tra chính xác Tên Brand/Nhân sự trong file).");
@@ -439,7 +451,11 @@ const AirLinksTab = () => {
 
             } catch (error) {
                 console.error(error);
-                alert("Lỗi xử lý file: " + error.message);
+                if (error.code === '23505') {
+                    alert("⛔ LỖI IMPORT: DATABASE ĐANG CHẶN TRÙNG LINK!\n\nBạn cần vào Supabase bỏ tích 'Is Unique' ở cột 'link_air_koc' thì mới import đè hoặc import trùng được nhé!");
+                } else {
+                    alert("Lỗi xử lý file: " + error.message);
+                }
             } finally {
                 e.target.value = ''; // Reset input
             }
@@ -758,6 +774,73 @@ const AirLinksTab = () => {
                     )}
                 </div>
             </div>
+
+            {/* DUPLICATE WARNING TABLE */}
+            {(() => {
+                const dupMap = {};
+                airLinks.forEach(item => {
+                    let key = item.id_video ? item.id_video.trim() : null;
+                    if (!key && item.link_air_koc) key = item.link_air_koc.trim();
+
+                    if (key) {
+                        if (!dupMap[key]) dupMap[key] = [];
+                        dupMap[key].push(item);
+                    }
+                });
+
+                const duplicates = Object.values(dupMap).filter(group => group.length > 1);
+
+                if (duplicates.length === 0) return null;
+
+                return (
+                    <div className="mirinda-card" style={{ marginBottom: '2rem', padding: '20px', border: '2px solid #FFCC00', backgroundColor: '#FFFBEB' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
+                            <span style={{ fontSize: '24px' }}>⚠️</span>
+                            <h3 style={{ margin: 0, color: '#B45309', fontSize: '1.2rem', fontWeight: 'bold' }}>
+                                CẢNH BÁO NHẬP TRÙNG ({duplicates.length} video)
+                            </h3>
+                        </div>
+                        <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #FCD34D', borderRadius: '8px' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                                <thead style={{ backgroundColor: '#FEF3C7', position: 'sticky', top: 0 }}>
+                                    <tr>
+                                        <th style={{ padding: '10px', textAlign: 'left', color: '#92400E' }}>Video / Link</th>
+                                        <th style={{ padding: '10px', textAlign: 'center', color: '#92400E' }}>Số lần</th>
+                                        <th style={{ padding: '10px', textAlign: 'left', color: '#92400E' }}>Chi tiết (Người nhập - Ngày)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {duplicates.map((group, idx) => (
+                                        <tr key={idx} style={{ borderBottom: '1px solid #FDE68A', backgroundColor: '#fff' }}>
+                                            <td style={{ padding: '10px', verticalAlign: 'top' }}>
+                                                <div style={{ fontWeight: 'bold', color: '#D97706' }}>{group[0].id_video || 'No ID'}</div>
+                                                <a href={group[0].link_air_koc} target="_blank" rel="noopener noreferrer" style={{ fontSize: '11px', color: '#666', textDecoration: 'none', display: 'block', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                    {group[0].link_air_koc}
+                                                </a>
+                                            </td>
+                                            <td style={{ padding: '10px', textAlign: 'center', fontWeight: 'bold', color: '#DC2626', verticalAlign: 'top' }}>
+                                                {group.length}
+                                            </td>
+                                            <td style={{ padding: '10px' }}>
+                                                <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                                                    {group.map(item => (
+                                                        <li key={item.id} style={{ marginBottom: '4px' }}>
+                                                            <strong>{item.nhansu?.ten_nhansu || 'Unknown'}</strong>
+                                                            <span style={{ color: '#666', marginLeft: '5px', fontSize: '11px' }}>
+                                                                ({item.created_at ? new Date(item.created_at).toLocaleDateString('vi-VN') : 'No Date'})
+                                                            </span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                );
+            })()}
 
             {/* CHARTS */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', marginBottom: '30px' }}>
