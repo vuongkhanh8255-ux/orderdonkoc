@@ -4,8 +4,10 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import { supabase } from '../supabaseClient';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, LabelList, Legend, Label } from 'recharts';
+import { normalizeProductName } from '../utils/productMapping';
 
-const COLORS = ['#FF6600', '#10B981', '#F59E0B', '#3B82F6', '#8B5CF6', '#EC4899', '#6366F1'];
+// STELLA KINETICS COSMIC COLOR PALETTE
+const COLORS = ['#00D4FF', '#A855F7', '#3B82F6', '#00FF88', '#FBBF24', '#EC4899', '#6366F1', '#14B8A6'];
 const ITEMS_PER_PAGE = 10;
 
 // --- HELPER COMPONENT: SEARCHABLE DROPDOWN (MULTI-SELECT SUPPORT) ---
@@ -57,23 +59,24 @@ const SearchableDropdown = ({ options, value, onChange, placeholder, style, isMu
             <div
                 onClick={() => setIsOpen(!isOpen)}
                 style={{
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #d1d5db',
-                    backgroundColor: '#fff',
-                    color: (isMulti ? value.length > 0 : value) ? '#374151' : '#9CA3AF',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(0, 212, 255, 0.3)',
+                    backgroundColor: 'rgba(15, 37, 68, 0.8)',
+                    color: (isMulti ? value.length > 0 : value) ? '#FFFFFF' : 'rgba(255,255,255,0.5)',
                     fontSize: '14px',
                     cursor: 'pointer',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    minHeight: '38px' // Match other inputs
+                    minHeight: '40px',
+                    backdropFilter: 'blur(10px)'
                 }}
             >
                 <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px', fontWeight: (isMulti ? value.length > 0 : value) ? '600' : '400' }}>
                     {getDisplayValue()}
                 </span>
-                <span style={{ fontSize: '10px', color: '#666' }}>▼</span>
+                <span style={{ fontSize: '10px', color: '#00D4FF' }}>▼</span>
             </div>
 
             {/* DROPDOWN MENU */}
@@ -86,15 +89,15 @@ const SearchableDropdown = ({ options, value, onChange, placeholder, style, isMu
                     minWidth: '250px',
                     maxHeight: '300px',
                     overflowY: 'auto',
-                    backgroundColor: '#fff',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 15px rgba(0,0,0,0.15)',
-                    border: '1px solid #e5e7eb',
+                    backgroundColor: '#0F2544',
+                    borderRadius: '12px',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 212, 255, 0.1)',
+                    border: '1px solid rgba(0, 212, 255, 0.2)',
                     zIndex: 1000,
                     animation: 'fadeIn 0.2s'
                 }}>
                     {showSearch && (
-                        <div style={{ position: 'sticky', top: 0, padding: '8px', backgroundColor: '#fff', borderBottom: '1px solid #f3f4f6' }}>
+                        <div style={{ position: 'sticky', top: 0, padding: '10px', backgroundColor: '#0A1628', borderBottom: '1px solid rgba(0, 212, 255, 0.1)' }}>
                             <input
                                 type="text"
                                 placeholder="🔍 Tìm..."
@@ -103,9 +106,11 @@ const SearchableDropdown = ({ options, value, onChange, placeholder, style, isMu
                                 autoFocus
                                 style={{
                                     width: '100%',
-                                    padding: '6px 10px',
-                                    borderRadius: '6px',
-                                    border: '1px solid #ddd',
+                                    padding: '8px 12px',
+                                    borderRadius: '8px',
+                                    border: '1px solid rgba(0, 212, 255, 0.3)',
+                                    backgroundColor: 'rgba(26, 58, 92, 0.5)',
+                                    color: '#FFFFFF',
                                     fontSize: '13px',
                                     outline: 'none'
                                 }}
@@ -117,14 +122,14 @@ const SearchableDropdown = ({ options, value, onChange, placeholder, style, isMu
                             <div
                                 onClick={() => handleSelect('')}
                                 style={{
-                                    padding: '8px 12px',
+                                    padding: '10px 14px',
                                     cursor: 'pointer',
                                     fontSize: '14px',
-                                    color: '#666',
-                                    borderBottom: '1px dashed #eee',
+                                    color: 'rgba(255,255,255,0.5)',
+                                    borderBottom: '1px dashed rgba(0, 212, 255, 0.1)',
                                     fontStyle: 'italic'
                                 }}
-                                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                                onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(0, 212, 255, 0.1)'}
                                 onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
                             >
                                 -- {placeholder} --
@@ -137,18 +142,18 @@ const SearchableDropdown = ({ options, value, onChange, placeholder, style, isMu
                                     key={opt.value}
                                     onClick={() => handleSelect(opt.value)}
                                     style={{
-                                        padding: '8px 4px', // Tighter left padding for alignment
+                                        padding: '10px 6px',
                                         cursor: 'pointer',
                                         fontSize: '14px',
-                                        color: isSelected ? '#FF6600' : '#374151',
-                                        backgroundColor: isSelected ? '#FFF7ED' : 'transparent',
+                                        color: isSelected ? '#00D4FF' : 'rgba(255,255,255,0.8)',
+                                        backgroundColor: isSelected ? 'rgba(0, 212, 255, 0.15)' : 'transparent',
                                         fontWeight: isSelected ? '600' : '400',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'flex-start',
                                         gap: '8px'
                                     }}
-                                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#FFF7ED'}
+                                    onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(0, 212, 255, 0.1)'}
                                     onMouseLeave={e => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent'; }}
                                 >
                                     {isMulti && (
@@ -156,14 +161,14 @@ const SearchableDropdown = ({ options, value, onChange, placeholder, style, isMu
                                             type="checkbox"
                                             checked={isSelected}
                                             onChange={() => { }}
-                                            style={{ cursor: 'pointer', accentColor: '#FF6600' }}
+                                            style={{ cursor: 'pointer', accentColor: '#00D4FF' }}
                                         />
                                     )}
                                     {opt.label}
                                 </div>
                             );
                         }) : (
-                            <div style={{ padding: '10px', textAlign: 'center', color: '#999', fontSize: '13px' }}>
+                            <div style={{ padding: '12px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '13px' }}>
                                 Không tìm thấy
                             </div>
                         )}
@@ -360,10 +365,19 @@ const DashboardTab = () => {
     const totalAirPages = Math.ceil(filteredAirLinks.length / ITEMS_PER_PAGE);
 
     // --- CHART DATA ---
+    // --- CHART DATA ---
+
+    // Inside DashboardTab:
     const chart1Data = useMemo(() => {
         const map = {};
-        // Chart 1 is Top Products (Air Links), distinct? No, products are distinct items.
-        filteredAirLinks.forEach(i => { const k = i.san_pham || 'SP Khác'; map[k] = (map[k] || 0) + 1; });
+        // Chart 1 is Top Products (Air Links)
+        // [FIX] Apply normalization here
+        // (Force HMR update)
+        filteredAirLinks.forEach(i => {
+            const rawName = i.san_pham || 'SP Khác';
+            const k = normalizeProductName(rawName);
+            map[k] = (map[k] || 0) + 1;
+        });
         return Object.keys(map).map(k => ({ name: k, value: map[k] })).sort((a, b) => b.value - a.value);
     }, [filteredAirLinks]);
 
@@ -421,13 +435,17 @@ const DashboardTab = () => {
                                 <Label
                                     value={data.reduce((acc, cur) => acc + cur.value, 0)}
                                     position="center"
-                                    fill="#000"
-                                    style={{ fontSize: '24px', fontWeight: '700', fontFamily: 'Inter', textAnchor: 'middle' }}
+                                    fill="#00D4FF"
+                                    style={{ fontSize: '26px', fontWeight: '800', fontFamily: "'Space Grotesk', sans-serif", textAnchor: 'middle', filter: 'drop-shadow(0px 0px 8px rgba(0, 212, 255, 0.5))' }}
                                 />
                             </Pie>
 
-                            <Tooltip formatter={(val) => isMoney ? formatMoney(val) : val + ' ' + unit} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }} />
-                            {showLegend && <Legend layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: '12px', width: '100%', marginBottom: '10px' }} />}
+                            <Tooltip
+                                formatter={(val) => isMoney ? formatMoney(val) : val + ' ' + unit}
+                                contentStyle={{ borderRadius: '12px', border: 'none', backgroundColor: '#FFFFFF', color: '#0f172a', boxShadow: '0 8px 32px rgba(0,0,0,0.3)', fontWeight: 'bold' }}
+                                wrapperStyle={{ zIndex: 1000 }} // Ensure it floats on top
+                            />
+                            {showLegend && <Legend layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: '11px', width: '100%', marginBottom: '10px', color: 'rgba(255,255,255,0.7)' }} />}
                         </PieChart>
                     </ResponsiveContainer>
                 </div>
@@ -436,15 +454,25 @@ const DashboardTab = () => {
     };
 
 
-    // --- STYLE ---
+    // --- STYLE --- COSMIC THEME
     const filterContainerStyle = {
-        marginBottom: '30px', padding: '20px', background: '#fff', borderRadius: '16px',
+        marginBottom: '30px', padding: '20px 24px',
+        background: 'linear-gradient(135deg, rgba(15, 37, 68, 0.8) 0%, rgba(26, 58, 92, 0.6) 100%)',
+        borderRadius: '16px',
         display: 'flex', alignItems: 'center', gap: '20px',
-        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.02)',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2), 0 0 1px rgba(0, 212, 255, 0.3)',
+        border: '1px solid rgba(0, 212, 255, 0.15)',
+        backdropFilter: 'blur(10px)',
         flexWrap: 'wrap'
     };
-    const inputStyle = { padding: '8px 12px', borderRadius: '8px', border: '1px solid #d1d5db', backgroundColor: '#fff', color: '#374151', fontSize: '14px', outline: 'none', cursor: 'pointer' };
-    const labelStyle = { fontWeight: '600', color: '#374151', fontSize: '0.9rem', whiteSpace: 'nowrap' };
+    const inputStyle = {
+        padding: '10px 14px', borderRadius: '10px',
+        border: '1px solid rgba(0, 212, 255, 0.25)',
+        backgroundColor: 'rgba(10, 22, 40, 0.8)',
+        color: '#FFFFFF', fontSize: '14px', outline: 'none', cursor: 'pointer',
+        backdropFilter: 'blur(5px)'
+    };
+    const labelStyle = { fontWeight: '600', color: '#00D4FF', fontSize: '0.85rem', whiteSpace: 'nowrap', letterSpacing: '0.5px' };
 
     // Pagination Controls Component
     const PaginationControls = ({ page, totalPages, setPage }) => (
@@ -456,7 +484,7 @@ const DashboardTab = () => {
             >
                 Prev
             </button>
-            <span style={{ fontWeight: '500', color: '#374151', fontSize: '0.95rem', padding: '0 10px' }}>trang {page} / {totalPages || 1}</span>
+            <span style={{ fontWeight: '500', color: 'rgba(255,255,255,0.7)', fontSize: '0.95rem', padding: '0 10px' }}>trang {page} / {totalPages || 1}</span>
             <button
                 onClick={() => setPage(prev => Math.min(totalPages, prev + 1))}
                 disabled={page === totalPages || totalPages === 0}
@@ -468,7 +496,7 @@ const DashboardTab = () => {
     );
 
     return (
-        <div style={{ padding: '0 20px 40px 20px', maxWidth: '1600px', margin: '0 auto', fontFamily: 'Inter, sans-serif' }}>
+        <div style={{ padding: '0 20px 40px 20px', maxWidth: '1600px', margin: '0 auto', fontFamily: 'Outfit, sans-serif' }}>
 
             {/* FILTER BAR */}
             <div style={filterContainerStyle}>
@@ -490,7 +518,7 @@ const DashboardTab = () => {
                     </select>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, borderLeft: '2px solid #eee', paddingLeft: '15px', position: 'relative', zIndex: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, borderLeft: '1px solid rgba(0, 212, 255, 0.2)', paddingLeft: '15px', position: 'relative', zIndex: 10 }}>
                     <span style={labelStyle}>📦 Sản phẩm:</span>
                     <SearchableDropdown
                         showSearch={false}
@@ -512,11 +540,11 @@ const DashboardTab = () => {
                     </select>
                 </div>
 
-                {loading && <span style={{ color: '#165B33', fontWeight: 'bold', fontSize: '13px', marginLeft: 'auto' }}>⏳ Đang tải...</span>}
+                {loading && <span style={{ color: '#00D4FF', fontWeight: 'bold', fontSize: '13px', marginLeft: 'auto' }}>⏳ Đang tải...</span>}
             </div>
 
             {/* HEADER */}
-            <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#111827', margin: 0 }}>
+            <h3 style={{ fontSize: '20px', fontWeight: 'bold', background: 'linear-gradient(135deg, #FFFFFF 0%, #00D4FF 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: '0 0 20px 0', fontFamily: "'Space Grotesk', sans-serif", letterSpacing: '0.5px' }}>
                 TỔNG QUAN HIỆU SUẤT (Tháng {airReportMonth}/{airReportYear})
             </h3>
 
@@ -532,16 +560,34 @@ const DashboardTab = () => {
                 <div className="mirinda-card" style={{ height: '450px', display: 'flex', flexDirection: 'column' }}>
                     <h4 style={{ textAlign: 'center', marginBottom: '15px' }}><span className="section-title">💸 Ngân Sách Đã Chi</span></h4>
                     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
-                        <div style={{ fontSize: '2.5rem', fontWeight: '900', color: '#FF6600', textShadow: '2px 2px 0 #000' }}>
+                        <div style={{ fontSize: '2.5rem', fontWeight: '900', background: 'linear-gradient(135deg, #00D4FF 0%, #A855F7 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
                             {formatMoney(chart5Data.reduce((acc, cur) => acc + cur.value, 0))}
                         </div>
                         <div style={{ marginTop: '20px', width: '100%', height: '300px' }}>
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={chart5Data} margin={{ top: 5, right: 5, left: 5, bottom: 50 }}>
-                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold', width: 50 }} interval={0} />
-                                    <Tooltip />
-                                    <Bar dataKey="value" fill="#00CC00" radius={[10, 10, 0, 0]}>
-                                        <LabelList dataKey="value" position="top" formatter={(val) => formatMoney(val)} style={{ fontWeight: '900', fontSize: '12px', fill: '#000' }} />
+                                <BarChart data={chart5Data} margin={{ top: 20, right: 10, left: 10, bottom: 60 }}>
+                                    <XAxis
+                                        dataKey="name"
+                                        axisLine={false}
+                                        tickLine={false}
+                                        interval={0}
+                                        tick={{ fontSize: 11, fontWeight: '600', fill: '#fff', textAnchor: 'end' }}
+                                        angle={-25}
+                                        dy={10}
+                                    />
+                                    <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', backgroundColor: '#FFFFFF', color: '#0f172a', boxShadow: '0 4px 20px rgba(0,0,0,0.5)', fontWeight: 'bold' }} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
+                                    <Bar dataKey="value" fill="#00D4FF" radius={[6, 6, 0, 0]}>
+                                        <LabelList
+                                            dataKey="value"
+                                            position="top"
+                                            formatter={(val) => {
+                                                if (val >= 1000000000) return (val / 1000000000).toFixed(1) + 'B';
+                                                if (val >= 1000000) return (val / 1000000).toFixed(1) + 'M';
+                                                if (val >= 1000) return (val / 1000).toFixed(1) + 'K';
+                                                return val;
+                                            }}
+                                            style={{ fontWeight: '800', fontSize: '11px', fill: '#00D4FF' }}
+                                        />
                                     </Bar>
                                 </BarChart>
                             </ResponsiveContainer>
@@ -553,12 +599,12 @@ const DashboardTab = () => {
                     <h4 style={{ textAlign: 'center', marginBottom: '15px' }}><span className="section-title">💰 Chi Phí Trung Bình / 1 Video</span></h4>
                     <div style={{ flex: 1 }}>
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={chart6Data} barCategoryGap="20%" margin={{ top: 30, right: 10, left: 10, bottom: 0 }}>
-                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 'bold', dy: 10 }} />
-                                <Tooltip formatter={(value) => formatMoney(value)} cursor={{ fill: '#eee' }} contentStyle={{ borderRadius: '12px', border: '3px solid #000', boxShadow: '4px 4px 0 #000' }} />
+                            <BarChart data={chart6Data} barCategoryGap="20%" margin={{ top: 30, right: 10, left: 10, bottom: 20 }}>
+                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: '600', dy: 10, fill: '#fff' }} />
+                                <Tooltip formatter={(value) => formatMoney(value)} cursor={{ fill: 'rgba(0, 212, 255, 0.1)' }} contentStyle={{ borderRadius: '12px', border: 'none', backgroundColor: '#FFFFFF', color: '#0f172a', boxShadow: '0 4px 20px rgba(0,0,0,0.5)', fontWeight: 'bold' }} />
                                 <Bar dataKey="value" radius={[8, 8, 0, 0]}>
-                                    {chart6Data.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.value > 2000000 ? '#FF6600' : '#00CC00'} stroke="#000" strokeWidth={2} />)}
-                                    <LabelList dataKey="value" position="top" formatter={(val) => formatMoney(val)} style={{ fontWeight: '900', fontSize: '12px', fill: '#000' }} />
+                                    {chart6Data.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.value > 2000000 ? '#A855F7' : '#00D4FF'} stroke="rgba(255,255,255,0.2)" strokeWidth={1} />)}
+                                    <LabelList dataKey="value" position="top" formatter={(val) => formatMoney(val)} style={{ fontWeight: '800', fontSize: '12px', fill: '#fff' }} />
                                 </Bar>
                             </BarChart>
                         </ResponsiveContainer>
@@ -568,14 +614,14 @@ const DashboardTab = () => {
 
             {/* BOOKING TABLE */}
             <div className="mirinda-card" style={{ marginTop: '40px' }}>
-                <div style={{ marginBottom: '20px', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
+                <div style={{ marginBottom: '20px', borderBottom: '1px solid rgba(0, 212, 255, 0.15)', paddingBottom: '10px' }}>
                     <span className="section-title">📄 Danh Sách Booking Chi Tiết</span>
-                    <span style={{ fontSize: '1.2rem', fontWeight: '900', marginLeft: '15px' }}>({filteredBookings.length} đơn)</span>
+                    <span style={{ fontSize: '1.2rem', fontWeight: '900', marginLeft: '15px', color: '#00D4FF' }}>({filteredBookings.length} đơn)</span>
                 </div>
 
-                <div style={{ overflowX: 'auto', borderRadius: '10px', border: '1px solid #eee' }}>
+                <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid rgba(0, 212, 255, 0.2)' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead style={{ backgroundColor: '#fff7ed', color: '#ea580c', textTransform: 'uppercase', fontSize: '0.85rem' }}>
+                        <thead style={{ background: 'linear-gradient(135deg, rgba(0, 212, 255, 0.15) 0%, rgba(168, 85, 247, 0.1) 100%)', color: '#00D4FF', textTransform: 'uppercase', fontSize: '0.8rem' }}>
                             <tr>
                                 <th style={{ padding: '12px 15px', textAlign: 'left' }}>Ngày gửi</th>
                                 <th style={{ padding: '12px 15px', textAlign: 'left' }}>KOC</th>
@@ -588,10 +634,10 @@ const DashboardTab = () => {
                         </thead>
                         <tbody>
                             {filteredBookings.length === 0 ? (
-                                <tr><td colSpan="6" style={{ padding: '20px', textAlign: 'center', color: '#888', fontStyle: 'italic' }}>Không có booking nào trong tháng này.</td></tr>
+                                <tr><td colSpan="6" style={{ padding: '20px', textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>Không có booking nào trong tháng này.</td></tr>
                             ) : (
                                 getPaginatedData(filteredBookings, bookingPage).map((item, idx) => (
-                                    <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
+                                    <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                                         <td style={{ padding: '12px 15px' }}>{item.ngay_gui_don ? new Date(item.ngay_gui_don).toLocaleDateString('vi-VN') : '-'}</td>
                                         <td style={{ padding: '12px 15px', fontWeight: 'bold' }}>{item.id_kenh}</td>
                                         <td style={{ padding: '12px 15px' }}>

@@ -887,41 +887,76 @@ export const AppDataProvider = ({ children }) => {
   // =================================================================
   const loadAirLinks = async () => {
     setIsLoadingAirLinks(true);
-    const startIndex = (airLinksCurrentPage - 1) * AIRLINKS_PER_PAGE;
-    const endIndex = startIndex + AIRLINKS_PER_PAGE - 1;
-    let query = supabase.from('air_links').select(`
-      id, created_at, link_air_koc, id_kenh, id_video,
-      "cast", cms_brand, 
-      ngay_air, san_pham, ngay_booking,
-      brands ( ten_brand ),
-      nhansu ( ten_nhansu )
-    `, { count: 'exact' });
-    if (filterAlKenh) query = query.ilike('id_kenh', `%${filterAlKenh}%`);
-    if (filterAlLinkAir) query = query.ilike('link_air_koc', `%${filterAlLinkAir}%`);
-    if (filterAlBrand) query = query.eq('brand_id', filterAlBrand);
-    if (filterAlNhanSu) query = query.eq('nhansu_id', filterAlNhanSu);
-    if (filterAlDate) {
-      const startDate = `${filterAlDate}T00:00:00.000Z`;
-      const endDate = `${filterAlDate}T23:59:59.999Z`;
-      query = query.gte('ngay_air', startDate).lte('ngay_air', endDate);
+    let allLinks = [];
+    let from = 0;
+    const size = 1000;
+    let more = true;
+
+    // Base query setup
+    const buildQuery = () => {
+      let q = supabase.from('air_links').select(`
+            id, created_at, link_air_koc, id_kenh, id_video,
+            "cast", cms_brand, brand_id, nhansu_id,
+            ngay_air, san_pham, ngay_booking,
+            brands ( ten_brand ),
+            nhansu ( ten_nhansu )
+        `, { count: 'exact' });
+
+      if (filterAlKenh) {
+        const term = filterAlKenh.trim();
+        q = q.or(`id_kenh.ilike.%${term}%,id_video.ilike.%${term}%`);
+      }
+      if (filterAlLinkAir) q = q.ilike('link_air_koc', `%${filterAlLinkAir}%`);
+      if (filterAlBrand) q = q.eq('brand_id', filterAlBrand);
+      if (filterAlNhanSu) q = q.eq('nhansu_id', filterAlNhanSu);
+      if (filterAlDate) {
+        const startDate = `${filterAlDate}T00:00:00.000Z`;
+        const endDate = `${filterAlDate}T23:59:59.999Z`;
+        q = q.gte('ngay_air', startDate).lte('ngay_air', endDate);
+      }
+      return q;
+    };
+
+    // Get Total Count First (for info)
+    const { count, error: countError } = await buildQuery().range(0, 1);
+    if (countError) { alert("Lỗi đếm Link Air: " + countError.message); setIsLoadingAirLinks(false); return; }
+    setAirLinksTotalCount(count || 0);
+
+    // Loop Fetch
+    while (more) {
+      const { data, error } = await buildQuery()
+        .order('created_at', { ascending: false })
+        .range(from, from + size - 1);
+
+      if (error || !data || data.length === 0) {
+        more = false;
+      } else {
+        allLinks = [...allLinks, ...data];
+        from += size;
+        if (data.length < size) more = false;
+      }
+      if (allLinks.length > 20000) more = false; // Hard limit 20k
     }
 
-    const { data, error, count } = await query
-      .order('created_at', { ascending: false })
-      .range(startIndex, endIndex);
-    if (error) {
-      alert("Lỗi tải danh sách Link Air: " + error.message);
-    }
-    else { setAirLinks(data || []); setAirLinksTotalCount(count || 0); }
+    // DEDUPLICATE by ID to prevent duplicate data from concurrent loads (React Strict Mode)
+    const uniqueLinks = [...new Map(allLinks.map(link => [link.id, link])).values()];
+
+    setAirLinks(uniqueLinks);
     setIsLoadingAirLinks(false);
   };
   const handleDeleteAirLink = async (linkId, linkUrl) => {
     if (window.confirm(`Bạn có chắc muốn XÓA link này không?\n\n${linkUrl}`)) {
       setIsLoadingAirLinks(true);
       const { error } = await supabase.from('air_links').delete().eq('id', linkId);
-      if (error) alert("Lỗi khi xóa link: " + error.message);
-      else { alert("Đã xóa link thành công!"); loadAirLinks(); }
-      setIsLoadingAirLinks(false);
+      if (error) {
+        alert("Lỗi khi xóa link: " + error.message);
+        setIsLoadingAirLinks(false);
+      } else {
+        // Update state directly instead of reloading - prevents scroll jump!
+        setAirLinks(prev => prev.filter(link => link.id !== linkId));
+        setAirLinksTotalCount(prev => prev - 1);
+        setIsLoadingAirLinks(false);
+      }
     }
   };
   const clearAirLinkFilters = () => { setFilterAlKenh(''); setFilterAlBrand(''); setFilterAlNhanSu(''); setFilterAlDate(''); setFilterAlLinkAir(''); };
@@ -987,7 +1022,9 @@ export const AppDataProvider = ({ children }) => {
   useEffect(() => { loadInitialData(); }, [currentPage, filterIdKenh, filterSdt, filterNhanSu, filterNgay, filterLoaiShip, filterEditedStatus, filterBrand, filterSanPham]);
   useEffect(() => { if (currentPage !== 1) { setCurrentPage(1); } }, [filterIdKenh, filterSdt, filterNhanSu, filterNgay, filterLoaiShip, filterEditedStatus, filterBrand, filterSanPham]);
   useEffect(() => { loadSanPhamsByBrand(selectedBrand); setProductSearchTerm(''); }, [selectedBrand]);
-  useEffect(() => { loadAirLinks(); }, [airLinksCurrentPage, filterAlKenh, filterAlBrand, filterAlNhanSu, filterAlDate, filterAlLinkAir]);
+  useEffect(() => { loadSanPhamsByBrand(selectedBrand); setProductSearchTerm(''); }, [selectedBrand]);
+  // [MODIFIED] Removed airLinksCurrentPage dependency. Page change handled client-side now.
+  useEffect(() => { loadAirLinks(); }, [filterAlKenh, filterAlBrand, filterAlNhanSu, filterAlDate, filterAlLinkAir]);
 
   // [FIX] Load products for List Filter separately from Form
   useEffect(() => {

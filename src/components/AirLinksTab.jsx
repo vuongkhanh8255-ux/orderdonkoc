@@ -4,8 +4,9 @@ import { supabase } from '../supabaseClient';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, Label } from 'recharts';
 import { read, utils, writeFile } from 'xlsx';
 import SearchableDropdown from './SearchableDropdown';
+import { normalizeProductName } from '../utils/productMapping';
 
-const COLORS = ['#FF6600', '#10B981', '#F59E0B', '#3B82F6', '#8B5CF6', '#EC4899', '#6366F1'];
+const COLORS = ['#00D4FF', '#A855F7', '#3B82F6', '#00FF88', '#FBBF24', '#EC4899', '#6366F1', '#14B8A6'];
 const CHART_HEIGHT = 500;
 const PIE_CY = "45%";
 const PIE_CX = "50%";
@@ -36,16 +37,11 @@ const processExcelDate = (input) => {
     if (!input) return null;
     // Nếu là số (Excel Serial Date)
     if (typeof input === 'number') {
-        // Excel base date: Dec 30 1899
-        // 25569 is offset to Jan 1 1970
         const date = new Date(Math.round((input - 25569) * 86400 * 1000));
         return date.toISOString().split('T')[0];
     }
-    // Nếu là string
     const str = String(input).trim();
-    // Regex check YYYY-MM-DD
     if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
-    // Try standard parse
     const parsed = new Date(str);
     if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
 
@@ -62,11 +58,10 @@ const HardcodedCenterText = ({ value, isMoney = false }) => {
             dominantBaseline="central"
             style={{
                 fontSize: isMoney ? '28px' : '40px',
-                fontWeight: '700',
-                fill: '#374151',
-                fontFamily: 'Inter, sans-serif',
-                pointerEvents: 'none',
-                textAnchor: 'middle'
+                fontWeight: '800',
+                fill: '#00D4FF',
+                fontFamily: "'Space Grotesk', sans-serif",
+                filter: 'drop-shadow(0px 0px 8px rgba(0, 212, 255, 0.5))'
             }}
         >
             {value}
@@ -85,7 +80,7 @@ const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent
         <text
             x={x}
             y={y}
-            fill="#555"
+            fill="#FFFFFF"
             textAnchor={x > cx ? 'start' : 'end'}
             dominantBaseline="central"
             fontSize="12px"
@@ -132,6 +127,10 @@ const AirLinksTab = () => {
 
     // --- STATE CHO BULK DELETE ---
     const [selectedRowIds, setSelectedRowIds] = useState([]);
+
+    // --- STATE CHO DUPLICATE FILTERS ---
+    const [dupFilterStaff, setDupFilterStaff] = useState('');
+    const [dupFilterLink, setDupFilterLink] = useState('');
 
     // State bộ lọc biểu đồ
     const [chart1Brand, setChart1Brand] = useState('All');
@@ -191,7 +190,12 @@ const AirLinksTab = () => {
     const dataChart1 = useMemo(() => {
         let filtered = chart1Brand === 'All' ? airLinks : airLinks.filter(d => d.brands?.ten_brand === chart1Brand);
         const counts = {};
-        filtered.forEach(item => { const key = item.san_pham || 'Khác'; counts[key] = (counts[key] || 0) + 1; });
+        // [FIX] Apply normalization here
+        filtered.forEach(item => {
+            const rawName = item.san_pham || 'Khác';
+            const key = normalizeProductName(rawName);
+            counts[key] = (counts[key] || 0) + 1;
+        });
         return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
     }, [airLinks, chart1Brand]);
 
@@ -209,14 +213,25 @@ const AirLinksTab = () => {
         const staffName = selectedStaffObj.ten_nhansu;
         let filtered = airLinks.filter(d => (d.nhansu?.ten_nhansu === staffName) || String(d.nhansu_id) === String(chart3StaffId));
         const counts = {};
-        filtered.forEach(item => { const key = item.san_pham || 'Khác'; counts[key] = (counts[key] || 0) + 1; });
+        // [FIX] Convert to normalized name
+        filtered.forEach(item => {
+            const raw = item.san_pham || 'Khác';
+            const key = normalizeProductName(raw);
+            counts[key] = (counts[key] || 0) + 1;
+        });
         return Object.keys(counts).map(key => ({ name: key, value: counts[key] }));
     }, [airLinks, chart3StaffId, nhanSus]);
 
     const dataChart4 = useMemo(() => {
         let filtered = chart4Brand === 'All' ? airLinks : airLinks.filter(d => d.brands?.ten_brand === chart4Brand);
         const costMap = {};
-        filtered.forEach(item => { const key = item.san_pham || 'Khác'; const cost = parseMoney(item.cast); costMap[key] = (costMap[key] || 0) + cost; });
+        // [FIX] Convert to normalized name
+        filtered.forEach(item => {
+            const raw = item.san_pham || 'Khác';
+            const key = normalizeProductName(raw);
+            const cost = parseMoney(item.cast);
+            costMap[key] = (costMap[key] || 0) + cost;
+        });
         return Object.keys(costMap).map(key => ({ name: key, value: costMap[key] }));
     }, [airLinks, chart4Brand]);
 
@@ -272,6 +287,7 @@ const AirLinksTab = () => {
 
             const dataToInsert = {
                 ...newLink,
+                san_pham: normalizeProductName(newLink.san_pham), // [FIX] Auto-normalize on Save (Manual Input)
                 cms_brand: finalCMS,
                 cast: finalCast, // Đảm bảo lưu số 0 nếu không điền
                 ngay_air: newLink.ngay_air ? newLink.ngay_air : null
@@ -414,7 +430,7 @@ const AirLinksTab = () => {
                         link_air_koc: linkAir,
                         brand_id: foundBrand.id,
                         nhansu_id: foundNS.id,
-                        san_pham: sp,
+                        san_pham: normalizeProductName(sp), // [FIX] Auto-normalize Excel Data
                         id_kenh: kId || '',
                         id_video: vId || '',
                         ngay_air: dateAir || null,
@@ -792,48 +808,206 @@ const AirLinksTab = () => {
 
                 if (duplicates.length === 0) return null;
 
+                // Apply filters - Show WHOLE GROUP if ANY item matches
+                let filteredDuplicates = duplicates;
+                if (dupFilterStaff || dupFilterLink) {
+                    filteredDuplicates = duplicates.filter(group => {
+                        // Keep whole group if ANY item matches the filter
+                        return group.some(item => {
+                            const matchStaff = !dupFilterStaff ||
+                                (item.nhansu?.ten_nhansu || '') === dupFilterStaff;
+                            const matchLink = !dupFilterLink ||
+                                (item.link_air_koc || '').toLowerCase().includes(dupFilterLink.toLowerCase()) ||
+                                (item.id_video || '').toLowerCase().includes(dupFilterLink.toLowerCase());
+                            return matchStaff && matchLink;
+                        });
+                    });
+                }
+
+                // Export function
+                const handleExportDuplicates = () => {
+                    const exportData = [];
+                    filteredDuplicates.forEach(group => {
+                        group.forEach((item, idx) => {
+                            exportData.push({
+                                'Video ID': item.id_video || 'N/A',
+                                'Link': item.link_air_koc || 'N/A',
+                                'Nhân Sự': item.nhansu?.ten_nhansu || 'N/A',
+                                'Brand': item.brands?.ten_brand || 'N/A',
+                                'Sản Phẩm': item.san_pham || 'N/A',
+                                'Số lần trùng': group.length,
+                                'Bản sao thứ': idx + 1
+                            });
+                        });
+                    });
+
+                    const ws = utils.json_to_sheet(exportData);
+                    const wb = utils.book_new();
+                    utils.book_append_sheet(wb, ws, 'Duplicates');
+                    writeFile(wb, `Link_Trung_${new Date().toISOString().split('T')[0]}.xlsx`);
+                };
+
                 return (
-                    <div className="mirinda-card" style={{ marginBottom: '2rem', padding: '20px', border: '2px solid #FFCC00', backgroundColor: '#FFFBEB' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
-                            <span style={{ fontSize: '24px' }}>⚠️</span>
-                            <h3 style={{ margin: 0, color: '#B45309', fontSize: '1.2rem', fontWeight: 'bold' }}>
-                                CẢNH BÁO NHẬP TRÙNG ({duplicates.length} video)
-                            </h3>
+                    <div className="mirinda-card" style={{
+                        marginBottom: '2rem',
+                        padding: '25px',
+                        border: '3px solid #F59E0B',
+                        backgroundColor: '#FFF7ED',
+                        borderRadius: '12px'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <span style={{ fontSize: '32px' }}>⚠️</span>
+                                <h3 style={{ margin: 0, color: '#EA580C', fontSize: '1.4rem', fontWeight: 'bold' }}>
+                                    CẢNH BÁO NHẬP TRÙNG ({filteredDuplicates.length}/{duplicates.length} video)
+                                </h3>
+                            </div>
+                            <button
+                                onClick={handleExportDuplicates}
+                                style={{
+                                    padding: '10px 20px',
+                                    background: 'linear-gradient(90deg, #10B981, #059669)',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    fontWeight: 'bold',
+                                    cursor: 'pointer',
+                                    fontSize: '0.95rem'
+                                }}
+                            >
+                                📥 Xuất Excel
+                            </button>
                         </div>
-                        <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #FCD34D', borderRadius: '8px' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                                <thead style={{ backgroundColor: '#FEF3C7', position: 'sticky', top: 0 }}>
+
+                        {/* Filters */}
+                        <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
+                            <select
+                                value={dupFilterStaff}
+                                onChange={(e) => setDupFilterStaff(e.target.value)}
+                                style={{
+                                    flex: 1,
+                                    padding: '10px 15px',
+                                    border: '2px solid #F59E0B',
+                                    borderRadius: '8px',
+                                    fontSize: '0.95rem',
+                                    backgroundColor: 'white',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                <option value="">-- Tất cả nhân sự --</option>
+                                {/* Get unique staff names from duplicates */}
+                                {[...new Set(duplicates.flatMap(g => g.map(i => i.nhansu?.ten_nhansu)).filter(Boolean))].sort().map(name => (
+                                    <option key={name} value={name}>{name}</option>
+                                ))}
+                            </select>
+                            <input
+                                type="text"
+                                placeholder="🔍 Tìm theo Video ID / Link..."
+                                value={dupFilterLink}
+                                onChange={(e) => setDupFilterLink(e.target.value)}
+                                style={{
+                                    flex: 1,
+                                    padding: '10px 15px',
+                                    border: '2px solid #F59E0B',
+                                    borderRadius: '8px',
+                                    fontSize: '0.95rem'
+                                }}
+                            />
+                            {(dupFilterStaff || dupFilterLink) && (
+                                <button
+                                    onClick={() => {
+                                        setDupFilterStaff('');
+                                        setDupFilterLink('');
+                                    }}
+                                    style={{
+                                        padding: '10px 20px',
+                                        background: '#6B7280',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '8px',
+                                        fontWeight: 'bold',
+                                        cursor: 'pointer',
+                                        whiteSpace: 'nowrap'
+                                    }}
+                                >
+                                    ✖ Xóa lọc
+                                </button>
+                            )}
+                        </div>
+
+                        <p style={{ color: '#92400E', marginBottom: '20px', fontSize: '1rem' }}>
+                            Những video dưới đây bị nhập nhiều lần. Chọn 1 để giữ lại, xóa các bản còn lại.
+                        </p>
+                        <div style={{ maxHeight: '400px', overflowY: 'auto', border: '2px solid #F59E0B', borderRadius: '8px', backgroundColor: '#fff' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.95rem' }}>
+                                <thead style={{ backgroundColor: '#FEF3C7', position: 'sticky', top: 0, borderBottom: '2px solid #F59E0B' }}>
                                     <tr>
-                                        <th style={{ padding: '10px', textAlign: 'left', color: '#92400E' }}>Video / Link</th>
-                                        <th style={{ padding: '10px', textAlign: 'center', color: '#92400E' }}>Số lần</th>
-                                        <th style={{ padding: '10px', textAlign: 'left', color: '#92400E' }}>Chi tiết (Người nhập - Ngày)</th>
+                                        <th style={{ padding: '14px', textAlign: 'left', color: '#000', fontWeight: 'bold' }}>Video ID / Link</th>
+                                        <th style={{ padding: '14px', textAlign: 'center', color: '#000', fontWeight: 'bold' }}>Trùng</th>
+                                        <th style={{ padding: '14px', textAlign: 'left', color: '#000', fontWeight: 'bold' }}>Chi tiết</th>
+                                        <th style={{ padding: '14px', textAlign: 'center', color: '#000', fontWeight: 'bold' }}>Hành động</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {duplicates.map((group, idx) => (
-                                        <tr key={idx} style={{ borderBottom: '1px solid #FDE68A', backgroundColor: '#fff' }}>
-                                            <td style={{ padding: '10px', verticalAlign: 'top' }}>
-                                                <div style={{ fontWeight: 'bold', color: '#D97706' }}>{group[0].id_video || 'No ID'}</div>
-                                                <a href={group[0].link_air_koc} target="_blank" rel="noopener noreferrer" style={{ fontSize: '11px', color: '#666', textDecoration: 'none', display: 'block', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                    {group[0].link_air_koc}
-                                                </a>
-                                            </td>
-                                            <td style={{ padding: '10px', textAlign: 'center', fontWeight: 'bold', color: '#DC2626', verticalAlign: 'top' }}>
-                                                {group.length}
-                                            </td>
-                                            <td style={{ padding: '10px' }}>
-                                                <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                                                    {group.map(item => (
-                                                        <li key={item.id} style={{ marginBottom: '4px' }}>
-                                                            <strong>{item.nhansu?.ten_nhansu || 'Unknown'}</strong>
-                                                            <span style={{ color: '#666', marginLeft: '5px', fontSize: '11px' }}>
-                                                                ({item.created_at ? new Date(item.created_at).toLocaleDateString('vi-VN') : 'No Date'})
-                                                            </span>
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            </td>
-                                        </tr>
+                                    {filteredDuplicates.map((group, groupIdx) => (
+                                        <React.Fragment key={groupIdx}>
+                                            {/* Group Header - Shows the link info */}
+                                            <tr style={{ backgroundColor: '#FEF3C7', borderTop: groupIdx > 0 ? '3px solid #F59E0B' : 'none' }}>
+                                                <td colSpan={4} style={{ padding: '12px 14px' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                                        <span style={{ fontWeight: 'bold', color: '#DC2626', fontSize: '1.1rem' }}>
+                                                            🔗 Trùng {group.length}x
+                                                        </span>
+                                                        <span style={{ fontWeight: 'bold', color: '#000', fontSize: '0.95rem' }}>
+                                                            {group[0]?.id_video || 'No ID'}
+                                                        </span>
+                                                        <a href={group[0]?.link_air_koc} target="_blank" rel="noopener noreferrer"
+                                                            style={{ fontSize: '0.85rem', color: '#1976D2', textDecoration: 'underline', maxWidth: '400px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                            {group[0]?.link_air_koc}
+                                                        </a>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            {/* Items in this group */}
+                                            {group.map((item, subIdx) => (
+                                                <tr key={item.id} style={{
+                                                    borderBottom: '1px solid #FDE68A',
+                                                    backgroundColor: subIdx % 2 === 0 ? '#FFFBEB' : '#fff'
+                                                }}>
+                                                    <td style={{ padding: '10px 14px', paddingLeft: '30px' }}>
+                                                        <span style={{ color: '#666', fontSize: '0.85rem' }}>Bản sao #{subIdx + 1}</span>
+                                                    </td>
+                                                    <td style={{ padding: '10px 14px', textAlign: 'center', color: '#888' }}>
+                                                        —
+                                                    </td>
+                                                    <td style={{ padding: '10px 14px', color: '#000' }}>
+                                                        <div style={{ marginBottom: '4px' }}>
+                                                            <strong style={{ color: '#EA580C' }}>👤 {item.nhansu?.ten_nhansu || 'Unknown'}</strong>
+                                                        </div>
+                                                        <div style={{ fontSize: '0.85rem', color: '#666' }}>
+                                                            🏢 {item.brands?.ten_brand || 'N/A'} • 📦 {item.san_pham || 'N/A'}
+                                                        </div>
+                                                    </td>
+                                                    <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                                                        <button
+                                                            onClick={() => handleDeleteAirLink(item.id, item.link_air_koc)}
+                                                            style={{
+                                                                padding: '8px 16px',
+                                                                backgroundColor: '#DC2626',
+                                                                color: 'white',
+                                                                border: 'none',
+                                                                borderRadius: '6px',
+                                                                fontWeight: 'bold',
+                                                                cursor: 'pointer',
+                                                                fontSize: '0.9rem'
+                                                            }}
+                                                        >
+                                                            🗑️ Xóa
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </React.Fragment>
                                     ))}
                                 </tbody>
                             </table>
@@ -853,11 +1027,11 @@ const AirLinksTab = () => {
                                 <div style={{ width: '60%', height: '100%' }}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <PieChart>
-                                            <Pie data={dataChart1} cx="50%" cy="50%" outerRadius={OUTER_R} innerRadius={INNER_R} fill="#8884d8" dataKey="value" stroke="#000" strokeWidth={2}>
+                                            <Pie data={dataChart1} cx="50%" cy="50%" outerRadius={OUTER_R} innerRadius={INNER_R} fill="#8884d8" dataKey="value" stroke="none" cornerRadius={6}>
                                                 {dataChart1.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                                                <Label value={totalChart1} position="center" fill="#000" style={{ fontSize: '24px', fontWeight: '900', fontFamily: 'Inter', textAnchor: 'middle' }} />
+                                                <Label value={totalChart1} position="center" fill="#00D4FF" style={{ fontSize: '28px', fontWeight: '800', fontFamily: "'Space Grotesk', sans-serif", textAnchor: 'middle', filter: 'drop-shadow(0px 0px 8px rgba(0, 212, 255, 0.5))' }} />
                                             </Pie>
-                                            <Tooltip formatter={(value) => `${value} link`} contentStyle={{ borderRadius: '12px', border: '3px solid #000', boxShadow: '4px 4px 0 #000' }} />
+                                            <Tooltip formatter={(value) => `${value} link`} contentStyle={{ borderRadius: '12px', border: 'none', backgroundColor: '#FFFFFF', color: '#0f172a', boxShadow: '0 8px 32px rgba(0,0,0,0.3)', fontWeight: 'bold' }} wrapperStyle={{ zIndex: 1000 }} />
                                         </PieChart>
                                     </ResponsiveContainer>
                                 </div>
@@ -882,11 +1056,11 @@ const AirLinksTab = () => {
                                 <div style={{ width: '60%', height: '100%' }}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <PieChart>
-                                            <Pie data={dataChart2} cx="50%" cy="50%" outerRadius={OUTER_R} innerRadius={INNER_R} fill="#8884d8" dataKey="value" stroke="#000" strokeWidth={2}>
+                                            <Pie data={dataChart2} cx="50%" cy="50%" outerRadius={OUTER_R} innerRadius={INNER_R} fill="#8884d8" dataKey="value" stroke="none" cornerRadius={6}>
                                                 {dataChart2.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                                                <Label value={totalChart2} position="center" fill="#000" style={{ fontSize: '24px', fontWeight: '900', fontFamily: 'Inter', textAnchor: 'middle' }} />
+                                                <Label value={totalChart2} position="center" fill="#00D4FF" style={{ fontSize: '28px', fontWeight: '800', fontFamily: "'Space Grotesk', sans-serif", textAnchor: 'middle', filter: 'drop-shadow(0px 0px 8px rgba(0, 212, 255, 0.5))' }} />
                                             </Pie>
-                                            <Tooltip formatter={(value) => `${value} link`} contentStyle={{ borderRadius: '12px', border: '3px solid #000', boxShadow: '4px 4px 0 #000' }} />
+                                            <Tooltip formatter={(value) => `${value} link`} contentStyle={{ borderRadius: '12px', border: 'none', backgroundColor: '#FFFFFF', color: '#0f172a', boxShadow: '0 8px 32px rgba(0,0,0,0.3)', fontWeight: 'bold' }} wrapperStyle={{ zIndex: 1000 }} />
                                         </PieChart>
                                     </ResponsiveContainer>
                                 </div>
@@ -911,11 +1085,11 @@ const AirLinksTab = () => {
                                 <div style={{ width: '60%', height: '100%' }}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <PieChart>
-                                            <Pie data={dataChart3} cx="50%" cy="50%" outerRadius={OUTER_R} innerRadius={INNER_R} fill="#8884d8" dataKey="value" stroke="#000" strokeWidth={2}>
+                                            <Pie data={dataChart3} cx="50%" cy="50%" outerRadius={OUTER_R} innerRadius={INNER_R} fill="#8884d8" dataKey="value" stroke="none" cornerRadius={6}>
                                                 {dataChart3.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                                                <Label value={totalChart3} position="center" fill="#000" style={{ fontSize: '24px', fontWeight: '900', fontFamily: 'Inter', textAnchor: 'middle' }} />
+                                                <Label value={totalChart3} position="center" fill="#00D4FF" style={{ fontSize: '28px', fontWeight: '800', fontFamily: "'Space Grotesk', sans-serif", textAnchor: 'middle', filter: 'drop-shadow(0px 0px 8px rgba(0, 212, 255, 0.5))' }} />
                                             </Pie>
-                                            <Tooltip formatter={(value) => `${value} link`} contentStyle={{ borderRadius: '12px', border: '3px solid #000', boxShadow: '4px 4px 0 #000' }} />
+                                            <Tooltip formatter={(value) => `${value} link`} contentStyle={{ borderRadius: '12px', border: 'none', backgroundColor: '#FFFFFF', color: '#0f172a', boxShadow: '0 8px 32px rgba(0,0,0,0.3)', fontWeight: 'bold' }} wrapperStyle={{ zIndex: 1000 }} />
                                         </PieChart>
                                     </ResponsiveContainer>
                                 </div>
@@ -940,11 +1114,11 @@ const AirLinksTab = () => {
                                 <div style={{ width: '60%', height: '100%' }}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <PieChart>
-                                            <Pie data={dataChart4} cx="50%" cy="50%" outerRadius={OUTER_R} innerRadius={INNER_R} fill="#8884d8" dataKey="value" stroke="#000" strokeWidth={2}>
+                                            <Pie data={dataChart4} cx="50%" cy="50%" outerRadius={OUTER_R} innerRadius={INNER_R} fill="#8884d8" dataKey="value" stroke="none" cornerRadius={6}>
                                                 {dataChart4.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                                                <Label value={formatCompactNumber(totalChart4)} position="center" fill="#000" style={{ fontSize: '24px', fontWeight: '900', fontFamily: 'Inter', textAnchor: 'middle' }} />
+                                                <Label value={formatCompactNumber(totalChart4)} position="center" fill="#00D4FF" style={{ fontSize: '28px', fontWeight: '800', fontFamily: "'Space Grotesk', sans-serif", textAnchor: 'middle', filter: 'drop-shadow(0px 0px 8px rgba(0, 212, 255, 0.5))' }} />
                                             </Pie>
-                                            <Tooltip formatter={(value) => formatCurrency(value) + ' đ'} contentStyle={{ borderRadius: '12px', border: '3px solid #000', boxShadow: '4px 4px 0 #000' }} />
+                                            <Tooltip formatter={(value) => formatCurrency(value) + ' đ'} contentStyle={{ borderRadius: '12px', border: 'none', backgroundColor: '#FFFFFF', color: '#0f172a', boxShadow: '0 8px 32px rgba(0,0,0,0.3)', fontWeight: 'bold' }} wrapperStyle={{ zIndex: 1000 }} />
                                         </PieChart>
                                     </ResponsiveContainer>
                                 </div>
@@ -994,7 +1168,7 @@ const AirLinksTab = () => {
                         </button>
                     )}
                     <input type="text" placeholder="Tìm Link Air..." value={filterAlLinkAir} onChange={e => setFilterAlLinkAir(e.target.value)} style={{ flex: '1 1 200px' }} />
-                    <input type="text" placeholder="Lọc ID Kênh..." value={filterAlKenh} onChange={e => setFilterAlKenh(e.target.value)} style={{ flex: '1 1 150px' }} />
+                    <input type="text" placeholder="Lọc ID Kênh / Video..." value={filterAlKenh} onChange={e => setFilterAlKenh(e.target.value)} style={{ flex: '1 1 150px' }} />
                     <select value={filterAlBrand} onChange={e => setFilterAlBrand(e.target.value)} style={{ flex: '1 1 200px' }}><option value="">Tất cả Brand</option>{brands.map(b => <option key={b.id} value={b.id}>{b.ten_brand}</option>)}</select>
                     <select value={filterAlNhanSu} onChange={e => setFilterAlNhanSu(e.target.value)} style={{ flex: '1 1 180px' }}><option value="">Tất cả Nhân sự</option>{nhanSus.map(ns => <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>)}</select>
                     <select value={filterAlNhanSu} onChange={e => setFilterAlNhanSu(e.target.value)} style={{ flex: '1 1 180px' }}><option value="">Tất cả Nhân sự</option>{nhanSus.map(ns => <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>)}</select>
@@ -1024,113 +1198,128 @@ const AirLinksTab = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {airLinks.map((link, index) => {
-                                    const isEditing = String(editingRowId) === String(link.id);
+                                {(() => {
+                                    // [MODIFIED] Client-side Pagination Logic
+                                    const PAGE_SIZE = 100; // Smaller size for smooth DOM
+                                    const startIndex = (airLinksCurrentPage - 1) * PAGE_SIZE;
+                                    const paginatedLinks = airLinks.slice(startIndex, startIndex + PAGE_SIZE);
 
-                                    return (
-                                        <tr key={link.id} style={{ borderBottom: '1px solid #eee', backgroundColor: isEditing ? '#fefce8' : 'transparent' }}>
-                                            <td style={{ padding: '12px', textAlign: 'center' }}>
-                                                <input type="checkbox" checked={selectedRowIds.includes(link.id)} onChange={() => handleSelectRow(link.id)} style={{ transform: 'scale(1.2)', cursor: 'pointer' }} />
-                                            </td>
-                                            <td style={{ textAlign: 'center', padding: '12px' }}>{airLinksTotalCount - ((airLinksCurrentPage - 1) * 500 + index)}</td>
+                                    return paginatedLinks.map((link, index) => {
+                                        const globalIndex = startIndex + index; // Correct global index
+                                        const isEditing = String(editingRowId) === String(link.id);
+                                        return (
+                                            <tr key={link.id} style={{ borderBottom: '1px solid #eee', backgroundColor: isEditing ? '#fefce8' : 'transparent' }}>
+                                                <td style={{ padding: '12px', textAlign: 'center' }}>
+                                                    <input type="checkbox" checked={selectedRowIds.includes(link.id)} onChange={() => handleSelectRow(link.id)} style={{ transform: 'scale(1.2)', cursor: 'pointer' }} />
+                                                </td>
+                                                <td style={{ textAlign: 'center', padding: '12px' }}>{airLinks.length - globalIndex}</td>
 
-                                            {/* LINK */}
-                                            <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '12px' }}>
-                                                {isEditing ? (
-                                                    <input type="text" value={editFormData.link_air_koc} onChange={(e) => handleEditFormChange(e, 'link_air_koc')} style={tableInputStyle} />
-                                                ) : (
-                                                    <a href={link.link_air_koc} target="_blank" rel="noopener noreferrer" style={{ color: '#D42426' }}>{link.link_air_koc}</a>
-                                                )}
-                                            </td>
-
-                                            {/* ID KÊNH */}
-                                            <td style={{ textAlign: 'center', padding: '12px' }}>
-                                                {isEditing ? <input type="text" value={editFormData.id_kenh} onChange={(e) => handleEditFormChange(e, 'id_kenh')} style={tableInputStyle} /> : link.id_kenh}
-                                            </td>
-
-                                            {/* ID VIDEO */}
-                                            <td style={{ textAlign: 'center', padding: '12px' }}>
-                                                {isEditing ? <input type="text" value={editFormData.id_video} onChange={(e) => handleEditFormChange(e, 'id_video')} style={tableInputStyle} /> : link.id_video}
-                                            </td>
-
-                                            {/* BRAND */}
-                                            <td style={{ textAlign: 'center', padding: '12px' }}>
-                                                {isEditing ? (
-                                                    <select value={editFormData.brand_id} onChange={(e) => handleEditFormChange(e, 'brand_id')} style={tableInputStyle}>
-                                                        <option value="">--Brand--</option>
-                                                        {brands.map(b => <option key={b.id} value={b.id}>{b.ten_brand}</option>)}
-                                                    </select>
-                                                ) : link.brands?.ten_brand}
-                                            </td>
-
-                                            {/* SẢN PHẨM */}
-                                            <td style={{ textAlign: 'center', padding: '12px' }}>
-                                                {isEditing ? (
-                                                    <select value={editFormData.san_pham} onChange={(e) => handleEditFormChange(e, 'san_pham')} style={tableInputStyle}>
-                                                        <option value="">--SP--</option>
-                                                        {PRODUCT_OPTIONS.map(prod => (<option key={prod} value={prod}>{prod}</option>))}
-                                                    </select>
-                                                ) : link.san_pham}
-                                            </td>
-
-                                            {/* CAST (Đã áp dụng Highlight đỏ nếu có tiền) */}
-                                            <td style={{ textAlign: 'center', padding: '12px' }}>
-                                                {isEditing ? <input type="text" value={editFormData.cast} onChange={(e) => handleEditFormChange(e, 'cast')} style={tableInputStyle} /> : renderCast(link.cast)}
-                                            </td>
-
-                                            {/* CMS */}
-                                            <td style={{ textAlign: 'center', padding: '12px' }}>
-                                                {isEditing ? (
-                                                    <input type="text" value={editFormData.cms_brand} onChange={(e) => handleEditFormChange(e, 'cms_brand')} style={tableInputStyle} placeholder="10%" />
-                                                ) : (
-                                                    renderCMS(link.cms_brand)
-                                                )}
-                                            </td>
-
-                                            {/* NHÂN SỰ */}
-                                            <td style={{ textAlign: 'center', padding: '12px' }}>
-                                                {isEditing ? (
-                                                    <select value={editFormData.nhansu_id} onChange={(e) => handleEditFormChange(e, 'nhansu_id')} style={tableInputStyle}>
-                                                        <option value="">--Nhân sự--</option>
-                                                        {nhanSus.map(ns => <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>)}
-                                                    </select>
-                                                ) : link.nhansu?.ten_nhansu}
-                                            </td>
-
-                                            {/* HÀNH ĐỘNG */}
-                                            <td style={{ textAlign: 'center', padding: '12px' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'center', gap: '5px' }}>
+                                                {/* LINK */}
+                                                <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '12px' }}>
                                                     {isEditing ? (
-                                                        <>
-                                                            <button onClick={handleSaveClick} style={{ padding: '6px 12px', backgroundColor: '#165B33', border: 'none', color: 'white', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Lưu</button>
-                                                            <button onClick={handleCancelClick} style={{ padding: '6px 12px', backgroundColor: '#777', border: 'none', color: 'white', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Hủy</button>
-                                                        </>
+                                                        <input type="text" value={editFormData.link_air_koc} onChange={(e) => handleEditFormChange(e, 'link_air_koc')} style={tableInputStyle} />
                                                     ) : (
-                                                        <>
-                                                            <button onClick={() => handleEditClick(link)} style={{ padding: '6px 12px', backgroundColor: '#fff', border: '1px solid #1976D2', color: '#1976D2', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Sửa</button>
-                                                            <button onClick={() => {
-                                                                const pass = prompt("🔒 Nhập mật khẩu Admin để XÓA:");
-                                                                if (pass === 'Khanh8255') {
-                                                                    handleDeleteAirLink(link.id, link.link_air_koc);
-                                                                } else if (pass) {
-                                                                    alert("❌ Sai mật khẩu!");
-                                                                }
-                                                            }} style={{ padding: '6px 12px', backgroundColor: '#fff', border: '1px solid #D42426', color: '#D42426', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Xóa</button>
-                                                        </>
+                                                        <a href={link.link_air_koc} target="_blank" rel="noopener noreferrer" style={{ color: '#D42426' }}>{link.link_air_koc}</a>
                                                     )}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )
-                                })}
+                                                </td>
+
+                                                {/* ID KÊNH */}
+                                                <td style={{ textAlign: 'center', padding: '12px' }}>
+                                                    {isEditing ? <input type="text" value={editFormData.id_kenh} onChange={(e) => handleEditFormChange(e, 'id_kenh')} style={tableInputStyle} /> : link.id_kenh}
+                                                </td>
+
+                                                {/* ID VIDEO */}
+                                                <td style={{ textAlign: 'center', padding: '12px' }}>
+                                                    {isEditing ? <input type="text" value={editFormData.id_video} onChange={(e) => handleEditFormChange(e, 'id_video')} style={tableInputStyle} /> : link.id_video}
+                                                </td>
+
+                                                {/* BRAND */}
+                                                <td style={{ textAlign: 'center', padding: '12px' }}>
+                                                    {isEditing ? (
+                                                        <select value={editFormData.brand_id} onChange={(e) => handleEditFormChange(e, 'brand_id')} style={tableInputStyle}>
+                                                            <option value="">--Brand--</option>
+                                                            {brands.map(b => <option key={b.id} value={b.id}>{b.ten_brand}</option>)}
+                                                        </select>
+                                                    ) : link.brands?.ten_brand}
+                                                </td>
+
+                                                {/* SẢN PHẨM */}
+                                                <td style={{ textAlign: 'center', padding: '12px' }}>
+                                                    {isEditing ? (
+                                                        <select value={editFormData.san_pham} onChange={(e) => handleEditFormChange(e, 'san_pham')} style={tableInputStyle}>
+                                                            <option value="">--SP--</option>
+                                                            {PRODUCT_OPTIONS.map(prod => (<option key={prod} value={prod}>{prod}</option>))}
+                                                        </select>
+                                                    ) : normalizeProductName(link.san_pham)}
+                                                </td>
+
+                                                {/* CAST (Đã áp dụng Highlight đỏ nếu có tiền) */}
+                                                <td style={{ textAlign: 'center', padding: '12px' }}>
+                                                    {isEditing ? <input type="text" value={editFormData.cast} onChange={(e) => handleEditFormChange(e, 'cast')} style={tableInputStyle} /> : renderCast(link.cast)}
+                                                </td>
+
+                                                {/* CMS */}
+                                                <td style={{ textAlign: 'center', padding: '12px' }}>
+                                                    {isEditing ? (
+                                                        <input type="text" value={editFormData.cms_brand} onChange={(e) => handleEditFormChange(e, 'cms_brand')} style={tableInputStyle} placeholder="10%" />
+                                                    ) : (
+                                                        renderCMS(link.cms_brand)
+                                                    )}
+                                                </td>
+
+                                                {/* NHÂN SỰ */}
+                                                <td style={{ textAlign: 'center', padding: '12px' }}>
+                                                    {isEditing ? (
+                                                        <select value={editFormData.nhansu_id} onChange={(e) => handleEditFormChange(e, 'nhansu_id')} style={tableInputStyle}>
+                                                            <option value="">--Nhân sự--</option>
+                                                            {nhanSus.map(ns => <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>)}
+                                                        </select>
+                                                    ) : link.nhansu?.ten_nhansu}
+                                                </td>
+
+                                                {/* HÀNH ĐỘNG */}
+                                                <td style={{ textAlign: 'center', padding: '12px' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'center', gap: '5px' }}>
+                                                        {isEditing ? (
+                                                            <>
+                                                                <button onClick={handleSaveClick} style={{ padding: '6px 12px', backgroundColor: '#165B33', border: 'none', color: 'white', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Lưu</button>
+                                                                <button onClick={handleCancelClick} style={{ padding: '6px 12px', backgroundColor: '#777', border: 'none', color: 'white', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Hủy</button>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <button onClick={() => handleEditClick(link)} style={{ padding: '6px 12px', backgroundColor: '#fff', border: '1px solid #1976D2', color: '#1976D2', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Sửa</button>
+                                                                <button onClick={() => {
+                                                                    const pass = prompt("🔒 Nhập mật khẩu Admin để XÓA:");
+                                                                    if (pass === 'Khanh8255') {
+                                                                        handleDeleteAirLink(link.id, link.link_air_koc);
+                                                                    } else if (pass) {
+                                                                        alert("❌ Sai mật khẩu!");
+                                                                    }
+                                                                }} style={{ padding: '6px 12px', backgroundColor: '#fff', border: '1px solid #D42426', color: '#D42426', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Xóa</button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                })()}
                             </tbody>
                         </table>
                     </div>
                 )}
                 <div style={{ textAlign: 'center', marginTop: '25px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px' }}>
-                    <button onClick={() => setAirLinksCurrentPage(prev => Math.max(1, prev - 1))} disabled={airLinksCurrentPage === 1} className="btn-pagination btn-pagination-text">Trước</button>
-                    <span style={{ margin: '0 10px', fontWeight: 'bold' }}>Trang {airLinksCurrentPage} / {totalPagesAirLinks}</span>
-                    <button onClick={() => setAirLinksCurrentPage(prev => Math.min(totalPagesAirLinks, prev + 1))} disabled={airLinksCurrentPage === totalPagesAirLinks} className="btn-pagination btn-pagination-text">Sau</button>
+                    {(() => {
+                        const PAGE_SIZE = 100;
+                        const totalPages = Math.ceil(airLinks.length / PAGE_SIZE);
+                        return (
+                            <>
+                                <button onClick={() => setAirLinksCurrentPage(prev => Math.max(1, prev - 1))} disabled={airLinksCurrentPage === 1} className="btn-pagination btn-pagination-text">Trước</button>
+                                <span style={{ margin: '0 10px', fontWeight: 'bold' }}>Trang {airLinksCurrentPage} / {totalPages || 1}</span>
+                                <button onClick={() => setAirLinksCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={airLinksCurrentPage === totalPages} className="btn-pagination btn-pagination-text">Sau</button>
+                            </>
+                        )
+                    })()}
                 </div>
             </div>
         </>

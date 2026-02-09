@@ -1,0 +1,1239 @@
+import { supabase } from '../supabaseClient';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { useAppData } from '../context/AppDataContext';
+import * as XLSX from 'xlsx';
+import {
+    ComposedChart,
+    Bar,
+    Line,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    Legend,
+    ResponsiveContainer
+} from 'recharts';
+
+// --- COSMIC THEME CONSTANTS ---
+const cardStyle = {
+    background: 'rgba(15, 37, 68, 0.6)',
+    backdropFilter: 'blur(12px)',
+    borderRadius: '16px',
+    border: '1px solid rgba(0, 212, 255, 0.1)',
+    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+    padding: '24px',
+    marginBottom: '24px',
+    display: 'flex',
+    flexDirection: 'column'
+};
+
+// --- REUSABLE DATA TABLE COMPONENT WITH SORT & FILTER ---
+const DataTable = ({ columns, data = [], title }) => {
+    // STATES
+    const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
+    const [filters, setFilters] = useState({});
+
+    // SORT HANDLER
+    const handleSort = (key) => {
+        let direction = 'ascending';
+        if (sortConfig.key === key && sortConfig.direction === 'ascending') {
+            direction = 'descending';
+        }
+        setSortConfig({ key, direction });
+    };
+
+    // FILTER HANDLER
+    const handleFilterChange = (key, value) => {
+        setFilters(prev => ({ ...prev, [key]: value }));
+    };
+
+    // DATA PROCESSING
+    const processedData = useMemo(() => {
+        if (!data || !Array.isArray(data)) return [];
+        let sortedData = [...data];
+
+        // 1. Filter
+        Object.keys(filters).forEach(key => {
+            if (filters[key]) {
+                const lowerVal = filters[key].toLowerCase();
+                sortedData = sortedData.filter(item => {
+                    const itemVal = String(item[key] || '').toLowerCase();
+                    return itemVal.includes(lowerVal);
+                });
+            }
+        });
+
+        // 2. Sort
+        if (sortConfig.key) {
+            sortedData.sort((a, b) => {
+                let aVal = a[sortConfig.key];
+                let bVal = b[sortConfig.key];
+
+                // Handle numbers vs strings
+                if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+                if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+
+                if (aVal < bVal) return sortConfig.direction === 'ascending' ? -1 : 1;
+                if (aVal > bVal) return sortConfig.direction === 'ascending' ? 1 : -1;
+                return 0;
+            });
+        }
+        return sortedData;
+    }, [data, sortConfig, filters]);
+
+    return (
+        <div style={cardStyle}>
+            <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ color: '#00D4FF', fontWeight: 'bold', fontSize: '1.1rem', textTransform: 'uppercase' }}>{title}</div>
+                <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)' }}>{processedData.length} records</div>
+            </div>
+
+            <div style={{ overflowX: 'auto', maxHeight: '500px', border: '1px solid rgba(0, 212, 255, 0.1)', borderRadius: '12px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
+                    <thead style={{ background: 'linear-gradient(90deg, rgba(0, 212, 255, 0.15) 0%, rgba(168, 85, 247, 0.15) 100%)', position: 'sticky', top: 0, zIndex: 10 }}>
+                        <tr>
+                            {columns.map((col, idx) => (
+                                <th key={idx} style={{ padding: '12px 16px', textAlign: 'left', borderBottom: '1px solid rgba(0, 212, 255, 0.2)', minWidth: '120px' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                        {/* HEADER TITLE + SORT */}
+                                        <div
+                                            onClick={() => handleSort(col.accessor)}
+                                            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', color: '#00D4FF', fontSize: '0.8rem', fontWeight: '700', textTransform: 'uppercase' }}
+                                        >
+                                            {col.header}
+                                            {sortConfig.key === col.accessor && (
+                                                <span>{sortConfig.direction === 'ascending' ? '▲' : '▼'}</span>
+                                            )}
+                                        </div>
+
+                                        {/* EXCEL-LIKE FILTER INPUT */}
+                                        <input
+                                            type="text"
+                                            placeholder="..."
+                                            value={filters[col.accessor] || ''}
+                                            onChange={(e) => handleFilterChange(col.accessor, e.target.value)}
+                                            style={{ width: '100%', padding: '4px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', color: '#fff', fontSize: '0.75rem' }}
+                                        />
+                                    </div>
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {processedData.map((row, rowIdx) => (
+                            <tr key={rowIdx} style={{ backgroundColor: rowIdx % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent' }}>
+                                {columns.map((col, colIdx) => (
+                                    <td key={colIdx} style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', color: col.isBold ? '#fff' : '#e2e8f0', fontSize: '0.9rem' }}>
+                                        {col.formatter ? col.formatter(row[col.accessor], row) : row[col.accessor]}
+                                    </td>
+                                ))}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+};
+
+const BookingPerformanceTab = () => {
+    const { brands, nhanSus, airLinks, loadAirLinks } = useAppData();
+    const fileInputRef = useRef(null);
+
+    // FILTERS
+    const [month, setMonth] = useState(null); // Will be set by auto-detection
+    const [year, setYear] = useState(null);
+    const [filterBrand, setFilterBrand] = useState('');
+    const [filterStaff, setFilterStaff] = useState('');
+    const [hasAutoDetected, setHasAutoDetected] = useState(false);
+    const [isUnlocked, setIsUnlocked] = useState(false); // Password protection
+
+    // --- UPLOAD STATE ---
+    const [uploadBrandId, setUploadBrandId] = useState('');
+    const [importedData, setImportedData] = useState([]); // This will now be fetched from DB
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(null); // { current, total, rows, status }
+
+    // HELPERS
+    const formatNumber = (val) => new Intl.NumberFormat('vi-VN').format(val || 0);
+
+    // --- AUTO-DETECT LATEST MONTH WITH DATA ---
+    useEffect(() => {
+        if (hasAutoDetected || !airLinks || airLinks.length === 0) return;
+
+        // Find the most recent ngay_air date
+        let latestDate = null;
+        airLinks.forEach(link => {
+            if (!link.ngay_air) return;
+            const d = new Date(link.ngay_air);
+            if (!isNaN(d.getTime())) {
+                if (!latestDate || d > latestDate) latestDate = d;
+            }
+        });
+
+        if (latestDate) {
+            setMonth(latestDate.getMonth() + 1);
+            setYear(latestDate.getFullYear());
+        } else {
+            // Fallback to current month if no data
+            setMonth(new Date().getMonth() + 1);
+            setYear(new Date().getFullYear());
+        }
+        setHasAutoDetected(true);
+    }, [airLinks, hasAutoDetected]);
+
+    // Auto-load performance data from DB when month/year changes
+    useEffect(() => {
+        if (month && year) {
+            loadPerformanceData(parseInt(month), parseInt(year));
+        }
+    }, [month, year]);
+
+    // --- DB IMPORT SYSTEM (New) ---
+    const [sheetUrl, setSheetUrl] = useState(localStorage.getItem('booking_sheet_url') || '');
+    const [sheetMonth, setSheetMonth] = useState(new Date().getMonth() + 1);
+    const [sheetYear, setSheetYear] = useState(new Date().getFullYear());
+    const [isImporting, setIsImporting] = useState(false);
+    const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
+
+    // Load data from DB  instead of live fetch
+    const loadPerformanceData = async (targetMonth, targetYear) => {
+        try {
+            console.log(`📊 Loading performance data for ${targetMonth}/${targetYear}...`);
+
+            const { data, error } = await supabase
+                .from('tiktok_performance')
+                .select('*')
+                .eq('month', targetMonth)
+                .eq('year', targetYear);
+
+            if (error) throw error;
+
+            console.log(`✅ Loaded ${data?.length || 0} performance records`);
+
+            if (data && data.length > 0) {
+                console.log('Sample data:', data.slice(0, 3));
+                console.log('Total GMV in DB:', data.reduce((sum, d) => sum + (d.gmv || 0), 0));
+            }
+
+            setImportedData(data || []);
+        } catch (err) {
+            console.error('Failed to load performance data:', err);
+        }
+    };
+
+    const handleImportToDatabase = async () => {
+        if (!sheetUrl) {
+            alert("Vui lòng nhập Link Google Sheet!");
+            return;
+        }
+
+        localStorage.setItem('booking_sheet_url', sheetUrl);
+        setIsImporting(true);
+        setImportProgress({ current: 0, total: 0 });
+
+        try {
+            console.log(`📥 Starting import for ${sheetMonth}/${sheetYear}...`);
+
+            // 1. Convert to CSV URL
+            let fetchUrl = sheetUrl;
+            if (sheetUrl.includes('docs.google.com/spreadsheets')) {
+                const match = sheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+                if (match && match[1]) {
+                    const sheetId = match[1];
+                    let gid = '0';
+                    const gidMatch = sheetUrl.match(/[#&]gid=([0-9]+)/);
+                    if (gidMatch && gidMatch[1]) gid = gidMatch[1];
+                    fetchUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${gid}`;
+                }
+            }
+
+            // 2. Fetch CSV
+            const response = await fetch(fetchUrl);
+            if (!response.ok) throw new Error("Không thể tải CSV!");
+            const csvText = await response.text();
+
+            // 3. Parse CSV rows
+            const rows = csvText.split('\n').map(row => {
+                const matches = row.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
+                return matches.map(m => m.replace(/^"|"$/g, '').trim());
+            });
+
+            // 4. Find header row
+            let headerRowIndex = -1;
+            for (let i = 0; i < Math.min(20, rows.length); i++) {
+                const rowStr = rows[i].join(' ').toLowerCase();
+                if (rowStr.includes('id video')) {
+                    headerRowIndex = i;
+                    break;
+                }
+            }
+
+            if (headerRowIndex === -1) {
+                throw new Error("Không tìm thấy header 'ID Video'!");
+            }
+
+            const headers = rows[headerRowIndex];
+            console.log('✅ Headers:', headers);
+
+            // 5. Map columns with STRICT matching
+            const findIdx = (keywords) => headers.findIndex(h => {
+                const str = String(h).toLowerCase().trim();
+                return keywords.some(k => str.includes(k));
+            });
+
+            let iID = headers.findIndex(h => {
+                const str = String(h).toLowerCase().trim();
+                return str === 'id video' || str === 'video id' || str === 'id';
+            });
+
+            if (iID === -1) {
+                iID = findIdx(['id video', 'video id']);
+            }
+
+            const iGMV = findIdx(['gmv', 'tổng giá trị', 'doanh thu']);
+            const iView = findIdx(['vv', 'lượt xem', 'view']);
+            const iOrder = findIdx(['đơn hàng', 'số lượng bán', 'sold']);
+            const iAirDate = findIdx(['thời gian', 'ngày phát']);
+            const iCreatorName = findIdx(['tên', 'creator', 'nhà sáng tạo']);
+            const iCreatorId = findIdx(['id nhà sáng tạo', 'creator id']);
+
+            if (iID === -1) {
+                throw new Error("Không tìm thấy cột 'ID Video'!");
+            }
+
+            console.log('📊 Column mapping:', { iID, iGMV, iView, iOrder, iAirDate });
+
+            // 6. Parse rows and prepare for DB
+            const parseVNNumber = (v) => {
+                if (!v) return 0;
+                let str = String(v).trim();
+                if ((str.match(/\./g) || []).length > 1) {
+                    str = str.replace(/\./g, '');
+                } else if (/\.\d{3}$/.test(str) && !str.includes(',')) {
+                    str = str.replace(/\./g, '');
+                } else {
+                    str = str.replace(/,/g, '');
+                }
+                return parseFloat(str) || 0;
+            };
+
+            const dataToImport = [];
+            for (let i = headerRowIndex + 1; i < rows.length; i++) {
+                const row = rows[i];
+                if (!row || !row[iID]) continue;
+
+                const videoID = String(row[iID] || '').replace(/'/g, '').replace(/"/g, '').trim();
+                if (!videoID || videoID.length < 10) continue;
+
+                // Parse air date
+                let airDate = null;
+                try {
+                    const date = new Date(row[iAirDate]);
+                    if (!isNaN(date.getTime()) && date.getFullYear() >= 2020) {
+                        airDate = date.toISOString();
+                    }
+                } catch { }
+
+                dataToImport.push({
+                    video_id: videoID,
+                    month: parseInt(sheetMonth),
+                    year: parseInt(sheetYear),
+                    gmv: parseVNNumber(row[iGMV]),
+                    views: parseInt(row[iView]) || 0,
+                    orders: parseInt(row[iOrder]) || 0,
+                    air_date: airDate,
+                    creator_name: row[iCreatorName] || null,
+                    creator_id: row[iCreatorId] || null
+                });
+            }
+
+            console.log(`📦 Prepared ${dataToImport.length} rows for import`);
+
+            // [FIX] Deduplicate by video_id - Keep last occurrence (most recent data)
+            const uniqueData = [];
+            const seen = new Set();
+
+            for (let i = dataToImport.length - 1; i >= 0; i--) {
+                const key = `${dataToImport[i].video_id}`;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    uniqueData.unshift(dataToImport[i]);
+                }
+            }
+
+            const duplicatesRemoved = dataToImport.length - uniqueData.length;
+            if (duplicatesRemoved > 0) {
+                console.log(`⚠️ Removed ${duplicatesRemoved} duplicates from import data`);
+            }
+
+            console.log(`✅ Final data to import: ${uniqueData.length} unique rows`);
+            setImportProgress({ current: 0, total: uniqueData.length });
+
+            // 7. Batch upsert to database
+            const BATCH_SIZE = 5000;
+            let imported = 0;
+
+            for (let i = 0; i < uniqueData.length; i += BATCH_SIZE) {
+                const batch = uniqueData.slice(i, i + BATCH_SIZE);
+
+                const { error } = await supabase
+                    .from('tiktok_performance')
+                    .upsert(batch, {
+                        onConflict: 'video_id,month,year',
+                        ignoreDuplicates: false
+                    });
+
+                if (error) {
+                    console.error('Batch error:', error);
+                    throw error;
+                }
+
+                imported += batch.length;
+                setImportProgress({ current: imported, total: uniqueData.length });
+                console.log(`✅ Imported ${imported} / ${uniqueData.length}`);
+            }
+
+
+            console.log(`🎉 Import complete! ${imported} rows imported.`);
+
+            // 8. Auto-update ngay_air in air_links to match imported data
+            console.log(`📅 Updating ngay_air for imported videos...`);
+
+            let airDatesUpdated = 0;
+            const videosWithDates = uniqueData.filter(d => d.air_date);
+
+            if (videosWithDates.length > 0) {
+                // Update each video with its actual air_date from sheet
+                for (const video of videosWithDates) {
+                    const { error: updateError } = await supabase
+                        .from('air_links')
+                        .update({ ngay_air: video.air_date })
+                        .eq('id_video', video.video_id);
+
+                    if (!updateError) airDatesUpdated++;
+                }
+
+                console.log(`✅ Updated ngay_air for ${airDatesUpdated}/${videosWithDates.length} videos`);
+            } else {
+                console.warn('⚠️ No air dates found in sheet!');
+            }
+
+            alert(`✅ Import thành công ${imported.toLocaleString()} dòng!\n📅 Đã sync ${airDatesUpdated} ngày air từ sheet`);
+
+            // 9. Load data from DB to display
+            await loadPerformanceData(parseInt(month), parseInt(year));
+
+
+        } catch (err) {
+            console.error('Import failed:', err);
+            alert(`❌ Import thất bại: ${err.message}`);
+        } finally {
+            setIsImporting(false);
+        }
+    };
+
+    // Export Video IDs for TikTok One
+    const handleExportVideoIDs = () => {
+        if (!airLinks || airLinks.length === 0) {
+            alert("Không có video nào trong hệ thống!");
+            return;
+        }
+
+        // Filter videos for selected month (if month is selected)
+        let videosToExport = airLinks;
+
+        if (month && year) {
+            videosToExport = airLinks.filter(link => {
+                if (!link.ngay_air) return false;
+                const linkDate = new Date(link.ngay_air);
+                if (isNaN(linkDate.getTime())) return false;
+
+                const linkMonth = linkDate.getMonth() + 1;
+                const linkYear = linkDate.getFullYear();
+
+                return linkMonth === parseInt(month) && linkYear === parseInt(year);
+            });
+        }
+
+        if (videosToExport.length === 0) {
+            alert(`Không có video nào air trong tháng ${month}/${year}!`);
+            return;
+        }
+
+        // Get unique video IDs
+        const videoIDs = [...new Set(videosToExport.map(l => l.id_video).filter(Boolean))];
+
+        // Format as comma-separated for easy copy-paste into TikTok One
+        const csvFormat = videoIDs.join(',');
+        const txtFormat = videoIDs.join('\n');
+
+        // Create downloadable file
+        const content = `# Video IDs để export từ TikTok One
+# Tháng: ${month}/${year}
+# Tổng: ${videoIDs.length} videos
+# 
+# FORMAT 1: Copy dòng dưới (comma-separated)
+${csvFormat}
+
+# FORMAT 2: Hoặc copy list này (mỗi ID 1 dòng)
+${txtFormat}
+`;
+
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `video_ids_${month}_${year}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        alert(`✅ Đã export ${videoIDs.length} video IDs!\n\nMở file TXT → Copy danh sách → Paste vào TikTok One để export data!`);
+    };
+
+    // Delete imported data for selected month
+    const handleDeleteMonthData = async () => {
+        if (!month || !year) {
+            alert("Vui lòng chọn tháng/năm cần xóa!");
+            return;
+        }
+
+        const confirmMsg = `⚠️ BẠN CHẮC CHẮN MUỐN XÓA?\n\nCHỈ xóa DATA IMPORT (GMV, Views, Orders) tháng ${month}/${year}\nKHÔNG xóa Link Air mà mấy bạn đã điền!\n\nBấm OK để xác nhận xóa.`;
+
+        if (!confirm(confirmMsg)) {
+            return;
+        }
+
+        try {
+            const { error, count } = await supabase
+                .from('tiktok_performance')
+                .delete()
+                .eq('month', parseInt(month))
+                .eq('year', parseInt(year));
+
+            if (error) throw error;
+
+            alert(`✅ Đã xóa data tháng ${month}/${year}!`);
+
+            // Reload to refresh display
+            await loadPerformanceData(parseInt(month), parseInt(year));
+
+        } catch (err) {
+            console.error('Delete failed:', err);
+            alert(`❌ Xóa thất bại: ${err.message}`);
+        }
+    };
+
+    // OLD: Keep for backward compatibility or remove later
+    const handleSyncSheet = async () => {
+        if (!sheetUrl) {
+            alert("Vui lòng nhập Link Google Sheet (Publish to CSV)!");
+            return;
+        }
+
+        // Save URL for next time
+        localStorage.setItem('booking_sheet_url', sheetUrl);
+        setIsProcessing(true);
+
+        try {
+            // 1. Convert to CSV URL if needed
+            let fetchUrl = sheetUrl;
+            if (sheetUrl.includes('docs.google.com/spreadsheets')) {
+                const match = sheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+                if (match && match[1]) {
+                    const sheetId = match[1];
+                    // Try to find gid
+                    let gid = '0';
+                    const gidMatch = sheetUrl.match(/[#&]gid=([0-9]+)/);
+                    if (gidMatch && gidMatch[1]) gid = gidMatch[1];
+
+                    // [FIX] Use GVIZ endpoint (better for CORS/Shared sheets than /export)
+                    fetchUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${gid}`;
+                }
+            }
+
+            // 2. Fetch CSV
+            const response = await fetch(fetchUrl);
+            if (!response.ok) throw new Error("Không thể tải file CSV. Kiểm tra lại Link!");
+
+            const csvText = await response.text();
+
+            // 2. Parse CSV (Handling Quoted fields and VN Number format)
+            const rows = csvText.split('\n').map(row => {
+                // Simple regex to handle quoted fields containing commas
+                const matches = row.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
+                return matches.map(m => m.replace(/^"|"$/g, '').trim()); // Strip quotes
+            });
+
+            // Clean rows
+            const cleanedRows = rows;
+
+            // Helper: Robust VN Number Parser
+            const parseNum = (str) => {
+                if (!str) return 0;
+                // If format is like "100.000" (VN) -> Remove dots, then parse
+                // If format is like "100,000" (US) -> Remove commas, then parse
+                // Heuristic: If string contains dots AND commas, or dots but no commas and length > 3 blocks
+
+                let cleanStr = String(str);
+
+                // Case: 104.955.915 (VN Integer) or 104.955,5 (VN Decimal)
+                if (cleanStr.includes('.') && !cleanStr.includes(',')) {
+                    // Ambiguous: 100.500 (100k) vs 100.5 (100.5)
+                    // If multiple dots, definitely thousands separator
+                    if ((cleanStr.match(/\./g) || []).length > 1) {
+                        cleanStr = cleanStr.replace(/\./g, '');
+                    }
+                    // If one dot and 3 digits after -> Likely thousands
+                    else if (/\.\d{3}$/.test(cleanStr)) {
+                        cleanStr = cleanStr.replace(/\./g, '');
+                    }
+                } else if (cleanStr.includes('.')) {
+                    // Mixed: Remove dots (thousands), replace comma with dot (decimal) if exists?
+                    // Actually GVIZ CSV usually follows US format OR User Locale.
+                    // Let's assume standard normalization: Remove all non-numeric chars except last separator?
+
+                    // Simple fix for "104.955.915":
+                    // Remove dots if they look like thousands separators
+                    cleanStr = cleanStr.replaceAll('.', '');
+                }
+
+                // Handle comma as decimal if needed (though GVIZ CSV usually gives dot decimal)
+                // But user screenshot shows "104.955.915" in Sheet. 
+                // In CSV it might come as "104955915" or "104.955.915".
+
+                return parseFloat(cleanStr) || 0;
+            };
+
+            // 3. Find Headers
+            let headerRowIndex = -1;
+            let headers = [];
+
+            for (let i = 0; i < Math.min(cleanedRows.length, 20); i++) {
+                const row = cleanedRows[i];
+                const rowStr = row.join(' ').toLowerCase();
+                if (rowStr.includes('id video') || rowStr.includes('video id')) {
+                    headerRowIndex = i;
+                    headers = row;
+                    break;
+                }
+            }
+
+            if (headerRowIndex === -1) {
+                alert("❌ Không tìm thấy tiêu đề 'ID Video' trong Sheet!");
+                console.error("Header detection failed. First 5 rows:", cleanedRows.slice(0, 5));
+                setIsProcessing(false);
+                return;
+            }
+
+            console.log(`✅ Header found at row ${headerRowIndex}:`, headers);
+
+            // 4. Map Columns with STRICT matching for ID
+            const findIdx = (keywords) => headers.findIndex(h => {
+                const str = String(h).toLowerCase().trim();
+                return keywords.some(k => str.includes(k));
+            });
+
+            // [CRITICAL FIX] Be MORE STRICT with ID Video matching
+            // Look for EXACT match first, then fallback to partial
+            let iID = headers.findIndex(h => {
+                const str = String(h).toLowerCase().trim();
+                // Exact matches first
+                if (str === 'id video' || str === 'video id' || str === 'id') return true;
+                return false;
+            });
+
+            // If no exact match, try partial but log warning
+            if (iID === -1) {
+                iID = findIdx(['id video', 'video id']);
+                if (iID > -1) {
+                    console.warn(`⚠️ Using partial match for ID column: "${headers[iID]}"`);
+                }
+            }
+
+            const iGMV = findIdx(['gmv', 'tổng giá trị', 'doanh thu']);
+            const iView = findIdx(['vv', 'lượt xem', 'view']);
+            const iOrder = findIdx(['đơn hàng', 'số lượng bán', 'sold']);
+            // iAirDate not critical for analytics if we just trust the Sheet contents for the month
+            const iAirDate = findIdx(['thời gian', 'ngày phát']);
+
+            console.log('📊 Column mapping:', { iID, iGMV, iView, iOrder, iAirDate });
+            console.log('📋 Detected columns:');
+            console.log(`  ID Video (${iID}): "${headers[iID]}"`);
+            console.log(`  GMV (${iGMV}): "${headers[iGMV]}"`);
+            console.log(`  View (${iView}): "${headers[iView]}"`);
+            console.log(`  Order (${iOrder}): "${headers[iOrder]}"`);
+
+            if (iID === -1) {
+                alert("❌ Không tìm thấy cột 'ID Video'!");
+                console.error("Headers available:", headers);
+                setIsProcessing(false);
+                return;
+            }
+
+            // 5. Transform Data
+            const newMetrics = [];
+
+            console.log(`📝 Processing ${cleanedRows.length - headerRowIndex - 1} data rows...`);
+            let sampleCount = 0;
+
+            for (let i = headerRowIndex + 1; i < cleanedRows.length; i++) {
+                const row = cleanedRows[i];
+                if (!row || !row[iID]) continue;
+
+                // FIX: ID Video in CSV might be scientific notation "7.5E+18" if Excel messed up. 
+                // But GSheet CSV usually keeps full text if formatted as text.
+                // [CRITICAL] Normalize to string and remove any quotes/apostrophes
+                let videoID = String(row[iID] || '').replace(/'/g, '').replace(/"/g, '').trim();
+
+                // [DEBUG] Log first 3 rows to verify correct column
+                if (sampleCount < 3) {
+                    console.log(`  Row ${i}: ID="${videoID}" (from column ${iID}, raw: "${row[iID]}")`);
+                    sampleCount++;
+                }
+
+                // Value Parsing (Robust for VN/US formats)
+                const parseVal = (v) => {
+                    if (!v) return 0;
+                    let str = String(v).trim();
+                    // Handle VN format: 104.955.915 (remove dots)
+                    // If multiple dots, definitely thousands
+                    if ((str.match(/\./g) || []).length > 1) {
+                        str = str.replace(/\./g, '');
+                    }
+                    // If one dot and 3 digits at end (100.000) -> likely thousands
+                    else if (/\.\d{3}$/.test(str) && !str.includes(',')) {
+                        str = str.replace(/\./g, '');
+                    }
+                    // Handle US/Standard: 104,955 (remove comas)
+                    else {
+                        str = str.replace(/,/g, '');
+                    }
+                    return parseFloat(str) || 0;
+                };
+
+                newMetrics.push({
+                    video_id: videoID, // Already normalized to string
+                    gmv: iGMV > -1 ? parseVal(row[iGMV]) : 0,
+                    views: iView > -1 ? parseVal(row[iView]) : 0,
+                    orders: iOrder > -1 ? parseVal(row[iOrder]) : 0,
+                    // Store the SHEET's month/year provenance
+                    sheet_month: sheetMonth,
+                    sheet_year: sheetYear
+                });
+            }
+
+            console.log(`Loaded ${newMetrics.length} rows from Sheet.`);
+            console.log(`Sample data (first 3 rows):`, newMetrics.slice(0, 3));
+            console.log(`Unique video IDs: ${new Set(newMetrics.map(m => m.video_id)).size}`);
+            console.log(`Total AirLinks available: ${airLinks?.length || 0}`);
+
+            setImportedData(newMetrics); // Direct State Update (Live Mode)
+            alert(`✅ Đã đồng bộ ${newMetrics.length} dòng dữ liệu từ Google Sheet!`);
+
+        } catch (error) {
+            console.error(error);
+            alert("Lỗi Sync Sheet: " + error.message);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+
+
+
+
+
+
+
+
+    // 1. Filter AirLinks first (Show all videos in selected month OR those with data)
+    const processedAirLinks = useMemo(() => {
+        if (!airLinks || !month || !year) return [];
+
+        // [OPTIMIZATION] Keep links that are:
+        // Case 1: Aired in the selected month (even without imported data)
+        // Case 2: Has data in the imported report (for cumulative GMV from old videos)
+        const activeVideoIds = new Set(importedData.map(d => d.video_id));
+
+        const filtered = airLinks.filter(link => {
+            // Filter by Brand/Staff
+            if (filterBrand && String(link.brand_id) !== String(filterBrand)) return false;
+            if (filterStaff && String(link.nhansu_id) !== String(filterStaff)) return false;
+
+            // Filter by Relevance
+            if (!link.ngay_air) return false; // Invalid date
+
+            // Check Case 1: Aired in selected month (PRIORITY - shows all staff/brands)
+            const linkDate = new Date(link.ngay_air);
+            if (isNaN(linkDate.getTime())) return false;
+
+            const linkMonth = linkDate.getMonth() + 1;
+            const linkYear = linkDate.getFullYear();
+
+            if (linkMonth === parseInt(month) && linkYear === parseInt(year)) return true;
+
+            // Check Case 2: Has GMV data (for old videos with continuing revenue)
+            if (activeVideoIds.has(link.id_video)) return true;
+
+            // If neither, discard
+            return false;
+        });
+
+        // [DEBUG] Log matching statistics
+        console.log(`[ProcessedAirLinks] Total airLinks: ${airLinks.length}`);
+        console.log(`[ProcessedAirLinks] Imported data videos: ${activeVideoIds.size}`);
+        console.log(`[ProcessedAirLinks] Matched airLinks: ${filtered.length}`);
+
+        if (filtered.length === 0 && importedData.length > 0) {
+            console.warn(`⚠️ No airLinks matched! Possible reasons:`);
+            console.warn(`  1. Video IDs in sheet don't exist in air_links table`);
+            console.warn(`  2. Videos don't have ngay_air set`);
+            console.warn(`  3. Month filter (${month}/${year}) excludes all videos`);
+            console.warn(`Sample sheet video IDs:`, Array.from(activeVideoIds).slice(0, 5));
+            console.warn(`Sample airLink video IDs:`, airLinks.slice(0, 5).map(l => l.id_video));
+        }
+
+        return filtered;
+    }, [airLinks, filterBrand, filterStaff, month, year, importedData]);
+
+    // 2. Calculate Stats
+    const { brandStats, kocStats, staffStats, kocBrandPivot, calculatedStats, chartData } = useMemo(() => {
+        const brandMap = {}; const kocMap = {}; const staffMap = {};
+        const pivotObj = {};
+        let tGMV = 0; let tGMVMonth = 0; let tVideo = 0; let tOrders = 0; let tCast = 0; let tViews = 0;
+
+        // [FIX] Initialize Staff Map with ALL staff from DB to ensure everyone appears
+        nhanSus?.forEach(n => {
+            staffMap[n.ten_nhansu] = {
+                name: n.ten_nhansu,
+                gmvCum: 0,
+                gmvMonth: 0,
+                videoMonth: 0,
+                viewsCum: 0,
+                ordersAff: 0
+            };
+        });
+
+        const perfMap = new Map();
+        importedData.forEach(item => perfMap.set(item.video_id, item));
+
+        console.log(`[Stats Calc] perfMap size: ${perfMap.size}`);
+        console.log(`[Stats Calc] processedAirLinks count: ${processedAirLinks.length}`);
+
+        // [DEBUG] Print ACTUAL ID values to compare formats
+        const samplePerfIDs = Array.from(perfMap.keys()).slice(0, 3);
+        const sampleAirIDs = processedAirLinks.slice(0, 3).map(l => l.id_video);
+
+        console.log(`[Stats Calc] Sample perfMap IDs (RAW):`, samplePerfIDs);
+        console.log(`[Stats Calc]   ID[0] type: ${typeof samplePerfIDs[0]}, value: "${samplePerfIDs[0]}"`);
+        console.log(`[Stats Calc] Sample airLink IDs (RAW):`, sampleAirIDs);
+        console.log(`[Stats Calc]   ID[0] type: ${typeof sampleAirIDs[0]}, value: "${sampleAirIDs[0]}"`);
+
+        // Test if they match after normalization
+        if (sampleAirIDs.length > 0 && samplePerfIDs.length > 0) {
+            const normalizedAir = String(sampleAirIDs[0] || '').trim();
+            const hasPerfMap = perfMap.has(normalizedAir);
+            console.log(`[Stats Calc] TEST: Does perfMap have "${normalizedAir}"? ${hasPerfMap}`);
+            if (!hasPerfMap) {
+                console.warn(`[Stats Calc] MISMATCH! perfMap has "${samplePerfIDs[0]}" but airLink has "${normalizedAir}"`);
+            }
+        }
+
+        // [FIX] Track processed videos to prevent double counting if air_links has duplicates
+        let mismatchedIDs = []; // Track IDs that don't match
+        const processedVideoIds = new Set();
+
+        let matchedCount = 0;
+        let totalGMVFromMatches = 0;
+
+        processedAirLinks.forEach(link => {
+            // Deduplicate by Video ID
+            if (!link.id_video || processedVideoIds.has(link.id_video)) return;
+            processedVideoIds.add(link.id_video);
+
+            const linkDate = new Date(link.ngay_air);
+            // Safety check for date
+            if (isNaN(linkDate.getTime())) return;
+
+            const linkMonth = linkDate.getMonth() + 1;
+            const linkYear = linkDate.getFullYear();
+
+            // Check if VIDEO AIRED in selected month
+            const isCurrentMonth = linkMonth === parseInt(month) && linkYear === parseInt(year);
+
+            // [CRITICAL FIX] Normalize video ID to string for matching
+            const normalizedVideoID = String(link.id_video || '').trim();
+
+            // Get metrics (GMV data from sheet)
+            const metrics = perfMap.get(normalizedVideoID) || { gmv: 0, views: 0, orders: 0 };
+
+            // [DEBUG] Log first 3 lookups
+            if (matchedCount + mismatchedIDs.length < 3) {
+                console.log(`[Lookup ${matchedCount + mismatchedIDs.length}] Looking for: "${normalizedVideoID}"`);
+                console.log(`  Has in perfMap? ${perfMap.has(normalizedVideoID)}`);
+                console.log(`  Found metrics:`, metrics);
+
+                // Check if ID exists with different format
+                const keys = Array.from(perfMap.keys());
+                const similar = keys.find(k => k.includes(normalizedVideoID.slice(-10)));
+                if (similar && similar !== normalizedVideoID) {
+                    console.warn(`  ⚠️ Similar key found: "${similar}" vs "${normalizedVideoID}"`);
+                }
+            }
+
+            if (metrics.gmv > 0) {
+                matchedCount++;
+                totalGMVFromMatches += metrics.gmv;
+            } else if (mismatchedIDs.length < 5) {
+                // Track first 5 mismatches for debugging
+                mismatchedIDs.push({
+                    airLinkID: normalizedVideoID,
+                    inMap: perfMap.has(normalizedVideoID)
+                });
+            }
+
+            // [FIXED LOGIC]
+            // - gmvVideo = Total GMV for this video (cumulative, includes old videos)
+            // - gmvMonth = GMV if video AIRED THIS MONTH (for "GMV Tháng Air")
+            const gmvVideo = metrics.gmv;
+            const gmvMonth = isCurrentMonth ? gmvVideo : 0; // Only count if aired this month
+            const isVideoMonth = isCurrentMonth ? 1 : 0;
+            const orders = metrics.orders;
+            const views = metrics.views || 0;
+            const cast = parseFloat(link.cast) || 0;
+
+            // Totals
+            tGMV += gmvVideo; // All GMV (including old videos with revenue)
+            tGMVMonth += gmvMonth; // Only videos that aired this month
+            tVideo += isVideoMonth;
+            tOrders += orders;
+            tViews += views;
+            if (isCurrentMonth) tCast += cast;
+
+            // Brand Stats
+            const bName = link.brands?.ten_brand || 'Unknown';
+            if (!brandMap[bName]) brandMap[bName] = { name: bName, gmvVideo: 0, gmvMonth: 0, videoMonth: 0, viewsCum: 0, viewsMonth: 0 };
+            brandMap[bName].gmvVideo += gmvVideo;
+            brandMap[bName].gmvMonth += gmvMonth;
+            brandMap[bName].videoMonth += isVideoMonth;
+
+            // KOC Stats
+            const kId = link.id_kenh || 'Unknown';
+            if (!kocMap[kId]) kocMap[kId] = { id: kId, gmvVideo: 0, gmvMonth: 0, videoMonth: 0 };
+            kocMap[kId].gmvVideo += gmvVideo;
+            kocMap[kId].gmvMonth += gmvMonth;
+            kocMap[kId].videoMonth += isVideoMonth;
+
+            // Staff Stats
+            const sName = link.nhansu?.ten_nhansu || 'Unknown';
+            if (!staffMap[sName]) staffMap[sName] = { name: sName, gmvCum: 0, gmvMonth: 0, videoMonth: 0, viewsCum: 0, ordersAff: 0 };
+            staffMap[sName].gmvCum += gmvVideo;
+            staffMap[sName].gmvMonth += gmvMonth;
+            staffMap[sName].videoMonth += isVideoMonth;
+            staffMap[sName].viewsCum += metrics.views; // [FIX] Add Views
+            staffMap[sName].ordersAff += orders;
+
+            // Pivot
+            if (!pivotObj[kId]) pivotObj[kId] = { id: kId, gmv: 0, totalVideo: 0, brands: {} };
+            pivotObj[kId].gmv += gmvVideo;
+            pivotObj[kId].totalVideo += 1; // All time
+            if (!pivotObj[kId].brands[bName]) pivotObj[kId].brands[bName] = 0;
+            pivotObj[kId].brands[bName] += 1;
+        });
+
+        // Pivot Array Transform
+        const pivotArray = Object.values(pivotObj); // Simple list for now
+
+        console.log(`[Stats Calc] Videos with GMV > 0: ${matchedCount}`);
+        console.log(`[Stats Calc] Total GMV from matches: ${totalGMVFromMatches}`);
+        console.log(`[Stats Calc] Final calculated GMV: ${tGMV}`);
+        console.log(`[Stats Calc] Final GMV Month Air: ${tGMVMonth}`);
+        console.log(`[Stats Calc] Video count for month: ${tVideo}`);
+
+        if (matchedCount === 0 && processedAirLinks.length > 0) {
+            console.warn(`⚠️ NO GMV matches found!`);
+            console.warn(`Sample airLink IDs without GMV:`, mismatchedIDs);
+            console.warn(`Are these IDs in perfMap?`, mismatchedIDs.map(id => perfMap.has(id)));
+        }
+
+        return {
+            brandStats: Object.values(brandMap),
+            kocStats: Object.values(kocMap),
+            staffStats: Object.values(staffMap),
+            kocBrandPivot: pivotArray,
+            calculatedStats: { gmv: tGMV, gmvMonthAir: tGMVMonth, videoAirMonth: tVideo, orders: tOrders, castMonth: tCast, totalViews: tViews },
+            chartData: Object.values(staffMap).map(i => ({
+                name: i.name,
+                gmvMonth: i.gmvMonth,
+                gmvRest: i.gmvCum > i.gmvMonth ? i.gmvCum - i.gmvMonth : 0,
+                videoMonth: i.videoMonth
+            }))
+        };
+    }, [processedAirLinks, importedData, month, year]);
+
+    // COLUMNS
+    const brandCols = [
+        { header: 'Brand', accessor: 'name', isBold: true },
+        { header: 'GMV Video', accessor: 'gmvVideo', formatter: formatNumber },
+        { header: 'GMV Tháng Air', accessor: 'gmvMonth', formatter: formatNumber },
+        { header: 'Video Trong Tháng', accessor: 'videoMonth', formatter: formatNumber },
+    ];
+    const kocCols = [
+        { header: 'ID KOC', accessor: 'id', isBold: true },
+        { header: 'GMV Video', accessor: 'gmvVideo', formatter: formatNumber },
+        { header: 'GMV Tháng Air', accessor: 'gmvMonth', formatter: formatNumber },
+        { header: 'Video Trong Tháng', accessor: 'videoMonth', formatter: formatNumber },
+    ];
+    const staffCols = [
+        { header: 'Tên Nhân Sự', accessor: 'name', isBold: true },
+        { header: 'Tổng GMV Lũy Kế', accessor: 'gmvCum', formatter: formatNumber },
+        { header: 'GMV Tháng Air', accessor: 'gmvMonth', formatter: formatNumber },
+        { header: 'Video Air Trong Tháng', accessor: 'videoMonth', formatter: formatNumber },
+        { header: 'Tổng Lượt Xem', accessor: 'viewsCum', formatter: formatNumber }, // [FIX] Add Column
+        { header: 'Đơn Hàng AFF', accessor: 'ordersAff', formatter: formatNumber },
+    ];
+    const pivotCols = [
+        { header: 'ID Nhà Sáng Tạo', accessor: 'id', isBold: true },
+        { header: 'Tổng GMV Lũy Kế', accessor: 'gmv', formatter: formatNumber },
+        { header: 'Tổng SL Video Air', accessor: 'totalVideo', formatter: formatNumber },
+    ];
+
+    return (
+        <div style={{ padding: '20px', maxWidth: '1600px', margin: '0 auto', fontFamily: 'Outfit, sans-serif' }}>
+            <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: 'white', marginBottom: '20px' }}>📊 DASHBOARD HIỆU SUẤT BOOKING</h2>
+
+            {/* PASSWORD LOCK */}
+            {!isUnlocked ? (
+                <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minHeight: '60vh',
+                    background: 'linear-gradient(135deg, rgba(15, 37, 68, 0.9), rgba(26, 58, 82, 0.9))',
+                    borderRadius: '20px',
+                    padding: '60px',
+                    border: '2px solid #3B82F6',
+                    boxShadow: '0 10px 40px rgba(0, 0, 0, 0.5)'
+                }}>
+                    <div style={{ fontSize: '80px', marginBottom: '30px' }}>🔒</div>
+                    <h3 style={{ color: '#00D4FF', fontSize: '2rem', marginBottom: '20px', fontWeight: 'bold' }}>
+                        Khu Vực Bảo Mật
+                    </h3>
+                    <p style={{ color: '#94A3B8', fontSize: '1.1rem', marginBottom: '40px', textAlign: 'center', maxWidth: '500px' }}>
+                        Dashboard này chứa thông tin nhạy cảm về doanh thu và hiệu suất.<br />
+                        Vui lòng nhập mật khẩu để truy cập.
+                    </p>
+                    <button
+                        onClick={() => {
+                            const password = prompt('🔑 Nhập mật khẩu:');
+                            if (password === '8255') {
+                                setIsUnlocked(true);
+                            } else if (password) {
+                                alert('❌ Mật khẩu sai! Vui lòng thử lại.');
+                            }
+                        }}
+                        style={{
+                            padding: '15px 50px',
+                            fontSize: '1.2rem',
+                            fontWeight: 'bold',
+                            background: 'linear-gradient(90deg, #00D4FF, #3B82F6)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '50px',
+                            cursor: 'pointer',
+                            boxShadow: '0 5px 20px rgba(0, 212, 255, 0.4)',
+                            transition: 'transform 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.target.style.transform = 'scale(1.05)'}
+                        onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
+                    >
+                        🔓 MỞ KHÓA
+                    </button>
+                </div>
+            ) : (
+                <>
+
+                    {/* IMPORT TOOL - GOOGLE SHEET */}
+                    <div style={{ ...cardStyle, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(15, 37, 68, 0.8)' }}>
+                        <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flex: 1 }}>
+                            <div style={{ color: '#00FF88', fontSize: '1.2rem', fontWeight: 'bold' }}>📊 Live Data</div>
+
+                            {/* Sheet Date Selector - Fixed */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.1)', padding: '6px 14px', borderRadius: '8px', whiteSpace: 'nowrap' }}>
+                                <span style={{ color: '#aaa', fontSize: '0.9rem', fontWeight: '500' }}>Nguồn Data:</span>
+                                <select
+                                    value={sheetMonth}
+                                    onChange={e => setSheetMonth(e.target.value)}
+                                    style={{ background: '#1a3a52', color: 'white', border: '1px solid #3B82F6', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.95rem' }}
+                                >
+                                    {Array.from({ length: 12 }, (_, i) => <option key={i} value={i + 1} style={{ background: '#1a3a52', color: 'white' }}>T{i + 1}</option>)}
+                                </select>
+                                <span style={{ color: '#ccc' }}>/</span>
+                                <input
+                                    type="number"
+                                    value={sheetYear}
+                                    onChange={e => setSheetYear(e.target.value)}
+                                    style={{ width: '70px', background: '#1a3a52', color: 'white', border: '1px solid #3B82F6', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '0.95rem', textAlign: 'center' }}
+                                />
+                            </div>
+
+                            <input
+                                type="text"
+                                placeholder="Dán Link Google Sheet (File -> Share -> Publish to Web -> CSV)..."
+                                value={sheetUrl}
+                                onChange={e => setSheetUrl(e.target.value)}
+                                style={{
+                                    flex: 1,
+                                    padding: '10px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #3B82F6',
+                                    background: 'rgba(0,0,0,0.3)',
+                                    color: 'white'
+                                }}
+                            />
+                            <button
+                                onClick={handleImportToDatabase}
+                                disabled={isImporting}
+                                style={{
+                                    marginLeft: '20px',
+                                    padding: '10px 20px',
+                                    background: isImporting ? '#666' : 'linear-gradient(90deg, #00D4FF, #3B82F6)',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    fontWeight: 'bold',
+                                    cursor: isImporting ? 'not-allowed' : 'pointer',
+                                    whiteSpace: 'nowrap'
+                                }}
+                            >
+                                {isImporting ? '💾 Đang import...' : '📥 Import vào DB'}
+                            </button>
+
+                            <button
+                                onClick={handleExportVideoIDs}
+                                style={{
+                                    marginLeft: '10px',
+                                    padding: '10px 20px',
+                                    background: 'linear-gradient(90deg, #10B981, #059669)',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    fontWeight: 'bold',
+                                    cursor: 'pointer',
+                                    whiteSpace: 'nowrap'
+                                }}
+                                title="Export danh sách Video IDs để lấy data từ TikTok One"
+                            >
+                                📋 Export IDs
+                            </button>
+
+                            <button
+                                onClick={handleDeleteMonthData}
+                                style={{
+                                    marginLeft: '10px',
+                                    padding: '10px 20px',
+                                    background: 'linear-gradient(90deg, #EF4444, #DC2626)',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    fontWeight: 'bold',
+                                    cursor: 'pointer',
+                                    whiteSpace: 'nowrap'
+                                }}
+                                title={`Xóa data đã import cho tháng ${month}/${year}`}
+                            >
+                                🗑️ Xóa Data
+                            </button>
+                        </div>
+
+                        {/* Progress Bar */}
+                        {isImporting && importProgress.total > 0 && (
+                            <div style={{ marginTop: '10px', width: '100%' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#00D4FF', fontSize: '0.9rem', marginBottom: '5px' }}>
+                                    <span>Đang import...</span>
+                                    <span>{importProgress.current.toLocaleString()} / {importProgress.total.toLocaleString()} rows</span>
+                                </div>
+                                <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+                                    <div style={{
+                                        width: `${(importProgress.current / importProgress.total * 100)}%`,
+                                        height: '100%',
+                                        background: 'linear-gradient(90deg, #00D4FF, #3B82F6)',
+                                        transition: 'width 0.3s ease'
+                                    }}></div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+
+                    {/* GLOBAL FILTER */}
+                    <div style={{ background: 'rgba(26, 58, 92, 0.6)', padding: '20px', borderRadius: '16px', marginBottom: '30px', display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                        <select value={month} onChange={e => setMonth(e.target.value)} style={{ padding: '8px', borderRadius: '8px', color: '#fff', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', minWidth: '100px' }}>
+                            {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1} style={{ color: 'black', backgroundColor: 'white' }}>Tháng {i + 1}</option>)}
+                        </select>
+                        <input type="number" value={year} onChange={e => setYear(e.target.value)} style={{ padding: '8px', borderRadius: '8px', width: '80px', color: '#fff', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)' }} />
+                        <select value={filterBrand} onChange={e => setFilterBrand(e.target.value)} style={{ padding: '8px', borderRadius: '8px', flex: 1, color: '#fff', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', minWidth: '200px' }}>
+                            <option value="" style={{ color: 'black', backgroundColor: 'white' }}>Tất cả Brand</option>
+                            {brands?.map(b => <option key={b.id} value={b.id} style={{ color: 'black', backgroundColor: 'white' }}>{b.ten_brand}</option>)}
+                        </select>
+                        <select value={filterStaff} onChange={e => setFilterStaff(e.target.value)} style={{ padding: '8px', borderRadius: '8px', flex: 1, color: '#fff', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', minWidth: '200px' }}>
+                            <option value="" style={{ color: 'black', backgroundColor: 'white' }}>Tất cả Nhân sự</option>
+                            {nhanSus?.map(n => <option key={n.id} value={n.id} style={{ color: 'black', backgroundColor: 'white' }}>{n.ten_nhansu}</option>)}
+                        </select>
+                    </div>
+
+                    {/* STATS */}
+                    <div style={{ display: 'flex', gap: '20px', marginBottom: '30px' }}>
+                        <div style={{ ...cardStyle, flex: 1, alignItems: 'center' }}>
+                            <div style={{ color: 'rgba(255,255,255,0.7)' }}>TỔNG GMV</div>
+                            <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#00D4FF' }}>{formatNumber(calculatedStats.gmv)}</div>
+                        </div>
+                        <div style={{ ...cardStyle, flex: 1, alignItems: 'center' }}>
+                            <div style={{ color: 'rgba(255,255,255,0.7)' }}>GMV THÁNG AIR</div>
+                            <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#3B82F6' }}>{formatNumber(calculatedStats.gmvMonthAir)}</div>
+                        </div>
+                        <div style={{ ...cardStyle, flex: 1, alignItems: 'center' }}>
+                            <div style={{ color: 'rgba(255,255,255,0.7)' }}>VIDEO AIR</div>
+                            <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#C084FC' }}>{formatNumber(calculatedStats.videoAirMonth)}</div>
+                        </div>
+                        <div style={{ ...cardStyle, flex: 1, alignItems: 'center', border: '1px solid #FF00FF', boxShadow: '0 0 10px rgba(255, 0, 255, 0.3)' }}>
+                            <div style={{ color: 'rgba(255,255,255,0.7)' }}>TỔNG VIEW</div>
+                            <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#FF00FF' }}>{formatNumber(calculatedStats.totalViews)}</div>
+                        </div>
+                    </div>
+
+                    {/* CHART */}
+                    <div style={cardStyle}>
+                        <div style={{ color: '#00D4FF', fontWeight: 'bold', marginBottom: '15px' }}>🏆 GMV Video Dựa Trên PFM Nhân Sự</div>
+                        <div style={{ width: '100%', height: 400 }}>
+                            <ResponsiveContainer>
+                                <ComposedChart data={chartData}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                                    <XAxis dataKey="name" tick={{ fill: '#FFF' }} />
+                                    <YAxis yAxisId="left" tick={{ fill: '#FFF' }} tickFormatter={v => (v / 1000000).toFixed(0) + 'M'} />
+                                    <YAxis yAxisId="right" orientation="right" tick={{ fill: '#A855F7' }} />
+                                    <Tooltip contentStyle={{ background: '#0f2544', border: '1px solid #00D4FF' }} formatter={v => formatNumber(v)} />
+                                    <Legend />
+                                    <Bar yAxisId="left" dataKey="gmvMonth" name="GMV Air Trong Tháng" stackId="a" fill="#3B82F6" />
+                                    <Bar yAxisId="left" dataKey="gmvRest" name="GMV Lũy Kế" stackId="a" fill="#F97316" />
+                                    <Line yAxisId="right" dataKey="videoMonth" name="Video Air" stroke="#A855F7" strokeWidth={3} />
+                                </ComposedChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+
+                    {/* TABLES */}
+                    <DataTable title="Performance theo Brand" columns={brandCols} data={brandStats} />
+                    <DataTable title="Performance theo KOL/KOC" columns={kocCols} data={kocStats} />
+                    <DataTable title="Performance theo Nhân sự" columns={staffCols} data={staffStats} />
+                    <DataTable title="KOC Theo Brand (Pivot)" columns={pivotCols} data={kocBrandPivot} />
+
+                </>
+            )}
+        </div>
+    );
+};
+
+export default BookingPerformanceTab;

@@ -331,25 +331,43 @@ const OrderTab = () => {
                             <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151' }}>Sản phẩm & Số clip</label>
                             <input type="text" placeholder="🔍 Tìm sản phẩm..." value={productSearchTerm} onChange={e => setProductSearchTerm(e.target.value)} disabled={!selectedBrand} style={{ width: '100%', marginBottom: '10px' }} />
                             <div style={{ border: '1px solid #E5E7EB', borderRadius: '12px', padding: '15px', maxHeight: '250px', overflowY: 'auto', backgroundColor: '#FAFAFA' }}>
-                                {sanPhams.length > 0 ? sanPhams.filter(sp => sp.ten_sanpham.toLowerCase().includes(productSearchTerm.toLowerCase())).map(sp => (
-                                    <div key={sp.id} style={{ display: 'flex', alignItems: 'center', marginBottom: '12px', borderBottom: '1px solid #eee', paddingBottom: '8px' }}>
-                                        <div style={{ flex: 1 }}>
-                                            <div style={{ fontWeight: '600', color: '#333' }}>{sp.ten_sanpham}</div>
-                                        </div>
-                                        <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-                                            <div style={{ textAlign: 'center' }}>
-                                                <div style={{ fontSize: '0.75rem', color: '#666', marginBottom: '4px' }}>SL Hàng</div>
-                                                <input type="number" min="0" id={sp.id} value={selectedSanPhams[sp.id] || ''} onChange={(e) => handleLocalQuantityChange(sp.id, e.target.value)} style={{ width: '60px', padding: '8px', textAlign: 'center', border: '1px solid #ddd', borderRadius: '8px' }} placeholder="0" />
-                                            </div>
-                                            {selectedSanPhams[sp.id] > 0 && (
-                                                <div style={{ textAlign: 'center', animation: 'fadeIn 0.3s' }}>
-                                                    <div style={{ fontSize: '0.75rem', color: '#D42426', fontWeight: 'bold', marginBottom: '4px' }}>Clip</div>
-                                                    <input type="number" min="0" value={videoCounts[sp.id] !== undefined ? videoCounts[sp.id] : 1} onChange={(e) => handleVideoCountChange(sp.id, e.target.value)} style={{ width: '60px', padding: '8px', textAlign: 'center', border: '2px solid #D42426', borderRadius: '8px', fontWeight: 'bold', color: '#D42426' }} />
+                                {(() => {
+                                    const HIDDEN_PRODUCTS = [
+                                        "Mặt nạ tràm trà", "Mask Tràm Trà", "Mask Tràm Trà 60gr",
+                                        "Dầu olive 250ml", "Scrub cà phê", "Dầu dừa 250ml",
+                                        "Xịt bưởi 100ml", "Bột đậu đỏ", "Serum dưỡng mi", "Xịt dưỡng biotin",
+                                        "Sachi", "Body lotion", "Bột trà xanh", "Son dưỡng nha đam",
+                                        "Son trà xanh", "Son gấc", "Mas dừa", "Son dừa", "Bột yến mạch"
+                                    ];
+
+                                    return sanPhams
+                                    return sanPhams
+                                        .filter(sp => !HIDDEN_PRODUCTS.some(hidden => sp.ten_sanpham.toLowerCase().includes(hidden.toLowerCase())))
+                                        .filter(sp => sp.ten_sanpham.toLowerCase().includes(productSearchTerm.toLowerCase()))
+                                        .map(sp => (
+
+                                            <div key={sp.id} style={{ display: 'flex', alignItems: 'center', marginBottom: '12px', borderBottom: '1px solid #eee', paddingBottom: '8px' }}>
+                                                <div style={{ flex: 1 }}>
+                                                    <div style={{ fontWeight: '600', color: '#333' }}>{sp.ten_sanpham}</div>
                                                 </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )) : <p style={{ margin: 0, color: '#9CA3AF', textAlign: 'center', fontStyle: 'italic' }}>{selectedBrand ? 'Không tìm thấy sản phẩm' : '👈 Vui lòng chọn Brand trước'}</p>}
+                                                <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                                                    <div style={{ textAlign: 'center' }}>
+                                                        <div style={{ fontSize: '0.75rem', color: '#666', marginBottom: '4px' }}>SL Hàng</div>
+                                                        <input type="number" min="0" id={sp.id} value={selectedSanPhams[sp.id] || ''} onChange={(e) => handleLocalQuantityChange(sp.id, e.target.value)} style={{ width: '60px', padding: '8px', textAlign: 'center', border: '1px solid #ddd', borderRadius: '8px' }} placeholder="0" />
+                                                    </div>
+                                                    {selectedSanPhams[sp.id] > 0 && (
+                                                        <div style={{ textAlign: 'center', animation: 'fadeIn 0.3s' }}>
+                                                            <div style={{ fontSize: '0.75rem', color: '#D42426', fontWeight: 'bold', marginBottom: '4px' }}>Clip</div>
+                                                            <input type="number" min="0" value={videoCounts[sp.id] !== undefined ? videoCounts[sp.id] : 1} onChange={(e) => handleVideoCountChange(sp.id, e.target.value)} style={{ width: '60px', padding: '8px', textAlign: 'center', border: '2px solid #D42426', borderRadius: '8px', fontWeight: 'bold', color: '#D42426' }} />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))
+                                })()}
+                                {sanPhams.filter(sp => sp.ten_sanpham.toLowerCase().includes(productSearchTerm.toLowerCase())).length === 0 && (
+                                    <p style={{ margin: 0, color: '#9CA3AF', textAlign: 'center', fontStyle: 'italic' }}>{selectedBrand ? 'Không tìm thấy sản phẩm' : '👈 Vui lòng chọn Brand trước'}</p>
+                                )}
                             </div>
                         </div>
 
@@ -534,7 +552,18 @@ const OrderTab = () => {
                     <input type="text" placeholder="SĐT..." value={filterSdt} onChange={e => setFilterSdt(e.target.value)} style={{ flex: '1 1 150px' }} />
                     <select value={filterBrand} onChange={e => setFilterBrand(e.target.value)} style={{ flex: '1 1 200px' }}><option value="">Tất cả Brand</option>{brands.map(b => <option key={b.id} value={b.id}>{b.ten_brand}</option>)}</select>
                     <SearchableDropdown
-                        options={filterSanPhams.map(sp => ({ value: sp.id, label: sp.ten_sanpham }))}
+                        options={filterSanPhams
+                            .filter(sp => {
+                                const HIDDEN_PRODUCTS = [
+                                    "Mặt nạ tràm trà", "Mask Tràm Trà", "Mask Tràm Trà 60gr",
+                                    "Dầu olive 250ml", "Scrub cà phê", "Dầu dừa 250ml",
+                                    "Xịt bưởi 100ml", "Bột đậu đỏ", "Serum dưỡng mi", "Xịt dưỡng biotin",
+                                    "Sachi", "Body lotion", "Bột trà xanh", "Son dưỡng nha đam",
+                                    "Son trà xanh", "Son gấc", "Mas dừa", "Son dừa", "Bột yến mạch"
+                                ];
+                                return !HIDDEN_PRODUCTS.some(hidden => sp.ten_sanpham.toLowerCase().includes(hidden.toLowerCase()));
+                            })
+                            .map(sp => ({ value: sp.id, label: sp.ten_sanpham }))}
                         value={filterSanPham}
                         onChange={setFilterSanPham}
                         placeholder={!filterBrand ? "Chọn Brand trước" : "Tất cả Sản phẩm"}

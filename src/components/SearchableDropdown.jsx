@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 // --- HELPER COMPONENT: SEARCHABLE DROPDOWN (MULTI-SELECT SUPPORT) ---
-const SearchableDropdown = ({ options, value, onChange, placeholder, style, isMulti = false }) => {
+const SearchableDropdown = ({ options, value, onChange, placeholder, style, isMulti = false, showSearch = true }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const wrapperRef = useRef(null);
@@ -45,30 +45,31 @@ const SearchableDropdown = ({ options, value, onChange, placeholder, style, isMu
 
     return (
         <div ref={wrapperRef} style={{ position: 'relative', ...style, padding: 0, border: 'none', background: 'transparent' }}>
-            {/* TRIGGER AREA */}
+            {/* TRIGGER AREA - COSMIC THEME */}
             <div
                 onClick={() => setIsOpen(!isOpen)}
                 style={{
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #d1d5db',
-                    backgroundColor: '#fff',
-                    color: (isMulti ? value.length > 0 : value) ? '#374151' : '#10B981', // Highlight color
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(0, 212, 255, 0.3)',
+                    backgroundColor: 'rgba(15, 37, 68, 0.8)',
+                    color: (isMulti ? value.length > 0 : value) ? '#FFFFFF' : 'rgba(255,255,255,0.5)',
                     fontSize: '14px',
                     cursor: 'pointer',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    minHeight: '38px' // Match other inputs
+                    minHeight: '40px',
+                    backdropFilter: 'blur(10px)'
                 }}
             >
-                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px', fontWeight: (isMulti ? value.length > 0 : value) ? '600' : '400', color: (isMulti ? value.length > 0 : value) ? '#374151' : '#9CA3AF' }}>
+                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px', fontWeight: (isMulti ? value.length > 0 : value) ? '600' : '400' }}>
                     {getDisplayValue()}
                 </span>
-                <span style={{ fontSize: '10px', color: '#666' }}>▼</span>
+                <span style={{ fontSize: '10px', color: '#00D4FF' }}>▼</span>
             </div>
 
-            {/* DROPDOWN MENU */}
+            {/* DROPDOWN MENU - COSMIC THEME */}
             {isOpen && (
                 <div style={{
                     position: 'absolute',
@@ -78,43 +79,47 @@ const SearchableDropdown = ({ options, value, onChange, placeholder, style, isMu
                     minWidth: '250px',
                     maxHeight: '300px',
                     overflowY: 'auto',
-                    backgroundColor: '#fff',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 15px rgba(0,0,0,0.15)',
-                    border: '1px solid #e5e7eb',
+                    backgroundColor: '#0F2544',
+                    borderRadius: '12px',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 212, 255, 0.1)',
+                    border: '1px solid rgba(0, 212, 255, 0.2)',
                     zIndex: 1000,
                     animation: 'fadeIn 0.2s'
                 }}>
-                    <div style={{ position: 'sticky', top: 0, padding: '8px', backgroundColor: '#fff', borderBottom: '1px solid #f3f4f6' }}>
-                        <input
-                            type="text"
-                            placeholder="🔍 Tìm..."
-                            value={searchTerm}
-                            onChange={e => setSearchTerm(e.target.value)}
-                            autoFocus
-                            style={{
-                                width: '100%',
-                                padding: '6px 10px',
-                                borderRadius: '6px',
-                                border: '1px solid #ddd',
-                                fontSize: '13px',
-                                outline: 'none'
-                            }}
-                        />
-                    </div>
+                    {showSearch && (
+                        <div style={{ position: 'sticky', top: 0, padding: '10px', backgroundColor: '#0A1628', borderBottom: '1px solid rgba(0, 212, 255, 0.1)' }}>
+                            <input
+                                type="text"
+                                placeholder="🔍 Tìm..."
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                                autoFocus
+                                style={{
+                                    width: '100%',
+                                    padding: '8px 12px',
+                                    borderRadius: '8px',
+                                    border: '1px solid rgba(0, 212, 255, 0.3)',
+                                    backgroundColor: 'rgba(26, 58, 92, 0.5)',
+                                    color: '#FFFFFF',
+                                    fontSize: '13px',
+                                    outline: 'none'
+                                }}
+                            />
+                        </div>
+                    )}
                     <div>
                         {!isMulti && (
                             <div
                                 onClick={() => handleSelect('')}
                                 style={{
-                                    padding: '8px 12px',
+                                    padding: '10px 14px',
                                     cursor: 'pointer',
                                     fontSize: '14px',
-                                    color: '#666',
-                                    borderBottom: '1px dashed #eee',
+                                    color: 'rgba(255,255,255,0.5)',
+                                    borderBottom: '1px dashed rgba(0, 212, 255, 0.1)',
                                     fontStyle: 'italic'
                                 }}
-                                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                                onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(0, 212, 255, 0.1)'}
                                 onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
                             >
                                 -- {placeholder} --
@@ -127,18 +132,18 @@ const SearchableDropdown = ({ options, value, onChange, placeholder, style, isMu
                                     key={opt.value}
                                     onClick={() => handleSelect(opt.value)}
                                     style={{
-                                        padding: '8px 4px', // Tighter left padding for alignment
+                                        padding: '10px 6px',
                                         cursor: 'pointer',
                                         fontSize: '14px',
-                                        color: isSelected ? '#FF6600' : '#374151',
-                                        backgroundColor: isSelected ? '#FFF7ED' : 'transparent',
+                                        color: isSelected ? '#00D4FF' : 'rgba(255,255,255,0.8)',
+                                        backgroundColor: isSelected ? 'rgba(0, 212, 255, 0.15)' : 'transparent',
                                         fontWeight: isSelected ? '600' : '400',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'flex-start',
                                         gap: '8px'
                                     }}
-                                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#FFF7ED'}
+                                    onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(0, 212, 255, 0.1)'}
                                     onMouseLeave={e => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent'; }}
                                 >
                                     {isMulti && (
@@ -146,14 +151,14 @@ const SearchableDropdown = ({ options, value, onChange, placeholder, style, isMu
                                             type="checkbox"
                                             checked={isSelected}
                                             onChange={() => { }}
-                                            style={{ cursor: 'pointer', accentColor: '#FF6600' }}
+                                            style={{ cursor: 'pointer', accentColor: '#00D4FF' }}
                                         />
                                     )}
                                     {opt.label}
                                 </div>
                             );
                         }) : (
-                            <div style={{ padding: '10px', textAlign: 'center', color: '#999', fontSize: '13px' }}>
+                            <div style={{ padding: '12px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '13px' }}>
                                 Không tìm thấy
                             </div>
                         )}

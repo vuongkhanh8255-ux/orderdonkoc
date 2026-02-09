@@ -5,8 +5,9 @@ import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
 // Import thư viện vẽ biểu đồ
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, Label } from 'recharts';
+import { normalizeProductName } from '../utils/productMapping';
 
-const COLORS = ['#FF6600', '#10B981', '#F59E0B', '#3B82F6', '#8B5CF6', '#EC4899', '#6366F1'];
+const COLORS = ['#00D4FF', '#A855F7', '#3B82F6', '#00FF88', '#FBBF24', '#EC4899', '#6366F1', '#14B8A6'];
 
 // --- HÀM HELPER FORMAT ---
 const formatCurrency = (val) => {
@@ -143,7 +144,7 @@ const BookingManagerTab = () => {
                 cast_amount: parseMoney(manualBooking.cast),
                 cms: manualBooking.cms,
                 brand_id: manualBooking.brand_id,
-                san_pham: manualBooking.san_pham,
+                san_pham: normalizeProductName(manualBooking.san_pham), // [FIX] Normalize
                 nhansu_id: manualBooking.nhansu_id,
                 status: 'pending',
                 link_air: '',
@@ -177,7 +178,7 @@ const BookingManagerTab = () => {
 
             const { error: airLinkError } = await supabase.from('air_links').insert([{
                 link_air_koc: tempLink, id_kenh: bookingItem.id_kenh, id_video: videoId,
-                brand_id: bookingItem.brand_id, san_pham: bookingItem.san_pham, nhansu_id: bookingItem.nhansu_id,
+                brand_id: bookingItem.brand_id, san_pham: normalizeProductName(bookingItem.san_pham), nhansu_id: bookingItem.nhansu_id, // [FIX] Normalize
                 cast: bookingItem.cast_amount, cms_brand: bookingItem.cms,
                 ngay_air: new Date().toISOString().split('T')[0], ngay_booking: bookingItem.ngay_gui_don
             }]);
