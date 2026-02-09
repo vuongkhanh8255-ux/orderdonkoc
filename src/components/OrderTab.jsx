@@ -341,7 +341,6 @@ const OrderTab = () => {
                                     ];
 
                                     return sanPhams
-                                    return sanPhams
                                         .filter(sp => !HIDDEN_PRODUCTS.some(hidden => sp.ten_sanpham.toLowerCase().includes(hidden.toLowerCase())))
                                         .filter(sp => sp.ten_sanpham.toLowerCase().includes(productSearchTerm.toLowerCase()))
                                         .map(sp => (

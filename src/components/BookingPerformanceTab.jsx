@@ -397,21 +397,48 @@ const BookingPerformanceTab = () => {
 
             console.log(`🎉 Import complete! ${imported} rows imported.`);
 
-            // 8. Auto-update ngay_air in air_links to match imported data
-            console.log(`📅 Updating ngay_air for imported videos...`);
+            // 8. Auto-update ngay_air in air_links using BATCH approach (100k+ rows support)
+            console.log(`📅 Updating ngay_air for imported videos (batch mode)...`);
 
             let airDatesUpdated = 0;
             const videosWithDates = uniqueData.filter(d => d.air_date);
 
             if (videosWithDates.length > 0) {
-                // Update each video with its actual air_date from sheet
-                for (const video of videosWithDates) {
-                    const { error: updateError } = await supabase
-                        .from('air_links')
-                        .update({ ngay_air: video.air_date })
-                        .eq('id_video', video.video_id);
+                // BATCH UPDATE: Process 50 videos at a time (smaller to avoid rate limits)
+                const UPDATE_BATCH_SIZE = 50;
 
-                    if (!updateError) airDatesUpdated++;
+                for (let i = 0; i < videosWithDates.length; i += UPDATE_BATCH_SIZE) {
+                    const batch = videosWithDates.slice(i, i + UPDATE_BATCH_SIZE);
+
+                    // Build batch updates - use Promise.all for parallel execution
+                    const updatePromises = batch.map(video =>
+                        supabase
+                            .from('air_links')
+                            .update({ ngay_air: video.air_date })
+                            .eq('id_video', video.video_id)
+                            .then(res => res)
+                            .catch(() => ({ error: true }))
+                    );
+
+                    // Execute batch in parallel with timeout
+                    try {
+                        const results = await Promise.race([
+                            Promise.all(updatePromises),
+                            new Promise((_, reject) => setTimeout(() => reject('timeout'), 30000))
+                        ]);
+                        const successCount = results.filter(r => !r.error).length;
+                        airDatesUpdated += successCount;
+                    } catch (e) {
+                        console.warn(`⚠️ Batch timeout at ${i}`);
+                    }
+
+                    // Progress update every 500 videos
+                    if (i % 500 === 0) {
+                        console.log(`📅 Synced ngay_air: ${Math.min(i + UPDATE_BATCH_SIZE, videosWithDates.length)}/${videosWithDates.length}`);
+                    }
+
+                    // Small delay to prevent rate limiting
+                    await new Promise(r => setTimeout(r, 50));
                 }
 
                 console.log(`✅ Updated ngay_air for ${airDatesUpdated}/${videosWithDates.length} videos`);
