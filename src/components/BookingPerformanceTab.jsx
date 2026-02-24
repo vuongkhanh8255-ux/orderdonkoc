@@ -11,16 +11,18 @@ import {
     CartesianGrid,
     Tooltip,
     Legend,
-    ResponsiveContainer
+    ResponsiveContainer,
+    PieChart,
+    Pie,
+    Cell
 } from 'recharts';
 
-// --- COSMIC THEME CONSTANTS ---
+// --- LIGHT THEME CONSTANTS ---
 const cardStyle = {
-    background: 'rgba(15, 37, 68, 0.6)',
-    backdropFilter: 'blur(12px)',
+    background: '#fff',
     borderRadius: '16px',
-    border: '1px solid rgba(0, 212, 255, 0.1)',
-    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+    border: '1px solid #eee',
+    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
     padding: '24px',
     marginBottom: '24px',
     display: 'flex',
@@ -32,6 +34,13 @@ const DataTable = ({ columns, data = [], title }) => {
     // STATES
     const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
     const [filters, setFilters] = useState({});
+    const [currentPage, setCurrentPage] = useState(1);
+    const pageSize = 50;
+
+    // Reset to page 1 on search or sort
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [filters, sortConfig, data]);
 
     // SORT HANDLER
     const handleSort = (key) => {
@@ -81,24 +90,27 @@ const DataTable = ({ columns, data = [], title }) => {
         return sortedData;
     }, [data, sortConfig, filters]);
 
+    const totalPages = Math.ceil(processedData.length / pageSize) || 1;
+    const paginatedData = processedData.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
     return (
         <div style={cardStyle}>
             <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ color: '#00D4FF', fontWeight: 'bold', fontSize: '1.1rem', textTransform: 'uppercase' }}>{title}</div>
-                <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)' }}>{processedData.length} records</div>
+                <div style={{ color: '#ea580c', fontWeight: 'bold', fontSize: '1.1rem', textTransform: 'uppercase' }}>{title}</div>
+                <div style={{ fontSize: '0.8rem', color: '#666' }}>Hiển thị {paginatedData.length} / Tổng {processedData.length} kết quả</div>
             </div>
 
-            <div style={{ overflowX: 'auto', maxHeight: '500px', border: '1px solid rgba(0, 212, 255, 0.1)', borderRadius: '12px' }}>
+            <div style={{ overflowX: 'auto', maxHeight: '500px', border: '1px solid #eee', borderRadius: '12px' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
-                    <thead style={{ background: 'linear-gradient(90deg, rgba(0, 212, 255, 0.15) 0%, rgba(168, 85, 247, 0.15) 100%)', position: 'sticky', top: 0, zIndex: 10 }}>
+                    <thead style={{ background: '#f9fafb', position: 'sticky', top: 0, zIndex: 10 }}>
                         <tr>
                             {columns.map((col, idx) => (
-                                <th key={idx} style={{ padding: '12px 16px', textAlign: 'left', borderBottom: '1px solid rgba(0, 212, 255, 0.2)', minWidth: '120px' }}>
+                                <th key={idx} style={{ padding: '12px 16px', textAlign: 'left', borderBottom: '1px solid #eee', minWidth: '120px' }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                                         {/* HEADER TITLE + SORT */}
                                         <div
                                             onClick={() => handleSort(col.accessor)}
-                                            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', color: '#00D4FF', fontSize: '0.8rem', fontWeight: '700', textTransform: 'uppercase' }}
+                                            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', color: '#ea580c', fontSize: '0.8rem', fontWeight: '700', textTransform: 'uppercase' }}
                                         >
                                             {col.header}
                                             {sortConfig.key === col.accessor && (
@@ -112,7 +124,7 @@ const DataTable = ({ columns, data = [], title }) => {
                                             placeholder="..."
                                             value={filters[col.accessor] || ''}
                                             onChange={(e) => handleFilterChange(col.accessor, e.target.value)}
-                                            style={{ width: '100%', padding: '4px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', color: '#fff', fontSize: '0.75rem' }}
+                                            style={{ width: '100%', padding: '4px', borderRadius: '4px', border: '1px solid #ddd', background: '#fff', color: '#333', fontSize: '0.75rem' }}
                                         />
                                     </div>
                                 </th>
@@ -120,10 +132,10 @@ const DataTable = ({ columns, data = [], title }) => {
                         </tr>
                     </thead>
                     <tbody>
-                        {processedData.map((row, rowIdx) => (
-                            <tr key={rowIdx} style={{ backgroundColor: rowIdx % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent' }}>
+                        {paginatedData.map((row, rowIdx) => (
+                            <tr key={rowIdx} style={{ backgroundColor: rowIdx % 2 === 0 ? '#f9fafb' : 'transparent' }}>
                                 {columns.map((col, colIdx) => (
-                                    <td key={colIdx} style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', color: col.isBold ? '#fff' : '#e2e8f0', fontSize: '0.9rem' }}>
+                                    <td key={colIdx} style={{ padding: '12px 16px', borderBottom: '1px solid #eee', color: col.isBold ? '#333' : '#666', fontSize: '0.9rem' }}>
                                         {col.formatter ? col.formatter(row[col.accessor], row) : row[col.accessor]}
                                     </td>
                                 ))}
@@ -131,6 +143,29 @@ const DataTable = ({ columns, data = [], title }) => {
                         ))}
                     </tbody>
                 </table>
+            </div>
+
+            {/* PAGINATION CONTROLS */}
+            <div style={{ marginTop: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', color: '#666' }}>
+                <div>
+                    Trang <strong style={{ color: '#ea580c' }}>{currentPage}</strong> / {totalPages}
+                </div>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    <button
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        style={{ padding: '6px 16px', background: currentPage === 1 ? '#f3f4f6' : '#fff', color: currentPage === 1 ? '#999' : '#ea580c', border: '1px solid #ddd', borderRadius: '6px', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
+                    >
+                        ◀ TRƯỚC
+                    </button>
+                    <button
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                        style={{ padding: '6px 16px', background: currentPage === totalPages ? '#f3f4f6' : '#ea580c', color: currentPage === totalPages ? '#999' : '#fff', border: '1px solid #ddd', borderRadius: '6px', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
+                    >
+                        SAU ▶
+                    </button>
+                </div>
             </div>
         </div>
     );
@@ -145,12 +180,14 @@ const BookingPerformanceTab = () => {
     const [year, setYear] = useState(null);
     const [filterBrand, setFilterBrand] = useState('');
     const [filterStaff, setFilterStaff] = useState('');
+    const [filterKoc, setFilterKoc] = useState('');
     const [hasAutoDetected, setHasAutoDetected] = useState(false);
     const [isUnlocked, setIsUnlocked] = useState(false); // Password protection
 
-    // --- UPLOAD STATE ---
     const [uploadBrandId, setUploadBrandId] = useState('');
     const [importedData, setImportedData] = useState([]); // This will now be fetched from DB
+    const [isLoadingData, setIsLoadingData] = useState(false); // Track loading DB state
+    const currentFetchRef = useRef(0); // Track latest fetch to prevent race conditions
     const [isProcessing, setIsProcessing] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(null); // { current, total, rows, status }
 
@@ -185,7 +222,9 @@ const BookingPerformanceTab = () => {
     // Auto-load performance data from DB when month/year changes
     useEffect(() => {
         if (month && year) {
-            loadPerformanceData(parseInt(month), parseInt(year));
+            const fetchId = Date.now();
+            currentFetchRef.current = fetchId;
+            loadPerformanceData(parseInt(month), parseInt(year), fetchId);
         }
     }, [month, year]);
 
@@ -196,29 +235,64 @@ const BookingPerformanceTab = () => {
     const [isImporting, setIsImporting] = useState(false);
     const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
 
-    // Load data from DB  instead of live fetch
-    const loadPerformanceData = async (targetMonth, targetYear) => {
+    // Load data from    // Unique Kênh list for filter
+    const uniqueKenhList = useMemo(() => {
+        const set = new Set();
+        airLinks?.forEach(l => {
+            if (l.id_kenh) set.add(l.id_kenh);
+        });
+        return Array.from(set).sort();
+    }, [airLinks]);
+
+    // LOAD DATA DIRECTLY FROM SUPABASE
+    const loadPerformanceData = async (targetMonth, targetYear, fetchId = null) => {
         try {
+            // Only set loading if it's the latest request
+            if (!fetchId || currentFetchRef.current === fetchId) {
+                setIsLoadingData(true);
+            }
             console.log(`📊 Loading performance data for ${targetMonth}/${targetYear}...`);
 
-            const { data, error } = await supabase
-                .from('tiktok_performance')
-                .select('*')
-                .eq('month', targetMonth)
-                .eq('year', targetYear);
+            let allData = [];
+            let from = 0;
+            const step = 1000;
 
-            if (error) throw error;
+            while (true) {
+                const { data, error } = await supabase
+                    .from('tiktok_performance')
+                    .select('*')
+                    .eq('month', targetMonth)
+                    .eq('year', targetYear)
+                    .range(from, from + step - 1);
 
-            console.log(`✅ Loaded ${data?.length || 0} performance records`);
+                if (error) throw error;
+                if (!data || data.length === 0) break;
 
-            if (data && data.length > 0) {
-                console.log('Sample data:', data.slice(0, 3));
-                console.log('Total GMV in DB:', data.reduce((sum, d) => sum + (d.gmv || 0), 0));
+                allData = [...allData, ...data];
+                if (data.length < step) break; // Finished fetching all records
+                from += step;
             }
 
-            setImportedData(data || []);
+            console.log(`✅ Loaded ${allData.length} performance records`);
+
+            if (allData.length > 0) {
+                console.log('Sample data:', allData.slice(0, 3));
+                console.log('Total GMV in DB:', allData.reduce((sum, d) => sum + (d.gmv || 0), 0));
+            }
+
+            // ONLY update state if this is still the most recent fetch
+            if (!fetchId || currentFetchRef.current === fetchId) {
+                setImportedData(allData);
+                setIsLoadingData(false);
+            } else {
+                console.log(`⚠️ Discarding stale data for ${targetMonth}/${targetYear}`);
+            }
         } catch (err) {
             console.error('Failed to load performance data:', err);
+            // ONLY update state if this is still the most recent fetch
+            if (!fetchId || currentFetchRef.current === fetchId) {
+                setIsLoadingData(false);
+            }
         }
     };
 
@@ -253,11 +327,30 @@ const BookingPerformanceTab = () => {
             if (!response.ok) throw new Error("Không thể tải CSV!");
             const csvText = await response.text();
 
-            // 3. Parse CSV rows
-            const rows = csvText.split('\n').map(row => {
-                const matches = row.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
-                return matches.map(m => m.replace(/^"|"$/g, '').trim());
-            });
+            // 3. Parse CSV rows with a robust function (handles commas inside quotes, empty values)
+            const parseCSVLine = (text) => {
+                const result = [];
+                let cur = '';
+                let inQuotes = false;
+                for (let i = 0; i < text.length; i++) {
+                    const char = text[i];
+                    if (char === '"' && text[i + 1] === '"') {
+                        cur += '"';
+                        i++;
+                    } else if (char === '"') {
+                        inQuotes = !inQuotes;
+                    } else if (char === ',' && !inQuotes) {
+                        result.push(cur.trim());
+                        cur = '';
+                    } else {
+                        cur += char;
+                    }
+                }
+                result.push(cur.trim());
+                return result;
+            };
+
+            const rows = csvText.split('\n').filter(r => r.trim()).map(row => parseCSVLine(row));
 
             // 4. Find header row
             let headerRowIndex = -1;
@@ -307,7 +400,9 @@ const BookingPerformanceTab = () => {
             // 6. Parse rows and prepare for DB
             const parseVNNumber = (v) => {
                 if (!v) return 0;
-                let str = String(v).trim();
+                // Remove spaces, letters, and currency symbols (₫, $, etc). Keep only digits, dots, commas, negative sign.
+                let str = String(v).replace(/[^0-9.,-]/g, '');
+
                 if ((str.match(/\./g) || []).length > 1) {
                     str = str.replace(/\./g, '');
                 } else if (/\.\d{3}$/.test(str) && !str.includes(',')) {
@@ -446,7 +541,8 @@ const BookingPerformanceTab = () => {
                 console.warn('⚠️ No air dates found in sheet!');
             }
 
-            alert(`✅ Import thành công ${imported.toLocaleString()} dòng!\n📅 Đã sync ${airDatesUpdated} ngày air từ sheet`);
+            const missingIDsCount = importProgress.total - imported;
+            alert(`✅ Import thành công ${imported.toLocaleString()} dòng!\n📅 Đã sync ${airDatesUpdated} ngày air từ sheet.\nℹ️ Có ${missingIDsCount} video trong hệ thống không tìm thấy trong file đã ghép.`);
 
             // 9. Load data from DB to display
             await loadPerformanceData(parseInt(month), parseInt(year));
@@ -781,12 +877,13 @@ ${txtFormat}
         // [OPTIMIZATION] Keep links that are:
         // Case 1: Aired in the selected month (even without imported data)
         // Case 2: Has data in the imported report (for cumulative GMV from old videos)
-        const activeVideoIds = new Set(importedData.map(d => d.video_id));
+        const activeVideoIds = new Set(importedData.map(d => String(d.video_id).trim()));
 
         const filtered = airLinks.filter(link => {
-            // Filter by Brand/Staff
+            // Filter by Brand/Staff/Kenh
             if (filterBrand && String(link.brand_id) !== String(filterBrand)) return false;
             if (filterStaff && String(link.nhansu_id) !== String(filterStaff)) return false;
+            if (filterKoc && String(link.id_kenh) !== String(filterKoc)) return false;
 
             // Filter by Relevance
             if (!link.ngay_air) return false; // Invalid date
@@ -801,7 +898,7 @@ ${txtFormat}
             if (linkMonth === parseInt(month) && linkYear === parseInt(year)) return true;
 
             // Check Case 2: Has GMV data (for old videos with continuing revenue)
-            if (activeVideoIds.has(link.id_video)) return true;
+            if (activeVideoIds.has(String(link.id_video || '').trim())) return true;
 
             // If neither, discard
             return false;
@@ -843,7 +940,7 @@ ${txtFormat}
         });
 
         const perfMap = new Map();
-        importedData.forEach(item => perfMap.set(item.video_id, item));
+        importedData.forEach(item => perfMap.set(String(item.video_id).trim(), item));
 
         console.log(`[Stats Calc] perfMap size: ${perfMap.size}`);
         console.log(`[Stats Calc] processedAirLinks count: ${processedAirLinks.length}`);
@@ -875,9 +972,12 @@ ${txtFormat}
         let totalGMVFromMatches = 0;
 
         processedAirLinks.forEach(link => {
+            // [CRITICAL FIX] Normalize video ID to string for matching
+            const normalizedVideoID = String(link.id_video || '').trim();
+
             // Deduplicate by Video ID
-            if (!link.id_video || processedVideoIds.has(link.id_video)) return;
-            processedVideoIds.add(link.id_video);
+            if (!normalizedVideoID || processedVideoIds.has(normalizedVideoID)) return;
+            processedVideoIds.add(normalizedVideoID);
 
             const linkDate = new Date(link.ngay_air);
             // Safety check for date
@@ -888,9 +988,6 @@ ${txtFormat}
 
             // Check if VIDEO AIRED in selected month
             const isCurrentMonth = linkMonth === parseInt(month) && linkYear === parseInt(year);
-
-            // [CRITICAL FIX] Normalize video ID to string for matching
-            const normalizedVideoID = String(link.id_video || '').trim();
 
             // Get metrics (GMV data from sheet)
             const metrics = perfMap.get(normalizedVideoID) || { gmv: 0, views: 0, orders: 0 };
@@ -1028,7 +1125,7 @@ ${txtFormat}
 
     return (
         <div style={{ padding: '20px', maxWidth: '1600px', margin: '0 auto', fontFamily: 'Outfit, sans-serif' }}>
-            <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: 'white', marginBottom: '20px' }}>📊 DASHBOARD HIỆU SUẤT BOOKING</h2>
+            <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#333', marginBottom: '20px' }}>📊 DASHBOARD HIỆU SUẤT BOOKING</h2>
 
             {/* PASSWORD LOCK */}
             {!isUnlocked ? (
@@ -1038,17 +1135,17 @@ ${txtFormat}
                     alignItems: 'center',
                     justifyContent: 'center',
                     minHeight: '60vh',
-                    background: 'linear-gradient(135deg, rgba(15, 37, 68, 0.9), rgba(26, 58, 82, 0.9))',
+                    background: '#f9fafb',
                     borderRadius: '20px',
                     padding: '60px',
-                    border: '2px solid #3B82F6',
-                    boxShadow: '0 10px 40px rgba(0, 0, 0, 0.5)'
+                    border: '2px solid #ddd',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                 }}>
                     <div style={{ fontSize: '80px', marginBottom: '30px' }}>🔒</div>
-                    <h3 style={{ color: '#00D4FF', fontSize: '2rem', marginBottom: '20px', fontWeight: 'bold' }}>
+                    <h3 style={{ color: '#ea580c', fontSize: '2rem', marginBottom: '20px', fontWeight: 'bold' }}>
                         Khu Vực Bảo Mật
                     </h3>
-                    <p style={{ color: '#94A3B8', fontSize: '1.1rem', marginBottom: '40px', textAlign: 'center', maxWidth: '500px' }}>
+                    <p style={{ color: '#666', fontSize: '1.1rem', marginBottom: '40px', textAlign: 'center', maxWidth: '500px' }}>
                         Dashboard này chứa thông tin nhạy cảm về doanh thu và hiệu suất.<br />
                         Vui lòng nhập mật khẩu để truy cập.
                     </p>
@@ -1065,12 +1162,12 @@ ${txtFormat}
                             padding: '15px 50px',
                             fontSize: '1.2rem',
                             fontWeight: 'bold',
-                            background: 'linear-gradient(90deg, #00D4FF, #3B82F6)',
+                            background: '#ea580c',
                             color: 'white',
                             border: 'none',
                             borderRadius: '50px',
                             cursor: 'pointer',
-                            boxShadow: '0 5px 20px rgba(0, 212, 255, 0.4)',
+                            boxShadow: '0 4px 6px -1px rgba(234, 88, 12, 0.4)',
                             transition: 'transform 0.2s'
                         }}
                         onMouseEnter={(e) => e.target.style.transform = 'scale(1.05)'}
@@ -1081,181 +1178,107 @@ ${txtFormat}
                 </div>
             ) : (
                 <>
-
-                    {/* IMPORT TOOL - GOOGLE SHEET */}
-                    <div style={{ ...cardStyle, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(15, 37, 68, 0.8)' }}>
-                        <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flex: 1 }}>
-                            <div style={{ color: '#00FF88', fontSize: '1.2rem', fontWeight: 'bold' }}>📊 Live Data</div>
-
-                            {/* Sheet Date Selector - Fixed */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.1)', padding: '6px 14px', borderRadius: '8px', whiteSpace: 'nowrap' }}>
-                                <span style={{ color: '#aaa', fontSize: '0.9rem', fontWeight: '500' }}>Nguồn Data:</span>
-                                <select
-                                    value={sheetMonth}
-                                    onChange={e => setSheetMonth(e.target.value)}
-                                    style={{ background: '#1a3a52', color: 'white', border: '1px solid #3B82F6', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.95rem' }}
-                                >
-                                    {Array.from({ length: 12 }, (_, i) => <option key={i} value={i + 1} style={{ background: '#1a3a52', color: 'white' }}>T{i + 1}</option>)}
-                                </select>
-                                <span style={{ color: '#ccc' }}>/</span>
-                                <input
-                                    type="number"
-                                    value={sheetYear}
-                                    onChange={e => setSheetYear(e.target.value)}
-                                    style={{ width: '70px', background: '#1a3a52', color: 'white', border: '1px solid #3B82F6', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '0.95rem', textAlign: 'center' }}
-                                />
-                            </div>
-
-                            <input
-                                type="text"
-                                placeholder="Dán Link Google Sheet (File -> Share -> Publish to Web -> CSV)..."
-                                value={sheetUrl}
-                                onChange={e => setSheetUrl(e.target.value)}
-                                style={{
-                                    flex: 1,
-                                    padding: '10px',
-                                    borderRadius: '8px',
-                                    border: '1px solid #3B82F6',
-                                    background: 'rgba(0,0,0,0.3)',
-                                    color: 'white'
-                                }}
-                            />
-                            <button
-                                onClick={handleImportToDatabase}
-                                disabled={isImporting}
-                                style={{
-                                    marginLeft: '20px',
-                                    padding: '10px 20px',
-                                    background: isImporting ? '#666' : 'linear-gradient(90deg, #00D4FF, #3B82F6)',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '8px',
-                                    fontWeight: 'bold',
-                                    cursor: isImporting ? 'not-allowed' : 'pointer',
-                                    whiteSpace: 'nowrap'
-                                }}
-                            >
-                                {isImporting ? '💾 Đang import...' : '📥 Import vào DB'}
-                            </button>
-
-                            <button
-                                onClick={handleExportVideoIDs}
-                                style={{
-                                    marginLeft: '10px',
-                                    padding: '10px 20px',
-                                    background: 'linear-gradient(90deg, #10B981, #059669)',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '8px',
-                                    fontWeight: 'bold',
-                                    cursor: 'pointer',
-                                    whiteSpace: 'nowrap'
-                                }}
-                                title="Export danh sách Video IDs để lấy data từ TikTok One"
-                            >
-                                📋 Export IDs
-                            </button>
-
-                            <button
-                                onClick={handleDeleteMonthData}
-                                style={{
-                                    marginLeft: '10px',
-                                    padding: '10px 20px',
-                                    background: 'linear-gradient(90deg, #EF4444, #DC2626)',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '8px',
-                                    fontWeight: 'bold',
-                                    cursor: 'pointer',
-                                    whiteSpace: 'nowrap'
-                                }}
-                                title={`Xóa data đã import cho tháng ${month}/${year}`}
-                            >
-                                🗑️ Xóa Data
-                            </button>
-                        </div>
-
-                        {/* Progress Bar */}
-                        {isImporting && importProgress.total > 0 && (
-                            <div style={{ marginTop: '10px', width: '100%' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#00D4FF', fontSize: '0.9rem', marginBottom: '5px' }}>
-                                    <span>Đang import...</span>
-                                    <span>{importProgress.current.toLocaleString()} / {importProgress.total.toLocaleString()} rows</span>
-                                </div>
-                                <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
-                                    <div style={{
-                                        width: `${(importProgress.current / importProgress.total * 100)}%`,
-                                        height: '100%',
-                                        background: 'linear-gradient(90deg, #00D4FF, #3B82F6)',
-                                        transition: 'width 0.3s ease'
-                                    }}></div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
+                    {/* NOTE: Import feature has been moved to the Data Archive Tab */}
 
                     {/* GLOBAL FILTER */}
-                    <div style={{ background: 'rgba(26, 58, 92, 0.6)', padding: '20px', borderRadius: '16px', marginBottom: '30px', display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-                        <select value={month} onChange={e => setMonth(e.target.value)} style={{ padding: '8px', borderRadius: '8px', color: '#fff', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', minWidth: '100px' }}>
+                    <div style={{ background: '#fff', border: '1px solid #eee', padding: '20px', borderRadius: '16px', marginBottom: '30px', display: 'flex', gap: '20px', flexWrap: 'wrap', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                        <select value={month} onChange={e => setMonth(e.target.value)} style={{ padding: '8px', borderRadius: '8px', color: '#333', background: '#f9fafb', border: '1px solid #ddd', minWidth: '100px' }}>
                             {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1} style={{ color: 'black', backgroundColor: 'white' }}>Tháng {i + 1}</option>)}
                         </select>
-                        <input type="number" value={year} onChange={e => setYear(e.target.value)} style={{ padding: '8px', borderRadius: '8px', width: '80px', color: '#fff', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)' }} />
-                        <select value={filterBrand} onChange={e => setFilterBrand(e.target.value)} style={{ padding: '8px', borderRadius: '8px', flex: 1, color: '#fff', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', minWidth: '200px' }}>
+                        <input type="number" value={year} onChange={e => setYear(e.target.value)} style={{ padding: '8px', borderRadius: '8px', width: '80px', color: '#333', background: '#f9fafb', border: '1px solid #ddd' }} />
+                        <select value={filterBrand} onChange={e => setFilterBrand(e.target.value)} style={{ padding: '8px', borderRadius: '8px', flex: 1, color: '#333', background: '#f9fafb', border: '1px solid #ddd', minWidth: '150px' }}>
                             <option value="" style={{ color: 'black', backgroundColor: 'white' }}>Tất cả Brand</option>
                             {brands?.map(b => <option key={b.id} value={b.id} style={{ color: 'black', backgroundColor: 'white' }}>{b.ten_brand}</option>)}
                         </select>
-                        <select value={filterStaff} onChange={e => setFilterStaff(e.target.value)} style={{ padding: '8px', borderRadius: '8px', flex: 1, color: '#fff', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', minWidth: '200px' }}>
+                        <select value={filterStaff} onChange={e => setFilterStaff(e.target.value)} style={{ padding: '8px', borderRadius: '8px', flex: 1, color: '#333', background: '#f9fafb', border: '1px solid #ddd', minWidth: '150px' }}>
                             <option value="" style={{ color: 'black', backgroundColor: 'white' }}>Tất cả Nhân sự</option>
                             {nhanSus?.map(n => <option key={n.id} value={n.id} style={{ color: 'black', backgroundColor: 'white' }}>{n.ten_nhansu}</option>)}
                         </select>
+                        <select value={filterKoc} onChange={e => setFilterKoc(e.target.value)} style={{ padding: '8px', borderRadius: '8px', flex: 1, color: '#333', background: '#f9fafb', border: '1px solid #ddd', minWidth: '150px' }}>
+                            <option value="" style={{ color: 'black', backgroundColor: 'white' }}>Tất cả ID Kênh</option>
+                            {uniqueKenhList.map(k => <option key={k} value={k} style={{ color: 'black', backgroundColor: 'white' }}>{k}</option>)}
+                        </select>
                     </div>
 
-                    {/* STATS */}
-                    <div style={{ display: 'flex', gap: '20px', marginBottom: '30px' }}>
-                        <div style={{ ...cardStyle, flex: 1, alignItems: 'center' }}>
-                            <div style={{ color: 'rgba(255,255,255,0.7)' }}>TỔNG GMV</div>
-                            <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#00D4FF' }}>{formatNumber(calculatedStats.gmv)}</div>
+                    {/* LOADING OVERLAY OR STATS */}
+                    {isLoadingData ? (
+                        <div style={{ textAlign: 'center', padding: '50px', background: '#fff', borderRadius: '16px', marginBottom: '30px', border: '1px solid #eee' }}>
+                            <div style={{ fontSize: '2rem', animation: 'spin 1s linear infinite' }}>⏳</div>
+                            <h3 style={{ color: '#ea580c', marginTop: '15px' }}>Đang tải dữ liệu từ máy chủ...</h3>
+                            <p style={{ color: '#666' }}>Vui lòng đợi vài giây (Hệ thống đang nạp hàng chục ngàn dòng)</p>
                         </div>
-                        <div style={{ ...cardStyle, flex: 1, alignItems: 'center' }}>
-                            <div style={{ color: 'rgba(255,255,255,0.7)' }}>GMV THÁNG AIR</div>
-                            <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#3B82F6' }}>{formatNumber(calculatedStats.gmvMonthAir)}</div>
+                    ) : (
+                        <div style={{ display: 'flex', gap: '20px', marginBottom: '30px' }}>
+                            <div style={{ ...cardStyle, flex: 1, alignItems: 'center', borderColor: '#ea580c' }}>
+                                <div style={{ color: '#666' }}>TỔNG GMV</div>
+                                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#ea580c' }}>{formatNumber(calculatedStats.gmv)}</div>
+                            </div>
+                            <div style={{ ...cardStyle, flex: 1, alignItems: 'center', borderColor: '#3b82f6' }}>
+                                <div style={{ color: '#666' }}>GMV THÁNG AIR</div>
+                                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#3b82f6' }}>{formatNumber(calculatedStats.gmvMonthAir)}</div>
+                            </div>
+                            <div style={{ ...cardStyle, flex: 1, alignItems: 'center', borderColor: '#10b981' }}>
+                                <div style={{ color: '#666' }}>VIDEO AIR</div>
+                                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#10b981' }}>{formatNumber(calculatedStats.videoAirMonth)}</div>
+                            </div>
+                            <div style={{ ...cardStyle, flex: 1, alignItems: 'center', borderColor: '#f43f5e', boxShadow: 'none' }}>
+                                <div style={{ color: '#666' }}>TỔNG VIEW</div>
+                                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#f43f5e' }}>{formatNumber(calculatedStats.totalViews)}</div>
+                            </div>
                         </div>
-                        <div style={{ ...cardStyle, flex: 1, alignItems: 'center' }}>
-                            <div style={{ color: 'rgba(255,255,255,0.7)' }}>VIDEO AIR</div>
-                            <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#C084FC' }}>{formatNumber(calculatedStats.videoAirMonth)}</div>
-                        </div>
-                        <div style={{ ...cardStyle, flex: 1, alignItems: 'center', border: '1px solid #FF00FF', boxShadow: '0 0 10px rgba(255, 0, 255, 0.3)' }}>
-                            <div style={{ color: 'rgba(255,255,255,0.7)' }}>TỔNG VIEW</div>
-                            <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#FF00FF' }}>{formatNumber(calculatedStats.totalViews)}</div>
-                        </div>
-                    </div>
+                    )}
 
                     {/* CHART */}
-                    <div style={cardStyle}>
-                        <div style={{ color: '#00D4FF', fontWeight: 'bold', marginBottom: '15px' }}>🏆 GMV Video Dựa Trên PFM Nhân Sự</div>
-                        <div style={{ width: '100%', height: 400 }}>
-                            <ResponsiveContainer>
-                                <ComposedChart data={chartData}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                                    <XAxis dataKey="name" tick={{ fill: '#FFF' }} />
-                                    <YAxis yAxisId="left" tick={{ fill: '#FFF' }} tickFormatter={v => (v / 1000000).toFixed(0) + 'M'} />
-                                    <YAxis yAxisId="right" orientation="right" tick={{ fill: '#A855F7' }} />
-                                    <Tooltip contentStyle={{ background: '#0f2544', border: '1px solid #00D4FF' }} formatter={v => formatNumber(v)} />
-                                    <Legend />
-                                    <Bar yAxisId="left" dataKey="gmvMonth" name="GMV Air Trong Tháng" stackId="a" fill="#3B82F6" />
-                                    <Bar yAxisId="left" dataKey="gmvRest" name="GMV Lũy Kế" stackId="a" fill="#F97316" />
-                                    <Line yAxisId="right" dataKey="videoMonth" name="Video Air" stroke="#A855F7" strokeWidth={3} />
-                                </ComposedChart>
-                            </ResponsiveContainer>
+                    <div style={{ display: 'flex', gap: '20px', marginBottom: '24px' }}>
+                        <div style={{ ...cardStyle, flex: 2, marginBottom: 0 }}>
+                            <div style={{ color: '#ea580c', fontWeight: 'bold', marginBottom: '15px' }}>🏆 GMV Video Dựa Trên PFM Nhân Sự</div>
+                            <div style={{ width: '100%', height: 400 }}>
+                                <ResponsiveContainer>
+                                    <ComposedChart data={chartData}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                                        <XAxis
+                                            dataKey="name"
+                                            tick={{ fill: '#666', fontSize: 11 }}
+                                            interval={0}
+                                            angle={-20}
+                                            textAnchor="end"
+                                        />
+                                        <YAxis yAxisId="left" tick={{ fill: '#666' }} tickFormatter={v => (v / 1000000).toFixed(0) + 'M'} />
+                                        <YAxis yAxisId="right" orientation="right" tick={{ fill: '#3b82f6' }} />
+                                        <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ddd' }} formatter={v => formatNumber(v)} />
+                                        <Legend />
+                                        <Bar yAxisId="left" dataKey="gmvMonth" name="GMV Air Trong Tháng" stackId="a" fill="#3b82f6" />
+                                        <Bar yAxisId="left" dataKey="gmvRest" name="GMV Lũy Kế" stackId="a" fill="#ea580c" />
+                                        <Line yAxisId="right" dataKey="videoMonth" name="Video Air" stroke="#10b981" strokeWidth={3} />
+                                    </ComposedChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+
+                        <div style={{ ...cardStyle, flex: 1, marginBottom: 0 }}>
+                            <div style={{ color: '#ea580c', fontWeight: 'bold', marginBottom: '15px', textAlign: 'center' }}>🥧 Tỉ lệ Video Air theo Brand</div>
+                            <div style={{ width: '100%', height: 400 }}>
+                                <ResponsiveContainer>
+                                    <PieChart>
+                                        <Pie data={brandStats} dataKey="videoMonth" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={120} label={({ name, percent }) => percent > 0 ? `${name} ${(percent * 100).toFixed(0)}%` : ''}>
+                                            {brandStats.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={['#ea580c', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#f43f5e', '#14b8a6'][index % 8]} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ddd', color: '#333', borderRadius: '8px' }} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
                         </div>
                     </div>
 
                     {/* TABLES */}
-                    <DataTable title="Performance theo Brand" columns={brandCols} data={brandStats} />
-                    <DataTable title="Performance theo KOL/KOC" columns={kocCols} data={kocStats} />
-                    <DataTable title="Performance theo Nhân sự" columns={staffCols} data={staffStats} />
-                    <DataTable title="KOC Theo Brand (Pivot)" columns={pivotCols} data={kocBrandPivot} />
+                    <div style={{ opacity: isLoadingData ? 0.5 : 1, pointerEvents: isLoadingData ? 'none' : 'auto' }}>
+                        <DataTable title="Performance theo Brand" columns={brandCols} data={brandStats} />
+                        <DataTable title="Performance theo KOL/KOC" columns={kocCols} data={kocStats} />
+                        <DataTable title="Performance theo Nhân sự" columns={staffCols} data={staffStats} />
+                        <DataTable title="KOC Theo Brand (Pivot)" columns={pivotCols} data={kocBrandPivot} />
+                    </div>
 
                 </>
             )}

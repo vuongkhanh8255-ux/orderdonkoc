@@ -7,7 +7,7 @@ import { useAppData } from '../context/AppDataContext';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, Label } from 'recharts';
 import { normalizeProductName } from '../utils/productMapping';
 
-const COLORS = ['#00D4FF', '#A855F7', '#3B82F6', '#00FF88', '#FBBF24', '#EC4899', '#6366F1', '#14B8A6'];
+const COLORS = ['#ea580c', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#f43f5e', '#14b8a6'];
 
 // --- HÀM HELPER FORMAT ---
 const formatCurrency = (val) => {

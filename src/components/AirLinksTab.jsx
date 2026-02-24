@@ -6,7 +6,7 @@ import { read, utils, writeFile } from 'xlsx';
 import SearchableDropdown from './SearchableDropdown';
 import { normalizeProductName } from '../utils/productMapping';
 
-const COLORS = ['#00D4FF', '#A855F7', '#3B82F6', '#00FF88', '#FBBF24', '#EC4899', '#6366F1', '#14B8A6'];
+const COLORS = ['#ea580c', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#f43f5e', '#14b8a6'];
 const CHART_HEIGHT = 500;
 const PIE_CY = "45%";
 const PIE_CX = "50%";
@@ -59,9 +59,8 @@ const HardcodedCenterText = ({ value, isMoney = false }) => {
             style={{
                 fontSize: isMoney ? '28px' : '40px',
                 fontWeight: '800',
-                fill: '#00D4FF',
-                fontFamily: "'Space Grotesk', sans-serif",
-                filter: 'drop-shadow(0px 0px 8px rgba(0, 212, 255, 0.5))'
+                fill: '#ea580c',
+                fontFamily: "'Outfit', sans-serif"
             }}
         >
             {value}
@@ -80,7 +79,7 @@ const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent
         <text
             x={x}
             y={y}
-            fill="#FFFFFF"
+            fill="#333"
             textAnchor={x > cx ? 'start' : 'end'}
             dominantBaseline="central"
             fontSize="12px"
@@ -598,8 +597,9 @@ const AirLinksTab = () => {
             brand_id: link.brand_id || '',
             san_pham: link.san_pham || '',
             nhansu_id: link.nhansu_id || '',
-            cast: formatCurrency(link.cast),
-            cms_brand: link.cms_brand || ''
+            cast: link.cast || '', // Will be stored as string for input
+            cms_brand: link.cms_brand || '',
+            ngay_air: link.ngay_air || '',
         });
     };
 
@@ -635,7 +635,8 @@ const AirLinksTab = () => {
                     san_pham: editFormData.san_pham,
                     cast: finalCast,
                     cms_brand: finalCMS,
-                    nhansu_id: editFormData.nhansu_id
+                    nhansu_id: editFormData.nhansu_id,
+                    ngay_air: editFormData.ngay_air || null,
                 })
                 .eq('id', editFormData.id);
 
@@ -1029,7 +1030,7 @@ const AirLinksTab = () => {
                                         <PieChart>
                                             <Pie data={dataChart1} cx="50%" cy="50%" outerRadius={OUTER_R} innerRadius={INNER_R} fill="#8884d8" dataKey="value" stroke="none" cornerRadius={6}>
                                                 {dataChart1.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                                                <Label value={totalChart1} position="center" fill="#00D4FF" style={{ fontSize: '28px', fontWeight: '800', fontFamily: "'Space Grotesk', sans-serif", textAnchor: 'middle', filter: 'drop-shadow(0px 0px 8px rgba(0, 212, 255, 0.5))' }} />
+                                                <Label value={totalChart1} position="center" fill="#00D4FF" style={{ fontSize: '28px', fontWeight: '800', fontFamily: "'Outfit', sans-serif", textAnchor: 'middle', filter: 'drop-shadow(0px 0px 8px rgba(0, 212, 255, 0.5))' }} />
                                             </Pie>
                                             <Tooltip formatter={(value) => `${value} link`} contentStyle={{ borderRadius: '12px', border: 'none', backgroundColor: '#FFFFFF', color: '#0f172a', boxShadow: '0 8px 32px rgba(0,0,0,0.3)', fontWeight: 'bold' }} wrapperStyle={{ zIndex: 1000 }} />
                                         </PieChart>
@@ -1058,7 +1059,7 @@ const AirLinksTab = () => {
                                         <PieChart>
                                             <Pie data={dataChart2} cx="50%" cy="50%" outerRadius={OUTER_R} innerRadius={INNER_R} fill="#8884d8" dataKey="value" stroke="none" cornerRadius={6}>
                                                 {dataChart2.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                                                <Label value={totalChart2} position="center" fill="#00D4FF" style={{ fontSize: '28px', fontWeight: '800', fontFamily: "'Space Grotesk', sans-serif", textAnchor: 'middle', filter: 'drop-shadow(0px 0px 8px rgba(0, 212, 255, 0.5))' }} />
+                                                <Label value={totalChart2} position="center" fill="#00D4FF" style={{ fontSize: '28px', fontWeight: '800', fontFamily: "'Outfit', sans-serif", textAnchor: 'middle', filter: 'drop-shadow(0px 0px 8px rgba(0, 212, 255, 0.5))' }} />
                                             </Pie>
                                             <Tooltip formatter={(value) => `${value} link`} contentStyle={{ borderRadius: '12px', border: 'none', backgroundColor: '#FFFFFF', color: '#0f172a', boxShadow: '0 8px 32px rgba(0,0,0,0.3)', fontWeight: 'bold' }} wrapperStyle={{ zIndex: 1000 }} />
                                         </PieChart>
@@ -1087,7 +1088,7 @@ const AirLinksTab = () => {
                                         <PieChart>
                                             <Pie data={dataChart3} cx="50%" cy="50%" outerRadius={OUTER_R} innerRadius={INNER_R} fill="#8884d8" dataKey="value" stroke="none" cornerRadius={6}>
                                                 {dataChart3.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                                                <Label value={totalChart3} position="center" fill="#00D4FF" style={{ fontSize: '28px', fontWeight: '800', fontFamily: "'Space Grotesk', sans-serif", textAnchor: 'middle', filter: 'drop-shadow(0px 0px 8px rgba(0, 212, 255, 0.5))' }} />
+                                                <Label value={totalChart3} position="center" fill="#00D4FF" style={{ fontSize: '28px', fontWeight: '800', fontFamily: "'Outfit', sans-serif", textAnchor: 'middle', filter: 'drop-shadow(0px 0px 8px rgba(0, 212, 255, 0.5))' }} />
                                             </Pie>
                                             <Tooltip formatter={(value) => `${value} link`} contentStyle={{ borderRadius: '12px', border: 'none', backgroundColor: '#FFFFFF', color: '#0f172a', boxShadow: '0 8px 32px rgba(0,0,0,0.3)', fontWeight: 'bold' }} wrapperStyle={{ zIndex: 1000 }} />
                                         </PieChart>
@@ -1116,7 +1117,7 @@ const AirLinksTab = () => {
                                         <PieChart>
                                             <Pie data={dataChart4} cx="50%" cy="50%" outerRadius={OUTER_R} innerRadius={INNER_R} fill="#8884d8" dataKey="value" stroke="none" cornerRadius={6}>
                                                 {dataChart4.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                                                <Label value={formatCompactNumber(totalChart4)} position="center" fill="#00D4FF" style={{ fontSize: '28px', fontWeight: '800', fontFamily: "'Space Grotesk', sans-serif", textAnchor: 'middle', filter: 'drop-shadow(0px 0px 8px rgba(0, 212, 255, 0.5))' }} />
+                                                <Label value={formatCompactNumber(totalChart4)} position="center" fill="#00D4FF" style={{ fontSize: '28px', fontWeight: '800', fontFamily: "'Outfit', sans-serif", textAnchor: 'middle', filter: 'drop-shadow(0px 0px 8px rgba(0, 212, 255, 0.5))' }} />
                                             </Pie>
                                             <Tooltip formatter={(value) => formatCurrency(value) + ' đ'} contentStyle={{ borderRadius: '12px', border: 'none', backgroundColor: '#FFFFFF', color: '#0f172a', boxShadow: '0 8px 32px rgba(0,0,0,0.3)', fontWeight: 'bold' }} wrapperStyle={{ zIndex: 1000 }} />
                                         </PieChart>
@@ -1191,6 +1192,8 @@ const AirLinksTab = () => {
                                     <th style={{ padding: '12px', textAlign: 'center' }}>ID Video</th>
                                     <th style={{ padding: '12px', textAlign: 'center' }}>Brand</th>
                                     <th style={{ padding: '12px', textAlign: 'center' }}>Sản Phẩm</th>
+                                    <th style={{ padding: '12px', textAlign: 'center' }}>Ngày Air</th>
+                                    <th style={{ padding: '12px', textAlign: 'center' }}>Trạng Thái</th>
                                     <th style={{ padding: '12px', textAlign: 'center' }}>CAST</th>
                                     <th style={{ padding: '12px', textAlign: 'center' }}>CMS</th>
                                     <th style={{ padding: '12px', textAlign: 'center' }}>Nhân Sự</th>
@@ -1252,6 +1255,26 @@ const AirLinksTab = () => {
                                                         </select>
                                                     ) : normalizeProductName(link.san_pham)}
                                                 </td>
+
+                                                {/* NGÀY AIR */}
+                                                <td style={{ textAlign: 'center', padding: '12px' }}>
+                                                    {isEditing ? (
+                                                        <input type="date" value={editFormData.ngay_air ? editFormData.ngay_air.substring(0, 10) : ''} onChange={(e) => handleEditFormChange(e, 'ngay_air')} style={tableInputStyle} />
+                                                    ) : (
+                                                        link.ngay_air ? new Date(link.ngay_air).toLocaleDateString('vi-VN') : '-'
+                                                    )}
+                                                </td>
+
+                                                {/* TRẠNG THÁI ON-AIR */}
+                                                <td style={{ textAlign: 'center', padding: '12px' }}>
+                                                    {link.ngay_air ? (
+                                                        <span style={{ backgroundColor: '#D1FAE5', color: '#065F46', padding: '4px 8px', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 'bold', whiteSpace: 'nowrap' }}>🟢 Đã On-air</span>
+                                                    ) : (
+                                                        <span style={{ backgroundColor: '#F3F4F6', color: '#6B7280', padding: '4px 8px', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 'bold', whiteSpace: 'nowrap' }}>⚪ Chưa On-air</span>
+                                                    )}
+                                                </td>
+
+
 
                                                 {/* CAST (Đã áp dụng Highlight đỏ nếu có tiền) */}
                                                 <td style={{ textAlign: 'center', padding: '12px' }}>
