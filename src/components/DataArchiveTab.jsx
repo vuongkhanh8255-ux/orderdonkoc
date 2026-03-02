@@ -273,11 +273,15 @@ const DataArchiveTab = () => {
 
             const headers = rows[headerRowIndex];
 
-            // 5. Map columns exactly as before
-            const findIdx = (keywords) => headers.findIndex(h => {
-                const str = String(h).toLowerCase().trim();
-                return keywords.some(k => str.includes(k));
-            });
+            // 5. Map columns exactly as before, but with better prioritization
+            const findIdx = (keywords) => {
+                const hStrs = headers.map(h => String(h).toLowerCase().trim());
+                // Exact match first
+                let idx = hStrs.findIndex(str => keywords.some(k => str === k));
+                if (idx !== -1) return idx;
+                // Includes match
+                return hStrs.findIndex(str => keywords.some(k => str.includes(k)));
+            };
 
             let iID = headers.findIndex(h => {
                 const str = String(h).toLowerCase().trim();
@@ -285,7 +289,23 @@ const DataArchiveTab = () => {
             });
             if (iID === -1) iID = findIdx(['id video', 'video id']);
 
-            const iGMV = findIdx(['gmv', 'tổng giá trị', 'doanh thu']);
+            // Special handling for GMV to avoid a custom user column containing "#N/A"
+            const findGMVIdx = () => {
+                const hStrs = headers.map(h => String(h).toLowerCase().trim());
+                let idx = hStrs.findIndex(str => ['tổng giá trị', 'doanh thu', 'gmv'].includes(str));
+                if (idx !== -1) return idx;
+
+                idx = hStrs.findIndex(str => str.includes('tổng giá trị') || str.includes('doanh thu'));
+                if (idx !== -1) return idx;
+
+                // Fallback to 'gmv' but ignore 'gmv quy ra'
+                idx = hStrs.findIndex(str => str.includes('gmv') && !str.includes('quy ra'));
+                if (idx !== -1) return idx;
+
+                return hStrs.findIndex(str => str.includes('gmv'));
+            };
+
+            const iGMV = findGMVIdx();
             const iView = findIdx(['vv', 'lượt xem', 'view']);
             const iOrder = findIdx(['đơn hàng', 'số lượng bán', 'sold']);
             const iAirDate = findIdx(['thời gian', 'ngày phát']);
@@ -383,16 +403,23 @@ const DataArchiveTab = () => {
 
             setTestParseResults(debugSamples);
 
-            // Deduplicate
-            const uniqueData = [];
-            const seen = new Set();
-            for (let i = dataToImport.length - 1; i >= 0; i--) {
-                const key = `${dataToImport[i].video_id}`;
-                if (!seen.has(key)) {
-                    seen.add(key);
-                    uniqueData.unshift(dataToImport[i]);
+            // Aggregate duplicates (Sum GMV, views, orders)
+            const aggregatedMap = new Map();
+            for (let i = 0; i < dataToImport.length; i++) {
+                const item = dataToImport[i];
+                const key = String(item.video_id).trim();
+                if (!aggregatedMap.has(key)) {
+                    aggregatedMap.set(key, { ...item });
+                } else {
+                    const existing = aggregatedMap.get(key);
+                    existing.gmv += (item.gmv || 0);
+                    existing.views += (item.views || 0);
+                    existing.orders += (item.orders || 0);
+                    // Keep the latest air_date if previous was missing
+                    if (!existing.air_date && item.air_date) existing.air_date = item.air_date;
                 }
             }
+            const uniqueData = Array.from(aggregatedMap.values());
 
             setImportProgress({ current: 0, total: uniqueData.length });
 

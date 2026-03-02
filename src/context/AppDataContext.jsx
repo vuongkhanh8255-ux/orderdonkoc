@@ -178,7 +178,7 @@ export const AppDataProvider = ({ children }) => {
   const [filterAlKenh, setFilterAlKenh] = useState('');
   const [filterAlBrand, setFilterAlBrand] = useState('');
   const [filterAlNhanSu, setFilterAlNhanSu] = useState('');
-  const [filterAlDate, setFilterAlDate] = useState('');
+  const [filterAlMonth, setFilterAlMonth] = useState('');
   const [filterAlLinkAir, setFilterAlLinkAir] = useState('');
   const [airLinksCurrentPage, setAirLinksCurrentPage] = useState(1);
   const [airLinksTotalCount, setAirLinksTotalCount] = useState(0);
@@ -909,9 +909,12 @@ export const AppDataProvider = ({ children }) => {
       if (filterAlLinkAir) q = q.ilike('link_air_koc', `%${filterAlLinkAir}%`);
       if (filterAlBrand) q = q.eq('brand_id', filterAlBrand);
       if (filterAlNhanSu) q = q.eq('nhansu_id', filterAlNhanSu);
-      if (filterAlDate) {
-        const startDate = `${filterAlDate}T00:00:00.000Z`;
-        const endDate = `${filterAlDate}T23:59:59.999Z`;
+      if (filterAlMonth) {
+        const targetYear = parseInt(filterAlMonth.split('-')[0]);
+        const targetMonth = parseInt(filterAlMonth.split('-')[1]);
+        const startDate = `${filterAlMonth}-01T00:00:00.000Z`;
+        const lastDay = new Date(targetYear, targetMonth, 0).getDate();
+        const endDate = `${filterAlMonth}-${lastDay}T23:59:59.999Z`;
         q = q.gte('ngay_air', startDate).lte('ngay_air', endDate);
       }
       return q;
@@ -926,6 +929,7 @@ export const AppDataProvider = ({ children }) => {
     while (more) {
       const { data, error } = await buildQuery()
         .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
         .range(from, from + size - 1);
 
       if (error || !data || data.length === 0) {
@@ -935,7 +939,7 @@ export const AppDataProvider = ({ children }) => {
         from += size;
         if (data.length < size) more = false;
       }
-      if (allLinks.length > 20000) more = false; // Hard limit 20k
+      if (allLinks.length >= 100000) more = false; // Raised limit to 100k to accommodate large DBs
     }
 
     // DEDUPLICATE by ID to prevent duplicate data from concurrent loads (React Strict Mode)
@@ -959,7 +963,7 @@ export const AppDataProvider = ({ children }) => {
       }
     }
   };
-  const clearAirLinkFilters = () => { setFilterAlKenh(''); setFilterAlBrand(''); setFilterAlNhanSu(''); setFilterAlDate(''); setFilterAlLinkAir(''); };
+  const clearAirLinkFilters = () => { setFilterAlKenh(''); setFilterAlBrand(''); setFilterAlNhanSu(''); setFilterAlMonth(''); setFilterAlLinkAir(''); };
   const handleGenerateAirLinksReport = async () => {
     setIsAirReportLoading(true);
     setAirReportData({ reportRows: [], brandHeaders: [] });
@@ -1023,7 +1027,7 @@ export const AppDataProvider = ({ children }) => {
   useEffect(() => { if (currentPage !== 1) { setCurrentPage(1); } }, [filterIdKenh, filterSdt, filterNhanSu, filterNgay, filterLoaiShip, filterEditedStatus, filterBrand, filterSanPham]);
   useEffect(() => { loadSanPhamsByBrand(selectedBrand); setProductSearchTerm(''); }, [selectedBrand]);
   // [MODIFIED] Removed airLinksCurrentPage dependency. Page change handled client-side now.
-  useEffect(() => { loadAirLinks(); }, [filterAlKenh, filterAlBrand, filterAlNhanSu, filterAlDate, filterAlLinkAir]);
+  useEffect(() => { loadAirLinks(); }, [filterAlKenh, filterAlBrand, filterAlNhanSu, filterAlMonth, filterAlLinkAir]);
 
   // [FIX] Load products for List Filter separately from Form
   useEffect(() => {
@@ -1034,7 +1038,7 @@ export const AppDataProvider = ({ children }) => {
     };
     fetchFilterProducts();
   }, [filterBrand]);
-  useEffect(() => { if (airLinksCurrentPage !== 1) { setAirLinksCurrentPage(1); } }, [filterAlKenh, filterAlBrand, filterAlNhanSu, filterAlDate, filterAlLinkAir]);
+  useEffect(() => { if (airLinksCurrentPage !== 1) { setAirLinksCurrentPage(1); } }, [filterAlKenh, filterAlBrand, filterAlNhanSu, filterAlMonth, filterAlLinkAir]);
 
   // =================================================================
   // USE MEMO (Tính toán)
@@ -1179,7 +1183,7 @@ export const AppDataProvider = ({ children }) => {
     // State & Setters Tab Air Links
     airLinks, setAirLinks, isLoadingAirLinks, setIsLoadingAirLinks,
     filterAlKenh, setFilterAlKenh, filterAlBrand, setFilterAlBrand,
-    filterAlNhanSu, setFilterAlNhanSu, filterAlDate, setFilterAlDate,
+    filterAlNhanSu, setFilterAlNhanSu, filterAlMonth, setFilterAlMonth,
     filterAlLinkAir, setFilterAlLinkAir,
     airLinksCurrentPage, setAirLinksCurrentPage, airLinksTotalCount,
 

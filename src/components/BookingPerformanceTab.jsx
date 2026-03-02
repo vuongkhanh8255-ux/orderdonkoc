@@ -176,12 +176,11 @@ const BookingPerformanceTab = () => {
     const fileInputRef = useRef(null);
 
     // FILTERS
-    const [month, setMonth] = useState(null); // Will be set by auto-detection
-    const [year, setYear] = useState(null);
+    const [month, setMonth] = useState(new Date().getMonth() + 1); // Default to current month immediately
+    const [year, setYear] = useState(new Date().getFullYear()); // Default to current year immediately
     const [filterBrand, setFilterBrand] = useState('');
     const [filterStaff, setFilterStaff] = useState('');
     const [filterKoc, setFilterKoc] = useState('');
-    const [hasAutoDetected, setHasAutoDetected] = useState(false);
     const [isUnlocked, setIsUnlocked] = useState(false); // Password protection
 
     const [uploadBrandId, setUploadBrandId] = useState('');
@@ -189,35 +188,12 @@ const BookingPerformanceTab = () => {
     const [isLoadingData, setIsLoadingData] = useState(false); // Track loading DB state
     const currentFetchRef = useRef(0); // Track latest fetch to prevent race conditions
     const [isProcessing, setIsProcessing] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState(null); // { current, total, rows, status }
+    const [loadProgress, setLoadProgress] = useState({ current: 0, total: 0 }); // Track DB fetch progress
 
     // HELPERS
     const formatNumber = (val) => new Intl.NumberFormat('vi-VN').format(val || 0);
 
-    // --- AUTO-DETECT LATEST MONTH WITH DATA ---
-    useEffect(() => {
-        if (hasAutoDetected || !airLinks || airLinks.length === 0) return;
-
-        // Find the most recent ngay_air date
-        let latestDate = null;
-        airLinks.forEach(link => {
-            if (!link.ngay_air) return;
-            const d = new Date(link.ngay_air);
-            if (!isNaN(d.getTime())) {
-                if (!latestDate || d > latestDate) latestDate = d;
-            }
-        });
-
-        if (latestDate) {
-            setMonth(latestDate.getMonth() + 1);
-            setYear(latestDate.getFullYear());
-        } else {
-            // Fallback to current month if no data
-            setMonth(new Date().getMonth() + 1);
-            setYear(new Date().getFullYear());
-        }
-        setHasAutoDetected(true);
-    }, [airLinks, hasAutoDetected]);
+    // (Removed slow hasAutoDetected logic because it causes Month/Year to be null while waiting for 100k AirLinks to load)
 
     // Auto-load performance data from DB when month/year changes
     useEffect(() => {
@@ -247,11 +223,26 @@ const BookingPerformanceTab = () => {
     // LOAD DATA DIRECTLY FROM SUPABASE
     const loadPerformanceData = async (targetMonth, targetYear, fetchId = null) => {
         try {
-            // Only set loading if it's the latest request
             if (!fetchId || currentFetchRef.current === fetchId) {
                 setIsLoadingData(true);
+                setLoadProgress({ current: 0, total: 0 });
             }
+
             console.log(`📊 Loading performance data for ${targetMonth}/${targetYear}...`);
+
+            // 1. Get total count first to show progress
+            const { count, error: countErr } = await supabase
+                .from('tiktok_performance')
+                .select('*', { count: 'exact', head: true })
+                .eq('month', targetMonth)
+                .eq('year', targetYear);
+
+            if (countErr) throw countErr;
+            const totalRecords = count || 0;
+
+            if (!fetchId || currentFetchRef.current === fetchId) {
+                setLoadProgress({ current: 0, total: totalRecords });
+            }
 
             let allData = [];
             let from = 0;
@@ -269,6 +260,11 @@ const BookingPerformanceTab = () => {
                 if (!data || data.length === 0) break;
 
                 allData = [...allData, ...data];
+
+                if (!fetchId || currentFetchRef.current === fetchId) {
+                    setLoadProgress({ current: allData.length, total: totalRecords });
+                }
+
                 if (data.length < step) break; // Finished fetching all records
                 from += step;
             }
@@ -885,23 +881,22 @@ ${txtFormat}
             if (filterStaff && String(link.nhansu_id) !== String(filterStaff)) return false;
             if (filterKoc && String(link.id_kenh) !== String(filterKoc)) return false;
 
-            // Filter by Relevance
-            if (!link.ngay_air) return false; // Invalid date
+            // [CRITICAL FIX] 1. Do not return early if no date. 
+            // A link might not have a date but STILL generate GMV in the report!
+            let isAiredInMonth = false;
+            if (link.ngay_air) {
+                const linkDate = new Date(link.ngay_air);
+                if (!isNaN(linkDate.getTime())) {
+                    const linkMonth = linkDate.getMonth() + 1;
+                    const linkYear = linkDate.getFullYear();
+                    isAiredInMonth = (linkMonth === parseInt(month) && linkYear === parseInt(year));
+                }
+            }
 
-            // Check Case 1: Aired in selected month (PRIORITY - shows all staff/brands)
-            const linkDate = new Date(link.ngay_air);
-            if (isNaN(linkDate.getTime())) return false;
+            // Check Case 2: Has GMV data (for old videos or videos missing dates)
+            const hasDataInReport = activeVideoIds.has(String(link.id_video || '').trim());
 
-            const linkMonth = linkDate.getMonth() + 1;
-            const linkYear = linkDate.getFullYear();
-
-            if (linkMonth === parseInt(month) && linkYear === parseInt(year)) return true;
-
-            // Check Case 2: Has GMV data (for old videos with continuing revenue)
-            if (activeVideoIds.has(String(link.id_video || '').trim())) return true;
-
-            // If neither, discard
-            return false;
+            return isAiredInMonth || hasDataInReport;
         });
 
         // [DEBUG] Log matching statistics
@@ -1185,7 +1180,11 @@ ${txtFormat}
                         <select value={month} onChange={e => setMonth(e.target.value)} style={{ padding: '8px', borderRadius: '8px', color: '#333', background: '#f9fafb', border: '1px solid #ddd', minWidth: '100px' }}>
                             {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1} style={{ color: 'black', backgroundColor: 'white' }}>Tháng {i + 1}</option>)}
                         </select>
-                        <input type="number" value={year} onChange={e => setYear(e.target.value)} style={{ padding: '8px', borderRadius: '8px', width: '80px', color: '#333', background: '#f9fafb', border: '1px solid #ddd' }} />
+                        <select value={year} onChange={e => setYear(e.target.value)} style={{ padding: '8px', borderRadius: '8px', width: '90px', color: '#333', background: '#f9fafb', border: '1px solid #ddd' }}>
+                            {Array.from({ length: 10 }, (_, i) => 2024 + i).map(y => (
+                                <option key={y} value={y} style={{ color: 'black', backgroundColor: 'white' }}>{y}</option>
+                            ))}
+                        </select>
                         <select value={filterBrand} onChange={e => setFilterBrand(e.target.value)} style={{ padding: '8px', borderRadius: '8px', flex: 1, color: '#333', background: '#f9fafb', border: '1px solid #ddd', minWidth: '150px' }}>
                             <option value="" style={{ color: 'black', backgroundColor: 'white' }}>Tất cả Brand</option>
                             {brands?.map(b => <option key={b.id} value={b.id} style={{ color: 'black', backgroundColor: 'white' }}>{b.ten_brand}</option>)}
@@ -1203,9 +1202,26 @@ ${txtFormat}
                     {/* LOADING OVERLAY OR STATS */}
                     {isLoadingData ? (
                         <div style={{ textAlign: 'center', padding: '50px', background: '#fff', borderRadius: '16px', marginBottom: '30px', border: '1px solid #eee' }}>
-                            <div style={{ fontSize: '2rem', animation: 'spin 1s linear infinite' }}>⏳</div>
-                            <h3 style={{ color: '#ea580c', marginTop: '15px' }}>Đang tải dữ liệu từ máy chủ...</h3>
-                            <p style={{ color: '#666' }}>Vui lòng đợi vài giây (Hệ thống đang nạp hàng chục ngàn dòng)</p>
+                            <div style={{ fontSize: '2rem', animation: 'spin 1s linear infinite', marginBottom: '15px' }}>⏳</div>
+                            <h3 style={{ color: '#ea580c', margin: '0 0 10px 0' }}>Đang tải dữ liệu từ máy chủ ({month}/{year})</h3>
+
+                            {loadProgress.total > 0 && (
+                                <div style={{ maxWidth: '400px', margin: '20px auto' }}>
+                                    <div style={{ width: '100%', background: '#eee', borderRadius: '10px', height: '12px', overflow: 'hidden' }}>
+                                        <div style={{
+                                            width: `${Math.min(100, Math.round((loadProgress.current / loadProgress.total) * 100))}%`,
+                                            background: '#ea580c',
+                                            height: '100%',
+                                            transition: 'width 0.3s'
+                                        }}></div>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#666', marginTop: '8px', fontWeight: 'bold' }}>
+                                        <span>Đã tải: {formatNumber(loadProgress.current)} dòng</span>
+                                        <span>Tổng: {formatNumber(loadProgress.total)} dòng ({Math.round((loadProgress.current / loadProgress.total) * 100)}%)</span>
+                                    </div>
+                                </div>
+                            )}
+                            <p style={{ color: '#888', fontSize: '14px', marginTop: '10px' }}>*Hệ thống đang đối soát chéo hàng chục nghìn dòng dữ liệu.</p>
                         </div>
                     ) : (
                         <div style={{ display: 'flex', gap: '20px', marginBottom: '30px' }}>

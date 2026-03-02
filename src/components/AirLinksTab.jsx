@@ -108,7 +108,7 @@ const AirLinksTab = () => {
         airReportData, isAirReportLoading, handleGenerateAirLinksReport, requestAirSort,
         sortedAirReportRows, totalsRowAirReport,
         filterAlLinkAir, setFilterAlLinkAir,
-        filterAlDate, setFilterAlDate
+        filterAlMonth, setFilterAlMonth
     } = useAppData();
 
     const [newLink, setNewLink] = useState({
@@ -292,12 +292,31 @@ const AirLinksTab = () => {
                 ngay_air: newLink.ngay_air ? newLink.ngay_air : null
             };
 
+            // [NEW] Auto-map `ngay_air` from Data Archive if not provided
+            if (!dataToInsert.ngay_air && dataToInsert.id_video) {
+                try {
+                    const { data: perfData } = await supabase
+                        .from('tiktok_performance')
+                        .select('air_date')
+                        .eq('video_id', dataToInsert.id_video)
+                        .limit(1)
+                        .maybeSingle();
+
+                    if (perfData && perfData.air_date) {
+                        dataToInsert.ngay_air = perfData.air_date;
+                        console.log(`Auto-mapped ngay_air to ${perfData.air_date} for video ${dataToInsert.id_video}`);
+                    }
+                } catch (e) {
+                    console.error("Failed to auto-map air_date:", e);
+                }
+            }
+
             const { error } = await supabase.from('air_links').insert([dataToInsert]);
             if (error) throw error;
-            alert("Đã thêm link thành công! 🎉");
+            alert(`Đã thêm link thành công! 🎉${dataToInsert.ngay_air ? '\n(Đã tự động check và cập nhật thông số từ Lưu Trữ Data)' : ''}`);
             setNewLink({ link_air_koc: '', id_kenh: '', id_video: '', brand_id: '', san_pham: '', nhansu_id: '', ngay_air: '', ngay_booking: new Date().toISOString().split('T')[0], cast: '', cms_brand: '', view_count: 0 });
-            loadAirLinks(); handleGenerateAirLinksReport();
-            loadAirLinks(); handleGenerateAirLinksReport();
+            loadAirLinks();
+            handleGenerateAirLinksReport();
         } catch (error) {
             if (error.code === '23505') {
                 alert("⛔ HIỆN TẠI DATABASE ĐANG CHẶN TRÙNG LINK!\n\nĐể nhập được nhiều dòng cùng 1 link (để tính KPI), bạn cần:\n1. Vào Supabase > Table 'air_links'\n2. Bấm Edit cột 'link_air_koc'\n3. Bỏ tích ô 'Is Unique'\n4. Lưu lại là xong!");
@@ -448,6 +467,29 @@ const AirLinksTab = () => {
                 const uniqueValidRows = Array.from(uniqueRowsMap.values());
 
                 if (uniqueValidRows.length > 0) {
+                    // [NEW] Auto-map `ngay_air` from Data Archive for bulk upload
+                    const videoIdsToMap = uniqueValidRows.filter(r => r.id_video && !r.ngay_air).map(r => r.id_video);
+                    if (videoIdsToMap.length > 0) {
+                        try {
+                            const { data: perfData } = await supabase
+                                .from('tiktok_performance')
+                                .select('video_id, air_date')
+                                .in('video_id', videoIdsToMap);
+
+                            if (perfData && perfData.length > 0) {
+                                const perfMap = new Map();
+                                perfData.forEach(d => perfMap.set(d.video_id, d.air_date));
+                                uniqueValidRows.forEach(row => {
+                                    if (!row.ngay_air && row.id_video && perfMap.has(row.id_video)) {
+                                        row.ngay_air = perfMap.get(row.id_video);
+                                    }
+                                });
+                            }
+                        } catch (e) {
+                            console.error("Failed to auto-map air_date bulk:", e);
+                        }
+                    }
+
                     // [MODIFIED] INSERT INSTEAD OF UPSERT (Allow Duplicates)
                     // We now insert ALL valid rows, even if they share the same link
                     const { error } = await supabase.from('air_links').insert(uniqueValidRows);
@@ -503,14 +545,18 @@ const AirLinksTab = () => {
                 if (filterAlLinkAir) query = query.ilike('link_air_koc', `%${filterAlLinkAir}%`);
                 if (filterAlBrand) query = query.eq('brand_id', filterAlBrand);
                 if (filterAlNhanSu) query = query.eq('nhansu_id', filterAlNhanSu);
-                if (filterAlDate) {
-                    const startDate = `${filterAlDate}T00:00:00.000Z`;
-                    const endDate = `${filterAlDate}T23:59:59.999Z`;
+                if (filterAlMonth) {
+                    const targetYear = parseInt(filterAlMonth.split('-')[0]);
+                    const targetMonth = parseInt(filterAlMonth.split('-')[1]);
+                    const startDate = `${filterAlMonth}-01T00:00:00.000Z`;
+                    const lastDay = new Date(targetYear, targetMonth, 0).getDate();
+                    const endDate = `${filterAlMonth}-${lastDay}T23:59:59.999Z`;
                     query = query.gte('ngay_air', startDate).lte('ngay_air', endDate);
                 }
 
                 const { data, error } = await query
                     .order('created_at', { ascending: false })
+                    .order('id', { ascending: false })
                     .range(from, from + size - 1);
 
                 if (error) throw error;
@@ -1172,7 +1218,34 @@ const AirLinksTab = () => {
                     <input type="text" placeholder="Lọc ID Kênh / Video..." value={filterAlKenh} onChange={e => setFilterAlKenh(e.target.value)} style={{ flex: '1 1 150px' }} />
                     <select value={filterAlBrand} onChange={e => setFilterAlBrand(e.target.value)} style={{ flex: '1 1 200px' }}><option value="">Tất cả Brand</option>{brands.map(b => <option key={b.id} value={b.id}>{b.ten_brand}</option>)}</select>
                     <select value={filterAlNhanSu} onChange={e => setFilterAlNhanSu(e.target.value)} style={{ flex: '1 1 180px' }}><option value="">Tất cả Nhân sự</option>{nhanSus.map(ns => <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>)}</select>
-                    <select value={filterAlNhanSu} onChange={e => setFilterAlNhanSu(e.target.value)} style={{ flex: '1 1 180px' }}><option value="">Tất cả Nhân sự</option>{nhanSus.map(ns => <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>)}</select>
+                    <div style={{ display: 'flex', gap: '5px', flex: '1 1 180px' }}>
+                        <select
+                            value={filterAlMonth ? parseInt(filterAlMonth.split('-')[1], 10) : ''}
+                            onChange={e => {
+                                const m = e.target.value;
+                                if (!m) { setFilterAlMonth(''); return; }
+                                const y = filterAlMonth ? filterAlMonth.split('-')[0] : new Date().getFullYear();
+                                setFilterAlMonth(`${y}-${String(m).padStart(2, '0')}`);
+                            }}
+                            style={{ flex: 1, padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                        >
+                            <option value="">Tất cả Tháng</option>
+                            {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>Tháng {i + 1}</option>)}
+                        </select>
+                        <select
+                            value={filterAlMonth ? filterAlMonth.split('-')[0] : ''}
+                            onChange={e => {
+                                const y = e.target.value;
+                                if (!y && !filterAlMonth) return;
+                                const m = filterAlMonth ? filterAlMonth.split('-')[1] : String(new Date().getMonth() + 1).padStart(2, '0');
+                                setFilterAlMonth(y ? `${y}-${m}` : '');
+                            }}
+                            style={{ width: '90px', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', textAlign: 'center' }}
+                        >
+                            <option value="">Năm</option>
+                            {Array.from({ length: 10 }, (_, i) => 2024 + i).map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                    </div>
                     <button onClick={clearAirLinkFilters} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>Xóa Lọc</button>
                     <button onClick={handleExportExcel} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: '#10B981', border: 'none' }}>
                         📥 Xuất Excel
