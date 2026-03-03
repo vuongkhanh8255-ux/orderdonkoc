@@ -350,7 +350,7 @@ const AirLinksTab = () => {
 
         // PASSWORD PROTECTION
         const password = prompt("🔒 Nhập mật khẩu để XÓA (Admin):");
-        if (password !== 'Khanh8255') {
+        if (password !== 'QUOCKHANH8255') {
             alert("❌ Mật khẩu không đúng! Không thể xóa.");
             return;
         }
@@ -809,7 +809,7 @@ const AirLinksTab = () => {
                             <button
                                 onClick={() => {
                                     const password = prompt('🔑 Nhập mật khẩu để mở khóa:');
-                                    if (password === 'Khanh8255') {
+                                    if (password === 'QUOCKHANH8255') {
                                         setIsImportUnlocked(true);
                                     } else if (password) {
                                         alert('❌ Mật khẩu sai!');
@@ -1386,7 +1386,7 @@ const AirLinksTab = () => {
                                                                 <button onClick={() => handleEditClick(link)} style={{ padding: '6px 12px', backgroundColor: '#fff', border: '1px solid #1976D2', color: '#1976D2', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Sửa</button>
                                                                 <button onClick={() => {
                                                                     const pass = prompt("🔒 Nhập mật khẩu Admin để XÓA:");
-                                                                    if (pass === 'Khanh8255') {
+                                                                    if (pass === 'QUOCKHANH8255') {
                                                                         handleDeleteAirLink(link.id, link.link_air_koc);
                                                                     } else if (pass) {
                                                                         alert("❌ Sai mật khẩu!");

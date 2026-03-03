@@ -1147,7 +1147,7 @@ ${txtFormat}
                     <button
                         onClick={() => {
                             const password = prompt('🔑 Nhập mật khẩu:');
-                            if (password === '8255') {
+                            if (password === 'QUOCKHANH8255') {
                                 setIsUnlocked(true);
                             } else if (password) {
                                 alert('❌ Mật khẩu sai! Vui lòng thử lại.');
