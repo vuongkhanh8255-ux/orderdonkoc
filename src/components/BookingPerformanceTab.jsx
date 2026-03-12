@@ -182,6 +182,7 @@ const BookingPerformanceTab = () => {
     const [filterStaff, setFilterStaff] = useState('');
     const [filterKoc, setFilterKoc] = useState('');
     const [isUnlocked, setIsUnlocked] = useState(false); // Password protection
+    const [lockPassword, setLockPassword] = useState(''); // Secure password input
 
     const [uploadBrandId, setUploadBrandId] = useState('');
     const [importedData, setImportedData] = useState([]); // This will now be fetched from DB
@@ -1140,17 +1141,40 @@ ${txtFormat}
                     <h3 style={{ color: '#ea580c', fontSize: '2rem', marginBottom: '20px', fontWeight: 'bold' }}>
                         Khu Vực Bảo Mật
                     </h3>
-                    <p style={{ color: '#666', fontSize: '1.1rem', marginBottom: '40px', textAlign: 'center', maxWidth: '500px' }}>
+                    <p style={{ color: '#666', fontSize: '1.1rem', marginBottom: '30px', textAlign: 'center', maxWidth: '500px' }}>
                         Dashboard này chứa thông tin nhạy cảm về doanh thu và hiệu suất.<br />
                         Vui lòng nhập mật khẩu để truy cập.
                     </p>
+                    <input
+                        type="password"
+                        value={lockPassword}
+                        onChange={(e) => setLockPassword(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                if (lockPassword === 'QUOCKHANH8255') setIsUnlocked(true);
+                                else { alert('❌ Mật khẩu sai! Vui lòng thử lại.'); setLockPassword(''); }
+                            }
+                        }}
+                        placeholder="••••••••"
+                        style={{
+                            padding: '12px 24px',
+                            fontSize: '1.2rem',
+                            borderRadius: '50px',
+                            border: '1px solid #ccc',
+                            marginBottom: '20px',
+                            textAlign: 'center',
+                            width: '250px',
+                            outline: 'none',
+                            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)'
+                        }}
+                    />
                     <button
                         onClick={() => {
-                            const password = prompt('🔑 Nhập mật khẩu:');
-                            if (password === 'QUOCKHANH8255') {
+                            if (lockPassword === 'QUOCKHANH8255') {
                                 setIsUnlocked(true);
-                            } else if (password) {
+                            } else {
                                 alert('❌ Mật khẩu sai! Vui lòng thử lại.');
+                                setLockPassword('');
                             }
                         }}
                         style={{

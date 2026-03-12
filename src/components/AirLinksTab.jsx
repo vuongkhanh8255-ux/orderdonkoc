@@ -118,7 +118,52 @@ const AirLinksTab = () => {
         cast: '', cms_brand: '', view_count: 0
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [isImportUnlocked, setIsImportUnlocked] = useState(false);
+
+    // Custom Secure Password Modal for Delete Operations
+    const [passwordModal, setPasswordModal] = useState({ isOpen: false, type: null, data: null, input: '' });
+
+    const openDeleteModal = (type, data = null) => {
+        setPasswordModal({ isOpen: true, type, data, input: '' });
+    };
+
+    // Get password based on brand
+    const getBrandPassword = (brandName) => {
+        if (!brandName) return null;
+        const lowerBrand = brandName.toLowerCase();
+        if (lowerBrand.includes('eherb') || lowerBrand.includes('masube')) return 'eherb345';
+        if (lowerBrand.includes('bodymiss') || lowerBrand.includes('real steel')) return 'bodymiss8255';
+        if (lowerBrand.includes('milaganics')) return 'Mila123';
+        if (lowerBrand.includes('moawmoawws') || lowerBrand.includes('healmi')) return 'MM101';
+        return null;
+    };
+
+    const handleConfirmSecureDelete = () => {
+        let isAuthorized = false;
+
+        // Master Admin Password
+        if (passwordModal.input === 'QUOCKHANH8255') {
+            isAuthorized = true;
+        }
+        // Brand-specific Password (for single delete only)
+        else if (passwordModal.type === 'single' && passwordModal.data?.brandName) {
+            const brandPass = getBrandPassword(passwordModal.data.brandName);
+            if (brandPass && passwordModal.input === brandPass) {
+                isAuthorized = true;
+            }
+        }
+
+        if (isAuthorized) {
+            if (passwordModal.type === 'bulk') {
+                handleBulkDeleteInternal();
+            } else if (passwordModal.type === 'single') {
+                handleDeleteAirLink(passwordModal.data.id, passwordModal.data.link);
+            }
+            setPasswordModal({ isOpen: false, type: null, data: null, input: '' });
+        } else {
+            alert('❌ Mật khẩu sai!');
+            setPasswordModal({ ...passwordModal, input: '' });
+        }
+    };
 
     // --- STATE CHO INLINE EDITING (SỬA TRỰC TIẾP) ---
     const [editingRowId, setEditingRowId] = useState(null);
@@ -345,16 +390,12 @@ const AirLinksTab = () => {
         }
     };
 
-    const handleBulkDelete = async () => {
+    const handleBulkDelete = () => {
         if (selectedRowIds.length === 0) return;
+        openDeleteModal('bulk');
+    };
 
-        // PASSWORD PROTECTION
-        const password = prompt("🔒 Nhập mật khẩu để XÓA (Admin):");
-        if (password !== 'QUOCKHANH8255') {
-            alert("❌ Mật khẩu không đúng! Không thể xóa.");
-            return;
-        }
-
+    const handleBulkDeleteInternal = async () => {
         if (!window.confirm(`Bạn có chắc chắn muốn xóa ${selectedRowIds.length} dòng đã chọn?`)) return;
 
         try {
@@ -803,38 +844,18 @@ const AirLinksTab = () => {
                 <div style={{ marginTop: '20px', padding: '20px', borderTop: '1px dashed #e5e7eb', textAlign: 'center' }}>
                     <h5 style={{ marginBottom: '15px', fontWeight: 'bold' }}>📂 IMPORT NHANH TỪ FILE EXCEL</h5>
 
-                    {!isImportUnlocked ? (
-                        <div style={{ padding: '20px', backgroundColor: '#fff7ed', borderRadius: '12px' }}>
-                            <p style={{ color: '#ea580c', marginBottom: '10px' }}>🔒 Khu vực này đã bị khóa.</p>
-                            <button
-                                onClick={() => {
-                                    const password = prompt('🔑 Nhập mật khẩu để mở khóa:');
-                                    if (password === 'QUOCKHANH8255') {
-                                        setIsImportUnlocked(true);
-                                    } else if (password) {
-                                        alert('❌ Mật khẩu sai!');
-                                    }
-                                }}
-                                className="btn-secondary"
-                                style={{ fontWeight: 'bold' }}
-                            >
-                                🔓 MỞ KHÓA IMPORT
-                            </button>
-                        </div>
-                    ) : (
-                        <div style={{ animation: 'fadeIn 0.5s' }}>
-                            <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', alignItems: 'center' }}>
-                                <a href="/Mau_Nhap_Link_Air.xlsx" download="Mau_Nhap_Link_Air.xlsx" className="btn-secondary" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                    ⬇️ Tải File Mẫu
-                                </a>
-                                <div style={{ position: 'relative', overflow: 'hidden', display: 'inline-block' }}>
-                                    <button className="btn-primary" style={{ padding: '8px 20px' }}>📤 Upload Excel</button>
-                                    <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} style={{ position: 'absolute', left: 0, top: 0, opacity: 0, height: '100%', width: '100%', cursor: 'pointer' }} />
-                                </div>
+                    <div style={{ animation: 'fadeIn 0.5s' }}>
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', alignItems: 'center' }}>
+                            <a href="/Mau_Nhap_Link_Air.xlsx" download="Mau_Nhap_Link_Air.xlsx" className="btn-secondary" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                ⬇️ Tải File Mẫu
+                            </a>
+                            <div style={{ position: 'relative', overflow: 'hidden', display: 'inline-block' }}>
+                                <button className="btn-primary" style={{ padding: '8px 20px' }}>📤 Upload Excel</button>
+                                <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} style={{ position: 'absolute', left: 0, top: 0, opacity: 0, height: '100%', width: '100%', cursor: 'pointer' }} />
                             </div>
-                            <p style={{ marginTop: '10px', fontSize: '0.85rem', color: '#666' }}>*Lưu ý: Điền chính xác "Tên Brand" và "Tên Nhân Sự" khớp với trên hệ thống.</p>
                         </div>
-                    )}
+                        <p style={{ marginTop: '10px', fontSize: '0.85rem', color: '#666' }}>*Lưu ý: Điền chính xác "Tên Brand" và "Tên Nhân Sự" khớp với trên hệ thống.</p>
+                    </div>
                 </div>
             </div>
 
@@ -1384,14 +1405,7 @@ const AirLinksTab = () => {
                                                         ) : (
                                                             <>
                                                                 <button onClick={() => handleEditClick(link)} style={{ padding: '6px 12px', backgroundColor: '#fff', border: '1px solid #1976D2', color: '#1976D2', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Sửa</button>
-                                                                <button onClick={() => {
-                                                                    const pass = prompt("🔒 Nhập mật khẩu Admin để XÓA:");
-                                                                    if (pass === 'QUOCKHANH8255') {
-                                                                        handleDeleteAirLink(link.id, link.link_air_koc);
-                                                                    } else if (pass) {
-                                                                        alert("❌ Sai mật khẩu!");
-                                                                    }
-                                                                }} style={{ padding: '6px 12px', backgroundColor: '#fff', border: '1px solid #D42426', color: '#D42426', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Xóa</button>
+                                                                <button onClick={() => openDeleteModal('single', { id: link.id, link: link.link_air_koc, brandName: link.brands?.ten_brand })} style={{ padding: '6px 12px', backgroundColor: '#fff', border: '1px solid #D42426', color: '#D42426', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Xóa</button>
                                                             </>
                                                         )}
                                                     </div>
@@ -1418,6 +1432,60 @@ const AirLinksTab = () => {
                     })()}
                 </div>
             </div>
+
+            {/* SECURE PASSWORD MODAL FOR DELETE ACTIONS */}
+            {passwordModal.isOpen && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+                    <div style={{ background: 'white', padding: '30px', borderRadius: '16px', width: '400px', maxWidth: '90%', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
+                            <span style={{ fontSize: '24px' }}>🔒</span>
+                            <h3 style={{ margin: 0, color: '#111827', fontSize: '20px', fontWeight: 'bold' }}>Xác Thực Quyền Xóa</h3>
+                        </div>
+                        <p style={{ color: '#D42426', fontSize: '14.5px', marginBottom: '8px', lineHeight: '1.5' }}>
+                            Hành động này sẽ <b>xóa vĩnh viễn</b> dữ liệu khỏi hệ thống.
+                        </p>
+                        <p style={{ color: '#6B7280', fontSize: '13.5px', marginBottom: '20px', lineHeight: '1.5' }}>
+                            Vui lòng nhập mật khẩu Admin hoặc mật khẩu xóa của Brand để xác nhận.
+                        </p>
+                        <input
+                            type="password"
+                            autoFocus
+                            placeholder="Nhập mật khẩu..."
+                            value={passwordModal.input}
+                            onChange={e => setPasswordModal({ ...passwordModal, input: e.target.value })}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter') handleConfirmSecureDelete();
+                                if (e.key === 'Escape') setPasswordModal({ isOpen: false, type: null, data: null, input: '' });
+                            }}
+                            style={{
+                                width: '100%', padding: '12px 16px', boxSizing: 'border-box', border: '1px solid #d1d5db',
+                                borderRadius: '8px', marginBottom: '25px', fontSize: '16px', outline: 'none',
+                                transition: 'border-color 0.2s', fontFamily: 'monospace'
+                            }}
+                            onFocus={(e) => e.target.style.borderColor = '#ea580c'}
+                            onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
+                        />
+                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                            <button
+                                onClick={() => setPasswordModal({ isOpen: false, type: null, data: null, input: '' })}
+                                style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid #d1d5db', background: '#fff', color: '#374151', cursor: 'pointer', fontWeight: '500', transition: 'background 0.2s' }}
+                                onMouseEnter={(e) => e.target.style.background = '#f3f4f6'}
+                                onMouseLeave={(e) => e.target.style.background = '#fff'}
+                            >
+                                Hủy Bỏ
+                            </button>
+                            <button
+                                onClick={handleConfirmSecureDelete}
+                                style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: '#D42426', color: 'white', cursor: 'pointer', fontWeight: 'bold', transition: 'background 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }}
+                                onMouseEnter={(e) => e.target.style.background = '#b91c1c'}
+                                onMouseLeave={(e) => e.target.style.background = '#D42426'}
+                            >
+                                Xác Nhận Xóa
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 };

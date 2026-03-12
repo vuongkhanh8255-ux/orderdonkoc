@@ -393,8 +393,8 @@ const DataArchiveTab = () => {
                     month: parseInt(sheetMonth),
                     year: parseInt(sheetYear),
                     gmv: parsedGmv,
-                    views: parseInt(row[iView]) || 0,
-                    orders: parseInt(row[iOrder]) || 0,
+                    views: Math.round(parseVNNumber(row[iView])) || 0,
+                    orders: Math.round(parseVNNumber(row[iOrder])) || 0,
                     air_date: airDate,
                     creator_name: row[iCreatorName] || null,
                     creator_id: row[iCreatorId] || null
