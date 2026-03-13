@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/bluecore-api/:match*",
+      "destination": "https://admin-apis.bluecore.vn/:match*"
+    }
+  ]
+}

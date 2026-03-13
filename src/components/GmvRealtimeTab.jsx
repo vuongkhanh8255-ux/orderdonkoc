@@ -3,9 +3,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const BLUECORE_PATH = '/api/services/app/PublicRecommendation/Get?tenancyName=hoanganhannie&sectionName=GMV_API&size=4247&replaceUnicode=false';
-const DEV_URL = '/bluecore-api' + BLUECORE_PATH;
-// Sử dụng proxy khác vì corsproxy.io bị chặn (403). allorigins hoặc cors-anywhere
-const PROD_URL = 'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://admin-apis.bluecore.vn' + BLUECORE_PATH);
+// Dùng proxy nội bộ của Vite khi dev, và dùng rewrite proxy của Vercel/Netlify khi lên prod
+const API_URL = '/bluecore-api' + BLUECORE_PATH;
 
 const COLORS = ['#ea580c', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e', '#6366f1', '#84cc16'];
 
@@ -73,9 +72,7 @@ const GmvRealtimeTab = () => {
         setLoading(true);
         setError(null);
         try {
-            const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-            const url = isDev ? DEV_URL : PROD_URL;
-            const response = await fetch(url);
+            const response = await fetch(API_URL);
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const json = await response.json();
             if (json.success && json.result) {
