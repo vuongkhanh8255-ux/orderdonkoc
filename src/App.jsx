@@ -11,6 +11,7 @@ import BookingManagerTab from './components/BookingManagerTab';
 import DashboardTab from './components/DashboardTab';
 import BookingPerformanceTab from './components/BookingPerformanceTab';
 import DataArchiveTab from './components/DataArchiveTab'; // [MỚI] Thêm DataArchiveTab
+import GmvRealtimeTab from './components/GmvRealtimeTab'; // [MỚI] Tab GMV Realtime
 import AIChat from './components/AIChat';
 
 function App() {
@@ -109,6 +110,16 @@ function App() {
             </div>
 
             <div
+              style={menuItemStyle(currentView === 'gmv_realtime')}
+              onClick={() => setCurrentView('gmv_realtime')}
+              onMouseEnter={(e) => { if (currentView !== 'gmv_realtime') { e.currentTarget.style.background = '#fff7ed'; e.currentTarget.style.color = '#ea580c'; } }}
+              onMouseLeave={(e) => { if (currentView !== 'gmv_realtime') { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#666'; } }}
+            >
+              <span>💰</span>
+              <span>GMV Realtime</span>
+            </div>
+
+            <div
               style={menuItemStyle(currentView === 'booking_performance')}
               onClick={() => setCurrentView('booking_performance')}
               onMouseEnter={(e) => { if (currentView !== 'booking_performance') { e.currentTarget.style.background = '#fff7ed'; e.currentTarget.style.color = '#ea580c'; } }}
@@ -204,6 +215,7 @@ function App() {
           {currentView === 'expense' && <ExpenseEcomTab />}
           {currentView === 'booking' && <BookingManagerTab />}
           {currentView === 'data_archive' && <DataArchiveTab />}
+          {currentView === 'gmv_realtime' && <GmvRealtimeTab />}
 
         </div>
       </div>
