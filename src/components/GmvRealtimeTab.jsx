@@ -2,9 +2,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-const BLUECORE_PATH = '/api/services/app/PublicRecommendation/Get?tenancyName=hoanganhannie&sectionName=GMV_API&size=4247&replaceUnicode=false';
-// Dùng proxy nội bộ của Vite khi dev, và dùng rewrite proxy của Vercel/Netlify khi lên prod
-const API_URL = '/bluecore-api' + BLUECORE_PATH;
+const BLUECORE_BASE = '/bluecore-api/api/services/app/PublicRecommendation/Get?tenancyName=hoanganhannie&sectionName=GMV_API&replaceUnicode=false';
+const API_MAX_SIZE = 10000;
 
 const COLORS = ['#ea580c', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e', '#6366f1', '#84cc16'];
 
@@ -72,7 +71,12 @@ const GmvRealtimeTab = () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch(API_URL);
+            // Step 1: probe to get total count
+            const probe = await fetch(BLUECORE_BASE + '&size=1').then(r => r.json());
+            const total = probe.result?.[0]?._source?.count_row || probe.result?.[0]?._source?.total_row || 100;
+            const size = Math.min(total, API_MAX_SIZE);
+            // Step 2: fetch with dynamic size (capped at API limit)
+            const response = await fetch(BLUECORE_BASE + '&size=' + size);
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const json = await response.json();
             if (json.success && json.result) {

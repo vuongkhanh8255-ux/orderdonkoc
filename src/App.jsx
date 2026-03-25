@@ -12,11 +12,16 @@ import DashboardTab from './components/DashboardTab';
 import BookingPerformanceTab from './components/BookingPerformanceTab';
 import DataArchiveTab from './components/DataArchiveTab'; // [MỚI] Thêm DataArchiveTab
 import GmvRealtimeTab from './components/GmvRealtimeTab'; // [MỚI] Tab GMV Realtime
+import StellaDashboardTab from './components/StellaDashboardTab'; // [MỚI] Tab Dashboard Stella
+import CSKHTab from './components/CSKHTab'; // [MỚI] Tab CSKH Đánh giá
+// ReportCSTab is now imported inside CSKHTab
 import AIChat from './components/AIChat';
 
 function App() {
   // Đổi mặc định thành 'dashboard' để mở lên là thấy ngay báo cáo mới
   const [currentView, setCurrentView] = useState('dashboard');
+  const [openGroups, setOpenGroups] = useState({ ecom: true, booking: true, archive: true });
+  const toggleGroup = (key) => setOpenGroups(prev => ({ ...prev, [key]: !prev[key] }));
 
   // Cấu hình độ rộng Sidebar - FIXED
   const SIDEBAR_WIDTH = '280px';
@@ -40,25 +45,23 @@ function App() {
 
   const menuItemStyle = (isActive) => ({
     justifyContent: 'flex-start',
-    margin: '6px 16px',
-    padding: '14px 18px',
+    margin: '2px 16px 2px 24px',
+    padding: '10px 14px',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
-    gap: '14px',
+    gap: '10px',
     background: isActive
       ? 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)'
       : 'transparent',
-    borderRadius: '12px',
-    color: isActive ? '#fff' : '#666',
-    fontWeight: isActive ? '700' : '600',
-    transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-    height: '50px',
-    fontSize: '0.95rem',
-    border: isActive ? 'none' : '1px solid transparent',
-    boxShadow: isActive ? '0 4px 10px rgba(234, 88, 12, 0.2)' : 'none',
-    letterSpacing: '0.3px',
-    textTransform: 'uppercase'
+    borderRadius: '10px',
+    color: isActive ? '#fff' : '#6b7280',
+    fontWeight: isActive ? '700' : '500',
+    transition: 'all 0.2s',
+    fontSize: '0.83rem',
+    border: 'none',
+    boxShadow: isActive ? '0 3px 8px rgba(234, 88, 12, 0.2)' : 'none',
+    letterSpacing: '0.2px',
   });
 
   const mainContentStyle = {
@@ -96,107 +99,51 @@ function App() {
           </div>
 
           {/* Menu Items */}
-          <div style={{ flex: 1, paddingTop: '16px', overflowY: 'auto' }}>
+          <div style={{ flex: 1, paddingTop: '8px', overflowY: 'auto' }}>
 
-            {/* 0. [MỚI] BÁO CÁO TỔNG (DASHBOARD) - Thêm vào đầu tiên */}
-            <div
-              style={menuItemStyle(currentView === 'dashboard')}
-              onClick={() => setCurrentView('dashboard')}
-              onMouseEnter={(e) => { if (currentView !== 'dashboard') { e.currentTarget.style.background = '#fff7ed'; e.currentTarget.style.color = '#ea580c'; } }}
-              onMouseLeave={(e) => { if (currentView !== 'dashboard') { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#666'; } }}
-            >
-              <span>📊</span>
-              <span>Dashboard</span>
-            </div>
-
-            <div
-              style={menuItemStyle(currentView === 'gmv_realtime')}
-              onClick={() => setCurrentView('gmv_realtime')}
-              onMouseEnter={(e) => { if (currentView !== 'gmv_realtime') { e.currentTarget.style.background = '#fff7ed'; e.currentTarget.style.color = '#ea580c'; } }}
-              onMouseLeave={(e) => { if (currentView !== 'gmv_realtime') { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#666'; } }}
-            >
-              <span>💰</span>
-              <span>GMV Realtime</span>
-            </div>
-
-            <div
-              style={menuItemStyle(currentView === 'booking_performance')}
-              onClick={() => setCurrentView('booking_performance')}
-              onMouseEnter={(e) => { if (currentView !== 'booking_performance') { e.currentTarget.style.background = '#fff7ed'; e.currentTarget.style.color = '#ea580c'; } }}
-              onMouseLeave={(e) => { if (currentView !== 'booking_performance') { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#666'; } }}
-            >
-              <span>📈</span>
-              <span>Báo Cáo Hiệu Suất</span>
-            </div>
-
-            <div
-              style={menuItemStyle(currentView === 'order')}
-              onClick={() => setCurrentView('order')}
-              onMouseEnter={(e) => { if (currentView !== 'order') { e.currentTarget.style.background = '#fff7ed'; e.currentTarget.style.color = '#ea580c'; } }}
-              onMouseLeave={(e) => { if (currentView !== 'order') { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#666'; } }}
-            >
-              <span>🛒</span>
-              <span>Đơn Hàng KOC</span>
-            </div>
-
-            <div
-              style={menuItemStyle(currentView === 'airlinks')}
-              onClick={() => setCurrentView('airlinks')}
-              onMouseEnter={(e) => { if (currentView !== 'airlinks') { e.currentTarget.style.background = '#fff7ed'; e.currentTarget.style.color = '#ea580c'; } }}
-              onMouseLeave={(e) => { if (currentView !== 'airlinks') { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#666'; } }}
-            >
-              <span>🔗</span>
-              <span>Quản Lý Link Air</span>
-            </div>
-
-            <div
-              style={menuItemStyle(currentView === 'booking')}
-              onClick={() => setCurrentView('booking')}
-              onMouseEnter={(e) => { if (currentView !== 'booking') { e.currentTarget.style.background = '#fff7ed'; e.currentTarget.style.color = '#ea580c'; } }}
-              onMouseLeave={(e) => { if (currentView !== 'booking') { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#666'; } }}
-            >
-              <span>📅</span>
-              <span>Booking Manager</span>
-            </div>
-
-            <div
-              style={menuItemStyle(currentView === 'contract')}
-              onClick={() => setCurrentView('contract')}
-              onMouseEnter={(e) => { if (currentView !== 'contract') { e.currentTarget.style.background = '#fff7ed'; e.currentTarget.style.color = '#ea580c'; } }}
-              onMouseLeave={(e) => { if (currentView !== 'contract') { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#666'; } }}
-            >
-              <span>📝</span>
-              <span>Hợp Đồng</span>
-            </div>
-
-            <div
-              style={menuItemStyle(currentView === 'expense')}
-              onClick={() => setCurrentView('expense')}
-              onMouseEnter={(e) => { if (currentView !== 'expense') { e.currentTarget.style.background = '#fff7ed'; e.currentTarget.style.color = '#ea580c'; } }}
-              onMouseLeave={(e) => { if (currentView !== 'expense') { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#666'; } }}
-            >
-              <span>💸</span>
-              <span>Ngân Sách Ecom</span>
-            </div>
-
-            <div
-              style={menuItemStyle(currentView === 'data_archive')}
-              onClick={() => setCurrentView('data_archive')}
-              onMouseEnter={(e) => { if (currentView !== 'data_archive') { e.currentTarget.style.background = '#fff7ed'; e.currentTarget.style.color = '#ea580c'; } }}
-              onMouseLeave={(e) => { if (currentView !== 'data_archive') { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#666'; } }}
-            >
-              <span>🗄️</span>
-              <span>Lưu Trữ Data</span>
-            </div>
-            {/* LIGHT COUNTDOWN WIDGET */}
-            <div style={{ margin: '16px', padding: '18px', background: '#fff7ed', borderRadius: '16px', border: '1px solid #fed7aa', textAlign: 'center' }}>
-              <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🎉</div>
-              <div style={{ fontSize: '0.75rem', color: '#ea580c', marginBottom: '8px', fontWeight: '600', letterSpacing: '1px', textTransform: 'uppercase' }}>Launch Countdown</div>
-              <div style={{ fontSize: '1.1rem', color: '#ea580c', fontWeight: '700' }}>
-                <span style={{ fontSize: '2rem', fontWeight: '900', color: '#ea580c' }}>{diffDays}</span> days
+            {/* Group label helper */}
+            {[
+              { key: 'ecom', label: '🛍️ Ecom', items: [
+                { view: 'stella_dashboard', icon: '📊', name: 'Stella Dashboard' },
+                { view: 'cskh',             icon: '📋', name: 'CSKH' },
+              ]},
+              { key: 'booking', label: '📅 Booking', items: [
+                { view: 'dashboard',           icon: '📊', name: 'Dashboard' },
+                { view: 'order',               icon: '🛒', name: 'Đơn Hàng KOC' },
+                { view: 'booking_performance', icon: '📈', name: 'Báo Cáo Hiệu Suất' },
+                { view: 'contract',            icon: '📝', name: 'Hợp Đồng' },
+                { view: 'airlinks',            icon: '🔗', name: 'Quản Lý Link Air' },
+                { view: 'booking',             icon: '📅', name: 'Booking Manager' },
+              ]},
+              { key: 'archive', label: '🗄️ Lưu trữ', items: [
+                { view: 'data_archive', icon: '🗄️', name: 'Lưu Trữ Data' },
+                { view: 'expense',      icon: '💸', name: 'Ngân Sách Ecom' },
+              ]},
+            ].map(group => (
+              <div key={group.key} style={{ marginBottom: 4 }}>
+                {/* Group header — click to toggle */}
+                <div
+                  onClick={() => toggleGroup(group.key)}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '10px 16px 4px', padding: '12px 16px', cursor: 'pointer', userSelect: 'none', borderRadius: 12, background: 'linear-gradient(135deg, #fff7ed, #fef3c7)', border: '1px solid #fed7aa' }}
+                >
+                  <span style={{ fontSize: '0.92rem', fontWeight: 800, color: '#c2410c', letterSpacing: '0.3px' }}>{group.label}</span>
+                  <span style={{ fontSize: '0.7rem', color: '#f97316', transition: 'transform 0.2s', display: 'inline-block', transform: openGroups[group.key] ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
+                </div>
+                {/* Items — show/hide */}
+                {openGroups[group.key] && group.items.map(({ view, icon, name }) => (
+                  <div key={view}
+                    style={menuItemStyle(currentView === view)}
+                    onClick={() => setCurrentView(view)}
+                    onMouseEnter={(e) => { if (currentView !== view) { e.currentTarget.style.background = '#fff7ed'; e.currentTarget.style.color = '#ea580c'; } }}
+                    onMouseLeave={(e) => { if (currentView !== view) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#666'; } }}
+                  >
+                    <span>{icon}</span>
+                    <span>{name}</span>
+                  </div>
+                ))}
               </div>
-              <div style={{ fontSize: '0.8rem', color: '#999', fontWeight: '500', marginTop: '5px' }}>until TẾT 2026 🐎</div>
-            </div>
+            ))}
+
           </div>
 
           <div style={{ padding: '16px', borderTop: '1px solid #eee', fontSize: '0.7rem', color: '#999', fontStyle: 'italic', textAlign: 'center', letterSpacing: '1px', textTransform: 'uppercase' }}>
@@ -216,6 +163,8 @@ function App() {
           {currentView === 'booking' && <BookingManagerTab />}
           {currentView === 'data_archive' && <DataArchiveTab />}
           {currentView === 'gmv_realtime' && <GmvRealtimeTab />}
+          {currentView === 'stella_dashboard' && <StellaDashboardTab />}
+          {currentView === 'cskh' && <CSKHTab />}
 
         </div>
       </div>
