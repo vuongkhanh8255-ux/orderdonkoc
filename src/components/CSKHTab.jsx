@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import ReportCSTab from './ReportCSTab';
 
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwl0bImCEVCdWA8rSM6SxJH1Go9YuKxmcysQiH2ZxRl6jnCSS6Rdna3ztKYnx5nbr9A6A/exec';
-const TOKEN = 'stella2026';
+const PROXY_URL  = 'https://xkyhvcmnkrxdtmwtghln.supabase.co/functions/v1/sheets-proxy';
+const CS_SHEET_ID = '1w9Y10K-eSasVbL1_jpT1_o1EkqCJq068OAwRg-ZPYcE';
 
 const BRAND_COLORS = {
   'BODYMISS':   '#3b82f6',
@@ -39,7 +39,7 @@ function DanhGiaTab() {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`${SCRIPT_URL}?token=${TOKEN}&sheet=11.1%20%C4%90%C3%81NH%20GI%C3%81%202026`)
+    fetch(`${PROXY_URL}?sheetId=${CS_SHEET_ID}&sheet=${encodeURIComponent('11.1 ĐÁNH GIÁ 2026')}`)
       .then(r => r.json())
       .then(j => {
         const cleaned = (j.data || []).filter(r => r['STT'] && r['BRAND']);

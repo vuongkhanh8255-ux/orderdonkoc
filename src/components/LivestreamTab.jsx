@@ -1,0 +1,451 @@
+import { useState, useEffect, useMemo } from 'react';
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  LineChart, Line, CartesianGrid, Legend,
+  PieChart, Pie, Cell
+} from 'recharts';
+
+// ── CONFIG ──────────────────────────────────────────────────────────────────
+const SHEET_ID    = '19XM9DYn6ZUNNiY2T1OhkndSsC5OQTQXB-bWI-R6CZk4';
+const SHEET_VIDEO = 'TỔNG - VIDEO 2025';
+const SHEET_LIVE  = 'TỔNG - PERFORMANCE LIVES 2025';
+
+const BRANDS = ['Tất cả', 'Bodymiss', 'Milaganics', 'Moaw Moaws', 'eHerb', 'Masube', 'Real Steel', 'Healmi'];
+
+const BRAND_COLORS = {
+  'Bodymiss':   '#f97316',
+  'Milaganics': '#22c55e',
+  'Moaw Moaws': '#ef4444',
+  'eHerb':      '#eab308',
+  'Masube':     '#8b5cf6',
+  'Real Steel': '#3b82f6',
+  'Healmi':     '#ec4899',
+};
+
+const PIE_COLORS = ['#f97316','#22c55e','#ef4444','#eab308','#8b5cf6','#3b82f6','#ec4899'];
+
+function normalizeBrand(kenhStr) {
+  if (!kenhStr) return 'Khác';
+  const s = kenhStr.toLowerCase().replace(/\s+/g,'');
+  if (s.includes('bodymiss')) return 'Bodymiss';
+  if (s.includes('milaganics')) return 'Milaganics';
+  if (s.includes('moaw')) return 'Moaw Moaws';
+  if (s.includes('eherb')) return 'eHerb';
+  if (s.includes('masube')) return 'Masube';
+  if (s.includes('realsteal') || s.includes('realsteel')) return 'Real Steel';
+  if (s.includes('healmii') || s.includes('healmi')) return 'Healmi';
+  return kenhStr;
+}
+
+function fmtMoney(n) {
+  if (!n || isNaN(n)) return '0';
+  if (n >= 1e9) return (n/1e9).toFixed(2) + ' tỷ';
+  if (n >= 1e6) return (n/1e6).toFixed(1) + ' tr';
+  if (n >= 1e3) return (n/1e3).toFixed(0) + 'k';
+  return n.toLocaleString('vi-VN');
+}
+
+function fmtHours(h) {
+  if (!h || isNaN(h)) return '0h';
+  return (+h).toFixed(1) + 'h';
+}
+
+// Dùng Supabase Edge Function proxy (ổn định, không CORS)
+const PROXY_URL = 'https://xkyhvcmnkrxdtmwtghln.supabase.co/functions/v1/sheets-proxy';
+
+async function fetchSheet(sheetName) {
+  const url = `${PROXY_URL}?sheetId=${SHEET_ID}&sheet=${encodeURIComponent(sheetName)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json(); // { headers, data, total }
+}
+
+// ── DONUT CHART ─────────────────────────────────────────────────────────────
+function DonutKPI({ value, total, label, color = '#f97316' }) {
+  const pct = total > 0 ? Math.min(value / total, 1) : 0;
+  const r = 54, cx = 70, cy = 70;
+  const circ = 2 * Math.PI * r;
+  const filled = pct * circ;
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <svg width={140} height={140}>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f3f4f6" strokeWidth={14}/>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={14}
+          strokeDasharray={`${filled} ${circ - filled}`}
+          strokeDashoffset={circ / 4}
+          strokeLinecap="round"
+        />
+        <text x={cx} y={cy - 6} textAnchor="middle" fontSize={18} fontWeight={800} fill="#1f2937">
+          {(+value).toFixed(1)}
+        </text>
+        <text x={cx} y={cy + 14} textAnchor="middle" fontSize={12} fill="#9ca3af">
+          / {total}
+        </text>
+      </svg>
+      <div style={{ fontSize: '0.78rem', color: '#6b7280', marginTop: 4 }}>{label}</div>
+    </div>
+  );
+}
+
+// ── KPI CARD ────────────────────────────────────────────────────────────────
+function KpiCard({ icon, label, value, sub }) {
+  return (
+    <div style={{ background: '#fff', borderRadius: 12, padding: '16px 20px', boxShadow: '0 1px 6px rgba(0,0,0,.06)', flex: 1, minWidth: 140 }}>
+      <div style={{ fontSize: '1.5rem', marginBottom: 4 }}>{icon}</div>
+      <div style={{ fontSize: '0.72rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</div>
+      <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1f2937', lineHeight: 1.2 }}>{value}</div>
+      {sub && <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+// ── MAIN COMPONENT ──────────────────────────────────────────────────────────
+export default function LivestreamTab() {
+  const [innerTab, setInnerTab]   = useState('performance');
+  const [videoRows, setVideoRows] = useState([]);
+  const [liveRows, setLiveRows]   = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState(null);
+
+  // Filters
+  const [brand,    setBrand]    = useState('Tất cả');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo,   setDateTo]   = useState('');
+  const [search,   setSearch]   = useState('');
+
+  // Fetch
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([fetchSheet(SHEET_VIDEO), fetchSheet(SHEET_LIVE)])
+      .then(([vid, live]) => {
+        setVideoRows(vid.data || []);
+        setLiveRows(live.data  || []);
+        setLoading(false);
+      })
+      .catch(e => { setError(e.message); setLoading(false); });
+  }, []);
+
+  // Parse date helper
+  const parseDate = (v) => {
+    if (!v) return null;
+    if (v instanceof Date) return v;
+    // Google Sheets serial date
+    if (typeof v === 'number') {
+      const d = new Date((v - 25569) * 86400 * 1000);
+      return d;
+    }
+    return new Date(v);
+  };
+
+  // Filtered video
+  const filteredVideo = useMemo(() => {
+    return videoRows.filter(r => {
+      const b = normalizeBrand(r['KÊNH'] || r['Kênh'] || '');
+      if (brand !== 'Tất cả' && b !== brand) return false;
+      const d = parseDate(r['NGÀY'] || r['Ngày']);
+      if (dateFrom && d && d < new Date(dateFrom)) return false;
+      if (dateTo   && d && d > new Date(dateTo + 'T23:59:59')) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        const row = Object.values(r).join(' ').toLowerCase();
+        if (!row.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [videoRows, brand, dateFrom, dateTo, search]);
+
+  // Filtered live
+  const filteredLive = useMemo(() => {
+    return liveRows.filter(r => {
+      const b = normalizeBrand(r['KÊNH'] || r['Kênh'] || '');
+      if (brand !== 'Tất cả' && b !== brand) return false;
+      const d = parseDate(r['NGÀY'] || r['Ngày']);
+      if (dateFrom && d && d < new Date(dateFrom)) return false;
+      if (dateTo   && d && d > new Date(dateTo + 'T23:59:59')) return false;
+      return true;
+    });
+  }, [liveRows, brand, dateFrom, dateTo]);
+
+  // KPIs
+  const totalHours   = useMemo(() => filteredLive.reduce((s,r) => s + (parseFloat(r['GIỜ']||r['Giờ']||0)||0), 0), [filteredLive]);
+  const totalRevenue = useMemo(() => filteredLive.reduce((s,r) => s + (parseFloat(r['DOANH SỐ']||0)||0), 0), [filteredLive]);
+  const totalOrders  = useMemo(() => filteredLive.reduce((s,r) => s + (parseFloat(r['ĐƠN HÀNG']||0)||0), 0), [filteredLive]);
+  const totalAds     = useMemo(() => filteredLive.reduce((s,r) => s + (parseFloat(r['ADS TỔNG']||0)||0), 0), [filteredLive]);
+  const acosAvg      = totalRevenue > 0 ? (totalAds / totalRevenue * 100) : 0;
+
+  // By host bar
+  const byHost = useMemo(() => {
+    const map = {};
+    filteredLive.forEach(r => {
+      const h = r['HOST'] || r['Host'] || 'N/A';
+      if (!map[h]) map[h] = { name: h, hours: 0, revenue: 0, orders: 0 };
+      map[h].hours   += parseFloat(r['GIỜ']||0)||0;
+      map[h].revenue += parseFloat(r['DOANH SỐ']||0)||0;
+      map[h].orders  += parseFloat(r['ĐƠN HÀNG']||0)||0;
+    });
+    return Object.values(map).sort((a,b) => b.revenue - a.revenue).slice(0,10);
+  }, [filteredLive]);
+
+  // By brand pie
+  const byBrandPie = useMemo(() => {
+    const map = {};
+    filteredLive.forEach(r => {
+      const b = normalizeBrand(r['KÊNH']||r['Kênh']||'');
+      if (!map[b]) map[b] = { name: b, value: 0 };
+      map[b].value += parseFloat(r['DOANH SỐ']||0)||0;
+    });
+    return Object.values(map).filter(x => x.value > 0).sort((a,b) => b.value - a.value);
+  }, [filteredLive]);
+
+  // GMV + ACOS by date
+  const byDate = useMemo(() => {
+    const map = {};
+    filteredLive.forEach(r => {
+      const d = parseDate(r['NGÀY']||r['Ngày']);
+      if (!d) return;
+      const key = d.toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit' });
+      if (!map[key]) map[key] = { date: key, revenue: 0, ads: 0, ts: d.getTime() };
+      map[key].revenue += parseFloat(r['DOANH SỐ']||0)||0;
+      map[key].ads     += parseFloat(r['ADS TỔNG']||0)||0;
+    });
+    return Object.values(map)
+      .sort((a,b) => a.ts - b.ts)
+      .map(x => ({ ...x, acos: x.revenue > 0 ? +(x.ads/x.revenue*100).toFixed(1) : 0 }));
+  }, [filteredLive]);
+
+  const tabBtn = (t, label) => (
+    <button onClick={() => setInnerTab(t)} style={{
+      padding: '8px 20px', border: 'none', cursor: 'pointer', borderRadius: 8,
+      background: innerTab === t ? 'linear-gradient(135deg,#f59e0b,#ea580c)' : '#f3f4f6',
+      color: innerTab === t ? '#fff' : '#6b7280',
+      fontWeight: innerTab === t ? 700 : 500, fontSize: '0.85rem',
+    }}>{label}</button>
+  );
+
+  if (loading) return <div style={{ textAlign:'center', padding: 60, color:'#9ca3af' }}>Đang tải dữ liệu Livestream...</div>;
+  if (error)   return <div style={{ textAlign:'center', padding: 60, color:'#ef4444' }}>Lỗi: {error}</div>;
+
+  return (
+    <div style={{ fontFamily:"'Outfit',sans-serif", color:'#1f2937' }}>
+      {/* Header */}
+      <div style={{ marginBottom: 24 }}>
+        <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color:'#ea580c' }}>🎬 LIVESTREAM DASHBOARD</h2>
+        <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color:'#9ca3af' }}>
+          Nguồn: Livestream Guideline — Video 2025 &amp; Performance Lives 2025
+        </p>
+      </div>
+
+      {/* Filters */}
+      <div style={{ background:'#fff', borderRadius:12, padding:'16px 20px', marginBottom:20, boxShadow:'0 1px 6px rgba(0,0,0,.06)', display:'flex', gap:12, flexWrap:'wrap', alignItems:'center' }}>
+        <div>
+          <label style={{ fontSize:'0.72rem', color:'#9ca3af', display:'block', marginBottom:2 }}>BRAND</label>
+          <select value={brand} onChange={e => setBrand(e.target.value)}
+            style={{ padding:'7px 10px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:'0.83rem', outline:'none', cursor:'pointer' }}>
+            {BRANDS.map(b => <option key={b}>{b}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{ fontSize:'0.72rem', color:'#9ca3af', display:'block', marginBottom:2 }}>TỪ NGÀY</label>
+          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+            style={{ padding:'7px 10px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:'0.83rem', outline:'none' }}/>
+        </div>
+        <div>
+          <label style={{ fontSize:'0.72rem', color:'#9ca3af', display:'block', marginBottom:2 }}>ĐẾN NGÀY</label>
+          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+            style={{ padding:'7px 10px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:'0.83rem', outline:'none' }}/>
+        </div>
+        {innerTab === 'video' && (
+          <div style={{ flex:1, minWidth:180 }}>
+            <label style={{ fontSize:'0.72rem', color:'#9ca3af', display:'block', marginBottom:2 }}>TÌM KIẾM</label>
+            <input placeholder="Talent, sản phẩm, kênh..." value={search} onChange={e => setSearch(e.target.value)}
+              style={{ width:'100%', padding:'7px 10px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:'0.83rem', outline:'none', boxSizing:'border-box' }}/>
+          </div>
+        )}
+        {(dateFrom || dateTo || brand !== 'Tất cả' || search) && (
+          <button onClick={() => { setBrand('Tất cả'); setDateFrom(''); setDateTo(''); setSearch(''); }}
+            style={{ alignSelf:'flex-end', padding:'7px 14px', background:'#fee2e2', color:'#ef4444', border:'none', borderRadius:8, cursor:'pointer', fontSize:'0.8rem', fontWeight:600 }}>
+            Xóa lọc
+          </button>
+        )}
+      </div>
+
+      {/* Inner Tabs */}
+      <div style={{ display:'flex', gap:8, marginBottom:20 }}>
+        {tabBtn('performance', '📊 Performance')}
+        {tabBtn('video', '🎥 Video')}
+      </div>
+
+      {/* ── PERFORMANCE TAB ── */}
+      {innerTab === 'performance' && (
+        <div>
+          {/* KPI Cards */}
+          <div style={{ display:'flex', gap:16, flexWrap:'wrap', marginBottom:24 }}>
+            <KpiCard icon="⏱️" label="Tổng giờ live"    value={fmtHours(totalHours)}   sub={`${filteredLive.length} phiên`}/>
+            <KpiCard icon="💰" label="Tổng doanh số"   value={fmtMoney(totalRevenue)} sub="VNĐ"/>
+            <KpiCard icon="📦" label="Tổng đơn hàng"   value={totalOrders.toLocaleString('vi-VN')} sub="đơn"/>
+            <KpiCard icon="📢" label="Tổng chi phí Ads" value={fmtMoney(totalAds)}    sub={`ACOS: ${acosAvg.toFixed(1)}%`}/>
+          </div>
+
+          {/* Row 1: Pie + Donut KPI */}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20, marginBottom:20 }}>
+            {/* GMV by brand pie */}
+            <div style={{ background:'#fff', borderRadius:12, padding:20, boxShadow:'0 1px 6px rgba(0,0,0,.06)' }}>
+              <h4 style={{ margin:'0 0 16px', fontSize:'0.85rem', fontWeight:700, color:'#374151' }}>📊 DOANH SỐ THEO BRAND</h4>
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie data={byBrandPie} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({name, percent}) => `${name} ${(percent*100).toFixed(0)}%`} labelLine={false}>
+                    {byBrandPie.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]}/>)}
+                  </Pie>
+                  <Tooltip formatter={v => fmtMoney(v)}/>
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Hours by host */}
+            <div style={{ background:'#fff', borderRadius:12, padding:20, boxShadow:'0 1px 6px rgba(0,0,0,.06)' }}>
+              <h4 style={{ margin:'0 0 16px', fontSize:'0.85rem', fontWeight:700, color:'#374151' }}>⏱️ GIỜ LIVE THEO HOST</h4>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={byHost} margin={{ left:-10 }}>
+                  <XAxis dataKey="name" tick={{ fontSize:11 }}/>
+                  <YAxis tick={{ fontSize:11 }}/>
+                  <Tooltip formatter={v => v.toFixed(1)+'h'}/>
+                  <Bar dataKey="hours" fill="#f97316" radius={[4,4,0,0]} label={{ position:'top', fontSize:10, formatter:v=>v.toFixed(1)+'h' }}/>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Row 2: Doanh số by host */}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20, marginBottom:20 }}>
+            <div style={{ background:'#fff', borderRadius:12, padding:20, boxShadow:'0 1px 6px rgba(0,0,0,.06)' }}>
+              <h4 style={{ margin:'0 0 16px', fontSize:'0.85rem', fontWeight:700, color:'#374151' }}>💰 DOANH SỐ THEO HOST</h4>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={byHost} margin={{ left:0 }}>
+                  <XAxis dataKey="name" tick={{ fontSize:11 }}/>
+                  <YAxis tick={{ fontSize:11 }} tickFormatter={v => fmtMoney(v)}/>
+                  <Tooltip formatter={v => fmtMoney(v)}/>
+                  <Bar dataKey="revenue" fill="#22c55e" radius={[4,4,0,0]}/>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* GMV + ACOS trend */}
+            <div style={{ background:'#fff', borderRadius:12, padding:20, boxShadow:'0 1px 6px rgba(0,0,0,.06)' }}>
+              <h4 style={{ margin:'0 0 16px', fontSize:'0.85rem', fontWeight:700, color:'#374151' }}>📈 GMV &amp; ACOS THEO NGÀY</h4>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={byDate} margin={{ left:0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6"/>
+                  <XAxis dataKey="date" tick={{ fontSize:10 }}/>
+                  <YAxis yAxisId="left"  tick={{ fontSize:10 }} tickFormatter={v => fmtMoney(v)}/>
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize:10 }} tickFormatter={v => v+'%'}/>
+                  <Tooltip formatter={(v, name) => name === 'acos' ? v+'%' : fmtMoney(v)}/>
+                  <Legend/>
+                  <Bar  yAxisId="left"  dataKey="revenue" name="Doanh số" fill="#ef4444" radius={[3,3,0,0]}/>
+                  <Line yAxisId="right" type="monotone" dataKey="acos" name="ACOS" stroke="#22c55e" dot={false} strokeWidth={2}/>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Sessions table */}
+          <div style={{ background:'#fff', borderRadius:12, padding:20, boxShadow:'0 1px 6px rgba(0,0,0,.06)' }}>
+            <h4 style={{ margin:'0 0 12px', fontSize:'0.85rem', fontWeight:700, color:'#374151' }}>
+              📋 CHI TIẾT PHIÊN LIVE <span style={{ color:'#9ca3af', fontWeight:400 }}>({filteredLive.length} phiên)</span>
+            </h4>
+            <div style={{ overflowX:'auto' }}>
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.8rem' }}>
+                <thead>
+                  <tr style={{ background:'#fef3c7' }}>
+                    {['NGÀY','KÊNH','HOST','GIỜ','DOANH SỐ','ĐƠN HÀNG','ADS TỔNG','ACOS'].map(h => (
+                      <th key={h} style={{ padding:'8px 12px', textAlign:'left', color:'#92400e', fontWeight:700, whiteSpace:'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredLive.slice(0,50).map((r,i) => {
+                    const d = parseDate(r['NGÀY']||r['Ngày']);
+                    const ds = parseFloat(r['DOANH SỐ']||0)||0;
+                    const ads = parseFloat(r['ADS TỔNG']||0)||0;
+                    const acos = ds > 0 ? (ads/ds*100).toFixed(1)+'%' : '—';
+                    return (
+                      <tr key={i} style={{ borderBottom:'1px solid #f3f4f6', background: i%2===0?'#fff':'#fafafa' }}>
+                        <td style={{ padding:'7px 12px', whiteSpace:'nowrap' }}>{d ? d.toLocaleDateString('vi-VN') : '—'}</td>
+                        <td style={{ padding:'7px 12px' }}>{r['KÊNH']||r['Kênh']||'—'}</td>
+                        <td style={{ padding:'7px 12px', fontWeight:600, color:'#f97316' }}>{r['HOST']||r['Host']||'—'}</td>
+                        <td style={{ padding:'7px 12px' }}>{parseFloat(r['GIỜ']||0).toFixed(1)}h</td>
+                        <td style={{ padding:'7px 12px', fontWeight:600 }}>{fmtMoney(ds)}</td>
+                        <td style={{ padding:'7px 12px' }}>{parseFloat(r['ĐƠN HÀNG']||0).toLocaleString()}</td>
+                        <td style={{ padding:'7px 12px' }}>{fmtMoney(ads)}</td>
+                        <td style={{ padding:'7px 12px', color: parseFloat(acos) > 30 ? '#ef4444' : '#22c55e', fontWeight:600 }}>{acos}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {filteredLive.length > 50 && (
+                <p style={{ textAlign:'center', color:'#9ca3af', fontSize:'0.78rem', marginTop:8 }}>
+                  Hiển thị 50 / {filteredLive.length} phiên
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── VIDEO TAB ── */}
+      {innerTab === 'video' && (
+        <div style={{ background:'#fff', borderRadius:12, padding:20, boxShadow:'0 1px 6px rgba(0,0,0,.06)' }}>
+          <h4 style={{ margin:'0 0 12px', fontSize:'0.85rem', fontWeight:700, color:'#374151' }}>
+            🎥 DANH SÁCH VIDEO <span style={{ color:'#9ca3af', fontWeight:400 }}>({filteredVideo.length} video)</span>
+          </h4>
+          <div style={{ overflowX:'auto' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.8rem' }}>
+              <thead>
+                <tr style={{ background:'#fef3c7' }}>
+                  {['#','NGÀY','TALENT','KÊNH','SẢN PHẨM','CONTENT','KEYWORD 1','LINK'].map(h => (
+                    <th key={h} style={{ padding:'8px 12px', textAlign:'left', color:'#92400e', fontWeight:700, whiteSpace:'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredVideo.slice(0,100).map((r,i) => {
+                  const d = parseDate(r['NGÀY']||r['Ngày']);
+                  const link = r['LINK']||r['Link']||'';
+                  const b = normalizeBrand(r['KÊNH']||r['Kênh']||'');
+                  return (
+                    <tr key={i} style={{ borderBottom:'1px solid #f3f4f6', background: i%2===0?'#fff':'#fafafa' }}>
+                      <td style={{ padding:'7px 12px', color:'#9ca3af' }}>{i+1}</td>
+                      <td style={{ padding:'7px 12px', whiteSpace:'nowrap' }}>{d ? d.toLocaleDateString('vi-VN') : '—'}</td>
+                      <td style={{ padding:'7px 12px', fontWeight:600, color:'#f97316' }}>{r['TALENT']||r['Talent']||'—'}</td>
+                      <td style={{ padding:'7px 12px' }}>
+                        <span style={{ background: BRAND_COLORS[b]+'22', color: BRAND_COLORS[b]||'#6b7280', padding:'2px 8px', borderRadius:6, fontSize:'0.75rem', fontWeight:600 }}>
+                          {r['KÊNH']||r['Kênh']||'—'}
+                        </span>
+                      </td>
+                      <td style={{ padding:'7px 12px' }}>{r['SẢN PHẨM']||r['Sản phẩm']||'—'}</td>
+                      <td style={{ padding:'7px 12px' }}>{r['CONTENT']||r['Content']||'—'}</td>
+                      <td style={{ padding:'7px 12px', color:'#6b7280' }}>{r['KEYWORD B1']||r['KEYWOR B1']||r['KEYWORD 1']||'—'}</td>
+                      <td style={{ padding:'7px 12px' }}>
+                        {link ? (
+                          <a href={link} target="_blank" rel="noreferrer"
+                            style={{ color:'#3b82f6', textDecoration:'none', fontSize:'0.78rem' }}>
+                            🔗 Xem
+                          </a>
+                        ) : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {filteredVideo.length > 100 && (
+              <p style={{ textAlign:'center', color:'#9ca3af', fontSize:'0.78rem', marginTop:8 }}>
+                Hiển thị 100 / {filteredVideo.length} video
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
