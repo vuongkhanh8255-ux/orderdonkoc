@@ -175,19 +175,25 @@ export default function LivestreamTab() {
     return ['Tất cả', ...Array.from(s).sort()];
   }, [liveRows]);
 
-  // Filtered live
+  // Filtered live — sort mới nhất lên đầu
   const filteredLive = useMemo(() => {
     setPage(1);
-    return liveRows.filter(r => {
-      const b = normalizeBrand(r['KÊNH'] || r['Kênh'] || '');
-      if (brand !== 'Tất cả' && b !== brand) return false;
-      const h = r['HOST'] || '';
-      if (host !== 'Tất cả' && h !== host) return false;
-      const d = parseDate(r['NGÀY'] || r['Ngày']);
-      if (dateFrom && d && d < new Date(dateFrom)) return false;
-      if (dateTo   && d && d > new Date(dateTo + 'T23:59:59')) return false;
-      return true;
-    });
+    return liveRows
+      .filter(r => {
+        const b = normalizeBrand(r['KÊNH'] || r['Kênh'] || '');
+        if (brand !== 'Tất cả' && b !== brand) return false;
+        const h = r['HOST'] || '';
+        if (host !== 'Tất cả' && h !== host) return false;
+        const d = parseDate(r['NGÀY'] || r['Ngày']);
+        if (dateFrom && d && d < new Date(dateFrom)) return false;
+        if (dateTo   && d && d > new Date(dateTo + 'T23:59:59')) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const da = parseDate(a['NGÀY']||a['Ngày']);
+        const db = parseDate(b['NGÀY']||b['Ngày']);
+        return (db ? db.getTime() : 0) - (da ? da.getTime() : 0);
+      });
   }, [liveRows, brand, host, dateFrom, dateTo]);
 
   // KPIs
