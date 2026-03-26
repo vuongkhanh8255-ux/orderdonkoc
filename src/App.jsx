@@ -15,6 +15,7 @@ import GmvRealtimeTab from './components/GmvRealtimeTab'; // [MỚI] Tab GMV Rea
 import StellaDashboardTab from './components/StellaDashboardTab'; // [MỚI] Tab Dashboard Stella
 import CSKHTab from './components/CSKHTab'; // [MỚI] Tab CSKH Đánh giá
 // ReportCSTab is now imported inside CSKHTab
+import LivestreamTab from './components/LivestreamTab'; // [MỚI] Tab Livestream
 import AIChat from './components/AIChat';
 
 function App() {
@@ -106,6 +107,7 @@ function App() {
               { key: 'ecom', label: '🛍️ Ecom', items: [
                 { view: 'stella_dashboard', icon: '📊', name: 'Stella Dashboard' },
                 { view: 'cskh',             icon: '📋', name: 'CSKH' },
+                { view: 'livestream',        icon: '🎬', name: 'Livestream' },
               ]},
               { key: 'booking', label: '📅 Booking', items: [
                 { view: 'dashboard',           icon: '📊', name: 'Dashboard' },
@@ -165,6 +167,7 @@ function App() {
           {currentView === 'gmv_realtime' && <GmvRealtimeTab />}
           {currentView === 'stella_dashboard' && <StellaDashboardTab />}
           {currentView === 'cskh' && <CSKHTab />}
+          {currentView === 'livestream' && <LivestreamTab />}
 
         </div>
       </div>
