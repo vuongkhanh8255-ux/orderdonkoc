@@ -151,22 +151,43 @@ export default function LivestreamTab() {
     return new Date(v);
   };
 
-  // Filtered video
+  // Filtered video — sort mới nhất lên đầu
   const filteredVideo = useMemo(() => {
-    return videoRows.filter(r => {
-      const b = normalizeBrand(r['KÊNH'] || r['Kênh'] || '');
-      if (brand !== 'Tất cả' && b !== brand) return false;
-      const d = parseDate(r['NGÀY'] || r['Ngày']);
-      if (dateFrom && d && d < new Date(dateFrom)) return false;
-      if (dateTo   && d && d > new Date(dateTo + 'T23:59:59')) return false;
-      if (search) {
-        const q = search.toLowerCase();
-        const row = Object.values(r).join(' ').toLowerCase();
-        if (!row.includes(q)) return false;
-      }
-      return true;
-    });
+    return videoRows
+      .filter(r => {
+        const b = normalizeBrand(r['KÊNH'] || r['Kênh'] || '');
+        if (brand !== 'Tất cả' && b !== brand) return false;
+        const d = parseDate(r['NGÀY'] || r['Ngày']);
+        if (dateFrom && d && d < new Date(dateFrom)) return false;
+        if (dateTo   && d && d > new Date(dateTo + 'T23:59:59')) return false;
+        if (search) {
+          const q = search.toLowerCase();
+          const row = Object.values(r).join(' ').toLowerCase();
+          if (!row.includes(q)) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        const da = parseDate(a['NGÀY']||a['Ngày']);
+        const db = parseDate(b['NGÀY']||b['Ngày']);
+        return (db ? db.getTime() : 0) - (da ? da.getTime() : 0);
+      });
   }, [videoRows, brand, dateFrom, dateTo, search]);
+
+  // Video stats by brand
+  const videoByBrand = useMemo(() => {
+    const map = {};
+    filteredVideo.forEach(r => {
+      const b = normalizeBrand(r['KÊNH']||r['Kênh']||'');
+      if (!map[b]) map[b] = { brand: b, total: 0, talents: new Set() };
+      map[b].total++;
+      const t = r['TALENT']||r['Talent']||'';
+      if (t) map[b].talents.add(t);
+    });
+    return Object.values(map)
+      .map(x => ({ ...x, talents: x.talents.size }))
+      .sort((a, b) => b.total - a.total);
+  }, [filteredVideo]);
 
   // All hosts for dropdown
   const allHosts = useMemo(() => {
@@ -175,18 +196,19 @@ export default function LivestreamTab() {
     return ['Tất cả', ...Array.from(s).sort()];
   }, [liveRows]);
 
-  // Filtered live — sort mới nhất lên đầu
+  // Filtered live — chỉ 2026, sort mới nhất lên đầu
   const filteredLive = useMemo(() => {
     setPage(1);
     return liveRows
       .filter(r => {
+        const d = parseDate(r['NGÀY'] || r['Ngày']);
+        if (!d || d.getFullYear() < 2026) return false; // chỉ lấy 2026
         const b = normalizeBrand(r['KÊNH'] || r['Kênh'] || '');
         if (brand !== 'Tất cả' && b !== brand) return false;
         const h = r['HOST'] || '';
         if (host !== 'Tất cả' && h !== host) return false;
-        const d = parseDate(r['NGÀY'] || r['Ngày']);
-        if (dateFrom && d && d < new Date(dateFrom)) return false;
-        if (dateTo   && d && d > new Date(dateTo + 'T23:59:59')) return false;
+        if (dateFrom && d < new Date(dateFrom)) return false;
+        if (dateTo   && d > new Date(dateTo + 'T23:59:59')) return false;
         return true;
       })
       .sort((a, b) => {
@@ -451,6 +473,22 @@ export default function LivestreamTab() {
 
       {/* ── VIDEO TAB ── */}
       {innerTab === 'video' && (
+        <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
+          {/* Thống kê theo brand */}
+          <div style={{ background:'#fff', borderRadius:12, padding:20, boxShadow:'0 1px 6px rgba(0,0,0,.06)' }}>
+            <h4 style={{ margin:'0 0 14px', fontSize:'0.85rem', fontWeight:700, color:'#374151' }}>📊 THỐNG KÊ VIDEO THEO BRAND</h4>
+            <div style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
+              {videoByBrand.map(x => (
+                <div key={x.brand} style={{ background:'#fef3c7', borderRadius:10, padding:'12px 20px', minWidth:140, borderLeft:`4px solid ${BRAND_COLORS[x.brand]||'#f97316'}` }}>
+                  <div style={{ fontSize:'0.72rem', color:'#92400e', fontWeight:700, marginBottom:4 }}>{x.brand.toUpperCase()}</div>
+                  <div style={{ fontSize:'1.4rem', fontWeight:800, color:'#1f2937' }}>{x.total}</div>
+                  <div style={{ fontSize:'0.72rem', color:'#6b7280' }}>video · {x.talents} talent</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Danh sách */}
         <div style={{ background:'#fff', borderRadius:12, padding:20, boxShadow:'0 1px 6px rgba(0,0,0,.06)' }}>
           <h4 style={{ margin:'0 0 12px', fontSize:'0.85rem', fontWeight:700, color:'#374151' }}>
             🎥 DANH SÁCH VIDEO <span style={{ color:'#9ca3af', fontWeight:400 }}>({filteredVideo.length} video)</span>
@@ -501,6 +539,7 @@ export default function LivestreamTab() {
               </p>
             )}
           </div>
+        </div>
         </div>
       )}
     </div>
