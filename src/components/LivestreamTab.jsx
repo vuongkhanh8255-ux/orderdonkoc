@@ -53,11 +53,12 @@ function fmtHours(h) {
 // Dùng Supabase Edge Function proxy (ổn định, không CORS)
 const PROXY_URL = 'https://xkyhvcmnkrxdtmwtghln.supabase.co/functions/v1/sheets-proxy';
 
-async function fetchSheet(sheetName) {
-  const url = `${PROXY_URL}?sheetId=${SHEET_ID}&sheet=${encodeURIComponent(sheetName)}`;
+async function fetchSheet(sheetName, range = '') {
+  let url = `${PROXY_URL}?sheetId=${SHEET_ID}&sheet=${encodeURIComponent(sheetName)}`;
+  if (range) url += `&range=${encodeURIComponent(range)}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json(); // { headers, data, total }
+  return res.json();
 }
 
 // ── DONUT CHART ─────────────────────────────────────────────────────────────
@@ -116,7 +117,8 @@ export default function LivestreamTab() {
   // Fetch
   useEffect(() => {
     setLoading(true);
-    Promise.all([fetchSheet(SHEET_VIDEO), fetchSheet(SHEET_LIVE)])
+    // PERFORMANCE LIVES: data header ở row 14 → dùng range A14:Q5000
+    Promise.all([fetchSheet(SHEET_VIDEO), fetchSheet(SHEET_LIVE, 'A14:Q5000')])
       .then(([vid, live]) => {
         setVideoRows(vid.data || []);
         setLiveRows(live.data  || []);
