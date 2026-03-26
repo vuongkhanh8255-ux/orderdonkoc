@@ -108,11 +108,23 @@ export default function LivestreamTab() {
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
 
-  // Filters
+  // Pending filters (chưa apply)
+  const [pendingBrand,    setPendingBrand]    = useState('Tất cả');
+  const [pendingHost,     setPendingHost]     = useState('Tất cả');
+  const [pendingDateFrom, setPendingDateFrom] = useState('');
+  const [pendingDateTo,   setPendingDateTo]   = useState('');
+  const [pendingSearch,   setPendingSearch]   = useState('');
+
+  // Applied filters
   const [brand,    setBrand]    = useState('Tất cả');
+  const [host,     setHost]     = useState('Tất cả');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo,   setDateTo]   = useState('');
   const [search,   setSearch]   = useState('');
+
+  // Pagination
+  const PAGE_SIZE = 50;
+  const [page, setPage] = useState(1);
 
   // Fetch
   useEffect(() => {
@@ -156,17 +168,27 @@ export default function LivestreamTab() {
     });
   }, [videoRows, brand, dateFrom, dateTo, search]);
 
+  // All hosts for dropdown
+  const allHosts = useMemo(() => {
+    const s = new Set();
+    liveRows.forEach(r => { const h = r['HOST']||''; if (h) s.add(h); });
+    return ['Tất cả', ...Array.from(s).sort()];
+  }, [liveRows]);
+
   // Filtered live
   const filteredLive = useMemo(() => {
+    setPage(1);
     return liveRows.filter(r => {
       const b = normalizeBrand(r['KÊNH'] || r['Kênh'] || '');
       if (brand !== 'Tất cả' && b !== brand) return false;
+      const h = r['HOST'] || '';
+      if (host !== 'Tất cả' && h !== host) return false;
       const d = parseDate(r['NGÀY'] || r['Ngày']);
       if (dateFrom && d && d < new Date(dateFrom)) return false;
       if (dateTo   && d && d > new Date(dateTo + 'T23:59:59')) return false;
       return true;
     });
-  }, [liveRows, brand, dateFrom, dateTo]);
+  }, [liveRows, brand, host, dateFrom, dateTo]);
 
   // KPIs
   const totalHours   = useMemo(() => filteredLive.reduce((s,r) => s + (parseFloat(r['GIỜ']||r['Giờ']||0)||0), 0), [filteredLive]);
@@ -238,37 +260,53 @@ export default function LivestreamTab() {
       </div>
 
       {/* Filters */}
-      <div style={{ background:'#fff', borderRadius:12, padding:'16px 20px', marginBottom:20, boxShadow:'0 1px 6px rgba(0,0,0,.06)', display:'flex', gap:12, flexWrap:'wrap', alignItems:'center' }}>
-        <div>
-          <label style={{ fontSize:'0.72rem', color:'#9ca3af', display:'block', marginBottom:2 }}>BRAND</label>
-          <select value={brand} onChange={e => setBrand(e.target.value)}
-            style={{ padding:'7px 10px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:'0.83rem', outline:'none', cursor:'pointer' }}>
-            {BRANDS.map(b => <option key={b}>{b}</option>)}
-          </select>
-        </div>
-        <div>
-          <label style={{ fontSize:'0.72rem', color:'#9ca3af', display:'block', marginBottom:2 }}>TỪ NGÀY</label>
-          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-            style={{ padding:'7px 10px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:'0.83rem', outline:'none' }}/>
-        </div>
-        <div>
-          <label style={{ fontSize:'0.72rem', color:'#9ca3af', display:'block', marginBottom:2 }}>ĐẾN NGÀY</label>
-          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-            style={{ padding:'7px 10px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:'0.83rem', outline:'none' }}/>
-        </div>
-        {innerTab === 'video' && (
-          <div style={{ flex:1, minWidth:180 }}>
-            <label style={{ fontSize:'0.72rem', color:'#9ca3af', display:'block', marginBottom:2 }}>TÌM KIẾM</label>
-            <input placeholder="Talent, sản phẩm, kênh..." value={search} onChange={e => setSearch(e.target.value)}
-              style={{ width:'100%', padding:'7px 10px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:'0.83rem', outline:'none', boxSizing:'border-box' }}/>
+      <div style={{ background:'#fff', borderRadius:12, padding:'16px 20px', marginBottom:20, boxShadow:'0 1px 6px rgba(0,0,0,.06)' }}>
+        <div style={{ display:'flex', gap:12, flexWrap:'wrap', alignItems:'flex-end' }}>
+          <div>
+            <label style={{ fontSize:'0.72rem', color:'#9ca3af', display:'block', marginBottom:2 }}>BRAND</label>
+            <select value={pendingBrand} onChange={e => setPendingBrand(e.target.value)}
+              style={{ padding:'7px 10px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:'0.83rem', outline:'none', cursor:'pointer' }}>
+              {BRANDS.map(b => <option key={b}>{b}</option>)}
+            </select>
           </div>
-        )}
-        {(dateFrom || dateTo || brand !== 'Tất cả' || search) && (
-          <button onClick={() => { setBrand('Tất cả'); setDateFrom(''); setDateTo(''); setSearch(''); }}
-            style={{ alignSelf:'flex-end', padding:'7px 14px', background:'#fee2e2', color:'#ef4444', border:'none', borderRadius:8, cursor:'pointer', fontSize:'0.8rem', fontWeight:600 }}>
-            Xóa lọc
+          <div>
+            <label style={{ fontSize:'0.72rem', color:'#9ca3af', display:'block', marginBottom:2 }}>NHÂN SỰ</label>
+            <select value={pendingHost} onChange={e => setPendingHost(e.target.value)}
+              style={{ padding:'7px 10px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:'0.83rem', outline:'none', cursor:'pointer', minWidth:130 }}>
+              {allHosts.map(h => <option key={h}>{h}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize:'0.72rem', color:'#9ca3af', display:'block', marginBottom:2 }}>TỪ NGÀY</label>
+            <input type="date" value={pendingDateFrom} onChange={e => setPendingDateFrom(e.target.value)}
+              style={{ padding:'7px 10px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:'0.83rem', outline:'none' }}/>
+          </div>
+          <div>
+            <label style={{ fontSize:'0.72rem', color:'#9ca3af', display:'block', marginBottom:2 }}>ĐẾN NGÀY</label>
+            <input type="date" value={pendingDateTo} onChange={e => setPendingDateTo(e.target.value)}
+              style={{ padding:'7px 10px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:'0.83rem', outline:'none' }}/>
+          </div>
+          {innerTab === 'video' && (
+            <div style={{ flex:1, minWidth:180 }}>
+              <label style={{ fontSize:'0.72rem', color:'#9ca3af', display:'block', marginBottom:2 }}>TÌM KIẾM</label>
+              <input placeholder="Talent, sản phẩm, kênh..." value={pendingSearch} onChange={e => setPendingSearch(e.target.value)}
+                style={{ width:'100%', padding:'7px 10px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:'0.83rem', outline:'none', boxSizing:'border-box' }}/>
+            </div>
+          )}
+          <button onClick={() => { setBrand(pendingBrand); setHost(pendingHost); setDateFrom(pendingDateFrom); setDateTo(pendingDateTo); setSearch(pendingSearch); }}
+            style={{ padding:'7px 20px', background:'linear-gradient(135deg,#f59e0b,#ea580c)', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontSize:'0.83rem', fontWeight:700 }}>
+            Áp dụng
           </button>
-        )}
+          {(brand !== 'Tất cả' || host !== 'Tất cả' || dateFrom || dateTo || search) && (
+            <button onClick={() => {
+              setPendingBrand('Tất cả'); setPendingHost('Tất cả'); setPendingDateFrom(''); setPendingDateTo(''); setPendingSearch('');
+              setBrand('Tất cả'); setHost('Tất cả'); setDateFrom(''); setDateTo(''); setSearch('');
+            }}
+              style={{ padding:'7px 14px', background:'#fee2e2', color:'#ef4444', border:'none', borderRadius:8, cursor:'pointer', fontSize:'0.8rem', fontWeight:600 }}>
+              Xóa lọc
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Inner Tabs */}
@@ -364,7 +402,7 @@ export default function LivestreamTab() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredLive.slice(0,50).map((r,i) => {
+                  {filteredLive.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE).map((r,i) => {
                     const d = parseDate(r['NGÀY']||r['Ngày']);
                     const ds = parseFloat(r['DOANH SỐ']||0)||0;
                     const ads = parseFloat(r['ADS TỔNG']||0)||0;
@@ -384,10 +422,21 @@ export default function LivestreamTab() {
                   })}
                 </tbody>
               </table>
-              {filteredLive.length > 50 && (
-                <p style={{ textAlign:'center', color:'#9ca3af', fontSize:'0.78rem', marginTop:8 }}>
-                  Hiển thị 50 / {filteredLive.length} phiên
-                </p>
+              {/* Pagination */}
+              {filteredLive.length > PAGE_SIZE && (
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, marginTop:16 }}>
+                  <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page===1}
+                    style={{ padding:'6px 14px', borderRadius:8, border:'1.5px solid #e5e7eb', background: page===1?'#f9fafb':'#fff', color: page===1?'#d1d5db':'#374151', cursor: page===1?'default':'pointer', fontWeight:600 }}>
+                    ← Trước
+                  </button>
+                  <span style={{ fontSize:'0.83rem', color:'#6b7280' }}>
+                    Trang {page} / {Math.ceil(filteredLive.length / PAGE_SIZE)} &nbsp;·&nbsp; {filteredLive.length} phiên
+                  </span>
+                  <button onClick={() => setPage(p => Math.min(Math.ceil(filteredLive.length/PAGE_SIZE), p+1))} disabled={page >= Math.ceil(filteredLive.length/PAGE_SIZE)}
+                    style={{ padding:'6px 14px', borderRadius:8, border:'1.5px solid #e5e7eb', background: page>=Math.ceil(filteredLive.length/PAGE_SIZE)?'#f9fafb':'#fff', color: page>=Math.ceil(filteredLive.length/PAGE_SIZE)?'#d1d5db':'#374151', cursor: page>=Math.ceil(filteredLive.length/PAGE_SIZE)?'default':'pointer', fontWeight:600 }}>
+                    Tiếp →
+                  </button>
+                </div>
               )}
             </div>
           </div>
