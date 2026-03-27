@@ -29,7 +29,9 @@ const API_MAX_SIZE = 10000;
 const fetchAllRows = async (url) => {
   const probe = await fetch(url + '&size=1').then(r => r.json());
   const first = probe.result?.[0]?._source;
-  const total = first?.count_row || first?.total_row || 100;
+  // total phải > 0 — nếu count_row/total_row = 0 hoặc không có thì dùng 500 làm fallback
+  const rawTotal = first?.count_row || first?.total_row;
+  const total = (rawTotal && rawTotal > 0) ? rawTotal : 500;
   const size = Math.min(total, API_MAX_SIZE);
   return fetch(url + '&size=' + size).then(r => r.json());
 };
