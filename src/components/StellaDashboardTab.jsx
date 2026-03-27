@@ -182,8 +182,12 @@ const StellaDashboardTab = () => {
         ),
       ]);
 
-      if (jAds.success && jAds.result) setAdsData(jAds.result.map(i => i._source));
-      else errs.push('Ads API lỗi');
+      if (jAds.success && jAds.result) {
+        const rows = jAds.result.map(i => i._source);
+        console.log('[ADS] first row keys:', rows[0] ? Object.keys(rows[0]) : 'empty');
+        console.log('[ADS] first row sample:', rows[0]);
+        setAdsData(rows);
+      } else errs.push('Ads API lỗi');
 
       if (jProduct.success && jProduct.result) setProductData(jProduct.result.map(i => i._source));
       else errs.push('Product API lỗi');
@@ -220,9 +224,11 @@ const StellaDashboardTab = () => {
   // ─── DERIVED DATA ───────────────────────────────────────────────────────────
   const allBrands = useMemo(() => {
     const brands = new Set();
-    productData.forEach(d => { if (d.org_name) brands.add(d.org_name); });
+    // Ưu tiên orderData (donhang) vì cover nhiều tháng hơn
+    const src = orderData.length ? orderData : productData;
+    src.forEach(d => { if (d.org_name) brands.add(normalizeBrand(d.org_name)); });
     return ['All', ...Array.from(brands).sort()];
-  }, [productData]);
+  }, [orderData, productData]);
 
   // Close picker when clicking outside
   useEffect(() => {
