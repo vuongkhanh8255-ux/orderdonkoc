@@ -261,31 +261,54 @@ const StellaDashboardTab = () => {
     return new Date(Math.max(...timestamps));
   }, [adsData]);
 
-  // Convert cumulative ADS running totals → daily incremental values per shop
-  const adsDailyDeltas = useMemo(() => {
-    if (!adsData.length) return [];
-    // Group by shop (filter field)
-    const byShop = {};
-    adsData.forEach(d => {
-      const key = d.filter || d.Source || '';
-      if (!byShop[key]) byShop[key] = [];
-      byShop[key].push(d);
+  // ─── ADS NORMALIZATION ─────────────────────────────────────────────────────
+  // Bluecore ADS API trả values ở đơn vị khác nhau tuỳ shop (một số shop inflate ×10^6).
+  // Cross-reference ADS orders vs donhang orders cùng ngày → tính hệ số chuẩn hoá per shop.
+  const adsNormFactors = useMemo(() => {
+    if (!adsData.length || !orderData.length) return {};
+    // Group donhang orders by shop+date
+    const donhangMap = {};              // { "Tiktok_Body Miss…": { "2026-03-24": 498, … } }
+    orderData.forEach(d => {
+      const shop = d.filter || '';
+      if (!shop) return;
+      if (!donhangMap[shop]) donhangMap[shop] = {};
+      const dt = new Date(d.created_at).toISOString().slice(0, 10);
+      donhangMap[shop][dt] = (donhangMap[shop][dt] || 0) + (d.count_order || 0);
     });
-    const result = [];
-    Object.values(byShop).forEach(rows => {
-      rows.sort((a, b) => (a.col_9PJS783P || 0) - (b.col_9PJS783P || 0));
-      rows.forEach((curr, i) => {
-        const prev = i > 0 ? rows[i - 1] : null;
-        result.push({
-          ...curr,
-          [ADS_COST_KEY]:    Math.max(0, (curr[ADS_COST_KEY]    || 0) - (prev ? (prev[ADS_COST_KEY]    || 0) : 0)),
-          [ADS_REVENUE_KEY]: Math.max(0, (curr[ADS_REVENUE_KEY] || 0) - (prev ? (prev[ADS_REVENUE_KEY] || 0) : 0)),
-          [ADS_ORDERS_KEY]:  Math.max(0, (curr[ADS_ORDERS_KEY]  || 0) - (prev ? (prev[ADS_ORDERS_KEY]  || 0) : 0)),
-        });
+    const factors = {};
+    const shops = [...new Set(adsData.map(d => d.filter).filter(Boolean))];
+    shops.forEach(shop => {
+      const dh = donhangMap[shop];
+      if (!dh) return;
+      let adsOrdSum = 0, dhOrdSum = 0;
+      adsData.filter(d => d.filter === shop).forEach(d => {
+        const dt = new Date(d.col_9PJS783P).toISOString().slice(0, 10);
+        if (dh[dt] && dh[dt] > 0) {
+          adsOrdSum += d[ADS_ORDERS_KEY] || 0;
+          dhOrdSum  += dh[dt];
+        }
       });
+      if (dhOrdSum >= 30 && adsOrdSum > 0) {
+        const f = adsOrdSum / dhOrdSum;
+        if (f > 10) factors[shop] = f;   // chỉ normalize khi lệch > 10×
+      }
     });
-    return result;
-  }, [adsData]);
+    return factors;
+  }, [adsData, orderData]);
+
+  // Apply normalization → adsData daily values chuẩn hoá về VND
+  const normalizedAds = useMemo(() => {
+    return adsData.map(d => {
+      const f = adsNormFactors[d.filter] || 1;
+      if (f === 1) return d;
+      return {
+        ...d,
+        [ADS_COST_KEY]:    (d[ADS_COST_KEY]    || 0) / f,
+        [ADS_REVENUE_KEY]: (d[ADS_REVENUE_KEY] || 0) / f,
+        [ADS_ORDERS_KEY]:  (d[ADS_ORDERS_KEY]  || 0) / f,
+      };
+    });
+  }, [adsData, adsNormFactors]);
 
   // Keep maxDataDate as the PRODUCT anchor (so header info stays accurate)
   const maxDataDate = maxProductDate;
@@ -355,7 +378,7 @@ const StellaDashboardTab = () => {
   }, [trafficData, platformFilter, brandFilter, periodMode, dateRange]);
 
   const filteredAds = useMemo(() => {
-    return adsDailyDeltas.filter(d => {
+    return normalizedAds.filter(d => {
       const ts = d.col_9PJS783P || d.created_at;
       if (periodMode === 'all' && ts < DATA_START) return false;
       const platform = d.Source || '';
@@ -367,7 +390,7 @@ const StellaDashboardTab = () => {
       const matchBrand = brandFilter === 'All' || normalizeBrand(shopName) === normalizeBrand(brandFilter);
       return matchPlatform && matchBrand && matchDate(ts);
     });
-  }, [adsDailyDeltas, platformFilter, brandFilter, periodMode, dateRange]);
+  }, [normalizedAds, platformFilter, brandFilter, periodMode, dateRange]);
 
   // Previous period filter (same duration, shifted back)
   const getPrevBounds = useMemo(() => {
@@ -409,7 +432,7 @@ const StellaDashboardTab = () => {
   const prevFilteredAds = useMemo(() => {
     if (!getPrevBounds) return [];
     const { lo, hi } = getPrevBounds;
-    return adsDailyDeltas.filter(d => {
+    return normalizedAds.filter(d => {
       const ts = new Date(d.col_9PJS783P || d.created_at);
       if (!ts || ts < lo || ts > hi) return false;
       const platform = d.Source || '';
@@ -419,7 +442,7 @@ const StellaDashboardTab = () => {
       const shopName = (d.filter || '').replace(/^[^_]+_/, '');
       return matchPlatform && (brandFilter === 'All' || normalizeBrand(shopName) === normalizeBrand(brandFilter));
     });
-  }, [adsDailyDeltas, platformFilter, brandFilter, getPrevBounds]);
+  }, [normalizedAds, platformFilter, brandFilter, getPrevBounds]);
 
   const prevFilteredTraffic = useMemo(() => {
     if (!getPrevBounds) return [];
