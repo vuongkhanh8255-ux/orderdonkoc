@@ -214,7 +214,6 @@ const StellaDashboardTab = () => {
         if (j.success && j.result) j.result.forEach(i => allAds.push(i._source));
       });
       if (allAds.length) {
-        console.log('[ADS] first row keys:', Object.keys(allAds[0]));
         setAdsData(allAds);
       } else errs.push('Ads API: không có data');
 
@@ -260,6 +259,32 @@ const StellaDashboardTab = () => {
     const timestamps = adsData.map(d => d.col_9PJS783P || d.created_at).filter(Boolean);
     if (!timestamps.length) return new Date();
     return new Date(Math.max(...timestamps));
+  }, [adsData]);
+
+  // Convert cumulative ADS running totals → daily incremental values per shop
+  const adsDailyDeltas = useMemo(() => {
+    if (!adsData.length) return [];
+    // Group by shop (filter field)
+    const byShop = {};
+    adsData.forEach(d => {
+      const key = d.filter || d.Source || '';
+      if (!byShop[key]) byShop[key] = [];
+      byShop[key].push(d);
+    });
+    const result = [];
+    Object.values(byShop).forEach(rows => {
+      rows.sort((a, b) => (a.col_9PJS783P || 0) - (b.col_9PJS783P || 0));
+      rows.forEach((curr, i) => {
+        const prev = i > 0 ? rows[i - 1] : null;
+        result.push({
+          ...curr,
+          [ADS_COST_KEY]:    Math.max(0, (curr[ADS_COST_KEY]    || 0) - (prev ? (prev[ADS_COST_KEY]    || 0) : 0)),
+          [ADS_REVENUE_KEY]: Math.max(0, (curr[ADS_REVENUE_KEY] || 0) - (prev ? (prev[ADS_REVENUE_KEY] || 0) : 0)),
+          [ADS_ORDERS_KEY]:  Math.max(0, (curr[ADS_ORDERS_KEY]  || 0) - (prev ? (prev[ADS_ORDERS_KEY]  || 0) : 0)),
+        });
+      });
+    });
+    return result;
   }, [adsData]);
 
   // Keep maxDataDate as the PRODUCT anchor (so header info stays accurate)
@@ -330,17 +355,19 @@ const StellaDashboardTab = () => {
   }, [trafficData, platformFilter, brandFilter, periodMode, dateRange]);
 
   const filteredAds = useMemo(() => {
-    return adsData.filter(d => {
+    return adsDailyDeltas.filter(d => {
       const ts = d.col_9PJS783P || d.created_at;
       if (periodMode === 'all' && ts < DATA_START) return false;
       const platform = d.Source || '';
       const matchPlatform = platformFilter === 'All'
         || (platformFilter === 'TikTok' && platform.toLowerCase().includes('tiktok'))
         || (platformFilter === 'Shopee' && platform.toLowerCase().includes('shopee'));
-      const matchBrand = brandFilter === 'All' || d.col_9TP6E83EC5MMA === brandFilter;
+      // Brand: extract shop name from filter field e.g. "Tiktok_Body Miss Việt Nam" → "Body Miss"
+      const shopName = (d.filter || '').replace(/^[^_]+_/, '');
+      const matchBrand = brandFilter === 'All' || normalizeBrand(shopName) === normalizeBrand(brandFilter);
       return matchPlatform && matchBrand && matchDate(ts);
     });
-  }, [adsData, platformFilter, brandFilter, periodMode, dateRange]);
+  }, [adsDailyDeltas, platformFilter, brandFilter, periodMode, dateRange]);
 
   // Previous period filter (same duration, shifted back)
   const getPrevBounds = useMemo(() => {
@@ -382,16 +409,17 @@ const StellaDashboardTab = () => {
   const prevFilteredAds = useMemo(() => {
     if (!getPrevBounds) return [];
     const { lo, hi } = getPrevBounds;
-    return adsData.filter(d => {
+    return adsDailyDeltas.filter(d => {
       const ts = new Date(d.col_9PJS783P || d.created_at);
       if (!ts || ts < lo || ts > hi) return false;
       const platform = d.Source || '';
       const matchPlatform = platformFilter === 'All'
         || (platformFilter === 'TikTok' && platform.toLowerCase().includes('tiktok'))
         || (platformFilter === 'Shopee' && platform.toLowerCase().includes('shopee'));
-      return matchPlatform && (brandFilter === 'All' || d.col_9TP6E83EC5MMA === brandFilter);
+      const shopName = (d.filter || '').replace(/^[^_]+_/, '');
+      return matchPlatform && (brandFilter === 'All' || normalizeBrand(shopName) === normalizeBrand(brandFilter));
     });
-  }, [adsData, platformFilter, brandFilter, getPrevBounds]);
+  }, [adsDailyDeltas, platformFilter, brandFilter, getPrevBounds]);
 
   const prevFilteredTraffic = useMemo(() => {
     if (!getPrevBounds) return [];
@@ -462,9 +490,19 @@ const StellaDashboardTab = () => {
     return [...filtered].sort((a, b) => (b[sortKey] || 0) - (a[sortKey] || 0)).slice(0, 15);
   }, [filtered, activeProductTab]);
 
-  // Ads by brand
+  // Ads aggregated by brand (sum daily deltas per shop)
   const adsByBrand = useMemo(() => {
-    return [...filteredAds].sort((a, b) => (b[ADS_COST_KEY] || 0) - (a[ADS_COST_KEY] || 0));
+    const map = {};
+    filteredAds.forEach(d => {
+      const shop = normalizeBrand((d.filter || '').replace(/^[^_]+_/, ''));
+      const platform = d.Source || '';
+      const key = shop + '|' + platform;
+      if (!map[key]) map[key] = { name: shop, Source: platform, [ADS_COST_KEY]: 0, [ADS_REVENUE_KEY]: 0, [ADS_ORDERS_KEY]: 0 };
+      map[key][ADS_COST_KEY]    += d[ADS_COST_KEY]    || 0;
+      map[key][ADS_REVENUE_KEY] += d[ADS_REVENUE_KEY] || 0;
+      map[key][ADS_ORDERS_KEY]  += d[ADS_ORDERS_KEY]  || 0;
+    });
+    return Object.values(map).sort((a, b) => (b[ADS_COST_KEY] || 0) - (a[ADS_COST_KEY] || 0));
   }, [filteredAds]);
 
   // ─── METRIC CONFIGS (for trend chart) ─────────────────────────────────────
@@ -831,7 +869,7 @@ const StellaDashboardTab = () => {
                   <tr key={i} style={{ borderBottom: '1px solid #f9fafb' }}
                     onMouseEnter={e => e.currentTarget.style.background = '#fffbf5'}
                     onMouseLeave={e => e.currentTarget.style.background = ''}>
-                    <td style={{ padding: '12px 16px', fontWeight: 700, color: '#111' }}>{item.col_9TP6E83EC5MMA || item.org_name || '—'}</td>
+                    <td style={{ padding: '12px 16px', fontWeight: 700, color: '#111' }}>{item.name || '—'}</td>
                     <td style={{ padding: '12px 16px', textAlign: 'center' }}><SourceBadge source={item.Source} /></td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: '#3b82f6' }}>{fmt(cost)}</td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: '#10b981' }}>{rev > 0 ? fmt(rev) : '—'}</td>
