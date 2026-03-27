@@ -170,9 +170,8 @@ const StellaDashboardTab = () => {
     setErrors([]);
     const errs = [];
     try {
-      // Fetch tất cả parallel: Orders (per filter), Product, Ads, Traffic (per filter)
-      const [jAds, jProduct, ...filterResults] = await Promise.all([
-        fetchAllRows(API_ADS),
+      // Fetch tất cả parallel: Product + Orders/Traffic/Ads per filter
+      const [jProduct, ...filterResults] = await Promise.all([
         fetchAllRows(API_PRODUCT),
         ...SHOP_FILTERS.map(f =>
           fetchAllRows(API_ORDERS + '&filter=' + encodeURIComponent(f))
@@ -182,22 +181,20 @@ const StellaDashboardTab = () => {
           fetchAllRows(API_TRAFFIC + '&filter=' + encodeURIComponent(f))
             .catch(() => ({ success: false, result: [] }))
         ),
+        ...SHOP_FILTERS.map(f =>
+          fetchAllRows(API_ADS + '&filter=' + encodeURIComponent(f))
+            .catch(() => ({ success: false, result: [] }))
+        ),
       ]);
-
-      if (jAds.success && jAds.result) {
-        const rows = jAds.result.map(i => i._source);
-        console.log('[ADS] first row keys:', rows[0] ? Object.keys(rows[0]) : 'empty');
-        console.log('[ADS] first row sample:', rows[0]);
-        setAdsData(rows);
-      } else errs.push('Ads API lỗi');
 
       if (jProduct.success && jProduct.result) setProductData(jProduct.result.map(i => i._source));
       else errs.push('Product API lỗi');
 
-      // filterResults = [orders×13, traffic×13]
+      // filterResults = [orders×n, traffic×n, ads×n]
       const n = SHOP_FILTERS.length;
-      const orderResults  = filterResults.slice(0, n);
-      const trafficResults = filterResults.slice(n);
+      const orderResults   = filterResults.slice(0, n);
+      const trafficResults = filterResults.slice(n, n * 2);
+      const adsResults     = filterResults.slice(n * 2);
 
       const allOrders = [];
       orderResults.forEach(j => {
@@ -211,7 +208,15 @@ const StellaDashboardTab = () => {
         if (j.success && j.result) j.result.forEach(i => allTraffic.push(i._source));
       });
       setTrafficData(allTraffic);
-      if (!allTraffic.length) errs.push('Traffic API: không có data');
+
+      const allAds = [];
+      adsResults.forEach(j => {
+        if (j.success && j.result) j.result.forEach(i => allAds.push(i._source));
+      });
+      if (allAds.length) {
+        console.log('[ADS] first row keys:', Object.keys(allAds[0]));
+        setAdsData(allAds);
+      } else errs.push('Ads API: không có data');
 
       setLastUpdated(new Date());
     } catch (e) {
