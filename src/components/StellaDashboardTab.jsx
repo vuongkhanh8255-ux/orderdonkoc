@@ -9,18 +9,20 @@ import {
 
 // ─── API PATHS ────────────────────────────────────────────────────────────────
 const BASE = '/bluecore-api/api/services/app/PublicRecommendation/Get?tenancyName=hoanganhannie&replaceUnicode=false';
-const API_PRODUCT = BASE + '&sectionName=Stella_api_product';
+const API_ORDERS  = BASE + '&sectionName=Stella_API_donhang';   // đơn hàng tổng hợp theo ngày/org
+const API_PRODUCT = BASE + '&sectionName=Stella_api_product';   // chi tiết sản phẩm (dùng cho top products / brand chart)
 const API_TRAFFIC = BASE + '&sectionName=Stella_api_traffic';
 const API_ADS     = BASE + '&sectionName=stella_api_tongquanads';
 
-// Traffic API yêu cầu filter= cho từng shop — không truyền thì trả []
-const TRAFFIC_FILTERS = [
+// Danh sách shop filters — dùng chung cho orders + traffic
+const SHOP_FILTERS = [
   'Shopee_BODYMISS VIETNAM', 'Shopee_Milaganics Việt Nam',
   'Shopee_Moaw Moaws Việt Nam', 'Shopee_eHerb Việt Nam', 'Shopee_eherbvietnam',
   'Tiktok_Body Miss Việt Nam', 'Tiktok_Healmii Việt Nam', 'Tiktok_MASUBE VIỆT NAM',
   'Tiktok_Milaganics Việt Nam', 'Tiktok_Moaw Moaws Việt Nam',
   'Tiktok_Real Steel Việt Nam', 'Tiktok_eHerb Hồ Chí Minh', 'Tiktok_eHerb Viet Nam',
 ];
+const TRAFFIC_FILTERS = SHOP_FILTERS; // alias giữ tương thích
 
 // Fetch rows: lấy count_row/total_row trước, cap tối đa 10000 (giới hạn API Bluecore)
 const API_MAX_SIZE = 10000;
@@ -37,8 +39,8 @@ const ADS_COST_KEY    = 'col_8DK6I83GD31QQ831CHPG';                         // C
 const ADS_REVENUE_KEY = 'col_8HNM2RJ841Q6GT90C5I76';                         // Doanh thu Ads (mới)
 const ADS_ORDERS_KEY  = 'col_AD621H4HOQGMS864I7GRLFRE41QE3ETB41GM8SO';      // Số đơn từ Ads
 
-// Chỉ lấy data 2 tháng gần nhất (tự động tính từ hôm nay)
-const DATA_START = (() => { const d = new Date(); d.setMonth(d.getMonth() - 2); d.setHours(0,0,0,0); return d.getTime(); })();
+// Chỉ lấy data 3 tháng gần nhất (tự động tính từ hôm nay)
+const DATA_START = (() => { const d = new Date(); d.setMonth(d.getMonth() - 3); d.setHours(0,0,0,0); return d.getTime(); })();
 
 // ─── COLORS ──────────────────────────────────────────────────────────────────
 const COLORS = ['#ea580c', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e', '#6366f1', '#84cc16'];
@@ -141,7 +143,8 @@ const SourceBadge = ({ source }) => (
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 const StellaDashboardTab = () => {
-  const [productData, setProductData] = useState([]);
+  const [orderData, setOrderData]   = useState([]);  // Stella_API_donhang — KPI chính
+  const [productData, setProductData] = useState([]); // Stella_api_product — brand/product breakdown
   const [trafficData, setTrafficData] = useState([]);
   const [adsData, setAdsData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -165,26 +168,45 @@ const StellaDashboardTab = () => {
     setErrors([]);
     const errs = [];
     try {
-      // Product + Ads + Traffic (traffic cần fetch từng filter rồi gộp)
-      const [j1, j3, ...trafficResults] = await Promise.all([
-        fetchAllRows(API_PRODUCT),
+      // Fetch tất cả parallel: Orders (per filter), Product, Ads, Traffic (per filter)
+      const [jAds, jProduct, ...filterResults] = await Promise.all([
         fetchAllRows(API_ADS),
-        ...TRAFFIC_FILTERS.map(f =>
+        fetchAllRows(API_PRODUCT),
+        ...SHOP_FILTERS.map(f =>
+          fetchAllRows(API_ORDERS + '&filter=' + encodeURIComponent(f))
+            .catch(() => ({ success: false, result: [] }))
+        ),
+        ...SHOP_FILTERS.map(f =>
           fetchAllRows(API_TRAFFIC + '&filter=' + encodeURIComponent(f))
             .catch(() => ({ success: false, result: [] }))
-        )
+        ),
       ]);
-      if (j1.success && j1.result) setProductData(j1.result.map(i => i._source));
-      else errs.push('Product API lỗi');
-      if (j3.success && j3.result) setAdsData(j3.result.map(i => i._source));
+
+      if (jAds.success && jAds.result) setAdsData(jAds.result.map(i => i._source));
       else errs.push('Ads API lỗi');
-      // Gộp tất cả traffic data từ các filter
+
+      if (jProduct.success && jProduct.result) setProductData(jProduct.result.map(i => i._source));
+      else errs.push('Product API lỗi');
+
+      // filterResults = [orders×13, traffic×13]
+      const n = SHOP_FILTERS.length;
+      const orderResults  = filterResults.slice(0, n);
+      const trafficResults = filterResults.slice(n);
+
+      const allOrders = [];
+      orderResults.forEach(j => {
+        if (j.success && j.result) j.result.forEach(i => allOrders.push(i._source));
+      });
+      setOrderData(allOrders);
+      if (!allOrders.length) errs.push('Orders API: không có data');
+
       const allTraffic = [];
       trafficResults.forEach(j => {
         if (j.success && j.result) j.result.forEach(i => allTraffic.push(i._source));
       });
       setTrafficData(allTraffic);
       if (!allTraffic.length) errs.push('Traffic API: không có data');
+
       setLastUpdated(new Date());
     } catch (e) {
       errs.push('Lỗi kết nối: ' + e.message);
@@ -212,13 +234,13 @@ const StellaDashboardTab = () => {
     return () => document.removeEventListener('mousedown', handler);
   }, [showPicker]);
 
-  // Max date from PRODUCT data only — this is our anchor for period filters
-  // (Ads API spans many months; anchoring to ads would push product data out of range)
+  // Max date — dùng orderData (donhang) nếu có, fallback về productData
   const maxProductDate = useMemo(() => {
-    const timestamps = productData.map(d => d.created_at).filter(Boolean);
+    const src = orderData.length ? orderData : productData;
+    const timestamps = src.map(d => d.created_at).filter(Boolean);
     if (!timestamps.length) return new Date();
     return new Date(Math.max(...timestamps));
-  }, [productData]);
+  }, [orderData, productData]);
 
   // Max date from ads data (for display only)
   const maxAdsDate = useMemo(() => {
@@ -253,9 +275,23 @@ const StellaDashboardTab = () => {
     return d >= cutoff && d <= upperBound;
   };
 
+  // filteredOrders: dùng cho KPI GMV/orders/qty (Stella_API_donhang — 3 tháng)
+  const filteredOrders = useMemo(() => {
+    const src = orderData.length ? orderData : productData; // fallback
+    return src.filter(d => {
+      if (periodMode === 'all' && d.created_at < DATA_START) return false;
+      const platform = d.source || '';
+      const matchPlatform = platformFilter === 'All'
+        || (platformFilter === 'TikTok' && platform.toLowerCase().includes('tiktok'))
+        || (platformFilter === 'Shopee' && platform.toLowerCase().includes('shopee'));
+      const matchBrand = brandFilter === 'All' || normalizeBrand(d.org_name) === normalizeBrand(brandFilter);
+      return matchPlatform && matchBrand && matchDate(d.created_at);
+    });
+  }, [orderData, productData, platformFilter, brandFilter, periodMode, dateRange]);
+
+  // filtered: productData — dùng cho brand chart, top products
   const filtered = useMemo(() => {
     return productData.filter(d => {
-      // In 'all' mode limit to recent 2 months so we don't show stale old data
       if (periodMode === 'all' && d.created_at < DATA_START) return false;
       const platform = d.source || '';
       const matchPlatform = platformFilter === 'All'
@@ -317,7 +353,8 @@ const StellaDashboardTab = () => {
   const prevFiltered = useMemo(() => {
     if (!getPrevBounds) return [];
     const { lo, hi } = getPrevBounds;
-    return productData.filter(d => {
+    const src = orderData.length ? orderData : productData;
+    return src.filter(d => {
       if (!d.created_at) return false;
       const ts = new Date(d.created_at);
       if (ts < lo || ts > hi) return false;
@@ -325,9 +362,9 @@ const StellaDashboardTab = () => {
       const matchPlatform = platformFilter === 'All'
         || (platformFilter === 'TikTok' && platform.toLowerCase().includes('tiktok'))
         || (platformFilter === 'Shopee' && platform.toLowerCase().includes('shopee'));
-      return matchPlatform && (brandFilter === 'All' || d.org_name === brandFilter);
+      return matchPlatform && (brandFilter === 'All' || normalizeBrand(d.org_name) === normalizeBrand(brandFilter));
     });
-  }, [productData, platformFilter, brandFilter, getPrevBounds]);
+  }, [orderData, productData, platformFilter, brandFilter, getPrevBounds]);
 
   const prevFilteredAds = useMemo(() => {
     if (!getPrevBounds) return [];
@@ -360,10 +397,10 @@ const StellaDashboardTab = () => {
     });
   }, [trafficData, platformFilter, brandFilter, getPrevBounds]);
 
-  // Summary stats
-  const totalGMV        = useMemo(() => filtered.reduce((s, d) => s + (d.GMV || 0), 0), [filtered]);
-  const totalOrders     = useMemo(() => filtered.reduce((s, d) => s + (d.count_order || 0), 0), [filtered]);
-  const totalQty        = useMemo(() => filtered.reduce((s, d) => s + (d.product_quantity || 0), 0), [filtered]);
+  // Summary stats — GMV/orders/qty từ orderData (donhang), brand/product từ productData
+  const totalGMV        = useMemo(() => filteredOrders.reduce((s, d) => s + (d.GMV || 0), 0), [filteredOrders]);
+  const totalOrders     = useMemo(() => filteredOrders.reduce((s, d) => s + (d.count_order || 0), 0), [filteredOrders]);
+  const totalQty        = useMemo(() => filteredOrders.reduce((s, d) => s + (d.product_quantity || 0), 0), [filteredOrders]);
   const totalAdsCost    = useMemo(() => filteredAds.reduce((s, d) => s + (d[ADS_COST_KEY] || 0), 0), [filteredAds]);
   const totalAdsRevenue = useMemo(() => filteredAds.reduce((s, d) => s + (d[ADS_REVENUE_KEY] || 0), 0), [filteredAds]);
   const totalAdsOrd     = useMemo(() => filteredAds.reduce((s, d) => s + (d[ADS_ORDERS_KEY] || 0), 0), [filteredAds]);
@@ -371,7 +408,7 @@ const StellaDashboardTab = () => {
   const avgCPO  = totalAdsOrd > 0 ? totalAdsCost / totalAdsOrd : 0;
   const roas    = totalAdsCost > 0 ? totalAdsRevenue / totalAdsCost : 0;
 
-  // Previous period stats (for comparison badges)
+  // Previous period stats — dùng prevFiltered (orderData hoặc productData)
   const prevGMV        = useMemo(() => prevFiltered.reduce((s, d) => s + (d.GMV || 0), 0), [prevFiltered]);
   const prevOrders     = useMemo(() => prevFiltered.reduce((s, d) => s + (d.count_order || 0), 0), [prevFiltered]);
   const prevQty        = useMemo(() => prevFiltered.reduce((s, d) => s + (d.product_quantity || 0), 0), [prevFiltered]);
@@ -420,9 +457,9 @@ const StellaDashboardTab = () => {
   // ─── METRIC CONFIGS (for trend chart) ─────────────────────────────────────
   const METRIC_CONFIGS = {
     traffic:     { label: 'Tổng Traffic',      color: '#6366f1', source: 'traffic', key: 'traffic',          format: v => v.toLocaleString('vi-VN') },
-    gmv:         { label: 'Tổng GMV',         color: '#ea580c', source: 'product', key: 'GMV',              format: fmt },
-    orders:      { label: 'Tổng đơn hàng',    color: '#f59e0b', source: 'product', key: 'count_order',     format: v => v.toLocaleString('vi-VN') },
-    qty:         { label: 'Tổng sản phẩm',    color: '#10b981', source: 'product', key: 'product_quantity', format: v => v.toLocaleString('vi-VN') },
+    gmv:         { label: 'Tổng GMV',         color: '#ea580c', source: 'orders', key: 'GMV',              format: fmt },
+    orders:      { label: 'Tổng đơn hàng',    color: '#f59e0b', source: 'orders', key: 'count_order',     format: v => v.toLocaleString('vi-VN') },
+    qty:         { label: 'Tổng sản phẩm',    color: '#10b981', source: 'orders', key: 'product_quantity', format: v => v.toLocaleString('vi-VN') },
     adsCost:     { label: 'Chi phí Ads',       color: '#3b82f6', source: 'ads',     key: ADS_COST_KEY,      format: fmt },
     adsRevenue:  { label: 'Doanh thu Ads',     color: '#10b981', source: 'ads',     key: ADS_REVENUE_KEY,   format: fmt },
     adsOrders:   { label: 'Đơn từ Ads',        color: '#8b5cf6', source: 'ads',     key: ADS_ORDERS_KEY,    format: v => v.toLocaleString('vi-VN') },
@@ -434,7 +471,7 @@ const StellaDashboardTab = () => {
   const trendData = useMemo(() => {
     const cfg = METRIC_CONFIGS[selectedMetric];
     if (!cfg) return [];
-    const data = cfg.source === 'product' ? filtered : cfg.source === 'traffic' ? filteredTraffic : filteredAds;
+    const data = cfg.source === 'orders' ? filteredOrders : cfg.source === 'traffic' ? filteredTraffic : filteredAds;
     const dateKey = cfg.source === 'ads' ? (d => d.col_9PJS783P || d.created_at) : 'created_at';
 
     const map = {};

@@ -98,15 +98,28 @@ export default function ReportCSTab() {
   const updateField = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
   // Load saved report from Supabase
+  // perf (bảng chỉ tiêu) → luôn lấy bản mới nhất theo brand, không phụ thuộc ngày
+  // form fields (section I, II, III) → lấy theo brand + ngày
   const loadReport = useCallback(async () => {
     if (!selectedBrand || !reportDate) return;
     setLoading(true);
+
+    // Load perf_data từ bản mới nhất của brand (không theo ngày)
+    const { data: latestPerf } = await supabase
+      .from('report_cs').select('perf_data')
+      .eq('brand', selectedBrand)
+      .not('perf_data', 'is', null)
+      .order('report_date', { ascending: false })
+      .limit(1).maybeSingle();
+    if (latestPerf?.perf_data) setPerf(latestPerf.perf_data);
+
+    // Load form fields theo brand + ngày cụ thể
     const { data } = await supabase
       .from('report_cs').select('*')
       .eq('brand', selectedBrand).eq('report_date', reportDate)
       .maybeSingle();
+    const EMPTY_FORM = { tt_ti_le_danh_gia_tieu_cuc: '', tt_ti_le_hai_long: '', tt_ti_le_tra_hang: '', tt_diem_nha_sang_tao: '', sp_thoi_gian_phan_hoi: '', sp_ti_le_giao_hang_nhanh: '', sp_ti_le_tra_hang: '', so_luot_danh_gia_tieu_cuc: '', li_do_chinh: '', key_info: '' };
     if (data) {
-      setPerf(data.perf_data || {});
       setForm({
         tt_ti_le_danh_gia_tieu_cuc: data.tt_ti_le_danh_gia_tieu_cuc || '',
         tt_ti_le_hai_long: data.tt_ti_le_hai_long || '',
@@ -120,8 +133,7 @@ export default function ReportCSTab() {
         key_info: data.key_info || '',
       });
     } else {
-      setPerf({});
-      setForm({ tt_ti_le_danh_gia_tieu_cuc: '', tt_ti_le_hai_long: '', tt_ti_le_tra_hang: '', tt_diem_nha_sang_tao: '', sp_thoi_gian_phan_hoi: '', sp_ti_le_giao_hang_nhanh: '', sp_ti_le_tra_hang: '', so_luot_danh_gia_tieu_cuc: '', li_do_chinh: '', key_info: '' });
+      setForm(EMPTY_FORM);
     }
     setLoading(false);
   }, [selectedBrand, reportDate]);
