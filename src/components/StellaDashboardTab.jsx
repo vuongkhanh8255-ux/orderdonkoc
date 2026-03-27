@@ -484,28 +484,31 @@ const StellaDashboardTab = () => {
   const prevRoas    = prevAdsCost > 0 ? prevAdsRevenue / prevAdsCost : 0;
 
   // By platform for pie
+  // Dùng filteredOrders (donhang) thay vì filtered (product) vì donhang có data 3 tháng gần nhất
+  const chartSource = filteredOrders.length ? filteredOrders : filtered;
+
   const byPlatform = useMemo(() => {
     const map = {};
-    filtered.forEach(d => {
+    chartSource.forEach(d => {
       const k = sourceLabel(d.source);
       if (!map[k]) map[k] = { name: k, GMV: 0, orders: 0, color: sourceColor(d.source) };
       map[k].GMV += d.GMV || 0;
       map[k].orders += d.count_order || 0;
     });
     return Object.values(map).sort((a, b) => b.GMV - a.GMV);
-  }, [filtered]);
+  }, [chartSource]);
 
   // By brand bar chart
   const byBrand = useMemo(() => {
     const map = {};
-    filtered.forEach(d => {
+    chartSource.forEach(d => {
       const name = normalizeBrand(d.org_name);
       if (!map[name]) map[name] = { name, GMV: 0, orders: 0 };
       map[name].GMV += d.GMV || 0;
       map[name].orders += d.count_order || 0;
     });
     return Object.values(map).sort((a, b) => b.GMV - a.GMV).slice(0, 8);
-  }, [filtered]);
+  }, [chartSource]);
 
   // Top products sorted by selected tab
   const topProducts = useMemo(() => {
