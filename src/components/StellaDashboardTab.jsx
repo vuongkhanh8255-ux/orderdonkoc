@@ -49,20 +49,7 @@ const COLORS = ['#ea580c', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899'
 const SOURCE_COLORS = { Tiktokshop: '#010101', TiktokShop: '#010101', Shopee: '#ee4d2d' };
 
 // ─── SECTION METRIC CONFIGS ──────────────────────────────────────────────────
-const S1_CONFIGS = {
-  traffic: { label: 'Traffic',      icon: '👁️', color: '#6366f1', key: 'traffic', format: v => v >= 1e6 ? (v/1e6).toFixed(1)+'tr' : (v/1e3).toFixed(0)+'k' },
-  gmv:     { label: 'GMV',          icon: '💰', color: '#ea580c', key: 'gmv',     format: fmt },
-  orders:  { label: 'Đơn hàng',     icon: '📦', color: '#f59e0b', key: 'orders',  format: v => v.toLocaleString('vi-VN') },
-  aov:     { label: 'AOV',          icon: '📊', color: '#8b5cf6', key: 'aov',     format: fmt },
-  abs:     { label: 'ABS (SP/đơn)', icon: '🛒', color: '#14b8a6', key: 'abs',     format: v => Number(v).toFixed(1) },
-};
-const S2_CONFIGS = {
-  adsCost:    { label: 'Chi phí Ads',    icon: '📢', color: '#3b82f6', key: 'adsCost',    format: fmt },
-  adsRevenue: { label: 'Doanh thu Ads',  icon: '💰', color: '#10b981', key: 'adsRevenue', format: fmt },
-  roas:       { label: 'ROAS',           icon: '🚀', color: '#f59e0b', key: 'roas',       format: v => Number(v).toFixed(2)+'x' },
-  cpo:        { label: 'CPO',            icon: '💸', color: '#ec4899', key: 'cpo',        format: fmt },
-  adsOrders:  { label: 'Đơn từ Ads',     icon: '🎯', color: '#8b5cf6', key: 'adsOrders',  format: v => v.toLocaleString('vi-VN') },
-};
+// S1_CONFIGS and S2_CONFIGS are defined after fmt (see below, near the helpers section)
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 const fmt = (n) => {
@@ -88,6 +75,22 @@ const sourceColor = (s) => {
   if (s.toLowerCase().includes('tiktok')) return '#010101';
   if (s.toLowerCase().includes('shopee')) return '#ee4d2d';
   return '#6b7280';
+};
+
+// ─── SECTION METRIC CONFIGS (must be after fmt) ──────────────────────────────
+const S1_CONFIGS = {
+  traffic: { label: 'Traffic',      icon: '👁️', color: '#6366f1', key: 'traffic', format: v => v >= 1e6 ? (v/1e6).toFixed(1)+'tr' : (v/1e3).toFixed(0)+'k' },
+  gmv:     { label: 'GMV',          icon: '💰', color: '#ea580c', key: 'gmv',     format: v => fmt(v) },
+  orders:  { label: 'Đơn hàng',     icon: '📦', color: '#f59e0b', key: 'orders',  format: v => v.toLocaleString('vi-VN') },
+  aov:     { label: 'AOV',          icon: '📊', color: '#8b5cf6', key: 'aov',     format: v => fmt(v) },
+  abs:     { label: 'ABS (SP/đơn)', icon: '🛒', color: '#14b8a6', key: 'abs',     format: v => Number(v).toFixed(1) },
+};
+const S2_CONFIGS = {
+  adsCost:    { label: 'Chi phí Ads',    icon: '📢', color: '#3b82f6', key: 'adsCost',    format: v => fmt(v) },
+  adsRevenue: { label: 'Doanh thu Ads',  icon: '💰', color: '#10b981', key: 'adsRevenue', format: v => fmt(v) },
+  roas:       { label: 'ROAS',           icon: '🚀', color: '#f59e0b', key: 'roas',       format: v => Number(v).toFixed(2)+'x' },
+  cpo:        { label: 'CPO',            icon: '💸', color: '#ec4899', key: 'cpo',        format: v => fmt(v) },
+  adsOrders:  { label: 'Đơn từ Ads',     icon: '🎯', color: '#8b5cf6', key: 'adsOrders',  format: v => v.toLocaleString('vi-VN') },
 };
 
 // Normalize org_name → canonical brand name (gộp mọi shop cùng brand)
