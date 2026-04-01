@@ -151,11 +151,17 @@ const AirLinksTab = () => {
                 isAuthorized = true;
             }
         }
+        // Thêm rule: Xóa trùng lặp chéo người phân quyền
+        else if (passwordModal.type === 'duplicate') {
+            if (passwordModal.input === 'bichhue123') {
+                isAuthorized = true;
+            }
+        }
 
         if (isAuthorized) {
             if (passwordModal.type === 'bulk') {
                 handleBulkDeleteInternal();
-            } else if (passwordModal.type === 'single') {
+            } else if (passwordModal.type === 'single' || passwordModal.type === 'duplicate') {
                 handleDeleteAirLink(passwordModal.data.id, passwordModal.data.link);
             }
             setPasswordModal({ isOpen: false, type: null, data: null, input: '' });
@@ -1058,7 +1064,16 @@ const AirLinksTab = () => {
                                                     </td>
                                                     <td style={{ padding: '10px 14px', textAlign: 'center' }}>
                                                         <button
-                                                            onClick={() => handleDeleteAirLink(item.id, item.link_air_koc)}
+                                                            onClick={() => {
+                                                                const allSamePerson = group.every(g => g.nhansu_id && g.nhansu_id === group[0].nhansu_id);
+                                                                if (allSamePerson) {
+                                                                    if (window.confirm('Xác nhận xóa bản ghi trùng lặp này?')) {
+                                                                        handleDeleteAirLink(item.id, item.link_air_koc);
+                                                                    }
+                                                                } else {
+                                                                    openDeleteModal('duplicate', { id: item.id, link: item.link_air_koc });
+                                                                }
+                                                            }}
                                                             style={{
                                                                 padding: '8px 16px',
                                                                 backgroundColor: '#DC2626',
