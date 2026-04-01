@@ -2,9 +2,9 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import DateRangePicker from './DateRangePicker';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, Legend,
-  LineChart, Line, Area, AreaChart
+  Line, Area, AreaChart, ComposedChart
 } from 'recharts';
 
 // ─── API PATHS ────────────────────────────────────────────────────────────────
@@ -47,6 +47,22 @@ const DATA_START = (() => { const d = new Date(); d.setMonth(d.getMonth() - 3); 
 // ─── COLORS ──────────────────────────────────────────────────────────────────
 const COLORS = ['#ea580c', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e', '#6366f1', '#84cc16'];
 const SOURCE_COLORS = { Tiktokshop: '#010101', TiktokShop: '#010101', Shopee: '#ee4d2d' };
+
+// ─── SECTION METRIC CONFIGS ──────────────────────────────────────────────────
+const S1_CONFIGS = {
+  traffic: { label: 'Traffic',      icon: '👁️', color: '#6366f1', key: 'traffic', format: v => v >= 1e6 ? (v/1e6).toFixed(1)+'tr' : (v/1e3).toFixed(0)+'k' },
+  gmv:     { label: 'GMV',          icon: '💰', color: '#ea580c', key: 'gmv',     format: fmt },
+  orders:  { label: 'Đơn hàng',     icon: '📦', color: '#f59e0b', key: 'orders',  format: v => v.toLocaleString('vi-VN') },
+  aov:     { label: 'AOV',          icon: '📊', color: '#8b5cf6', key: 'aov',     format: fmt },
+  abs:     { label: 'ABS (SP/đơn)', icon: '🛒', color: '#14b8a6', key: 'abs',     format: v => Number(v).toFixed(1) },
+};
+const S2_CONFIGS = {
+  adsCost:    { label: 'Chi phí Ads',    icon: '📢', color: '#3b82f6', key: 'adsCost',    format: fmt },
+  adsRevenue: { label: 'Doanh thu Ads',  icon: '💰', color: '#10b981', key: 'adsRevenue', format: fmt },
+  roas:       { label: 'ROAS',           icon: '🚀', color: '#f59e0b', key: 'roas',       format: v => Number(v).toFixed(2)+'x' },
+  cpo:        { label: 'CPO',            icon: '💸', color: '#ec4899', key: 'cpo',        format: fmt },
+  adsOrders:  { label: 'Đơn từ Ads',     icon: '🎯', color: '#8b5cf6', key: 'adsOrders',  format: v => v.toLocaleString('vi-VN') },
+};
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 const fmt = (n) => {
@@ -157,7 +173,9 @@ const StellaDashboardTab = () => {
   const [platformFilter, setPlatformFilter] = useState('All');
   const [brandFilter, setBrandFilter] = useState('All');
   const [activeProductTab, setActiveProductTab] = useState('gmv'); // gmv | orders | qty
-  const [selectedMetric, setSelectedMetric] = useState('gmv'); // for trend chart
+  const [selectedMetric, setSelectedMetric] = useState('gmv'); // for trend chart (legacy)
+  const [s1Metrics, setS1Metrics] = useState(['gmv', 'orders']);      // Section 1 dual-chart
+  const [s2Metrics, setS2Metrics] = useState(['adsCost', 'adsRevenue']); // Section 2 dual-chart
 
   // Date filters
   const [periodMode, setPeriodMode] = useState('all'); // 'all' | '1' | '7' | '30' | 'range'
@@ -483,6 +501,12 @@ const StellaDashboardTab = () => {
   const prevAvgCPO  = prevAdsOrd > 0 ? prevAdsCost / prevAdsOrd : 0;
   const prevRoas    = prevAdsCost > 0 ? prevAdsRevenue / prevAdsCost : 0;
 
+  // AOV / ABS
+  const avgAOV = totalOrders > 0 ? totalGMV / totalOrders : 0;
+  const avgABS = totalOrders > 0 ? totalQty / totalOrders : 0;
+  const prevAOV = prevOrders > 0 ? prevGMV / prevOrders : 0;
+  const prevABS = prevOrders > 0 ? prevQty / prevOrders : 0;
+
   // By platform for pie
   // Dùng filteredOrders (donhang) thay vì filtered (product) vì donhang có data 3 tháng gần nhất
   const chartSource = filteredOrders.length ? filteredOrders : filtered;
@@ -530,6 +554,43 @@ const StellaDashboardTab = () => {
     });
     return Object.values(map).sort((a, b) => (b[ADS_COST_KEY] || 0) - (a[ADS_COST_KEY] || 0));
   }, [filteredAds]);
+
+  // ─── DAILY STATS (all metrics per day for dual-line charts) ─────────────────
+  const dailyStats = useMemo(() => {
+    const map = {};
+    const ensure = (day) => {
+      if (!map[day]) map[day] = { fullDate: day, date: day.slice(5), traffic: 0, gmv: 0, orders: 0, qty: 0, adsCost: 0, adsRevenue: 0, adsOrders: 0 };
+    };
+    filteredTraffic.forEach(d => {
+      const day = d.created_at ? new Date(d.created_at).toISOString().slice(0, 10) : null;
+      if (!day) return; ensure(day);
+      map[day].traffic += d.traffic || 0;
+    });
+    filteredOrders.forEach(d => {
+      const day = d.created_at ? new Date(d.created_at).toISOString().slice(0, 10) : null;
+      if (!day) return; ensure(day);
+      map[day].gmv    += d.GMV || 0;
+      map[day].orders += d.count_order || 0;
+      map[day].qty    += d.product_quantity || 0;
+    });
+    filteredAds.forEach(d => {
+      const ts  = d.col_9PJS783P || d.created_at;
+      const day = ts ? new Date(ts).toISOString().slice(0, 10) : null;
+      if (!day) return; ensure(day);
+      map[day].adsCost    += d[ADS_COST_KEY]    || 0;
+      map[day].adsRevenue += d[ADS_REVENUE_KEY] || 0;
+      map[day].adsOrders  += d[ADS_ORDERS_KEY]  || 0;
+    });
+    return Object.values(map)
+      .sort((a, b) => a.fullDate.localeCompare(b.fullDate))
+      .map(d => ({
+        ...d,
+        aov:  d.orders > 0 ? d.gmv / d.orders : 0,
+        abs:  d.orders > 0 ? d.qty / d.orders : 0,
+        cpo:  d.adsOrders > 0 ? d.adsCost / d.adsOrders : 0,
+        roas: d.adsCost   > 0 ? d.adsRevenue / d.adsCost : 0,
+      }));
+  }, [filteredOrders, filteredTraffic, filteredAds]);
 
   // ─── METRIC CONFIGS (for trend chart) ─────────────────────────────────────
   const METRIC_CONFIGS = {
@@ -595,6 +656,9 @@ const StellaDashboardTab = () => {
   }, [filtered, filteredAds, filteredTraffic, selectedMetric]);
 
   // ─── RENDER ─────────────────────────────────────────────────────────────────
+  const toggleMetric = (m, setter) => setter(prev => prev[0] === m ? prev : [m, prev[0]]);
+  const s2DailyStats = dailyStats.filter(d => d.adsCost > 0 || d.adsOrders > 0);
+
   const filterBtnStyle = (active, color = '#ea580c') => ({
     padding: '7px 16px', borderRadius: '99px', fontWeight: 700,
     fontSize: '0.8rem', cursor: 'pointer', border: 'none',
@@ -610,14 +674,51 @@ const StellaDashboardTab = () => {
     color: active ? '#fff' : '#555',
   });
 
-  const selectStyle = {
-    padding: '7px 10px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: '0.82rem',
-    fontFamily: "'Outfit', sans-serif", fontWeight: 700, background: '#fff',
-    cursor: 'pointer', color: '#333', minWidth: 60
+  const metricBtnStyle = (isP, isS, color) => ({
+    padding: '7px 14px', borderRadius: 8, fontWeight: 700, fontSize: '0.8rem',
+    cursor: 'pointer', border: `2px solid ${isP || isS ? color : '#f0f0f0'}`,
+    background: isP ? color : isS ? color + '20' : '#f9fafb',
+    color: isP ? '#fff' : isS ? color : '#9ca3af',
+    transition: 'all 0.18s', display: 'flex', alignItems: 'center', gap: 5,
+  });
+
+  // Dual-line chart component
+  const DualChart = ({ data, cfg1, cfg2, height = 250 }) => {
+    if (!data || !data.length) return (
+      <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: '0.85rem' }}>Không có dữ liệu</div>
+    );
+    const id1 = `dg_${cfg1.key}`;
+    return (
+      <ResponsiveContainer width="100%" height={height}>
+        <ComposedChart data={data} margin={{ top: 20, right: 72, left: 0, bottom: 4 }}>
+          <defs>
+            <linearGradient id={id1} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={cfg1.color} stopOpacity={0.18} />
+              <stop offset="95%" stopColor={cfg1.color} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+          <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#9ca3af' }} tickLine={false} axisLine={false} />
+          <YAxis yAxisId="left"  tick={{ fontSize: 11, fill: cfg1.color }} tickLine={false} axisLine={false} tickFormatter={cfg1.format} width={72} />
+          <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: cfg2.color }} tickLine={false} axisLine={false} tickFormatter={cfg2.format} width={72} />
+          <Tooltip
+            contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', fontFamily: "'Outfit',sans-serif" }}
+            labelFormatter={(l, p) => p?.[0]?.payload?.fullDate || l}
+            formatter={(v, name) => {
+              const allCfg = { ...S1_CONFIGS, ...S2_CONFIGS };
+              const c = Object.values(allCfg).find(x => x.key === name);
+              return [c ? c.format(v) : v, c ? c.label : name];
+            }}
+          />
+          <Area  yAxisId="left"  type="monotone" dataKey={cfg1.key} stroke={cfg1.color} strokeWidth={2.5} fill={`url(#${id1})`} dot={data.length <= 45 ? { r: 2.5, fill: cfg1.color } : false} activeDot={{ r: 5 }} />
+          <Line  yAxisId="right" type="monotone" dataKey={cfg2.key} stroke={cfg2.color} strokeWidth={2} strokeDasharray="6 3" dot={false} activeDot={{ r: 4 }} />
+        </ComposedChart>
+      </ResponsiveContainer>
+    );
   };
 
   return (
-    <div style={{ fontFamily: "'Outfit', sans-serif", color: '#111', maxWidth: 1200, margin: '0 auto' }}>
+    <div style={{ fontFamily: "'Outfit', sans-serif", color: '#111', maxWidth: 1300, margin: '0 auto' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
@@ -707,106 +808,96 @@ const StellaDashboardTab = () => {
         </div>
       </div>
 
-      {/* ── KPI CARDS (clickable → trend chart) ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginBottom: 8 }}>
-        <StatCard icon="👁️" label="Tổng Traffic" value={totalTraffic.toLocaleString('vi-VN')} sub="lượt xem" color="#6366f1" loading={loading} active={selectedMetric==='traffic'} onClick={()=>setSelectedMetric('traffic')} compare={getPrevBounds ? { curr: totalTraffic, prev: prevTraffic } : null} />
-        <StatCard icon="💰" label="Tổng GMV" value={fmt(totalGMV)} sub={fmtFull(totalGMV)} color="#ea580c" loading={loading} active={selectedMetric==='gmv'} onClick={()=>setSelectedMetric('gmv')} compare={getPrevBounds ? { curr: totalGMV, prev: prevGMV } : null} />
-        <StatCard icon="📦" label="Tổng đơn hàng" value={totalOrders.toLocaleString('vi-VN')} sub="đơn" color="#f59e0b" loading={loading} active={selectedMetric==='orders'} onClick={()=>setSelectedMetric('orders')} compare={getPrevBounds ? { curr: totalOrders, prev: prevOrders } : null} />
-        <StatCard icon="🛒" label="Tổng sản phẩm bán" value={totalQty.toLocaleString('vi-VN')} sub="sản phẩm" color="#10b981" loading={loading} active={selectedMetric==='qty'} onClick={()=>setSelectedMetric('qty')} compare={getPrevBounds ? { curr: totalQty, prev: prevQty } : null} />
-        <StatCard icon="📢" label="Chi phí Ads" value={fmt(totalAdsCost)} sub={fmtFull(totalAdsCost)} color="#3b82f6" loading={loading} active={selectedMetric==='adsCost'} onClick={()=>setSelectedMetric('adsCost')} compare={getPrevBounds ? { curr: totalAdsCost, prev: prevAdsCost } : null} />
-        <StatCard icon="💰" label="Doanh thu Ads" value={fmt(totalAdsRevenue)} sub={fmtFull(totalAdsRevenue)} color="#10b981" loading={loading} active={selectedMetric==='adsRevenue'} onClick={()=>setSelectedMetric('adsRevenue')} compare={getPrevBounds ? { curr: totalAdsRevenue, prev: prevAdsRevenue } : null} />
-        <StatCard icon="🎯" label="Đơn từ Ads" value={totalAdsOrd.toLocaleString('vi-VN')} sub="đơn" color="#8b5cf6" loading={loading} active={selectedMetric==='adsOrders'} onClick={()=>setSelectedMetric('adsOrders')} compare={getPrevBounds ? { curr: totalAdsOrd, prev: prevAdsOrd } : null} />
-        <StatCard icon="💸" label="CPO" value={fmt(avgCPO)} sub="₫/đơn" color="#ec4899" loading={loading} active={selectedMetric==='cpo'} onClick={()=>setSelectedMetric('cpo')} compare={getPrevBounds ? { curr: avgCPO, prev: prevAvgCPO } : null} />
-        <StatCard icon="🚀" label="ROAS" value={roas > 0 ? roas.toFixed(2) + 'x' : '—'} sub="doanh thu / chi phí" color="#f59e0b" loading={loading} active={selectedMetric==='roas'} onClick={()=>setSelectedMetric('roas')} compare={getPrevBounds ? { curr: roas, prev: prevRoas } : null} />
+      {/* ══ SECTION 1: TỔNG QUAN ══ */}
+      <SectionHeader title="Tổng Quan" icon="📈" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 14 }}>
+        <StatCard icon="👁️" label="Traffic"    value={totalTraffic.toLocaleString('vi-VN')} sub="lượt xem"   color="#6366f1" loading={loading} active={s1Metrics.includes('traffic')} onClick={() => toggleMetric('traffic', setS1Metrics)} compare={getPrevBounds ? { curr: totalTraffic, prev: prevTraffic } : null} />
+        <StatCard icon="💰" label="Tổng GMV"   value={fmt(totalGMV)} sub={fmtFull(totalGMV)}                  color="#ea580c" loading={loading} active={s1Metrics.includes('gmv')}     onClick={() => toggleMetric('gmv', setS1Metrics)}     compare={getPrevBounds ? { curr: totalGMV, prev: prevGMV } : null} />
+        <StatCard icon="📦" label="Đơn hàng"   value={totalOrders.toLocaleString('vi-VN')} sub="đơn"          color="#f59e0b" loading={loading} active={s1Metrics.includes('orders')}  onClick={() => toggleMetric('orders', setS1Metrics)}  compare={getPrevBounds ? { curr: totalOrders, prev: prevOrders } : null} />
+        <StatCard icon="📊" label="AOV"         value={fmt(avgAOV)} sub="₫/đơn"                                color="#8b5cf6" loading={loading} active={s1Metrics.includes('aov')}     onClick={() => toggleMetric('aov', setS1Metrics)}     compare={getPrevBounds ? { curr: avgAOV, prev: prevAOV } : null} />
+        <StatCard icon="🛒" label="ABS"         value={avgABS.toFixed(1)} sub="SP/đơn"                        color="#14b8a6" loading={loading} active={s1Metrics.includes('abs')}     onClick={() => toggleMetric('abs', setS1Metrics)}     compare={getPrevBounds ? { curr: avgABS, prev: prevABS } : null} />
       </div>
 
-      {/* ── TREND CHART ── */}
-      {!loading && trendData.length > 0 && (() => {
-        const cfg = METRIC_CONFIGS[selectedMetric];
-        return (
-          <div style={{ background: '#fff', borderRadius: 16, padding: '20px 24px', marginTop: 16, marginBottom: 8, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-              <div style={{ width: 8, height: 8, borderRadius: 99, background: cfg.color }} />
-              <span style={{ fontWeight: 800, fontSize: '0.95rem', color: '#111' }}>Xu hướng: {cfg.label}</span>
-              <span style={{ fontSize: '0.78rem', color: '#9ca3af' }}>({trendData.length} ngày)</span>
-            </div>
-            <ResponsiveContainer width="100%" height={260}>
-              <AreaChart data={trendData} margin={{ top: 24, right: 60, left: 0, bottom: 4 }}>
-                <defs>
-                  <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={cfg.color} stopOpacity={0.2} />
-                    <stop offset="95%" stopColor={cfg.color} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#9ca3af' }} tickLine={false} axisLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} tickLine={false} axisLine={false} tickFormatter={fmt} width={60} />
-                <Tooltip
-                  contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', fontFamily: "'Outfit', sans-serif" }}
-                  labelFormatter={(l, payload) => payload?.[0]?.payload?.fullDate || l}
-                  formatter={(v) => [cfg.format(v), cfg.label]}
-                />
-                <Area type="monotone" dataKey="value" stroke={cfg.color} strokeWidth={2.5} fill="url(#trendGrad)"
-                  dot={trendData.length <= 31 ? { r: 3, fill: cfg.color } : false}
-                  activeDot={{ r: 5, fill: cfg.color }}
-                  label={trendData.length <= 31 ? ({ x, y, value }) => (
-                    <text x={x} y={y - 12} textAnchor="middle" fontSize={11} fontWeight={700} fill={cfg.color}>{fmt(value)}</text>
-                  ) : false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+      {/* Section 1 Chart */}
+      <div style={{ background: '#fff', borderRadius: 16, padding: '18px 24px', marginBottom: 28, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
+          {Object.entries(S1_CONFIGS).map(([k, cfg]) => {
+            const isP = s1Metrics[0] === k, isS = s1Metrics[1] === k;
+            return (
+              <button key={k} onClick={() => toggleMetric(k, setS1Metrics)} style={metricBtnStyle(isP, isS, cfg.color)}>
+                {cfg.icon} {cfg.label}
+                {isP && <span style={{ width: 7, height: 7, borderRadius: 99, background: cfg.color, flexShrink: 0 }} />}
+                {isS && <span style={{ width: 7, height: 7, borderRadius: 99, border: `2px solid ${cfg.color}`, flexShrink: 0 }} />}
+              </button>
+            );
+          })}
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 16, fontSize: '0.75rem', color: '#9ca3af', alignItems: 'center' }}>
+            <span><span style={{ display: 'inline-block', width: 20, height: 2.5, background: S1_CONFIGS[s1Metrics[0]]?.color, marginRight: 4, verticalAlign: 'middle' }} />{S1_CONFIGS[s1Metrics[0]]?.label} (trái)</span>
+            <span><span style={{ display: 'inline-block', width: 20, borderTop: `2px dashed ${S1_CONFIGS[s1Metrics[1]]?.color}`, marginRight: 4, verticalAlign: 'middle' }} />{S1_CONFIGS[s1Metrics[1]]?.label} (phải)</span>
+            <span>({dailyStats.length} ngày)</span>
           </div>
-        );
-      })()}
-
-      {/* ── CHARTS ROW ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 24 }}>
-        {/* Pie: GMV by Brand */}
-        <div style={{ background: '#fff', borderRadius: 16, padding: '20px 24px', boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
-          <div style={{ fontWeight: 800, fontSize: '0.9rem', marginBottom: 16, color: '#111' }}>🥧 Tỷ trọng GMV theo brand</div>
-          {loading ? <div style={{ height: 220, background: '#f9fafb', borderRadius: 12 }} /> : (
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
-                <Pie data={byBrand} dataKey="GMV" nameKey="name" cx="50%" cy="50%" outerRadius={90}
-                  labelLine={false}
-                  label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-                    if (percent < 0.05) return null;
-                    const R = Math.PI / 180;
-                    const r = innerRadius + (outerRadius - innerRadius) * 0.55;
-                    const x = cx + r * Math.cos(-midAngle * R);
-                    const y = cy + r * Math.sin(-midAngle * R);
-                    return (
-                      <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={800}>
-                        {(percent * 100).toFixed(0)}%
-                      </text>
-                    );
-                  }}>
-                  {byBrand.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Pie>
-                <Tooltip formatter={(v, name) => [fmt(v), name]} />
-                <Legend formatter={(name) => <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#374151' }}>{name}</span>} />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
         </div>
+        {loading
+          ? <div style={{ height: 250, background: '#f9fafb', borderRadius: 12, animation: 'pulse 1.5s infinite' }} />
+          : <DualChart data={dailyStats} cfg1={S1_CONFIGS[s1Metrics[0]]} cfg2={S1_CONFIGS[s1Metrics[1]]} />
+        }
+      </div>
 
-        {/* Bar: GMV by Brand */}
-        <div style={{ background: '#fff', borderRadius: 16, padding: '20px 24px', boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
-          <div style={{ fontWeight: 800, fontSize: '0.9rem', marginBottom: 16, color: '#111' }}>📊 GMV theo nhãn hàng</div>
-          {loading ? <div style={{ height: 220, background: '#f9fafb', borderRadius: 12 }} /> : (
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={byBrand} margin={{ top: 4, right: 8, left: 0, bottom: 40 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#6b7280' }} angle={-30} textAnchor="end" interval={0} />
-                <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} tickFormatter={fmt} />
-                <Tooltip formatter={(v) => [fmt(v), 'GMV']} />
-                <Bar dataKey="GMV" radius={[6, 6, 0, 0]}>
-                  {byBrand.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
+      {/* ══ SECTION 2: ADS ══ */}
+      <SectionHeader title="ADS" icon="📢" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 14 }}>
+        <StatCard icon="📢" label="Chi phí Ads"   value={fmt(totalAdsCost)} sub={fmtFull(totalAdsCost)}         color="#3b82f6" loading={loading} active={s2Metrics.includes('adsCost')}    onClick={() => toggleMetric('adsCost', setS2Metrics)}    compare={getPrevBounds ? { curr: totalAdsCost, prev: prevAdsCost } : null} />
+        <StatCard icon="💰" label="Doanh thu Ads" value={fmt(totalAdsRevenue)} sub={fmtFull(totalAdsRevenue)}   color="#10b981" loading={loading} active={s2Metrics.includes('adsRevenue')} onClick={() => toggleMetric('adsRevenue', setS2Metrics)} compare={getPrevBounds ? { curr: totalAdsRevenue, prev: prevAdsRevenue } : null} />
+        <StatCard icon="🚀" label="ROAS"          value={roas > 0 ? roas.toFixed(2)+'x' : '—'} sub="DT/chi phí" color="#f59e0b" loading={loading} active={s2Metrics.includes('roas')}      onClick={() => toggleMetric('roas', setS2Metrics)}      compare={getPrevBounds ? { curr: roas, prev: prevRoas } : null} />
+        <StatCard icon="💸" label="CPO"           value={fmt(avgCPO)} sub="₫/đơn"                               color="#ec4899" loading={loading} active={s2Metrics.includes('cpo')}       onClick={() => toggleMetric('cpo', setS2Metrics)}       compare={getPrevBounds ? { curr: avgCPO, prev: prevAvgCPO } : null} />
+        <StatCard icon="🎯" label="Đơn từ Ads"   value={totalAdsOrd.toLocaleString('vi-VN')} sub="đơn"          color="#8b5cf6" loading={loading} active={s2Metrics.includes('adsOrders')} onClick={() => toggleMetric('adsOrders', setS2Metrics)} compare={getPrevBounds ? { curr: totalAdsOrd, prev: prevAdsOrd } : null} />
+      </div>
+
+      {/* Section 2 Chart */}
+      <div style={{ background: '#fff', borderRadius: 16, padding: '18px 24px', marginBottom: 28, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
+          {Object.entries(S2_CONFIGS).map(([k, cfg]) => {
+            const isP = s2Metrics[0] === k, isS = s2Metrics[1] === k;
+            return (
+              <button key={k} onClick={() => toggleMetric(k, setS2Metrics)} style={metricBtnStyle(isP, isS, cfg.color)}>
+                {cfg.icon} {cfg.label}
+                {isP && <span style={{ width: 7, height: 7, borderRadius: 99, background: cfg.color, flexShrink: 0 }} />}
+                {isS && <span style={{ width: 7, height: 7, borderRadius: 99, border: `2px solid ${cfg.color}`, flexShrink: 0 }} />}
+              </button>
+            );
+          })}
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 16, fontSize: '0.75rem', color: '#9ca3af', alignItems: 'center' }}>
+            <span><span style={{ display: 'inline-block', width: 20, height: 2.5, background: S2_CONFIGS[s2Metrics[0]]?.color, marginRight: 4, verticalAlign: 'middle' }} />{S2_CONFIGS[s2Metrics[0]]?.label} (trái)</span>
+            <span><span style={{ display: 'inline-block', width: 20, borderTop: `2px dashed ${S2_CONFIGS[s2Metrics[1]]?.color}`, marginRight: 4, verticalAlign: 'middle' }} />{S2_CONFIGS[s2Metrics[1]]?.label} (phải)</span>
+            <span>({s2DailyStats.length} ngày)</span>
+          </div>
         </div>
+        {loading
+          ? <div style={{ height: 250, background: '#f9fafb', borderRadius: 12, animation: 'pulse 1.5s infinite' }} />
+          : <DualChart data={s2DailyStats} cfg1={S2_CONFIGS[s2Metrics[0]]} cfg2={S2_CONFIGS[s2Metrics[1]]} />
+        }
+      </div>
+
+      {/* ══ PHÂN TÍCH BRAND ══ */}
+      <SectionHeader title="Phân Tích" icon="🥧" />
+      <div style={{ background: '#fff', borderRadius: 16, padding: '20px 24px', marginBottom: 24, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6', maxWidth: 500 }}>
+        <div style={{ fontWeight: 800, fontSize: '0.9rem', marginBottom: 12, color: '#111' }}>🥧 Tỷ trọng GMV theo brand</div>
+        {loading ? <div style={{ height: 220, background: '#f9fafb', borderRadius: 12 }} /> : (
+          <ResponsiveContainer width="100%" height={220}>
+            <PieChart>
+              <Pie data={byBrand} dataKey="GMV" nameKey="name" cx="50%" cy="50%" outerRadius={90} labelLine={false}
+                label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+                  if (percent < 0.05) return null;
+                  const R = Math.PI / 180, r = innerRadius + (outerRadius - innerRadius) * 0.55;
+                  return <text x={cx + r * Math.cos(-midAngle * R)} y={cy + r * Math.sin(-midAngle * R)} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={800}>{(percent * 100).toFixed(0)}%</text>;
+                }}>
+                {byBrand.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+              </Pie>
+              <Tooltip formatter={(v, name) => [fmt(v), name]} />
+              <Legend formatter={(name) => <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#374151' }}>{name}</span>} />
+            </PieChart>
+          </ResponsiveContainer>
+        )}
       </div>
 
       {/* ── TOP PRODUCTS TABLE ── */}
