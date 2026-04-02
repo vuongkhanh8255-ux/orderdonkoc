@@ -122,51 +122,51 @@ const isStellaCampaign = (advertiserName) => {
 
 // ─── SUB-COMPONENTS ──────────────────────────────────────────────────────────
 const StatCard = ({ icon, label, value, sub, color = '#ea580c', loading, active, onClick, compare }) => {
+  const sparkPaths = [
+    "polygon(0 60%, 15% 45%, 30% 55%, 45% 35%, 60% 50%, 75% 25%, 90% 35%, 100% 15%, 100% 100%, 0 100%)",
+    "polygon(0 70%, 20% 60%, 40% 70%, 55% 45%, 70% 55%, 85% 30%, 100% 20%, 100% 100%, 0 100%)",
+    "polygon(0 40%, 20% 55%, 40% 45%, 60% 65%, 80% 50%, 100% 70%, 100% 100%, 0 100%)",
+    "polygon(0 55%, 25% 50%, 50% 60%, 75% 40%, 100% 30%, 100% 100%, 0 100%)",
+    "polygon(0 50%, 20% 48%, 40% 52%, 60% 47%, 80% 51%, 100% 45%, 100% 100%, 0 100%)",
+  ];
+  const sparkIdx = Math.abs(label?.charCodeAt(0) || 0) % sparkPaths.length;
   let badge = null;
   if (compare != null && !loading && compare.prev > 0) {
-    const { curr, prev } = compare;
-    const delta = ((curr - prev) / prev) * 100;
+    const delta = ((compare.curr - compare.prev) / compare.prev) * 100;
     const isUp = delta >= 0;
-    badge = (
-      <div style={{
-        fontSize: '0.68rem', fontWeight: 700, marginTop: 3,
-        color: isUp ? '#16a34a' : '#dc2626',
-      }}>
-        {isUp ? '▲' : '▼'}{Math.abs(delta).toFixed(1)}% vs kỳ trước
-      </div>
-    );
+    badge = <div style={{ fontSize: '0.68rem', fontWeight: 700, color: isUp ? '#16a34a' : '#dc2626', marginTop: 4 }}>{isUp ? '▲' : '▼'}{Math.abs(delta).toFixed(1)}% vs kỳ trước</div>;
   }
   return (
     <div onClick={onClick} style={{
-      background: active ? color + '08' : '#fff', borderRadius: '16px', padding: '20px 24px',
-      boxShadow: active ? `0 0 0 2px ${color}, 0 4px 12px ${color}25` : '0 1px 6px rgba(0,0,0,0.06)',
-      border: active ? 'none' : '1px solid #f3f4f6',
-      display: 'flex', gap: '16px', alignItems: 'center',
+      background: '#fff', borderRadius: 14, padding: '20px',
+      border: active ? `2px solid ${color}` : '1px solid #e2e8f0',
+      boxShadow: active ? `0 4px 16px ${color}22` : '0 2px 8px rgba(0,0,0,0.04)',
       cursor: onClick ? 'pointer' : 'default', transition: 'all 0.2s',
     }}>
-      <div style={{
-        width: 48, height: 48, borderRadius: '14px', flexShrink: 0,
-        background: color + '18', display: 'flex', alignItems: 'center',
-        justifyContent: 'center', fontSize: '1.4rem'
-      }}>{icon}</div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: '0.75rem', color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>{label}</div>
-        {loading
-          ? <div style={{ height: 28, width: '60%', background: '#f3f4f6', borderRadius: 6, animation: 'pulse 1.5s infinite' }} />
-          : <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#111', lineHeight: 1.1 }}>{value}</div>
-        }
-        {sub && !loading && <div style={{ fontSize: '0.78rem', color: '#6b7280', marginTop: 2 }}>{sub}</div>}
-        {badge}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+        <span style={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748b' }}>{label}</span>
+        {compare != null && !loading && compare.prev > 0 ? (() => {
+          const delta = ((compare.curr - compare.prev) / compare.prev) * 100;
+          const isUp = delta >= 0;
+          return <span style={{ fontSize: '0.68rem', fontWeight: 700, color: isUp ? '#16a34a' : '#dc2626' }}>{isUp ? '+' : ''}{delta.toFixed(1)}%</span>;
+        })() : active ? <span style={{ fontSize: '0.6rem', fontWeight: 700, color, background: color+'18', padding: '2px 7px', borderRadius: 99 }}>●</span> : null}
       </div>
+      {loading
+        ? <div style={{ height: 32, width: '70%', background: '#f1f5f9', borderRadius: 6, animation: 'pulse 1.5s infinite', marginBottom: 12 }} />
+        : <div style={{ fontSize: '1.55rem', fontWeight: 900, color: '#0f172a', lineHeight: 1, marginBottom: 12 }}>{value}</div>
+      }
+      <div style={{ height: 36, borderRadius: 8, background: color+'14', overflow: 'hidden', position: 'relative' }}>
+        <div style={{ position: 'absolute', inset: 0, background: color, opacity: 0.2, clipPath: sparkPaths[sparkIdx] }} />
+      </div>
+      {sub && !loading && <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: 8, fontWeight: 500 }}>{sub}</div>}
     </div>
   );
 };
 
-const SectionHeader = ({ title, icon }) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '28px 0 14px' }}>
-    <span style={{ fontSize: '1.3rem' }}>{icon}</span>
-    <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#111', letterSpacing: '0.3px' }}>{title}</h3>
-    <div style={{ flex: 1, height: 1, background: '#f3f4f6', marginLeft: 8 }} />
+const SectionHeader = ({ title, icon, subtitle }) => (
+  <div style={{ marginTop: 40, marginBottom: 20 }}>
+    <h2 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 900, color: '#0f172a', letterSpacing: '-0.03em', lineHeight: 1 }}>{title}</h2>
+    {subtitle && <p style={{ margin: '5px 0 0', fontSize: '0.82rem', color: '#64748b', fontWeight: 500 }}>{subtitle}</p>}
   </div>
 );
 
@@ -795,28 +795,28 @@ const StellaDashboardTab = () => {
   };
 
   return (
-    <div style={{ fontFamily: "'Outfit', sans-serif", color: '#111', maxWidth: 1300, margin: '0 auto' }}>
+    <div style={{ fontFamily: "'Inter', 'Outfit', sans-serif", color: '#0f172a', maxWidth: 1300, margin: '0 auto', background: '#f8fafc', minHeight: '100vh', padding: '0 0 48px' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '18px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 0 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 900, color: '#ea580c' }}>📊 Stella Dashboard</h1>
-          <p style={{ margin: '4px 0 0', color: '#9ca3af', fontSize: '0.82rem' }}>
+          <h1 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em' }}>Stella Dashboard</h1>
+          <p style={{ margin: '3px 0 0', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 500 }}>
             {lastUpdated ? `Cập nhật lần cuối: ${lastUpdated.toLocaleTimeString('vi-VN')}` : 'Đang tải dữ liệu...'}
             {!loading && productData.length > 0 && (
-              <span style={{ marginLeft: 12, color: '#f59e0b', fontWeight: 700 }}>
-                📦 Sản phẩm: {maxProductDate.toLocaleDateString('vi-VN')}
-                {adsData.length > 0 && <span style={{ color: '#60a5fa', marginLeft: 8 }}>📣 Ads: {maxAdsDate.toLocaleDateString('vi-VN')}</span>}
-                {' '}<span style={{ color: '#9ca3af', fontWeight: 400 }}>(Bộ lọc kỳ tính từ ngày sản phẩm)</span>
+              <span style={{ marginLeft: 10, color: '#f59e0b', fontWeight: 700 }}>
+                📦 {maxProductDate.toLocaleDateString('vi-VN')}
+                {adsData.length > 0 && <span style={{ color: '#60a5fa', marginLeft: 8 }}>📣 {maxAdsDate.toLocaleDateString('vi-VN')}</span>}
               </span>
             )}
           </p>
         </div>
         <button onClick={fetchAll} style={{
-          padding: '10px 20px', borderRadius: 12, background: '#ea580c', color: '#fff',
-          border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem',
-          boxShadow: '0 2px 8px rgba(234,88,12,0.25)', display: 'flex', alignItems: 'center', gap: 6
+          padding: '9px 18px', borderRadius: 10, background: '#ea580c', color: '#fff',
+          border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: '0.82rem',
+          boxShadow: '0 2px 8px rgba(234,88,12,0.3)', display: 'flex', alignItems: 'center', gap: 6, letterSpacing: '-0.01em'
         }}>🔄 Làm mới</button>
       </div>
+      <div style={{ padding: '24px 28px' }}>
 
       {/* Errors */}
       {errors.length > 0 && (
@@ -826,7 +826,7 @@ const StellaDashboardTab = () => {
       )}
 
       {/* ── FILTERS ── */}
-      <div style={{ background: '#fff', borderRadius: 14, padding: '16px 20px', marginBottom: 20, border: '1px solid #f3f4f6', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+      <div style={{ background: '#fff', borderRadius: 14, padding: '16px 20px', marginBottom: 28, border: '1px solid #e2e8f0', boxShadow: '0 1px 4px rgba(0,0,0,0.03)', position: 'sticky', top: 0, zIndex: 10 }}>
         {/* Row 1: Platform + Brand */}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
           <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#6b7280' }}>Sàn:</span>
@@ -886,7 +886,7 @@ const StellaDashboardTab = () => {
       </div>
 
       {/* ══ SECTION 1: TỔNG QUAN ══ */}
-      <SectionHeader title="Tổng Quan" icon="📈" />
+      <SectionHeader title="Tổng Quan" subtitle="Chỉ số hiệu suất tổng hợp theo ngày." />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 14 }}>
         <StatCard icon="👁️" label="Traffic"    value={totalTraffic.toLocaleString('vi-VN')} sub="lượt xem"   color="#6366f1" loading={loading} active={s1Metrics.includes('traffic')} onClick={() => toggleMetric('traffic', setS1Metrics)} compare={getPrevBounds ? { curr: totalTraffic, prev: prevTraffic } : null} />
         <StatCard icon="💰" label="Tổng GMV"   value={fmt(totalGMV)} sub={fmtFull(totalGMV)}                  color="#ea580c" loading={loading} active={s1Metrics.includes('gmv')}     onClick={() => toggleMetric('gmv', setS1Metrics)}     compare={getPrevBounds ? { curr: totalGMV, prev: prevGMV } : null} />
@@ -896,7 +896,7 @@ const StellaDashboardTab = () => {
       </div>
 
       {/* Section 1 Chart */}
-      <div style={{ background: '#fff', borderRadius: 16, padding: '18px 24px', marginBottom: 28, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
+      <div style={{ background: '#fff', borderRadius: 14, padding: '20px 24px', marginBottom: 36, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid #e2e8f0' }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
           {Object.entries(S1_CONFIGS).map(([k, cfg]) => {
             const isP = s1Metrics[0] === k, isS = s1Metrics[1] === k;
@@ -921,7 +921,7 @@ const StellaDashboardTab = () => {
       </div>
 
       {/* ══ SECTION 2: ADS ══ */}
-      <SectionHeader title="ADS" icon="📢" />
+      <SectionHeader title="Ads" subtitle="Hiệu suất chi tiêu quảng cáo có trả phí." />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 14 }}>
         <StatCard icon="📢" label="Chi phí Ads"   value={fmt(totalAdsCost)} sub={fmtFull(totalAdsCost)}         color="#3b82f6" loading={loading} active={s2Metrics.includes('adsCost')}    onClick={() => toggleMetric('adsCost', setS2Metrics)}    compare={getPrevBounds ? { curr: totalAdsCost, prev: prevAdsCost } : null} />
         <StatCard icon="💰" label="Doanh thu Ads" value={fmt(totalAdsRevenue)} sub={fmtFull(totalAdsRevenue)}   color="#10b981" loading={loading} active={s2Metrics.includes('adsRevenue')} onClick={() => toggleMetric('adsRevenue', setS2Metrics)} compare={getPrevBounds ? { curr: totalAdsRevenue, prev: prevAdsRevenue } : null} />
@@ -931,7 +931,7 @@ const StellaDashboardTab = () => {
       </div>
 
       {/* Section 2 Chart */}
-      <div style={{ background: '#fff', borderRadius: 16, padding: '18px 24px', marginBottom: 28, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
+      <div style={{ background: '#fff', borderRadius: 14, padding: '20px 24px', marginBottom: 36, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid #e2e8f0' }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
           {Object.entries(S2_CONFIGS).map(([k, cfg]) => {
             const isP = s2Metrics[0] === k, isS = s2Metrics[1] === k;
@@ -956,44 +956,104 @@ const StellaDashboardTab = () => {
       </div>
 
       {/* ══ PHÂN TÍCH BRAND ══ */}
-      <SectionHeader title="Phân Tích" icon="🥧" />
-      <div style={{ background: '#fff', borderRadius: 16, padding: '20px 24px', marginBottom: 24, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6', maxWidth: 500 }}>
-        <div style={{ fontWeight: 800, fontSize: '0.9rem', marginBottom: 12, color: '#111' }}>🥧 Tỷ trọng GMV theo brand</div>
-        {loading ? <div style={{ height: 220, background: '#f9fafb', borderRadius: 12 }} /> : (
-          <ResponsiveContainer width="100%" height={220}>
-            <PieChart>
-              <Pie data={byBrand} dataKey="GMV" nameKey="name" cx="50%" cy="50%" outerRadius={90} labelLine={false}
-                label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-                  if (percent < 0.05) return null;
-                  const R = Math.PI / 180, r = innerRadius + (outerRadius - innerRadius) * 0.55;
-                  return <text x={cx + r * Math.cos(-midAngle * R)} y={cy + r * Math.sin(-midAngle * R)} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={800}>{(percent * 100).toFixed(0)}%</text>;
-                }}>
-                {byBrand.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-              </Pie>
-              <Tooltip formatter={(v, name) => [fmt(v), name]} />
-              <Legend formatter={(name) => <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#374151' }}>{name}</span>} />
-            </PieChart>
-          </ResponsiveContainer>
-        )}
+      <SectionHeader title="Phân Tích" subtitle="Phân tích chi tiết doanh thu theo nhãn hàng." />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, marginBottom: 28, alignItems: 'start' }}>
+        {/* Brand GMV Table */}
+        <div style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem' }}>
+            <thead>
+              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                <th style={{ padding: '12px 20px', textAlign: 'left', fontWeight: 800, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748b' }}>Brand</th>
+                <th style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 800, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748b' }}>GMV</th>
+                <th style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 800, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748b' }}>Đơn</th>
+                <th style={{ padding: '12px 20px', textAlign: 'left', fontWeight: 800, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748b' }}>Share</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? Array.from({ length: 5 }).map((_, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  {[1,2,3,4].map(j => <td key={j} style={{ padding: '14px 20px' }}><div style={{ height: 14, background: '#f1f5f9', borderRadius: 4, animation: 'pulse 1.5s infinite' }} /></td>)}
+                </tr>
+              )) : (() => {
+                const totalGMVBrand = byBrand.reduce((s, d) => s + d.GMV, 0);
+                const initials = (n) => n.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+                return byBrand.map((item, i) => {
+                  const pct = totalGMVBrand > 0 ? (item.GMV / totalGMVBrand * 100) : 0;
+                  return (
+                    <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#fef7f0'}
+                      onMouseLeave={e => e.currentTarget.style.background = ''}>
+                      <td style={{ padding: '14px 20px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ width: 32, height: 32, borderRadius: 8, background: COLORS[i % COLORS.length]+'20', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 900, color: COLORS[i % COLORS.length], flexShrink: 0 }}>
+                            {initials(item.name)}
+                          </div>
+                          <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.85rem' }}>{item.name}</span>
+                        </div>
+                      </td>
+                      <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 800, color: '#ea580c', fontSize: '0.85rem' }}>{fmt(item.GMV)}</td>
+                      <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 600, color: '#64748b', fontSize: '0.82rem' }}>{(item.orders||0).toLocaleString()}</td>
+                      <td style={{ padding: '14px 20px', minWidth: 120 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ flex: 1, height: 5, background: '#f1f5f9', borderRadius: 99, overflow: 'hidden' }}>
+                            <div style={{ width: pct+'%', height: '100%', background: COLORS[i % COLORS.length], borderRadius: 99 }} />
+                          </div>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', minWidth: 32 }}>{pct.toFixed(0)}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                });
+              })()}
+            </tbody>
+          </table>
+        </div>
+        {/* Ring chart */}
+        <div style={{ background: '#fff', borderRadius: 14, padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', width: 280, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div style={{ fontWeight: 800, fontSize: '0.85rem', color: '#0f172a', marginBottom: 16 }}>Brand Distribution</div>
+          {loading ? <div style={{ height: 200, width: 200, background: '#f1f5f9', borderRadius: '50%', animation: 'pulse 1.5s infinite' }} /> : (
+            <ResponsiveContainer width={200} height={200}>
+              <PieChart>
+                <Pie data={byBrand} dataKey="GMV" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={88} labelLine={false}
+                  label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+                    if (percent < 0.07) return null;
+                    const R = Math.PI / 180, r = innerRadius + (outerRadius - innerRadius) * 0.55;
+                    return <text x={cx + r * Math.cos(-midAngle * R)} y={cy + r * Math.sin(-midAngle * R)} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={10} fontWeight={800}>{(percent * 100).toFixed(0)}%</text>;
+                  }}>
+                  {byBrand.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Pie>
+                <Tooltip formatter={(v, name) => [fmt(v), name]} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+          <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: '8px 16px', justifyContent: 'center' }}>
+            {byBrand.slice(0,4).map((item, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: COLORS[i % COLORS.length] }} />
+                <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{item.name.split(' ')[0]} {byBrand.reduce((s,d)=>s+d.GMV,0) > 0 ? Math.round(item.GMV/byBrand.reduce((s,d)=>s+d.GMV,0)*100)+'%' : ''}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* ── TOP PRODUCTS TABLE ── */}
-      <SectionHeader title="Top Sản Phẩm" icon="🏆" />
+      <SectionHeader title="Top Sản Phẩm" subtitle="Sản phẩm bán chạy nhất theo kỳ đã chọn." />
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
         {[['gmv', '💰 Theo GMV'], ['orders', '📦 Theo đơn'], ['qty', '🛒 Theo số lượng']].map(([k, l]) => (
           <button key={k} style={tabStyle(activeProductTab === k)} onClick={() => setActiveProductTab(k)}>{l}</button>
         ))}
       </div>
-      <div style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
+      <div style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid #e2e8f0' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem' }}>
           <thead>
-            <tr style={{ background: '#f9fafb', borderBottom: '2px solid #f3f4f6' }}>
-              <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 800, color: '#374151', width: 36 }}>#</th>
-              <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 800, color: '#374151' }}>Sản phẩm</th>
-              <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: '#374151' }}>GMV</th>
-              <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: '#374151' }}>Đơn</th>
-              <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: '#374151' }}>SL bán</th>
-              <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 800, color: '#374151' }}>Sàn</th>
+            <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+              <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 800, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748b', width: 36 }}>#</th>
+              <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 800, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748b' }}>Sản phẩm</th>
+              <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748b' }}>GMV</th>
+              <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748b' }}>Đơn</th>
+              <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748b' }}>SL bán</th>
+              <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 800, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748b' }}>Sàn</th>
             </tr>
           </thead>
           <tbody>
@@ -1030,8 +1090,8 @@ const StellaDashboardTab = () => {
       </div>
 
       {/* ── ADS TABLE ── */}
-      <SectionHeader title="Chi Tiết Ads theo Nhãn Hàng" icon="📢" />
-      <div style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6', marginBottom: 32 }}>
+      <SectionHeader title="Chi Tiết Ads theo Nhãn Hàng" subtitle="Chi phí, doanh thu và hiệu quả quảng cáo theo từng brand." />
+      <div style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid #e2e8f0', marginBottom: 36 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem' }}>
           <thead>
             <tr style={{ background: '#f9fafb', borderBottom: '2px solid #f3f4f6' }}>
@@ -1094,7 +1154,7 @@ const StellaDashboardTab = () => {
       </div>
 
       {/* ══ SECTION 3: CHIẾN DỊCH TIKTOK ADS ══ */}
-      <SectionHeader title="Chiến Dịch TikTok Ads" icon="🎯" />
+      <SectionHeader title="Chiến Dịch TikTok Ads" subtitle="Chi phí theo từng chiến dịch quảng cáo TikTok." />
 
       {/* KPI row — clickable cards swap chart metric */}
       {(() => {
@@ -1197,7 +1257,7 @@ const StellaDashboardTab = () => {
       </div>
 
       {/* Campaign breakdown table */}
-      <div style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6', marginBottom: 32 }}>
+      <div style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid #e2e8f0', marginBottom: 36 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem' }}>
           <thead>
             <tr style={{ background: '#f9fafb', borderBottom: '2px solid #f3f4f6' }}>
@@ -1254,6 +1314,7 @@ const StellaDashboardTab = () => {
         </table>
       </div>
 
+      </div>
       <style>{`
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
       `}</style>
