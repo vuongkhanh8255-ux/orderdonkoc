@@ -99,11 +99,21 @@ const S2_CONFIGS = {
 const normalizeBrand = (orgName) => {
   if (!orgName) return 'Không rõ';
   const n = orgName.toLowerCase().replace(/[\s_]/g, '');
-  if (n.includes('bodymiss'))  return 'Body Miss';
+  if (n.includes('bodymiss'))   return 'Body Miss';
   if (n.includes('milaganics')) return 'Milaganics';
-  if (n.includes('moaw'))      return 'Moaw Moaws';
-  if (n.includes('eherb'))     return 'eHerb';
+  if (n.includes('moaw'))       return 'Moaw Moaws';
+  if (n.includes('eherb'))      return 'eHerb';
+  if (n.includes('healmii'))    return 'Healmii';
+  if (n.includes('masube'))     return 'MASUBE';
+  if (n.includes('realsteel') || n.includes('real steel')) return 'Real Steel';
   return orgName.replace(/^(Tiktok|Shopee)\s*[-–]\s*/i, '').trim();
+};
+
+// Kiểm tra advertiser có phải internal/Stella không → loại khỏi campaign stats
+const isStellaCampaign = (advertiserName) => {
+  if (!advertiserName) return false;
+  const n = advertiserName.toLowerCase();
+  return n.includes('stella') || n.includes('web');
 };
 
 // ─── SUB-COMPONENTS ──────────────────────────────────────────────────────────
@@ -424,6 +434,7 @@ const StellaDashboardTab = () => {
   // Campaign data filtered (TikTok Ads spend per campaign)
   const filteredCampaigns = useMemo(() => {
     return campaignData.filter(d => {
+      if (isStellaCampaign(d.advertiser_name)) return false;
       if (periodMode === 'all' && d.stat_time_day < DATA_START) return false;
       const matchBrand = brandFilter === 'All' || normalizeBrand(d.advertiser_name) === normalizeBrand(brandFilter);
       // Campaign API chỉ có TikTok data
@@ -446,6 +457,17 @@ const StellaDashboardTab = () => {
   }, [filteredCampaigns]);
 
   const totalCampaignSpend = useMemo(() => filteredCampaigns.reduce((s, d) => s + (d.total_spend || 0), 0), [filteredCampaigns]);
+
+  // Aggregate by brand
+  const campaignsByBrand = useMemo(() => {
+    const map = {};
+    filteredCampaigns.forEach(d => {
+      const brand = normalizeBrand(d.advertiser_name);
+      if (!map[brand]) map[brand] = { brand, spend: 0 };
+      map[brand].spend += d.total_spend || 0;
+    });
+    return Object.values(map).sort((a, b) => b.spend - a.spend);
+  }, [filteredCampaigns]);
 
   // Campaign daily trend (top 5 campaigns)
   const campaignTrendData = useMemo(() => {
@@ -1118,6 +1140,60 @@ const StellaDashboardTab = () => {
           </div>
         );
       })()}
+
+      {/* Brand summary table */}
+      <div style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6', marginBottom: 16 }}>
+        <div style={{ padding: '14px 20px', borderBottom: '2px solid #f3f4f6', fontWeight: 800, fontSize: '0.88rem', color: '#111' }}>
+          📊 Tổng chi phí theo Brand
+        </div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+          <thead>
+            <tr style={{ background: '#f9fafb' }}>
+              <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 700, color: '#374151' }}>Brand</th>
+              <th style={{ padding: '10px 16px', textAlign: 'right', fontWeight: 700, color: '#374151' }}>Chi phí Ads</th>
+              <th style={{ padding: '10px 16px', textAlign: 'right', fontWeight: 700, color: '#374151' }}>% Tổng</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading
+              ? Array.from({ length: 4 }).map((_, i) => (
+                <tr key={i} style={{ borderTop: '1px solid #f3f4f6' }}>
+                  {[1,2,3].map(j => <td key={j} style={{ padding: '12px 16px' }}><div style={{ height: 14, background: '#f3f4f6', borderRadius: 4, animation: 'pulse 1.5s infinite' }} /></td>)}
+                </tr>
+              ))
+              : campaignsByBrand.map((item, i) => {
+                const pct = totalCampaignSpend > 0 ? (item.spend / totalCampaignSpend * 100) : 0;
+                return (
+                  <tr key={i} style={{ borderTop: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '12px 16px', fontWeight: 700, color: '#111' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: COLORS[i % COLORS.length], display: 'inline-block' }} />
+                        {item.brand}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: '#f43f5e' }}>{fmt(item.spend)}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                        <div style={{ width: 60, height: 6, background: '#f3f4f6', borderRadius: 99, overflow: 'hidden' }}>
+                          <div style={{ width: pct + '%', height: '100%', background: COLORS[i % COLORS.length], borderRadius: 99 }} />
+                        </div>
+                        <span style={{ fontWeight: 700, color: '#374151', minWidth: 36 }}>{pct.toFixed(1)}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            }
+            {!loading && campaignsByBrand.length > 0 && (
+              <tr style={{ borderTop: '2px solid #f3f4f6', background: '#fafafa' }}>
+                <td style={{ padding: '12px 16px', fontWeight: 900, color: '#111' }}>TỔNG</td>
+                <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 900, color: '#f43f5e' }}>{fmt(totalCampaignSpend)}</td>
+                <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: '#9ca3af' }}>100%</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
 
       {/* Campaign breakdown table */}
       <div style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6', marginBottom: 32 }}>
