@@ -4,7 +4,8 @@ import DateRangePicker from './DateRangePicker';
 import {
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, Legend,
-  Line, Area, AreaChart, ComposedChart
+  Line, Area, AreaChart, ComposedChart,
+  BarChart, Bar
 } from 'recharts';
 
 // ─── API PATHS ────────────────────────────────────────────────────────────────
@@ -12,7 +13,8 @@ const BASE = '/bluecore-api/api/services/app/PublicRecommendation/Get?tenancyNam
 const API_ORDERS  = BASE + '&sectionName=Stella_API_donhang';   // đơn hàng tổng hợp theo ngày/org
 const API_PRODUCT = BASE + '&sectionName=Stella_api_product';   // chi tiết sản phẩm (dùng cho top products / brand chart)
 const API_TRAFFIC = BASE + '&sectionName=Stella_api_traffic';
-const API_ADS     = BASE + '&sectionName=stella_api_tongquanads';
+const API_ADS      = BASE + '&sectionName=stella_api_tongquanads';
+const API_CAMPAIGNS = BASE + '&sectionName=Stella_api_tiktokads_spend';
 
 // Danh sách shop filters — dùng chung cho orders + traffic
 const SHOP_FILTERS = [
@@ -168,6 +170,7 @@ const StellaDashboardTab = () => {
   const [productData, setProductData] = useState([]); // Stella_api_product — brand/product breakdown
   const [trafficData, setTrafficData] = useState([]);
   const [adsData, setAdsData] = useState([]);
+  const [campaignData, setCampaignData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -191,9 +194,10 @@ const StellaDashboardTab = () => {
     setErrors([]);
     const errs = [];
     try {
-      // Fetch tất cả parallel: Product + Orders/Traffic/Ads per filter
-      const [jProduct, ...filterResults] = await Promise.all([
+      // Fetch tất cả parallel: Product + Orders/Traffic/Ads per filter + Campaigns
+      const [jProduct, jCampaigns, ...filterResults] = await Promise.all([
         fetchAllRows(API_PRODUCT),
+        fetch(API_CAMPAIGNS + '&size=5000').then(r => r.json()).catch(() => ({ result: [] })),
         ...SHOP_FILTERS.map(f =>
           fetchAllRows(API_ORDERS + '&filter=' + encodeURIComponent(f))
             .catch(() => ({ success: false, result: [] }))
@@ -237,6 +241,10 @@ const StellaDashboardTab = () => {
       if (allAds.length) {
         setAdsData(allAds);
       } else errs.push('Ads API: không có data');
+
+      if (jCampaigns.result?.length) {
+        setCampaignData(jCampaigns.result.map(i => i._source));
+      }
 
       setLastUpdated(new Date());
     } catch (e) {
@@ -412,6 +420,45 @@ const StellaDashboardTab = () => {
       return matchPlatform && matchBrand && matchDate(ts);
     });
   }, [normalizedAds, platformFilter, brandFilter, periodMode, dateRange]);
+
+  // Campaign data filtered (TikTok Ads spend per campaign)
+  const filteredCampaigns = useMemo(() => {
+    return campaignData.filter(d => {
+      if (periodMode === 'all' && d.stat_time_day < DATA_START) return false;
+      const matchBrand = brandFilter === 'All' || normalizeBrand(d.advertiser_name) === normalizeBrand(brandFilter);
+      // Campaign API chỉ có TikTok data
+      if (platformFilter === 'Shopee') return false;
+      return matchBrand && matchDate(d.stat_time_day);
+    });
+  }, [campaignData, brandFilter, platformFilter, periodMode, dateRange]);
+
+  // Aggregate campaigns by name+advertiser for table
+  const campaignsByName = useMemo(() => {
+    const map = {};
+    filteredCampaigns.forEach(d => {
+      const brand = normalizeBrand(d.advertiser_name);
+      const key = d.campaign_name.trim() + '|' + brand;
+      if (!map[key]) map[key] = { campaign: d.campaign_name.trim(), brand, spend: 0, days: 0 };
+      map[key].spend += d.total_spend || 0;
+      map[key].days += 1;
+    });
+    return Object.values(map).sort((a, b) => b.spend - a.spend);
+  }, [filteredCampaigns]);
+
+  const totalCampaignSpend = useMemo(() => filteredCampaigns.reduce((s, d) => s + (d.total_spend || 0), 0), [filteredCampaigns]);
+
+  // Campaign daily trend (top 5 campaigns)
+  const campaignTrendData = useMemo(() => {
+    const top5 = campaignsByName.slice(0, 5).map(c => c.campaign);
+    const map = {};
+    filteredCampaigns.filter(d => top5.includes(d.campaign_name.trim())).forEach(d => {
+      const day = new Date(d.stat_time_day).toISOString().slice(0, 10);
+      if (!map[day]) map[day] = { date: day.slice(5), fullDate: day };
+      const campKey = d.campaign_name.trim();
+      map[day][campKey] = (map[day][campKey] || 0) + (d.total_spend || 0);
+    });
+    return Object.values(map).sort((a, b) => a.fullDate.localeCompare(b.fullDate));
+  }, [filteredCampaigns, campaignsByName]);
 
   // Previous period filter (same duration, shifted back)
   const getPrevBounds = useMemo(() => {
@@ -1014,6 +1061,117 @@ const StellaDashboardTab = () => {
                 <td style={{ padding: '14px 16px', textAlign: 'right', fontWeight: 900, color: '#ea580c' }}>{totalAdsOrd > 0 ? fmt(avgCPO) : '—'}</td>
                 <td style={{ padding: '14px 16px', textAlign: 'right', fontWeight: 900, color: roas >= 3 ? '#10b981' : '#f59e0b' }}>{roas > 0 ? roas.toFixed(2) + 'x' : '—'}</td>
               </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ══ SECTION 3: CHIẾN DỊCH TIKTOK ADS ══ */}
+      <SectionHeader title="Chiến Dịch TikTok Ads" icon="🎯" />
+
+      {/* KPI row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 12, marginBottom: 20 }}>
+        <StatCard icon="💸" label="Tổng chi phí chiến dịch" value={fmt(totalCampaignSpend)} sub={Number(totalCampaignSpend).toLocaleString('vi-VN')+'₫'} color="#f43f5e" loading={loading} />
+        <StatCard icon="📋" label="Số chiến dịch" value={campaignsByName.length.toLocaleString()} sub="chiến dịch active" color="#8b5cf6" loading={loading} />
+        <StatCard icon="📅" label="Avg chi phí/ngày" value={fmt(filteredCampaigns.length > 0 ? totalCampaignSpend / [...new Set(filteredCampaigns.map(d => new Date(d.stat_time_day).toISOString().slice(0,10)))].length : 0)} sub="₫/ngày" color="#0ea5e9" loading={loading} />
+      </div>
+
+      {/* Trend chart: top 5 campaigns */}
+      {!loading && campaignTrendData.length > 0 && campaignsByName.length > 0 && (() => {
+        const top5 = campaignsByName.slice(0, 5);
+        const campColors = ['#f43f5e','#8b5cf6','#0ea5e9','#f59e0b','#10b981'];
+        return (
+          <div style={{ background: '#fff', borderRadius: 16, padding: '18px 24px', marginBottom: 20, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
+            <div style={{ fontWeight: 800, fontSize: '0.9rem', marginBottom: 14, color: '#111' }}>📈 Chi phí theo ngày — Top 5 chiến dịch</div>
+            <ResponsiveContainer width="100%" height={240}>
+              <AreaChart data={campaignTrendData} margin={{ top: 10, right: 20, left: 0, bottom: 4 }}>
+                <defs>
+                  {top5.map((c, i) => (
+                    <linearGradient key={i} id={`cg${i}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={campColors[i]} stopOpacity={0.15} />
+                      <stop offset="95%" stopColor={campColors[i]} stopOpacity={0} />
+                    </linearGradient>
+                  ))}
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#9ca3af' }} tickLine={false} axisLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} tickLine={false} axisLine={false} tickFormatter={v => fmt(v)} width={72} />
+                <Tooltip
+                  contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', fontFamily: "'Outfit',sans-serif" }}
+                  formatter={(v, name) => [fmt(v), name]}
+                  labelFormatter={(l, p) => p?.[0]?.payload?.fullDate || l}
+                />
+                {top5.map((c, i) => (
+                  <Area key={i} type="monotone" dataKey={c.campaign} stroke={campColors[i]} strokeWidth={2} fill={`url(#cg${i})`} dot={false} activeDot={{ r: 4 }} />
+                ))}
+              </AreaChart>
+            </ResponsiveContainer>
+            {/* Legend */}
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 10 }}>
+              {top5.map((c, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', fontWeight: 600, color: '#374151' }}>
+                  <span style={{ width: 12, height: 12, borderRadius: 3, background: campColors[i], display: 'inline-block', flexShrink: 0 }} />
+                  {c.campaign} <span style={{ color: '#9ca3af', fontWeight: 400 }}>({c.brand})</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Campaign breakdown table */}
+      <div style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6', marginBottom: 32 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem' }}>
+          <thead>
+            <tr style={{ background: '#f9fafb', borderBottom: '2px solid #f3f4f6' }}>
+              <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 800, color: '#374151', width: 36 }}>#</th>
+              <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 800, color: '#374151' }}>Chiến dịch</th>
+              <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 800, color: '#374151' }}>Nhãn hàng</th>
+              <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: '#374151' }}>Chi phí</th>
+              <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: '#374151' }}>% Tổng</th>
+              <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: '#374151' }}>Số ngày</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading
+              ? Array.from({ length: 5 }).map((_, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid #f9fafb' }}>
+                  {Array.from({ length: 6 }).map((_, j) => (
+                    <td key={j} style={{ padding: '14px 16px' }}><div style={{ height: 14, background: '#f3f4f6', borderRadius: 4, animation: 'pulse 1.5s infinite' }} /></td>
+                  ))}
+                </tr>
+              ))
+              : campaignsByName.slice(0, 20).map((item, i) => {
+                const pct = totalCampaignSpend > 0 ? (item.spend / totalCampaignSpend * 100) : 0;
+                return (
+                  <tr key={i} style={{ borderBottom: '1px solid #f9fafb', transition: 'background 0.15s' }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#fff5f5'}
+                    onMouseLeave={e => e.currentTarget.style.background = ''}>
+                    <td style={{ padding: '12px 16px', color: i < 3 ? '#f43f5e' : '#9ca3af', fontWeight: 800 }}>
+                      {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+                    </td>
+                    <td style={{ padding: '12px 16px', fontWeight: 600, color: '#111', maxWidth: 280 }}>
+                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.campaign}</div>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <span style={{ padding: '2px 10px', borderRadius: 99, background: '#fef3c7', color: '#92400e', fontSize: '0.75rem', fontWeight: 700 }}>{item.brand}</span>
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: '#f43f5e' }}>{fmt(item.spend)}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                        <div style={{ width: 60, height: 6, background: '#f3f4f6', borderRadius: 99, overflow: 'hidden' }}>
+                          <div style={{ width: pct + '%', height: '100%', background: '#f43f5e', borderRadius: 99 }} />
+                        </div>
+                        <span style={{ fontWeight: 700, color: '#374151', fontSize: '0.8rem', minWidth: 36 }}>{pct.toFixed(1)}%</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', color: '#6b7280', fontWeight: 600 }}>{item.days}</td>
+                  </tr>
+                );
+              })
+            }
+            {!loading && campaignsByName.length === 0 && (
+              <tr><td colSpan={6} style={{ padding: 32, textAlign: 'center', color: '#9ca3af' }}>Không có data chiến dịch cho kỳ này</td></tr>
             )}
           </tbody>
         </table>
