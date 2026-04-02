@@ -165,7 +165,7 @@ const StatCard = ({ icon, label, value, sub, color = '#ea580c', loading, active,
 
 const SectionHeader = ({ title, icon, subtitle }) => (
   <div style={{ marginTop: 40, marginBottom: 20 }}>
-    <h2 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 900, color: '#0f172a', letterSpacing: '-0.03em', lineHeight: 1 }}>{title}</h2>
+    <h2 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 900, color: '#0f172a', letterSpacing: 'normal', lineHeight: 1.1 }}>{title}</h2>
     {subtitle && <p style={{ margin: '5px 0 0', fontSize: '0.82rem', color: '#64748b', fontWeight: 500 }}>{subtitle}</p>}
   </div>
 );
@@ -826,62 +826,83 @@ const StellaDashboardTab = () => {
       )}
 
       {/* ── FILTERS ── */}
-      <div style={{ background: '#fff', borderRadius: 14, padding: '16px 20px', marginBottom: 28, border: '1px solid #e2e8f0', boxShadow: '0 1px 4px rgba(0,0,0,0.03)', position: 'sticky', top: 0, zIndex: 10 }}>
-        {/* Row 1: Platform + Brand */}
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
-          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#6b7280' }}>Sàn:</span>
-          {['All', 'TikTok', 'Shopee'].map(p => (
-            <button key={p} style={filterBtnStyle(platformFilter === p)} onClick={() => setPlatformFilter(p)}>{p === 'All' ? '🌐 Tất cả' : p === 'TikTok' ? '🎵 TikTok' : '🛍️ Shopee'}</button>
-          ))}
-          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#6b7280', marginLeft: 8 }}>Nhãn hàng:</span>
-          <select value={brandFilter} onChange={e => setBrandFilter(e.target.value)} style={{
-            padding: '7px 12px', borderRadius: 10, border: '1px solid #e5e7eb', fontSize: '0.82rem',
-            fontFamily: "'Outfit', sans-serif", fontWeight: 600, background: '#fff', cursor: 'pointer', color: '#333'
-          }}>
-            {allBrands.map(b => <option key={b} value={b}>{b === 'All' ? '— Tất cả nhãn hàng —' : b}</option>)}
-          </select>
-        </div>
+      <div style={{ background: '#fff', borderRadius: 14, padding: '16px 24px', marginBottom: 28, border: '1px solid #e2e8f0', boxShadow: '0 1px 4px rgba(0,0,0,0.03)', position: 'sticky', top: 0, zIndex: 10 }}>
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-end' }}>
 
-        {/* Row 2: Period + Popup Calendar */}
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', position: 'relative' }}>
-          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#6b7280' }}>Kỳ:</span>
-          {[['all','📅 Tất cả'], ['1','1 Ngày'], ['7','7 Ngày'], ['30','30 Ngày']].map(([v, l]) => (
-            <button key={v} style={filterBtnStyle(periodMode === v)}
-              onClick={() => { setPeriodMode(v); setShowPicker(false); }}>
-              {l}
-            </button>
-          ))}
-
-          {/* Tuỳ chọn button → opens popup */}
-          <div ref={pickerRef} style={{ position: 'relative' }}>
-            <button
-              style={filterBtnStyle(periodMode === 'range', '#0D9488')}
-              onClick={() => { setPeriodMode('range'); setShowPicker(v => !v); }}
-            >
-              📆 Tuỳ chọn
-              {periodMode === 'range' && dateRange.start && (
-                <span style={{ marginLeft: 6, fontWeight: 400, fontSize: '0.75rem', opacity: 0.85 }}>
-                  {dateRange.start.toLocaleDateString('vi-VN',{day:'2-digit',month:'2-digit'})}
-                  {dateRange.end ? ' → ' + dateRange.end.toLocaleDateString('vi-VN',{day:'2-digit',month:'2-digit'}) : ''}
-                </span>
-              )}
-            </button>
-
-            {/* Popup calendar */}
-            {showPicker && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 999 }}>
-                <DateRangePicker
-                  value={dateRange}
-                  anchorDate={maxProductDate}
-                  onChange={(r) => {
-                    setDateRange(r);
-                    setPeriodMode('range');
-                  }}
-                  onClose={() => setShowPicker(false)}
-                />
-              </div>
-            )}
+          {/* Nhãn hàng */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94a3b8' }}>Thương hiệu</label>
+            <select value={brandFilter} onChange={e => setBrandFilter(e.target.value)} style={{
+              padding: '8px 32px 8px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: '0.82rem',
+              fontWeight: 600, background: '#f8fafc', cursor: 'pointer', color: '#0f172a', outline: 'none',
+              appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E")`,
+              backgroundPosition: 'right 8px center', backgroundRepeat: 'no-repeat', backgroundSize: '16px', minWidth: 180,
+            }}>
+              {allBrands.map(b => <option key={b} value={b}>{b === 'All' ? 'Tất cả thương hiệu' : b}</option>)}
+            </select>
           </div>
+
+          {/* Sàn */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94a3b8' }}>Sàn</label>
+            <select value={platformFilter} onChange={e => setPlatformFilter(e.target.value)} style={{
+              padding: '8px 32px 8px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: '0.82rem',
+              fontWeight: 600, background: '#f8fafc', cursor: 'pointer', color: '#0f172a', outline: 'none',
+              appearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E")`,
+              backgroundPosition: 'right 8px center', backgroundRepeat: 'no-repeat', backgroundSize: '16px', minWidth: 160,
+            }}>
+              <option value="All">Tất cả sàn</option>
+              <option value="TikTok">TikTok</option>
+              <option value="Shopee">Shopee</option>
+            </select>
+          </div>
+
+          {/* Khung thời gian */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, position: 'relative' }}>
+            <label style={{ fontSize: '0.62rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94a3b8' }}>Khung thời gian</label>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              {[['all','Tất cả'], ['1','1 Ngày'], ['7','7 Ngày'], ['30','30 Ngày']].map(([v, l]) => (
+                <button key={v}
+                  onClick={() => { setPeriodMode(v); setShowPicker(false); }}
+                  style={{
+                    padding: '8px 14px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: '0.8rem', fontWeight: 600,
+                    cursor: 'pointer', transition: 'all 0.15s',
+                    background: periodMode === v ? '#ea580c' : '#f8fafc',
+                    color: periodMode === v ? '#fff' : '#475569',
+                    boxShadow: periodMode === v ? '0 2px 8px rgba(234,88,12,0.25)' : 'none',
+                  }}>
+                  {l}
+                </button>
+              ))}
+              <div ref={pickerRef} style={{ position: 'relative' }}>
+                <button
+                  onClick={() => { setPeriodMode('range'); setShowPicker(v => !v); }}
+                  style={{
+                    padding: '8px 14px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: '0.8rem', fontWeight: 600,
+                    cursor: 'pointer', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: 6,
+                    background: periodMode === 'range' ? '#0D9488' : '#f8fafc',
+                    color: periodMode === 'range' ? '#fff' : '#475569',
+                    boxShadow: periodMode === 'range' ? '0 2px 8px rgba(13,148,136,0.25)' : 'none',
+                  }}>
+                  📆 Tuỳ chọn
+                  {periodMode === 'range' && dateRange.start && (
+                    <span style={{ fontWeight: 500, fontSize: '0.75rem' }}>
+                      {dateRange.start.toLocaleDateString('vi-VN',{day:'2-digit',month:'2-digit'})}
+                      {dateRange.end ? ' → ' + dateRange.end.toLocaleDateString('vi-VN',{day:'2-digit',month:'2-digit'}) : ''}
+                    </span>
+                  )}
+                </button>
+                {showPicker && (
+                  <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 999 }}>
+                    <DateRangePicker value={dateRange} anchorDate={maxProductDate}
+                      onChange={(r) => { setDateRange(r); setPeriodMode('range'); }}
+                      onClose={() => setShowPicker(false)} />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -897,22 +918,10 @@ const StellaDashboardTab = () => {
 
       {/* Section 1 Chart */}
       <div style={{ background: '#fff', borderRadius: 14, padding: '20px 24px', marginBottom: 36, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid #e2e8f0' }}>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
-          {Object.entries(S1_CONFIGS).map(([k, cfg]) => {
-            const isP = s1Metrics[0] === k, isS = s1Metrics[1] === k;
-            return (
-              <button key={k} onClick={() => toggleMetric(k, setS1Metrics)} style={metricBtnStyle(isP, isS, cfg.color)}>
-                {cfg.icon} {cfg.label}
-                {isP && <span style={{ width: 7, height: 7, borderRadius: 99, background: cfg.color, flexShrink: 0 }} />}
-                {isS && <span style={{ width: 7, height: 7, borderRadius: 99, border: `2px solid ${cfg.color}`, flexShrink: 0 }} />}
-              </button>
-            );
-          })}
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 16, fontSize: '0.75rem', color: '#9ca3af', alignItems: 'center' }}>
-            <span><span style={{ display: 'inline-block', width: 20, height: 2.5, background: S1_CONFIGS[s1Metrics[0]]?.color, marginRight: 4, verticalAlign: 'middle' }} />{S1_CONFIGS[s1Metrics[0]]?.label} (trái)</span>
-            <span><span style={{ display: 'inline-block', width: 20, borderTop: `2px dashed ${S1_CONFIGS[s1Metrics[1]]?.color}`, marginRight: 4, verticalAlign: 'middle' }} />{S1_CONFIGS[s1Metrics[1]]?.label} (phải)</span>
-            <span>({dailyStats.length} ngày)</span>
-          </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 14, gap: 16, fontSize: '0.75rem', color: '#9ca3af' }}>
+          <span><span style={{ display: 'inline-block', width: 20, height: 2.5, background: S1_CONFIGS[s1Metrics[0]]?.color, marginRight: 4, verticalAlign: 'middle' }} />{S1_CONFIGS[s1Metrics[0]]?.label} (trái)</span>
+          <span><span style={{ display: 'inline-block', width: 20, borderTop: `2px dashed ${S1_CONFIGS[s1Metrics[1]]?.color}`, marginRight: 4, verticalAlign: 'middle' }} />{S1_CONFIGS[s1Metrics[1]]?.label} (phải)</span>
+          <span>({dailyStats.length} ngày)</span>
         </div>
         {loading
           ? <div style={{ height: 250, background: '#f9fafb', borderRadius: 12, animation: 'pulse 1.5s infinite' }} />
@@ -932,22 +941,10 @@ const StellaDashboardTab = () => {
 
       {/* Section 2 Chart */}
       <div style={{ background: '#fff', borderRadius: 14, padding: '20px 24px', marginBottom: 36, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid #e2e8f0' }}>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
-          {Object.entries(S2_CONFIGS).map(([k, cfg]) => {
-            const isP = s2Metrics[0] === k, isS = s2Metrics[1] === k;
-            return (
-              <button key={k} onClick={() => toggleMetric(k, setS2Metrics)} style={metricBtnStyle(isP, isS, cfg.color)}>
-                {cfg.icon} {cfg.label}
-                {isP && <span style={{ width: 7, height: 7, borderRadius: 99, background: cfg.color, flexShrink: 0 }} />}
-                {isS && <span style={{ width: 7, height: 7, borderRadius: 99, border: `2px solid ${cfg.color}`, flexShrink: 0 }} />}
-              </button>
-            );
-          })}
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 16, fontSize: '0.75rem', color: '#9ca3af', alignItems: 'center' }}>
-            <span><span style={{ display: 'inline-block', width: 20, height: 2.5, background: S2_CONFIGS[s2Metrics[0]]?.color, marginRight: 4, verticalAlign: 'middle' }} />{S2_CONFIGS[s2Metrics[0]]?.label} (trái)</span>
-            <span><span style={{ display: 'inline-block', width: 20, borderTop: `2px dashed ${S2_CONFIGS[s2Metrics[1]]?.color}`, marginRight: 4, verticalAlign: 'middle' }} />{S2_CONFIGS[s2Metrics[1]]?.label} (phải)</span>
-            <span>({s2DailyStats.length} ngày)</span>
-          </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 14, gap: 16, fontSize: '0.75rem', color: '#9ca3af' }}>
+          <span><span style={{ display: 'inline-block', width: 20, height: 2.5, background: S2_CONFIGS[s2Metrics[0]]?.color, marginRight: 4, verticalAlign: 'middle' }} />{S2_CONFIGS[s2Metrics[0]]?.label} (trái)</span>
+          <span><span style={{ display: 'inline-block', width: 20, borderTop: `2px dashed ${S2_CONFIGS[s2Metrics[1]]?.color}`, marginRight: 4, verticalAlign: 'middle' }} />{S2_CONFIGS[s2Metrics[1]]?.label} (phải)</span>
+          <span>({s2DailyStats.length} ngày)</span>
         </div>
         {loading
           ? <div style={{ height: 250, background: '#f9fafb', borderRadius: 12, animation: 'pulse 1.5s infinite' }} />
@@ -963,10 +960,10 @@ const StellaDashboardTab = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem' }}>
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                <th style={{ padding: '12px 20px', textAlign: 'left', fontWeight: 800, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748b' }}>Brand</th>
-                <th style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 800, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748b' }}>GMV</th>
-                <th style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 800, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748b' }}>Đơn</th>
-                <th style={{ padding: '12px 20px', textAlign: 'left', fontWeight: 800, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748b' }}>Share</th>
+                <th style={{ padding: '12px 20px', textAlign: 'left', fontWeight: 700, fontSize: '0.72rem', color: '#64748b' }}>Brand</th>
+                <th style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.72rem', color: '#64748b' }}>GMV</th>
+                <th style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.72rem', color: '#64748b' }}>Đơn</th>
+                <th style={{ padding: '12px 20px', textAlign: 'left', fontWeight: 700, fontSize: '0.72rem', color: '#64748b' }}>Share</th>
               </tr>
             </thead>
             <tbody>
@@ -1035,58 +1032,6 @@ const StellaDashboardTab = () => {
             ))}
           </div>
         </div>
-      </div>
-
-      {/* ── TOP PRODUCTS TABLE ── */}
-      <SectionHeader title="Top Sản Phẩm" subtitle="Sản phẩm bán chạy nhất theo kỳ đã chọn." />
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        {[['gmv', '💰 Theo GMV'], ['orders', '📦 Theo đơn'], ['qty', '🛒 Theo số lượng']].map(([k, l]) => (
-          <button key={k} style={tabStyle(activeProductTab === k)} onClick={() => setActiveProductTab(k)}>{l}</button>
-        ))}
-      </div>
-      <div style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid #e2e8f0' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem' }}>
-          <thead>
-            <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-              <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 800, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748b', width: 36 }}>#</th>
-              <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 800, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748b' }}>Sản phẩm</th>
-              <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748b' }}>GMV</th>
-              <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748b' }}>Đơn</th>
-              <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748b' }}>SL bán</th>
-              <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 800, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: '#64748b' }}>Sàn</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading
-              ? Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid #f9fafb' }}>
-                  {Array.from({ length: 6 }).map((_, j) => (
-                    <td key={j} style={{ padding: '14px 16px' }}><div style={{ height: 14, background: '#f3f4f6', borderRadius: 4, animation: 'pulse 1.5s infinite' }} /></td>
-                  ))}
-                </tr>
-              ))
-              : topProducts.map((item, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid #f9fafb', transition: 'background 0.15s' }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#fffbf5'}
-                  onMouseLeave={e => e.currentTarget.style.background = ''}>
-                  <td style={{ padding: '12px 16px', color: i < 3 ? '#ea580c' : '#9ca3af', fontWeight: 800, fontSize: '0.95rem' }}>
-                    {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
-                  </td>
-                  <td style={{ padding: '12px 16px', maxWidth: 380 }}>
-                    <div style={{ fontWeight: 600, color: '#111', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                      {item.product_name}
-                    </div>
-                    <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: 2 }}>{item.org_name}</div>
-                  </td>
-                  <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: '#ea580c', whiteSpace: 'nowrap' }}>{fmt(item.GMV)}</td>
-                  <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: '#374151' }}>{(item.count_order || 0).toLocaleString()}</td>
-                  <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: '#374151' }}>{(item.product_quantity || 0).toLocaleString()}</td>
-                  <td style={{ padding: '12px 16px', textAlign: 'center' }}><SourceBadge source={item.source} /></td>
-                </tr>
-              ))
-            }
-          </tbody>
-        </table>
       </div>
 
       {/* ── ADS TABLE ── */}
