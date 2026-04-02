@@ -94,6 +94,10 @@ const S2_CONFIGS = {
   cpo:        { label: 'CPO',            icon: '💸', color: '#ec4899', key: 'cpo',        format: v => fmt(v) },
   adsOrders:  { label: 'Đơn từ Ads',     icon: '🎯', color: '#8b5cf6', key: 'adsOrders',  format: v => v.toLocaleString('vi-VN') },
 };
+const S3_CONFIGS = {
+  totalSpend: { label: 'Tổng chi phí',   icon: '💸', color: '#f43f5e', key: 'totalSpend', format: v => fmt(v) },
+  avgSpend:   { label: 'Avg chi phí/ngày', icon: '📅', color: '#0ea5e9', key: 'avgSpend', format: v => fmt(v) },
+};
 
 // Normalize org_name → canonical brand name (gộp mọi shop cùng brand)
 const normalizeBrand = (orgName) => {
@@ -192,6 +196,7 @@ const StellaDashboardTab = () => {
   const [selectedMetric, setSelectedMetric] = useState('gmv'); // for trend chart (legacy)
   const [s1Metrics, setS1Metrics] = useState(['gmv', 'orders']);      // Section 1 dual-chart
   const [s2Metrics, setS2Metrics] = useState(['adsCost', 'adsRevenue']); // Section 2 dual-chart
+  const [s3Metrics, setS3Metrics] = useState(['totalSpend', 'avgSpend']); // Section 3 dual-chart
 
   // Date filters
   const [periodMode, setPeriodMode] = useState('all'); // 'all' | '1' | '7' | '30' | 'range'
@@ -469,18 +474,18 @@ const StellaDashboardTab = () => {
     return Object.values(map).sort((a, b) => b.spend - a.spend);
   }, [filteredCampaigns]);
 
-  // Campaign daily trend (top 5 campaigns)
-  const campaignTrendData = useMemo(() => {
-    const top5 = campaignsByName.slice(0, 5).map(c => c.campaign);
+  // Campaign daily stats: total spend + avg spend per campaign per day
+  const campaignDailyStats = useMemo(() => {
     const map = {};
-    filteredCampaigns.filter(d => top5.includes(d.campaign_name.trim())).forEach(d => {
+    filteredCampaigns.forEach(d => {
       const day = new Date(d.stat_time_day).toISOString().slice(0, 10);
-      if (!map[day]) map[day] = { date: day.slice(5), fullDate: day };
-      const campKey = d.campaign_name.trim();
-      map[day][campKey] = (map[day][campKey] || 0) + (d.total_spend || 0);
+      if (!map[day]) map[day] = { date: day.slice(5), fullDate: day, totalSpend: 0, campCount: 0 };
+      map[day].totalSpend += d.total_spend || 0;
+      map[day].campCount += 1;
     });
-    return Object.values(map).sort((a, b) => a.fullDate.localeCompare(b.fullDate));
-  }, [filteredCampaigns, campaignsByName]);
+    return Object.values(map).sort((a, b) => a.fullDate.localeCompare(b.fullDate))
+      .map(d => ({ ...d, avgSpend: d.campCount > 0 ? d.totalSpend / d.campCount : 0 }));
+  }, [filteredCampaigns]);
 
   // Previous period filter (same duration, shifted back)
   const getPrevBounds = useMemo(() => {
@@ -777,7 +782,7 @@ const StellaDashboardTab = () => {
             contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', fontFamily: "'Outfit',sans-serif" }}
             labelFormatter={(l, p) => p?.[0]?.payload?.fullDate || l}
             formatter={(v, name) => {
-              const allCfg = { ...S1_CONFIGS, ...S2_CONFIGS };
+              const allCfg = { ...S1_CONFIGS, ...S2_CONFIGS, ...S3_CONFIGS };
               const c = Object.values(allCfg).find(x => x.key === name);
               return [c ? c.format(v) : v, c ? c.label : name];
             }}
@@ -1091,55 +1096,51 @@ const StellaDashboardTab = () => {
       {/* ══ SECTION 3: CHIẾN DỊCH TIKTOK ADS ══ */}
       <SectionHeader title="Chiến Dịch TikTok Ads" icon="🎯" />
 
-      {/* KPI row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 12, marginBottom: 20 }}>
-        <StatCard icon="💸" label="Tổng chi phí chiến dịch" value={fmt(totalCampaignSpend)} sub={Number(totalCampaignSpend).toLocaleString('vi-VN')+'₫'} color="#f43f5e" loading={loading} />
-        <StatCard icon="📋" label="Số chiến dịch" value={campaignsByName.length.toLocaleString()} sub="chiến dịch active" color="#8b5cf6" loading={loading} />
-        <StatCard icon="📅" label="Avg chi phí/ngày" value={fmt(filteredCampaigns.length > 0 ? totalCampaignSpend / [...new Set(filteredCampaigns.map(d => new Date(d.stat_time_day).toISOString().slice(0,10)))].length : 0)} sub="₫/ngày" color="#0ea5e9" loading={loading} />
-      </div>
-
-      {/* Trend chart: top 5 campaigns */}
-      {!loading && campaignTrendData.length > 0 && campaignsByName.length > 0 && (() => {
-        const top5 = campaignsByName.slice(0, 5);
-        const campColors = ['#f43f5e','#8b5cf6','#0ea5e9','#f59e0b','#10b981'];
+      {/* KPI row — clickable cards swap chart metric */}
+      {(() => {
+        const avgSpendVal = filteredCampaigns.length > 0
+          ? totalCampaignSpend / [...new Set(filteredCampaigns.map(d => new Date(d.stat_time_day).toISOString().slice(0,10)))].length
+          : 0;
+        const cards = [
+          { key: 'totalSpend', icon: '💸', label: 'Tổng chi phí chiến dịch', value: fmt(totalCampaignSpend), sub: Number(totalCampaignSpend).toLocaleString('vi-VN')+'₫', color: '#f43f5e' },
+          { key: null,         icon: '📋', label: 'Số chiến dịch',           value: campaignsByName.length.toLocaleString(), sub: 'chiến dịch active', color: '#8b5cf6' },
+          { key: 'avgSpend',   icon: '📅', label: 'Avg chi phí/ngày',        value: fmt(avgSpendVal), sub: '₫/ngày', color: '#0ea5e9' },
+        ];
         return (
-          <div style={{ background: '#fff', borderRadius: 16, padding: '18px 24px', marginBottom: 20, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
-            <div style={{ fontWeight: 800, fontSize: '0.9rem', marginBottom: 14, color: '#111' }}>📈 Chi phí theo ngày — Top 5 chiến dịch</div>
-            <ResponsiveContainer width="100%" height={240}>
-              <AreaChart data={campaignTrendData} margin={{ top: 10, right: 20, left: 0, bottom: 4 }}>
-                <defs>
-                  {top5.map((c, i) => (
-                    <linearGradient key={i} id={`cg${i}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={campColors[i]} stopOpacity={0.15} />
-                      <stop offset="95%" stopColor={campColors[i]} stopOpacity={0} />
-                    </linearGradient>
-                  ))}
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#9ca3af' }} tickLine={false} axisLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} tickLine={false} axisLine={false} tickFormatter={v => fmt(v)} width={72} />
-                <Tooltip
-                  contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', fontFamily: "'Outfit',sans-serif" }}
-                  formatter={(v, name) => [fmt(v), name]}
-                  labelFormatter={(l, p) => p?.[0]?.payload?.fullDate || l}
-                />
-                {top5.map((c, i) => (
-                  <Area key={i} type="monotone" dataKey={c.campaign} stroke={campColors[i]} strokeWidth={2} fill={`url(#cg${i})`} dot={false} activeDot={{ r: 4 }} />
-                ))}
-              </AreaChart>
-            </ResponsiveContainer>
-            {/* Legend */}
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 10 }}>
-              {top5.map((c, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', fontWeight: 600, color: '#374151' }}>
-                  <span style={{ width: 12, height: 12, borderRadius: 3, background: campColors[i], display: 'inline-block', flexShrink: 0 }} />
-                  {c.campaign} <span style={{ color: '#9ca3af', fontWeight: 400 }}>({c.brand})</span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 12, marginBottom: 12 }}>
+            {cards.map(c => {
+              const active = c.key && s3Metrics.includes(c.key);
+              const isPrimary = c.key === s3Metrics[0];
+              return (
+                <div key={c.key || 'count'}
+                  onClick={() => c.key && toggleMetric(c.key, setS3Metrics)}
+                  style={{ background: '#fff', borderRadius: 14, padding: '16px 18px', boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: active ? `2px solid ${c.color}` : '2px solid transparent', cursor: c.key ? 'pointer' : 'default', transition: 'border 0.2s' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+                    {c.icon} {c.label}
+                    {active && <span style={{ marginLeft: 6, fontSize: '0.65rem', background: c.color, color: '#fff', borderRadius: 99, padding: '1px 6px' }}>{isPrimary ? 'Trái' : 'Phải'}</span>}
+                  </div>
+                  {loading
+                    ? <div style={{ height: 28, background: '#f3f4f6', borderRadius: 6, animation: 'pulse 1.5s infinite', margin: '4px 0' }} />
+                    : <div style={{ fontSize: '1.5rem', fontWeight: 900, color: active ? c.color : '#111' }}>{c.value}</div>
+                  }
+                  <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: 2 }}>{c.sub}</div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
         );
       })()}
+
+      {/* Dual chart — Tổng chi phí vs Avg chi phí/ngày */}
+      <div style={{ background: '#fff', borderRadius: 16, padding: '18px 24px', marginBottom: 20, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <span style={{ fontWeight: 800, fontSize: '0.88rem', color: '#111' }}>📈 Chi phí chiến dịch theo ngày</span>
+          <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+            — {S3_CONFIGS[s3Metrics[0]]?.label} (trái) &nbsp;·&nbsp; - - {S3_CONFIGS[s3Metrics[1]]?.label} (phải) &nbsp;·&nbsp; ({campaignDailyStats.length} ngày)
+          </span>
+        </div>
+        <DualChart data={campaignDailyStats} cfg1={S3_CONFIGS[s3Metrics[0]]} cfg2={S3_CONFIGS[s3Metrics[1]]} height={240} />
+      </div>
 
       {/* Brand summary table */}
       <div style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6', marginBottom: 16 }}>
