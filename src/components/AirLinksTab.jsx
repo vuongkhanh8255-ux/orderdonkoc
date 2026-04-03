@@ -825,55 +825,60 @@ const AirLinksTab = () => {
                     </div>
                     {blacklistModal.isOpen && (
                         <div style={{ padding: '16px' }}>
+                            {/* Danh sách luôn hiện */}
+                            {blacklistChannels.length === 0 ? (
+                                <p style={{ color: '#9ca3af', fontSize: '0.82rem', textAlign: 'center', padding: '8px 0 12px' }}>Chưa có kênh nào trong blacklist</p>
+                            ) : (
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', marginBottom: 12 }}>
+                                    <thead>
+                                        <tr style={{ background: '#fef2f2' }}>
+                                            <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, color: '#dc2626' }}>ID Kênh</th>
+                                            <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, color: '#dc2626', width: 80 }}>Xoá</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {blacklistChannels.map((ch, i) => (
+                                            <tr key={i} style={{ borderBottom: '1px solid #fee2e2' }}>
+                                                <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontWeight: 600 }}>{ch}</td>
+                                                <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                                                    {blacklistModal.unlocked ? (
+                                                        <button type="button" onClick={() => removeFromBlacklist(ch)}
+                                                            style={{ padding: '3px 10px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 6, color: '#dc2626', fontWeight: 700, cursor: 'pointer', fontSize: '0.78rem' }}>
+                                                            Xoá
+                                                        </button>
+                                                    ) : <span style={{ color: '#d1d5db', fontSize: '0.78rem' }}>🔒</span>}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                            {/* Phần chỉnh sửa cần mật khẩu */}
                             {!blacklistModal.unlocked ? (
-                                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                    <input type="password" placeholder="Nhập mật khẩu để quản lý blacklist..." value={blacklistModal.pwInput}
+                                <div style={{ display: 'flex', gap: 8, alignItems: 'center', borderTop: '1px solid #fee2e2', paddingTop: 12 }}>
+                                    <input type="password" placeholder="Nhập mật khẩu để thêm/xoá kênh..." value={blacklistModal.pwInput}
                                         onChange={e => setBlacklistModal(m => ({ ...m, pwInput: e.target.value }))}
                                         onKeyDown={e => { if (e.key === 'Enter') { if (blacklistModal.pwInput === 'Blacklist8255') setBlacklistModal(m => ({ ...m, unlocked: true, pwInput: '' })); else alert('Sai mật khẩu!'); }}}
-                                        style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid #fca5a5', fontSize: '0.85rem' }} />
+                                        style={{ flex: 1, padding: '7px 12px', borderRadius: 8, border: '1px solid #fca5a5', fontSize: '0.85rem' }} />
                                     <button type="button" onClick={() => { if (blacklistModal.pwInput === 'Blacklist8255') setBlacklistModal(m => ({ ...m, unlocked: true, pwInput: '' })); else alert('Sai mật khẩu!'); }}
-                                        style={{ padding: '8px 16px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem' }}>
-                                        Xác nhận
+                                        style={{ padding: '7px 16px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem' }}>
+                                        🔓 Mở khoá
                                     </button>
                                 </div>
                             ) : (
-                                <div>
-                                    <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                                <div style={{ borderTop: '1px solid #fee2e2', paddingTop: 12 }}>
+                                    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                                         <input type="text" placeholder="Nhập ID Kênh cần chặn (vd: @tenkenh hoặc 123456789)..." value={blacklistModal.newChannel}
                                             onChange={e => setBlacklistModal(m => ({ ...m, newChannel: e.target.value }))}
-                                            style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid #fca5a5', fontSize: '0.85rem' }} />
+                                            onKeyDown={e => { if (e.key === 'Enter') { addToBlacklist(blacklistModal.newChannel); setBlacklistModal(m => ({ ...m, newChannel: '' })); }}}
+                                            style={{ flex: 1, padding: '7px 12px', borderRadius: 8, border: '1px solid #fca5a5', fontSize: '0.85rem' }} />
                                         <button type="button" onClick={() => { addToBlacklist(blacklistModal.newChannel); setBlacklistModal(m => ({ ...m, newChannel: '' })); }}
-                                            style={{ padding: '8px 14px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>
+                                            style={{ padding: '7px 14px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>
                                             + Thêm
                                         </button>
                                     </div>
-                                    {blacklistChannels.length === 0 ? (
-                                        <p style={{ color: '#9ca3af', fontSize: '0.82rem', textAlign: 'center', padding: '12px 0' }}>Chưa có kênh nào trong blacklist</p>
-                                    ) : (
-                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
-                                            <thead>
-                                                <tr style={{ background: '#fef2f2' }}>
-                                                    <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, color: '#dc2626' }}>ID Kênh</th>
-                                                    <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, color: '#dc2626', width: 80 }}>Xoá</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {blacklistChannels.map((ch, i) => (
-                                                    <tr key={i} style={{ borderBottom: '1px solid #fee2e2' }}>
-                                                        <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontWeight: 600 }}>{ch}</td>
-                                                        <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                                                            <button type="button" onClick={() => removeFromBlacklist(ch)}
-                                                                style={{ padding: '3px 10px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 6, color: '#dc2626', fontWeight: 700, cursor: 'pointer', fontSize: '0.78rem' }}>
-                                                                Xoá
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    )}
                                     <button type="button" onClick={() => setBlacklistModal(m => ({ ...m, unlocked: false }))}
-                                        style={{ marginTop: 10, padding: '6px 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, cursor: 'pointer', fontSize: '0.78rem', color: '#64748b' }}>
+                                        style={{ padding: '5px 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, cursor: 'pointer', fontSize: '0.78rem', color: '#64748b' }}>
                                         🔒 Khoá lại
                                     </button>
                                 </div>
