@@ -123,9 +123,7 @@ const AirLinksTab = () => {
     const [passwordModal, setPasswordModal] = useState({ isOpen: false, type: null, data: null, input: '' });
 
     // Blacklist state
-    const [blacklistChannels, setBlacklistChannels] = useState(() => {
-        try { return JSON.parse(localStorage.getItem('koc_blacklist_channels') || '[]'); } catch { return []; }
-    });
+    const [blacklistChannels, setBlacklistChannels] = useState([]);
     const [blacklistModal, setBlacklistModal] = useState({ isOpen: false, unlocked: false, pwInput: '', newChannel: '' });
     const [kocOrderSet, setKocOrderSet] = useState(new Set());
 
@@ -143,18 +141,27 @@ const AirLinksTab = () => {
         loadKocOrders();
     }, []);
 
-    const saveBlacklist = (list) => {
-        setBlacklistChannels(list);
-        localStorage.setItem('koc_blacklist_channels', JSON.stringify(list));
-    };
-    const addToBlacklist = (channelId) => {
+    useEffect(() => {
+        const loadBlacklist = async () => {
+            try {
+                const { data } = await supabase.from('koc_blacklist').select('id_kenh').order('created_at', { ascending: true });
+                if (data) setBlacklistChannels(data.map(r => r.id_kenh));
+            } catch (e) { console.error('Failed to load blacklist:', e); }
+        };
+        loadBlacklist();
+    }, []);
+
+    const addToBlacklist = async (channelId) => {
         const trimmed = channelId.trim();
         if (!trimmed || blacklistChannels.includes(trimmed)) return;
-        const updated = [...blacklistChannels, trimmed];
-        saveBlacklist(updated);
+        const { error } = await supabase.from('koc_blacklist').insert({ id_kenh: trimmed });
+        if (!error) setBlacklistChannels(prev => [...prev, trimmed]);
+        else alert('Lỗi khi thêm vào blacklist: ' + error.message);
     };
-    const removeFromBlacklist = (channelId) => {
-        saveBlacklist(blacklistChannels.filter(c => c !== channelId));
+    const removeFromBlacklist = async (channelId) => {
+        const { error } = await supabase.from('koc_blacklist').delete().eq('id_kenh', channelId);
+        if (!error) setBlacklistChannels(prev => prev.filter(c => c !== channelId));
+        else alert('Lỗi khi xóa khỏi blacklist: ' + error.message);
     };
 
     // Get password based on brand
