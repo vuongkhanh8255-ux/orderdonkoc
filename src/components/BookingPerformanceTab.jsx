@@ -1110,9 +1110,24 @@ ${txtFormat}
         { header: 'Tổng GMV Lũy Kế', accessor: 'gmvCum', formatter: formatNumber },
         { header: 'GMV Tháng Air', accessor: 'gmvMonth', formatter: formatNumber },
         { header: 'Video Air Trong Tháng', accessor: 'videoMonth', formatter: formatNumber },
-        { header: 'Tổng Lượt Xem', accessor: 'viewsCum', formatter: formatNumber }, // [FIX] Add Column
+        { header: 'Tổng Lượt Xem', accessor: 'viewsCum', formatter: formatNumber },
         { header: 'Đơn Hàng AFF', accessor: 'ordersAff', formatter: formatNumber },
     ];
+
+    // Booking cast budget: max(15tr, (gmvCum + gmvMonth) × 2.5%)
+    const castBudgetData = staffStats
+        .map(s => {
+            const base = (s.gmvCum + s.gmvMonth) * 0.025;
+            const budget = Math.max(15000000, base);
+            return { name: s.name, gmvTotal: s.gmvCum + s.gmvMonth, castBudget: budget };
+        })
+        .sort((a, b) => b.castBudget - a.castBudget);
+    const castBudgetCols = [
+        { header: 'Tên Nhân Sự', accessor: 'name', isBold: true },
+        { header: 'GMV Lũy Kế + Air Tháng', accessor: 'gmvTotal', formatter: formatNumber },
+        { header: 'Định mức Cast tháng này', accessor: 'castBudget', formatter: (v) => `${formatNumber(v)} ₫` },
+    ];
+
     const pivotCols = [
         { header: 'ID Nhà Sáng Tạo', accessor: 'id', isBold: true },
         { header: 'Tổng GMV Lũy Kế', accessor: 'gmv', formatter: formatNumber },
@@ -1318,6 +1333,41 @@ ${txtFormat}
                         <DataTable title="Performance theo KOL/KOC" columns={kocCols} data={kocStats} />
                         <DataTable title="Performance theo Nhân sự" columns={staffCols} data={staffStats} />
                         <DataTable title="KOC Theo Brand (Pivot)" columns={pivotCols} data={kocBrandPivot} />
+
+                        {/* BOOKING CAST BUDGET TABLE */}
+                        <div style={{ marginTop: 32, background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+                            <div style={{ padding: '14px 20px', background: 'linear-gradient(135deg, #ea580c, #c2410c)', color: '#fff' }}>
+                                <div style={{ fontWeight: 800, fontSize: '1rem' }}>💰 Định Mức Booking Cast theo Nhân Sự</div>
+                                <div style={{ fontSize: '0.78rem', opacity: 0.85, marginTop: 2 }}>Công thức: max(15.000.000₫, (GMV lũy kế + GMV air tháng) × 2.5%)</div>
+                            </div>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                <thead>
+                                    <tr style={{ background: '#fef7f0', borderBottom: '2px solid #fed7aa' }}>
+                                        <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 700, color: '#92400e' }}>Nhân Sự</th>
+                                        <th style={{ padding: '10px 16px', textAlign: 'right', fontWeight: 700, color: '#92400e' }}>GMV Lũy Kế + Air Tháng</th>
+                                        <th style={{ padding: '10px 16px', textAlign: 'right', fontWeight: 700, color: '#92400e' }}>Định Mức Cast Tháng</th>
+                                        <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 700, color: '#92400e' }}>Ghi Chú</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {castBudgetData.map((row, i) => {
+                                        const isMin = (row.gmvTotal * 0.025) < 15000000;
+                                        return (
+                                            <tr key={i} style={{ borderBottom: '1px solid #fef3c7', background: i % 2 === 0 ? '#fff' : '#fffbf5' }}
+                                                onMouseEnter={e => e.currentTarget.style.background = '#fef3c7'}
+                                                onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? '#fff' : '#fffbf5'}>
+                                                <td style={{ padding: '12px 16px', fontWeight: 700 }}>{row.name}</td>
+                                                <td style={{ padding: '12px 16px', textAlign: 'right', color: '#64748b' }}>{formatNumber(row.gmvTotal)} ₫</td>
+                                                <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 900, color: '#ea580c', fontSize: '1rem' }}>{formatNumber(row.castBudget)} ₫</td>
+                                                <td style={{ padding: '12px 16px', fontSize: '0.75rem', color: isMin ? '#dc2626' : '#16a34a', fontWeight: 600 }}>
+                                                    {isMin ? '⚠️ Áp dụng mức tối thiểu 15tr' : '✅ Tính theo 2.5% GMV'}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
 
                 </>

@@ -122,8 +122,39 @@ const AirLinksTab = () => {
     // Custom Secure Password Modal for Delete Operations
     const [passwordModal, setPasswordModal] = useState({ isOpen: false, type: null, data: null, input: '' });
 
+    // Blacklist state
+    const [blacklistChannels, setBlacklistChannels] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('koc_blacklist_channels') || '[]'); } catch { return []; }
+    });
+    const [blacklistModal, setBlacklistModal] = useState({ isOpen: false, unlocked: false, pwInput: '', newChannel: '' });
+    const [kocOrderSet, setKocOrderSet] = useState(new Set());
+
     const openDeleteModal = (type, data = null) => {
         setPasswordModal({ isOpen: true, type, data, input: '' });
+    };
+
+    useEffect(() => {
+        const loadKocOrders = async () => {
+            try {
+                const { data } = await supabase.from('donguis').select('koc_id_kenh').not('koc_id_kenh', 'is', null);
+                if (data) setKocOrderSet(new Set(data.map(r => (r.koc_id_kenh || '').trim()).filter(Boolean)));
+            } catch (e) { console.error('Failed to load koc orders:', e); }
+        };
+        loadKocOrders();
+    }, []);
+
+    const saveBlacklist = (list) => {
+        setBlacklistChannels(list);
+        localStorage.setItem('koc_blacklist_channels', JSON.stringify(list));
+    };
+    const addToBlacklist = (channelId) => {
+        const trimmed = channelId.trim();
+        if (!trimmed || blacklistChannels.includes(trimmed)) return;
+        const updated = [...blacklistChannels, trimmed];
+        saveBlacklist(updated);
+    };
+    const removeFromBlacklist = (channelId) => {
+        saveBlacklist(blacklistChannels.filter(c => c !== channelId));
     };
 
     // Get password based on brand
@@ -141,7 +172,7 @@ const AirLinksTab = () => {
         let isAuthorized = false;
 
         // Master Admin Password
-        if (passwordModal.input === 'QUOCKHANH8255') {
+        if (passwordModal.input === 'QUOCKHANH8255' || passwordModal.input === 'bichhue123') {
             isAuthorized = true;
         }
         // Brand-specific Password (for single delete only)
@@ -325,6 +356,11 @@ const AirLinksTab = () => {
         e.preventDefault();
         if (!newLink.link_air_koc || !newLink.brand_id || !newLink.nhansu_id || !newLink.san_pham) {
             alert("Vui lòng điền đủ thông tin!"); return;
+        }
+        // Blacklist check
+        if (newLink.id_kenh && blacklistChannels.includes(newLink.id_kenh.trim())) {
+            alert(`🚫 Kênh "${newLink.id_kenh}" đang trong danh sách Black List!\nKhông thể nhập link air cho kênh này.`);
+            return;
         }
         setIsSubmitting(true);
         try {
@@ -773,6 +809,72 @@ const AirLinksTab = () => {
                 <h3 style={{ borderBottom: '1px solid #f3f4f6', paddingBottom: '15px', marginBottom: '25px', color: '#ea580c', fontSize: '1.25rem', fontWeight: '700', textTransform: 'uppercase' }}>
                     ✏️ THÊM LINK AIR MỚI
                 </h3>
+                {/* ── BLACKLIST KOC ── */}
+                <div style={{ background: '#fff', border: '1px solid #fca5a5', borderRadius: 12, marginBottom: 16, overflow: 'hidden' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: '#fef2f2', cursor: 'pointer' }}
+                        onClick={() => setBlacklistModal(m => ({ ...m, isOpen: !m.isOpen }))}>
+                        <span style={{ fontWeight: 800, color: '#dc2626', fontSize: '0.88rem' }}>🚫 Black List KOC ({blacklistChannels.length} kênh)</span>
+                        <span style={{ fontSize: '0.75rem', color: '#ef4444' }}>{blacklistModal.isOpen ? '▲ Thu gọn' : '▼ Mở rộng'}</span>
+                    </div>
+                    {blacklistModal.isOpen && (
+                        <div style={{ padding: '16px' }}>
+                            {!blacklistModal.unlocked ? (
+                                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                    <input type="password" placeholder="Nhập mật khẩu để quản lý blacklist..." value={blacklistModal.pwInput}
+                                        onChange={e => setBlacklistModal(m => ({ ...m, pwInput: e.target.value }))}
+                                        onKeyDown={e => { if (e.key === 'Enter') { if (blacklistModal.pwInput === 'Blacklist8255') setBlacklistModal(m => ({ ...m, unlocked: true, pwInput: '' })); else alert('Sai mật khẩu!'); }}}
+                                        style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid #fca5a5', fontSize: '0.85rem' }} />
+                                    <button type="button" onClick={() => { if (blacklistModal.pwInput === 'Blacklist8255') setBlacklistModal(m => ({ ...m, unlocked: true, pwInput: '' })); else alert('Sai mật khẩu!'); }}
+                                        style={{ padding: '8px 16px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem' }}>
+                                        Xác nhận
+                                    </button>
+                                </div>
+                            ) : (
+                                <div>
+                                    <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                                        <input type="text" placeholder="Nhập ID Kênh cần chặn (vd: @tenkenh hoặc 123456789)..." value={blacklistModal.newChannel}
+                                            onChange={e => setBlacklistModal(m => ({ ...m, newChannel: e.target.value }))}
+                                            style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid #fca5a5', fontSize: '0.85rem' }} />
+                                        <button type="button" onClick={() => { addToBlacklist(blacklistModal.newChannel); setBlacklistModal(m => ({ ...m, newChannel: '' })); }}
+                                            style={{ padding: '8px 14px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>
+                                            + Thêm
+                                        </button>
+                                    </div>
+                                    {blacklistChannels.length === 0 ? (
+                                        <p style={{ color: '#9ca3af', fontSize: '0.82rem', textAlign: 'center', padding: '12px 0' }}>Chưa có kênh nào trong blacklist</p>
+                                    ) : (
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                                            <thead>
+                                                <tr style={{ background: '#fef2f2' }}>
+                                                    <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, color: '#dc2626' }}>ID Kênh</th>
+                                                    <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, color: '#dc2626', width: 80 }}>Xoá</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {blacklistChannels.map((ch, i) => (
+                                                    <tr key={i} style={{ borderBottom: '1px solid #fee2e2' }}>
+                                                        <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontWeight: 600 }}>{ch}</td>
+                                                        <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                                                            <button type="button" onClick={() => removeFromBlacklist(ch)}
+                                                                style={{ padding: '3px 10px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 6, color: '#dc2626', fontWeight: 700, cursor: 'pointer', fontSize: '0.78rem' }}>
+                                                                Xoá
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    )}
+                                    <button type="button" onClick={() => setBlacklistModal(m => ({ ...m, unlocked: false }))}
+                                        style={{ marginTop: 10, padding: '6px 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, cursor: 'pointer', fontSize: '0.78rem', color: '#64748b' }}>
+                                        🔒 Khoá lại
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
                 <form onSubmit={handleAddLink}>
                     {/* Consistent 2-column Grid */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', marginBottom: '25px' }}>
@@ -1306,6 +1408,7 @@ const AirLinksTab = () => {
                                     <th style={{ padding: '12px', textAlign: 'center' }}>CAST</th>
                                     <th style={{ padding: '12px', textAlign: 'center' }}>CMS</th>
                                     <th style={{ padding: '12px', textAlign: 'center' }}>Nhân Sự</th>
+                                    <th style={{ padding: '12px', textAlign: 'center' }}>Đã order?</th>
                                     <th style={{ padding: '12px', textAlign: 'center' }}>Hành Động</th>
                                 </tr>
                             </thead>
@@ -1407,6 +1510,11 @@ const AirLinksTab = () => {
                                                             {nhanSus.map(ns => <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>)}
                                                         </select>
                                                     ) : link.nhansu?.ten_nhansu}
+                                                </td>
+
+                                                {/* ĐÃ ORDER? */}
+                                                <td style={{ textAlign: 'center', padding: '12px' }}>
+                                                    {kocOrderSet.has((link.id_kenh || '').trim()) ? '✅' : '????'}
                                                 </td>
 
                                                 {/* HÀNH ĐỘNG */}
