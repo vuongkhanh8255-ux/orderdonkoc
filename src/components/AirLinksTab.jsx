@@ -658,7 +658,6 @@ const AirLinksTab = () => {
                 } else {
                     more = false;
                 }
-                if (allData.length > 50000) more = false; // Safety break
             }
 
             if (allData.length === 0) {
