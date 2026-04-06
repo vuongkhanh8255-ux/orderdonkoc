@@ -16,6 +16,7 @@ import StellaDashboardTab from './components/StellaDashboardTab'; // [MỚI] Tab
 import CSKHTab from './components/CSKHTab'; // [MỚI] Tab CSKH Đánh giá
 // ReportCSTab is now imported inside CSKHTab
 import LivestreamTab from './components/LivestreamTab'; // [MỚI] Tab Livestream
+import LandingOrders from './components/LandingOrders'; // [MỚI] Tab Đơn hàng Landing Page
 import AIChat from './components/AIChat';
 
 function App() {
@@ -120,6 +121,7 @@ function App() {
               { key: 'archive', label: '🗄️ Lưu trữ', items: [
                 { view: 'data_archive', icon: '🗄️', name: 'Lưu Trữ Data' },
                 { view: 'expense',      icon: '💸', name: 'Ngân Sách Ecom' },
+                { view: 'landing_orders', icon: '🛒', name: 'Đơn hàng Landing Page' },
               ]},
             ].map(group => (
               <div key={group.key} style={{ marginBottom: 4 }}>
@@ -168,6 +170,7 @@ function App() {
           {currentView === 'stella_dashboard' && <StellaDashboardTab />}
           {currentView === 'cskh' && <CSKHTab />}
           {currentView === 'livestream' && <LivestreamTab />}
+          {currentView === 'landing_orders' && <LandingOrders />}
 
         </div>
       </div>
