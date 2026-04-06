@@ -5,6 +5,7 @@
       "name": "koc-tool",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["vite", "--port", "5173"],
+      "cwd": "C:\\Users\\ASUS\\koc-tool",
       "port": 5173
     }
   ]
