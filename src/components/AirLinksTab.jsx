@@ -364,8 +364,9 @@ const AirLinksTab = () => {
         if (!newLink.link_air_koc || !newLink.brand_id || !newLink.nhansu_id || !newLink.san_pham) {
             alert("Vui lòng điền đủ thông tin!"); return;
         }
-        // Blacklist check
-        if (newLink.id_kenh && blacklistChannels.includes(newLink.id_kenh.trim())) {
+        // Blacklist check (normalize: strip @ for comparison)
+        const normK = (k) => String(k || '').trim().replace(/^@/, '').toLowerCase();
+        if (newLink.id_kenh && blacklistChannels.map(c => normK(c)).includes(normK(newLink.id_kenh))) {
             alert(`🚫 Kênh "${newLink.id_kenh}" đang trong danh sách Black List!\nKhông thể nhập link air cho kênh này.`);
             return;
         }
@@ -524,8 +525,11 @@ const AirLinksTab = () => {
                         } catch (err) { }
                     }
 
-                    // Blacklist check
-                    if (kId && blacklistChannels.includes(String(kId).trim())) {
+                    // Blacklist check (normalize: strip @ for comparison)
+                    const normalizeKenh = (k) => String(k || '').trim().replace(/^@/, '').toLowerCase();
+                    const kIdNorm = normalizeKenh(kId);
+                    const blacklistNorm = blacklistChannels.map(c => normalizeKenh(c));
+                    if (kIdNorm && blacklistNorm.includes(kIdNorm)) {
                         console.warn("Skipping blacklisted channel:", kId);
                         failCount++;
                         continue;
