@@ -524,6 +524,13 @@ const AirLinksTab = () => {
                         } catch (err) { }
                     }
 
+                    // Blacklist check
+                    if (kId && blacklistChannels.includes(String(kId).trim())) {
+                        console.warn("Skipping blacklisted channel:", kId);
+                        failCount++;
+                        continue;
+                    }
+
                     // Find IDs
                     const foundBrand = brands.find(b => b.ten_brand?.toLowerCase() === brandName?.toLowerCase());
                     const foundNS = nhanSus.find(n => n.ten_nhansu?.toLowerCase() === nsName?.toLowerCase());
