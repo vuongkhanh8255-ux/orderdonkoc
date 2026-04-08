@@ -1,6 +1,6 @@
 // src/components/OrderTab.jsx
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import ResizableHeader from './ResizableHeader';
 import { supabase } from '../supabaseClient';
@@ -32,6 +32,14 @@ const OrderTab = () => {
         // Dữ liệu Chart
         chartNhanSu, setChartNhanSu, chartData, isChartLoading
     } = useAppData();
+
+    // Blacklist
+    const [blacklistChannels, setBlacklistChannels] = useState([]);
+    useEffect(() => {
+        supabase.from('koc_blacklist').select('id_kenh').then(({ data }) => {
+            if (data) setBlacklistChannels(data.map(r => r.id_kenh));
+        });
+    }, []);
 
     // State cục bộ
     const [cast, setCast] = useState('0');
@@ -184,6 +192,13 @@ const OrderTab = () => {
         e.preventDefault();
         if (!idKenh || !hoTen || !selectedNhanSu) { alert("Vui lòng điền đủ thông tin bắt buộc!"); return; }
         if (previewList.length === 0) { alert("Vui lòng chọn ít nhất 1 sản phẩm!"); return; }
+
+        // Blacklist check
+        const normK = (k) => String(k || '').trim().replace(/^@/, '').toLowerCase();
+        if (blacklistChannels.map(c => normK(c)).includes(normK(idKenh))) {
+            alert(`🚫 Kênh "${idKenh}" đang trong danh sách Black List!\nKhông thể tạo đơn hàng cho kênh này.`);
+            return;
+        }
 
         try {
             const summaryString = previewList.map(item => `${item.ten_sanpham} (SL: ${item.so_luong})`).join(', ');
