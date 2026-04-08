@@ -35,9 +35,12 @@ const OrderTab = () => {
 
     // Blacklist
     const [blacklistChannels, setBlacklistChannels] = useState([]);
+    const [blacklistLoaded, setBlacklistLoaded] = useState(false);
     useEffect(() => {
-        supabase.from('koc_blacklist').select('id_kenh').then(({ data }) => {
-            if (data) setBlacklistChannels(data.map(r => r.id_kenh));
+        supabase.from('koc_blacklist').select('id_kenh').then(({ data, error }) => {
+            if (error) { console.error('Blacklist load failed:', error); }
+            setBlacklistChannels(data ? data.map(r => r.id_kenh) : []);
+            setBlacklistLoaded(true);
         });
     }, []);
 
@@ -193,7 +196,15 @@ const OrderTab = () => {
         if (!idKenh || !hoTen || !selectedNhanSu) { alert("Vui lòng điền đủ thông tin bắt buộc!"); return; }
         if (previewList.length === 0) { alert("Vui lòng chọn ít nhất 1 sản phẩm!"); return; }
 
-        // Blacklist check
+        // Blacklist check — nếu chưa load được thì block lại, reload rồi thử
+        if (!blacklistLoaded) {
+            alert('⏳ Đang tải danh sách blacklist, vui lòng thử lại sau giây lát.');
+            supabase.from('koc_blacklist').select('id_kenh').then(({ data }) => {
+                setBlacklistChannels(data ? data.map(r => r.id_kenh) : []);
+                setBlacklistLoaded(true);
+            });
+            return;
+        }
         const normK = (k) => String(k || '').trim().replace(/^@/, '').toLowerCase();
         if (blacklistChannels.map(c => normK(c)).includes(normK(idKenh))) {
             alert(`🚫 Kênh "${idKenh}" đang trong danh sách Black List!\nKhông thể tạo đơn hàng cho kênh này.`);
