@@ -124,7 +124,8 @@ const AirLinksTab = () => {
 
     // Blacklist state
     const [blacklistChannels, setBlacklistChannels] = useState([]);
-    const [blacklistModal, setBlacklistModal] = useState({ isOpen: false, unlocked: false, pwInput: '', newChannel: '' });
+    const [blacklistModal, setBlacklistModal] = useState({ isOpen: false, unlocked: false, pwInput: '', newChannel: '', search: '', page: 1 });
+    const BL_PAGE_SIZE = 20;
     const [kocOrderSet, setKocOrderSet] = useState(new Set());
 
     const openDeleteModal = (type, data = null) => {
@@ -833,21 +834,38 @@ const AirLinksTab = () => {
                         <span style={{ fontWeight: 800, color: '#dc2626', fontSize: '0.88rem' }}>🚫 Black List KOC ({blacklistChannels.length} kênh)</span>
                         <span style={{ fontSize: '0.75rem', color: '#ef4444' }}>{blacklistModal.isOpen ? '▲ Thu gọn' : '▼ Mở rộng'}</span>
                     </div>
-                    {blacklistModal.isOpen && (
+                    {blacklistModal.isOpen && (() => {
+                        const blSearch = blacklistModal.search.trim().toLowerCase();
+                        const blFiltered = blSearch ? blacklistChannels.filter(c => c.toLowerCase().includes(blSearch)) : blacklistChannels;
+                        const blTotalPages = Math.max(1, Math.ceil(blFiltered.length / BL_PAGE_SIZE));
+                        const blPage = Math.min(blacklistModal.page, blTotalPages);
+                        const blPageItems = blFiltered.slice((blPage - 1) * BL_PAGE_SIZE, blPage * BL_PAGE_SIZE);
+                        return (
                         <div style={{ padding: '16px' }}>
-                            {/* Danh sách luôn hiện */}
-                            {blacklistChannels.length === 0 ? (
-                                <p style={{ color: '#9ca3af', fontSize: '0.82rem', textAlign: 'center', padding: '8px 0 12px' }}>Chưa có kênh nào trong blacklist</p>
+                            {/* Thanh tìm kiếm */}
+                            <div style={{ marginBottom: 10 }}>
+                                <input type="text" placeholder="🔍 Tìm kiếm ID Kênh..." value={blacklistModal.search}
+                                    onChange={e => setBlacklistModal(m => ({ ...m, search: e.target.value, page: 1 }))}
+                                    style={{ width: '100%', padding: '7px 12px', borderRadius: 8, border: '1px solid #fca5a5', fontSize: '0.85rem', boxSizing: 'border-box' }} />
+                            </div>
+                            {/* Danh sách */}
+                            {blFiltered.length === 0 ? (
+                                <p style={{ color: '#9ca3af', fontSize: '0.82rem', textAlign: 'center', padding: '8px 0 12px' }}>
+                                    {blSearch ? 'Không tìm thấy kênh nào' : 'Chưa có kênh nào trong blacklist'}
+                                </p>
                             ) : (
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', marginBottom: 12 }}>
+                                <>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', marginBottom: 8 }}>
                                     <thead>
                                         <tr style={{ background: '#fef2f2' }}>
-                                            <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, color: '#dc2626' }}>ID Kênh</th>
+                                            <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, color: '#dc2626' }}>
+                                                ID Kênh {blSearch && <span style={{ fontWeight: 400, color: '#9ca3af' }}>({blFiltered.length} kết quả)</span>}
+                                            </th>
                                             <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, color: '#dc2626', width: 80 }}>Xoá</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {blacklistChannels.map((ch, i) => (
+                                        {blPageItems.map((ch, i) => (
                                             <tr key={i} style={{ borderBottom: '1px solid #fee2e2' }}>
                                                 <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontWeight: 600 }}>{ch}</td>
                                                 <td style={{ padding: '8px 12px', textAlign: 'center' }}>
@@ -862,6 +880,17 @@ const AirLinksTab = () => {
                                         ))}
                                     </tbody>
                                 </table>
+                                {/* Pagination */}
+                                {blTotalPages > 1 && (
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 10 }}>
+                                        <button type="button" onClick={() => setBlacklistModal(m => ({ ...m, page: Math.max(1, blPage - 1) }))} disabled={blPage === 1}
+                                            style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #fca5a5', background: blPage === 1 ? '#f9fafb' : '#fff', color: blPage === 1 ? '#d1d5db' : '#dc2626', cursor: blPage === 1 ? 'default' : 'pointer', fontWeight: 700, fontSize: '0.8rem' }}>‹</button>
+                                        <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>Trang {blPage}/{blTotalPages} ({blFiltered.length} kênh)</span>
+                                        <button type="button" onClick={() => setBlacklistModal(m => ({ ...m, page: Math.min(blTotalPages, blPage + 1) }))} disabled={blPage === blTotalPages}
+                                            style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #fca5a5', background: blPage === blTotalPages ? '#f9fafb' : '#fff', color: blPage === blTotalPages ? '#d1d5db' : '#dc2626', cursor: blPage === blTotalPages ? 'default' : 'pointer', fontWeight: 700, fontSize: '0.8rem' }}>›</button>
+                                    </div>
+                                )}
+                                </>
                             )}
                             {/* Phần chỉnh sửa cần mật khẩu */}
                             {!blacklistModal.unlocked ? (
@@ -894,7 +923,7 @@ const AirLinksTab = () => {
                                 </div>
                             )}
                         </div>
-                    )}
+                    )})()}
                 </div>
 
                 <form onSubmit={handleAddLink}>
