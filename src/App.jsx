@@ -1,29 +1,55 @@
 // src/App.jsx
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AppDataProvider } from './context/AppDataContext';
 import OrderTab from './components/OrderTab';
 import ContractTab from './components/ContractTab';
 import AirLinksTab from './components/AirLinksTab';
 import ExpenseEcomTab from './components/ExpenseEcomTab';
 import BookingManagerTab from './components/BookingManagerTab';
-// [MỚI] Import DashboardTab để sử dụng
 import DashboardTab from './components/DashboardTab';
 import BookingPerformanceTab from './components/BookingPerformanceTab';
-import DataArchiveTab from './components/DataArchiveTab'; // [MỚI] Thêm DataArchiveTab
-import GmvRealtimeTab from './components/GmvRealtimeTab'; // [MỚI] Tab GMV Realtime
-import StellaDashboardTab from './components/StellaDashboardTab'; // [MỚI] Tab Dashboard Stella
-import CSKHTab from './components/CSKHTab'; // [MỚI] Tab CSKH Đánh giá
-// ReportCSTab is now imported inside CSKHTab
-import LivestreamTab from './components/LivestreamTab'; // [MỚI] Tab Livestream
-import LandingOrders from './components/LandingOrders'; // [MỚI] Tab Đơn hàng Landing Page
+import DataArchiveTab from './components/DataArchiveTab';
+import GmvRealtimeTab from './components/GmvRealtimeTab';
+import StellaDashboardTab from './components/StellaDashboardTab';
+import CSKHTab from './components/CSKHTab';
+import LivestreamTab from './components/LivestreamTab';
+import LandingOrders from './components/LandingOrders';
 import AIChat from './components/AIChat';
+import LoginPage, { ROLE_VIEWS } from './components/LoginPage';
+
+const SESSION_KEY = 'sk_session';
 
 function App() {
-  // Đổi mặc định thành 'dashboard' để mở lên là thấy ngay báo cáo mới
-  const [currentView, setCurrentView] = useState('dashboard');
+  // ── AUTH STATE ──
+  const [user, setUser] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem(SESSION_KEY)); } catch { return null; }
+  });
+
+  const handleLogin = (account) => {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(account));
+    setUser(account);
+  };
+  const handleLogout = () => {
+    sessionStorage.removeItem(SESSION_KEY);
+    setUser(null);
+  };
+
+  if (!user) return <LoginPage onLogin={handleLogin} />;
+
+  const allowedViews = ROLE_VIEWS[user.role] || [];
+
+  // ── MAIN APP ──
+  return <AppMain user={user} onLogout={handleLogout} allowedViews={allowedViews} />;
+}
+
+function AppMain({ user, onLogout, allowedViews }) {
+  const defaultView = allowedViews[0] || 'dashboard';
+  const [currentView, setCurrentView] = useState(defaultView);
   const [openGroups, setOpenGroups] = useState({ ecom: true, booking: true, archive: true });
   const toggleGroup = (key) => setOpenGroups(prev => ({ ...prev, [key]: !prev[key] }));
+
+  const canView = (v) => allowedViews.includes(v);
 
   // Cấu hình độ rộng Sidebar - FIXED
   const SIDEBAR_WIDTH = '280px';
@@ -102,13 +128,11 @@ function App() {
 
           {/* Menu Items */}
           <div style={{ flex: 1, paddingTop: '8px', overflowY: 'auto' }}>
-
-            {/* Group label helper */}
             {[
               { key: 'ecom', label: '🛍️ Ecom', items: [
                 { view: 'stella_dashboard', icon: '📊', name: 'Stella Dashboard' },
                 { view: 'cskh',             icon: '📋', name: 'CSKH' },
-                { view: 'livestream',        icon: '🎬', name: 'Livestream' },
+                { view: 'livestream',       icon: '🎬', name: 'Livestream' },
               ]},
               { key: 'booking', label: '📅 Booking', items: [
                 { view: 'dashboard',           icon: '📊', name: 'Dashboard' },
@@ -119,39 +143,46 @@ function App() {
                 { view: 'booking',             icon: '📅', name: 'Booking Manager' },
               ]},
               { key: 'archive', label: '🗄️ Lưu trữ', items: [
-                { view: 'data_archive', icon: '🗄️', name: 'Lưu Trữ Data' },
-                { view: 'expense',      icon: '💸', name: 'Ngân Sách Ecom' },
+                { view: 'data_archive',   icon: '🗄️', name: 'Lưu Trữ Data' },
+                { view: 'expense',        icon: '💸', name: 'Ngân Sách Ecom' },
                 { view: 'landing_orders', icon: '🛒', name: 'Đơn hàng Landing Page' },
               ]},
-            ].map(group => (
-              <div key={group.key} style={{ marginBottom: 4 }}>
-                {/* Group header — click to toggle */}
-                <div
-                  onClick={() => toggleGroup(group.key)}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '10px 16px 4px', padding: '12px 16px', cursor: 'pointer', userSelect: 'none', borderRadius: 12, background: 'linear-gradient(135deg, #fff7ed, #fef3c7)', border: '1px solid #fed7aa' }}
-                >
-                  <span style={{ fontSize: '0.92rem', fontWeight: 800, color: '#c2410c', letterSpacing: '0.3px' }}>{group.label}</span>
-                  <span style={{ fontSize: '0.7rem', color: '#f97316', transition: 'transform 0.2s', display: 'inline-block', transform: openGroups[group.key] ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
-                </div>
-                {/* Items — show/hide */}
-                {openGroups[group.key] && group.items.map(({ view, icon, name }) => (
-                  <div key={view}
-                    style={menuItemStyle(currentView === view)}
-                    onClick={() => setCurrentView(view)}
-                    onMouseEnter={(e) => { if (currentView !== view) { e.currentTarget.style.background = '#fff7ed'; e.currentTarget.style.color = '#ea580c'; } }}
-                    onMouseLeave={(e) => { if (currentView !== view) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#666'; } }}
-                  >
-                    <span>{icon}</span>
-                    <span>{name}</span>
+            ].map(group => {
+              const visibleItems = group.items.filter(i => canView(i.view));
+              if (visibleItems.length === 0) return null;
+              return (
+                <div key={group.key} style={{ marginBottom: 4 }}>
+                  <div onClick={() => toggleGroup(group.key)}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '10px 16px 4px', padding: '12px 16px', cursor: 'pointer', userSelect: 'none', borderRadius: 12, background: 'linear-gradient(135deg, #fff7ed, #fef3c7)', border: '1px solid #fed7aa' }}>
+                    <span style={{ fontSize: '0.92rem', fontWeight: 800, color: '#c2410c', letterSpacing: '0.3px' }}>{group.label}</span>
+                    <span style={{ fontSize: '0.7rem', color: '#f97316', transition: 'transform 0.2s', display: 'inline-block', transform: openGroups[group.key] ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
                   </div>
-                ))}
-              </div>
-            ))}
-
+                  {openGroups[group.key] && visibleItems.map(({ view, icon, name }) => (
+                    <div key={view}
+                      style={menuItemStyle(currentView === view)}
+                      onClick={() => setCurrentView(view)}
+                      onMouseEnter={(e) => { if (currentView !== view) { e.currentTarget.style.background = '#fff7ed'; e.currentTarget.style.color = '#ea580c'; } }}
+                      onMouseLeave={(e) => { if (currentView !== view) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#666'; } }}>
+                      <span>{icon}</span>
+                      <span>{name}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
           </div>
 
-          <div style={{ padding: '16px', borderTop: '1px solid #eee', fontSize: '0.7rem', color: '#999', fontStyle: 'italic', textAlign: 'center', letterSpacing: '1px', textTransform: 'uppercase' }}>
-            v3.0 STELLA KINETICS
+          {/* User info + logout */}
+          <div style={{ padding: '12px 16px', borderTop: '1px solid #eee' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff7ed', borderRadius: 10, padding: '10px 12px', border: '1px solid #fed7aa' }}>
+              <div>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#ea580c' }}>👤 {user.name}</div>
+                <div style={{ fontSize: '0.68rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{user.role}</div>
+              </div>
+              <button onClick={onLogout} style={{ padding: '5px 10px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 7, color: '#dc2626', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>
+                Đăng xuất
+              </button>
+            </div>
           </div>
         </div>
 
