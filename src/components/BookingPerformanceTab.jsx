@@ -187,22 +187,94 @@ const BookingPerformanceTab = () => {
     const currentFetchRef = useRef(0); // Track latest fetch to prevent race conditions
     const [isProcessing, setIsProcessing] = useState(false);
     const [loadProgress, setLoadProgress] = useState({ current: 0, total: 0 }); // Track DB fetch progress
+    const [lastLoadedLabel, setLastLoadedLabel] = useState(''); // "Đã lưu X tiếng trước"
+
+    // In-memory session cache: { "2026_4": [...data] }
+    const sessionCacheRef = useRef({});
+    // localStorage cache max age: 12 hours
+    const CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
     // HELPERS
     const formatNumber = (val) => new Intl.NumberFormat('vi-VN').format(val || 0);
 
-    // (Removed slow hasAutoDetected logic because it causes Month/Year to be null while waiting for 100k AirLinks to load)
+    const getCacheKey = (m, y) => `perfData_${y}_${m}`;
 
-    // Load on mount only (first time)
+    // Đọc cache từ localStorage (kèm timestamp)
+    const loadFromLocalCache = (m, y) => {
+        try {
+            const raw = localStorage.getItem(getCacheKey(m, y));
+            if (!raw) return null;
+            const { data, savedAt } = JSON.parse(raw);
+            if (!data || !savedAt) return null;
+            const age = Date.now() - savedAt;
+            if (age > CACHE_MAX_AGE_MS) return null; // Quá cũ
+            const hoursAgo = Math.round(age / 3600000);
+            return { data, hoursAgo };
+        } catch { return null; }
+    };
+
+    // Load on mount — thử cache trước, nếu không có thì fetch Supabase
     useEffect(() => {
         if (month && year) {
+            const cacheKey = `${year}_${month}`;
+            // Check session cache first
+            if (sessionCacheRef.current[cacheKey]) {
+                setImportedData(sessionCacheRef.current[cacheKey]);
+                setLastLoadedLabel('Đã tải (session cache)');
+                return;
+            }
+            // Check localStorage cache
+            const cached = loadFromLocalCache(parseInt(month), parseInt(year));
+            if (cached) {
+                setImportedData(cached.data);
+                sessionCacheRef.current[cacheKey] = cached.data;
+                setLastLoadedLabel(`Đã lưu ${cached.hoursAgo > 0 ? cached.hoursAgo + ' tiếng' : '< 1 tiếng'} trước`);
+                return;
+            }
+            // No cache — fetch Supabase
             const fetchId = Date.now();
             currentFetchRef.current = fetchId;
             loadPerformanceData(parseInt(month), parseInt(year), fetchId);
         }
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const handleLoadReport = () => {
+    // Khi đổi tháng/năm: kiểm tra cache, nếu có thì load ngay
+    useEffect(() => {
+        const cacheKey = `${year}_${month}`;
+        if (sessionCacheRef.current[cacheKey]) {
+            setImportedData(sessionCacheRef.current[cacheKey]);
+            setLastLoadedLabel('Đã tải (session cache)');
+        } else {
+            const cached = loadFromLocalCache(parseInt(month), parseInt(year));
+            if (cached) {
+                setImportedData(cached.data);
+                sessionCacheRef.current[cacheKey] = cached.data;
+                setLastLoadedLabel(`Đã lưu ${cached.hoursAgo > 0 ? cached.hoursAgo + ' tiếng' : '< 1 tiếng'} trước`);
+            } else {
+                // Không có cache, xóa data cũ để tránh hiển thị nhầm
+                setImportedData([]);
+                setLastLoadedLabel('');
+            }
+        }
+    }, [month, year]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const handleLoadReport = (forceRefresh = false) => {
+        if (!forceRefresh) {
+            // Check cache trước
+            const cacheKey = `${year}_${month}`;
+            if (sessionCacheRef.current[cacheKey]) {
+                setImportedData(sessionCacheRef.current[cacheKey]);
+                setLastLoadedLabel('Đã tải (session cache)');
+                return;
+            }
+            const cached = loadFromLocalCache(parseInt(month), parseInt(year));
+            if (cached) {
+                setImportedData(cached.data);
+                sessionCacheRef.current[cacheKey] = cached.data;
+                setLastLoadedLabel(`Đã lưu ${cached.hoursAgo > 0 ? cached.hoursAgo + ' tiếng' : '< 1 tiếng'} trước`);
+                return;
+            }
+        }
         const fetchId = Date.now();
         currentFetchRef.current = fetchId;
         loadPerformanceData(parseInt(month), parseInt(year), fetchId);
@@ -283,6 +355,14 @@ const BookingPerformanceTab = () => {
             // ONLY update state if this is still the most recent fetch
             if (!fetchId || currentFetchRef.current === fetchId) {
                 setImportedData(allData);
+                // Lưu vào session cache và localStorage (cache 12 tiếng)
+                const ck = `${targetYear}_${targetMonth}`;
+                sessionCacheRef.current[ck] = allData;
+                try {
+                    localStorage.setItem(getCacheKey(targetMonth, targetYear),
+                        JSON.stringify({ data: allData, savedAt: Date.now() }));
+                } catch (e) { /* ignore nếu localStorage đầy */ }
+                setLastLoadedLabel('Vừa tải xong ✓');
                 setIsLoadingData(false);
             } else {
                 console.log(`⚠️ Discarding stale data for ${targetMonth}/${targetYear}`);
@@ -1134,10 +1214,14 @@ ${txtFormat}
             const map = {};
             castBudgetData.forEach(d => { map[d.name] = d.castBudget; });
             setCastBudgetByNhanSu(map);
-            // Persist to localStorage keyed by month/year so AirLinksTab loads it automatically
-            try {
-                localStorage.setItem(`castBudget_${year}_${month}`, JSON.stringify(map));
-            } catch (e) { /* ignore storage errors */ }
+            // Chỉ save localStorage khi có ít nhất 1 nhân sự có GMV thật (> 15tr minimum)
+            // Tránh lưu data stale khi GMV matches bằng 0
+            const hasRealGmv = castBudgetData.some(d => d.castBudget > 15000000);
+            if (hasRealGmv) {
+                try {
+                    localStorage.setItem(`castBudget_${year}_${month}`, JSON.stringify(map));
+                } catch (e) { /* ignore storage errors */ }
+            }
         }
     }, [castBudgetData, year, month]);
     const castBudgetCols = [
@@ -1168,10 +1252,19 @@ ${txtFormat}
                                 <option key={y} value={y} style={{ color: 'black', backgroundColor: 'white' }}>{y}</option>
                             ))}
                         </select>
-                        <button onClick={handleLoadReport} disabled={isLoadingData}
-                            style={{ padding: '8px 20px', background: isLoadingData ? '#d1d5db' : 'linear-gradient(135deg,#f59e0b,#ea580c)', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: isLoadingData ? 'default' : 'pointer', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
-                            {isLoadingData ? '⏳ Đang tải...' : '🔄 Tải Báo Cáo'}
-                        </button>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                                <button onClick={() => handleLoadReport(false)} disabled={isLoadingData}
+                                    style={{ padding: '8px 16px', background: isLoadingData ? '#d1d5db' : 'linear-gradient(135deg,#f59e0b,#ea580c)', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: isLoadingData ? 'default' : 'pointer', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                                    {isLoadingData ? '⏳ Đang tải...' : '📂 Xem Báo Cáo'}
+                                </button>
+                                <button onClick={() => handleLoadReport(true)} disabled={isLoadingData} title="Tải lại từ Supabase, bỏ qua cache"
+                                    style={{ padding: '8px 10px', background: isLoadingData ? '#d1d5db' : '#f3f4f6', color: '#374151', border: '1px solid #d1d5db', borderRadius: '8px', fontWeight: 600, cursor: isLoadingData ? 'default' : 'pointer', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                                    🔄
+                                </button>
+                            </div>
+                            {lastLoadedLabel && <span style={{ fontSize: '0.68rem', color: '#10b981', fontWeight: 600 }}>{lastLoadedLabel}</span>}
+                        </div>
                         <select value={filterBrand} onChange={e => setFilterBrand(e.target.value)} style={{ padding: '8px', borderRadius: '8px', flex: 1, color: '#333', background: '#f9fafb', border: '1px solid #ddd', minWidth: '150px' }}>
                             <option value="" style={{ color: 'black', backgroundColor: 'white' }}>Tất cả Brand</option>
                             {brands?.map(b => <option key={b.id} value={b.id} style={{ color: 'black', backgroundColor: 'white' }}>{b.ten_brand}</option>)}

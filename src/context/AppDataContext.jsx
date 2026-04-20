@@ -983,16 +983,18 @@ export const AppDataProvider = ({ children }) => {
     const brandHeaders = Array.from(brandSet).sort();
     setAirReportData({ reportRows, brandHeaders });
 
-    // Auto-load saved cast budget for this month/year from localStorage
-    try {
-      const saved = localStorage.getItem(`castBudget_${airReportYear}_${airReportMonth}`);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object') {
-          setCastBudgetByNhanSu(parsed);
+    // Load cast budget từ localStorage CHỈ KHI context đang rỗng (không ghi đè live data từ BookingPerformanceTab)
+    if (Object.keys(castBudgetByNhanSu).length === 0) {
+      try {
+        const saved = localStorage.getItem(`castBudget_${airReportYear}_${airReportMonth}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && typeof parsed === 'object') {
+            setCastBudgetByNhanSu(parsed);
+          }
         }
-      }
-    } catch (e) { /* ignore */ }
+      } catch (e) { /* ignore */ }
+    }
 
     setIsAirReportLoading(false);
   };
