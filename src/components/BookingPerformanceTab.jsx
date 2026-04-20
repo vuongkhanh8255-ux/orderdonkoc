@@ -172,7 +172,7 @@ const DataTable = ({ columns, data = [], title }) => {
 };
 
 const BookingPerformanceTab = () => {
-    const { brands, nhanSus, airLinks, loadAirLinks } = useAppData();
+    const { brands, nhanSus, airLinks, loadAirLinks, setCastBudgetByNhanSu } = useAppData();
     const fileInputRef = useRef(null);
 
     // FILTERS
@@ -1122,6 +1122,15 @@ ${txtFormat}
             return { name: s.name, gmvTotal: s.gmvCum + s.gmvMonth, castBudget: budget };
         })
         .sort((a, b) => b.castBudget - a.castBudget);
+
+    // Sync budget map to context so AirLinksTab can use it
+    useEffect(() => {
+        if (castBudgetData.length > 0) {
+            const map = {};
+            castBudgetData.forEach(d => { map[d.name] = d.castBudget; });
+            setCastBudgetByNhanSu(map);
+        }
+    }, [castBudgetData]);
     const castBudgetCols = [
         { header: 'Tên Nhân Sự', accessor: 'name', isBold: true },
         { header: 'GMV Lũy Kế + Air Tháng', accessor: 'gmvTotal', formatter: formatNumber },

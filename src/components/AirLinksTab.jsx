@@ -107,6 +107,7 @@ const AirLinksTab = () => {
         airReportMonth, setAirReportMonth, airReportYear, setAirReportYear,
         airReportData, isAirReportLoading, handleGenerateAirLinksReport, requestAirSort,
         sortedAirReportRows, totalsRowAirReport,
+        castBudgetByNhanSu,
         filterAlLinkAir, setFilterAlLinkAir,
         filterAlMonth, setFilterAlMonth
     } = useAppData();
@@ -1373,24 +1374,74 @@ const AirLinksTab = () => {
             </div>
 
             {/* BÁO CÁO HIỆU SUẤT */}
-            <div className="mirinda-card" style={{ marginBottom: '2rem', padding: '25px', borderRadius: '12px', border: '2px solid #000', boxShadow: '4px 4px 0px #000', backgroundColor: '#fff' }}>
-                <h2 style={{ textAlign: 'center', color: '#333', fontSize: '1.4rem', marginBottom: '1.5rem', fontWeight: '800' }}>BÁO CÁO HIỆU SUẤT AIR LINKS</h2>
-                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem' }}>
-                    <select value={airReportMonth} onChange={e => setAirReportMonth(e.target.value)} style={{ padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '1rem' }}>{Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>Tháng {i + 1}</option>)}</select>
-                    <input type="number" value={airReportYear} onChange={e => setAirReportYear(e.target.value)} style={{ width: '90px', padding: '10px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '1rem' }} />
-                    <button onClick={handleGenerateAirLinksReport} disabled={isAirReportLoading} style={{ backgroundColor: '#165B33', color: 'white', padding: '10px 25px', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '1rem', fontWeight: 'bold' }}>{isAirReportLoading ? '...' : 'Xem Báo Cáo'}</button>
+            <div className="mirinda-card" style={{ marginBottom: '2rem', padding: '25px', borderRadius: '16px', border: '1px solid #e5e7eb', boxShadow: '0 4px 12px rgba(0,0,0,0.06)', backgroundColor: '#fff' }}>
+                <h2 style={{ textAlign: 'center', color: '#ea580c', fontSize: '1.2rem', marginBottom: '1.2rem', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>📊 Báo Cáo Hiệu Suất Air Links</h2>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem' }}>
+                    <select value={airReportMonth} onChange={e => setAirReportMonth(e.target.value)} style={{ padding: '9px 14px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '0.9rem', outline: 'none' }}>{Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>Tháng {i + 1}</option>)}</select>
+                    <input type="number" value={airReportYear} onChange={e => setAirReportYear(e.target.value)} style={{ width: '90px', padding: '9px 14px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '0.9rem', outline: 'none' }} />
+                    <button onClick={handleGenerateAirLinksReport} disabled={isAirReportLoading} style={{ background: 'linear-gradient(135deg,#f59e0b,#ea580c)', color: '#fff', padding: '9px 24px', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '700' }}>{isAirReportLoading ? '⏳...' : 'Xem Báo Cáo'}</button>
                 </div>
+                {Object.keys(castBudgetByNhanSu).length === 0 && (
+                    <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 14px', marginBottom: 12, fontSize: '0.8rem', color: '#92400e' }}>
+                        💡 Để xem cột <b>Định Mức Cast</b> & <b>Còn Lại</b>, hãy vào tab <b>Báo Cáo Hiệu Suất</b> và import data tháng tương ứng trước.
+                    </div>
+                )}
                 {airReportData.reportRows.length > 0 ? (
                     <div style={{ width: '100%', overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.95rem' }}>
-                            <thead style={{ backgroundColor: '#f9f9f9', borderBottom: '2px solid #eee' }}>
-                                <tr><th onClick={() => requestAirSort('ten_nhansu')} style={{ cursor: 'pointer', padding: '14px', textAlign: 'left' }}>Nhân Sự</th><th onClick={() => requestAirSort('sl_video_air')} style={{ cursor: 'pointer', textAlign: 'center', padding: '14px' }}>SL Video</th><th onClick={() => requestAirSort('chi_phi_cast')} style={{ cursor: 'pointer', textAlign: 'center', padding: '14px' }}>Chi Phí Cast</th>{airReportData.brandHeaders.map(brand => (<th key={brand} style={{ textAlign: 'center', padding: '14px' }}>{brand}</th>))}</tr>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                            <thead>
+                                <tr style={{ background: 'linear-gradient(135deg,#fff7ed,#fef3c7)', borderBottom: '2px solid #fed7aa' }}>
+                                    <th onClick={() => requestAirSort('ten_nhansu')} style={{ cursor: 'pointer', padding: '12px 14px', textAlign: 'left', fontWeight: 800, color: '#92400e', whiteSpace: 'nowrap', borderRight: '1px solid #fed7aa' }}>Nhân Sự ↕</th>
+                                    <th onClick={() => requestAirSort('sl_video_air')} style={{ cursor: 'pointer', textAlign: 'center', padding: '12px 10px', fontWeight: 800, color: '#92400e', whiteSpace: 'nowrap', borderRight: '1px solid #fed7aa' }}>SL Video ↕</th>
+                                    <th onClick={() => requestAirSort('chi_phi_cast')} style={{ cursor: 'pointer', textAlign: 'right', padding: '12px 14px', fontWeight: 800, color: '#92400e', whiteSpace: 'nowrap', borderRight: '1px solid #fed7aa' }}>Chi Phí Cast ↕</th>
+                                    <th style={{ textAlign: 'right', padding: '12px 14px', fontWeight: 800, color: '#92400e', whiteSpace: 'nowrap', borderRight: '1px solid #fed7aa' }}>Định Mức Cast</th>
+                                    <th style={{ textAlign: 'right', padding: '12px 14px', fontWeight: 800, color: '#92400e', whiteSpace: 'nowrap', borderRight: '2px solid #fed7aa' }}>Còn Lại</th>
+                                    {airReportData.brandHeaders.map(brand => (<th key={brand} style={{ textAlign: 'center', padding: '12px 10px', fontWeight: 700, color: '#6b7280', whiteSpace: 'nowrap', borderRight: '1px solid #f3f4f6' }}>{brand}</th>))}
+                                </tr>
                             </thead>
-                            <tbody>{sortedAirReportRows.map((item) => (<tr key={item.nhansu_id} style={{ borderBottom: '1px solid #f0f0f0' }}><td style={{ fontWeight: 'bold', color: '#165B33', padding: '14px' }}>{item.ten_nhansu}</td><td style={{ textAlign: 'center', padding: '14px' }}>{item.sl_video_air}</td><td style={{ textAlign: 'center', padding: '14px' }}>{Math.round(item.chi_phi_cast).toLocaleString('vi-VN')} đ</td>{airReportData.brandHeaders.map(brand => (<td key={brand} style={{ textAlign: 'center', padding: '14px' }}>{item.brand_counts_air[brand] || 0}</td>))}</tr>))}</tbody>
-                            <tfoot>{totalsRowAirReport && (<tr style={{ backgroundColor: '#fff5f5', fontWeight: 'bold', color: '#D42426' }}><td style={{ padding: '14px' }}>TỔNG CỘNG</td><td style={{ textAlign: 'center', padding: '14px' }}>{totalsRowAirReport.sl_video_air}</td><td style={{ textAlign: 'center', padding: '14px' }}>{Math.round(totalsRowAirReport.chi_phi_cast).toLocaleString('vi-VN')} đ</td>{airReportData.brandHeaders.map(brand => (<td key={brand} style={{ textAlign: 'center', padding: '14px' }}>{totalsRowAirReport.brand_counts_air[brand] || 0}</td>))}</tr>)}</tfoot>
+                            <tbody>
+                                {sortedAirReportRows.map((item, i) => {
+                                    const budget = castBudgetByNhanSu[item.ten_nhansu];
+                                    const remaining = budget != null ? budget - item.chi_phi_cast : null;
+                                    const rowBg = i % 2 === 0 ? '#fff' : '#fafafa';
+                                    return (
+                                        <tr key={item.nhansu_id} style={{ borderBottom: '1px solid #f0f0f0', background: rowBg }}
+                                            onMouseEnter={e => e.currentTarget.style.background = '#fff7ed'}
+                                            onMouseLeave={e => e.currentTarget.style.background = rowBg}>
+                                            <td style={{ fontWeight: 700, color: '#ea580c', padding: '11px 14px', borderRight: '1px solid #f3f4f6' }}>{item.ten_nhansu}</td>
+                                            <td style={{ textAlign: 'center', padding: '11px 10px', color: '#374151', borderRight: '1px solid #f3f4f6' }}>{item.sl_video_air}</td>
+                                            <td style={{ textAlign: 'right', padding: '11px 14px', fontWeight: 600, color: '#374151', borderRight: '1px solid #f3f4f6' }}>{Math.round(item.chi_phi_cast).toLocaleString('vi-VN')} đ</td>
+                                            <td style={{ textAlign: 'right', padding: '11px 14px', fontWeight: 700, color: '#0369a1', borderRight: '1px solid #f3f4f6' }}>
+                                                {budget != null ? `${Math.round(budget).toLocaleString('vi-VN')} đ` : <span style={{ color: '#d1d5db' }}>—</span>}
+                                            </td>
+                                            <td style={{ textAlign: 'right', padding: '11px 14px', fontWeight: 800, borderRight: '2px solid #f0f0f0',
+                                                color: remaining == null ? '#d1d5db' : remaining >= 0 ? '#16a34a' : '#dc2626' }}>
+                                                {remaining != null ? `${Math.round(remaining).toLocaleString('vi-VN')} đ` : <span style={{ color: '#d1d5db' }}>—</span>}
+                                            </td>
+                                            {airReportData.brandHeaders.map(brand => (
+                                                <td key={brand} style={{ textAlign: 'center', padding: '11px 10px', color: '#6b7280', borderRight: '1px solid #f3f4f6' }}>{item.brand_counts_air[brand] || 0}</td>
+                                            ))}
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                            <tfoot>
+                                {totalsRowAirReport && (
+                                    <tr style={{ background: 'linear-gradient(135deg,#fff7ed,#fef3c7)', borderTop: '2px solid #fed7aa', fontWeight: 800 }}>
+                                        <td style={{ padding: '12px 14px', color: '#c2410c', borderRight: '1px solid #fed7aa' }}>TỔNG CỘNG</td>
+                                        <td style={{ textAlign: 'center', padding: '12px 10px', color: '#c2410c', borderRight: '1px solid #fed7aa' }}>{totalsRowAirReport.sl_video_air}</td>
+                                        <td style={{ textAlign: 'right', padding: '12px 14px', color: '#c2410c', borderRight: '1px solid #fed7aa' }}>{Math.round(totalsRowAirReport.chi_phi_cast).toLocaleString('vi-VN')} đ</td>
+                                        <td style={{ borderRight: '1px solid #fed7aa' }}></td>
+                                        <td style={{ borderRight: '2px solid #fed7aa' }}></td>
+                                        {airReportData.brandHeaders.map(brand => (
+                                            <td key={brand} style={{ textAlign: 'center', padding: '12px 10px', color: '#c2410c', borderRight: '1px solid #f3f4f6' }}>{totalsRowAirReport.brand_counts_air[brand] || 0}</td>
+                                        ))}
+                                    </tr>
+                                )}
+                            </tfoot>
                         </table>
                     </div>
-                ) : <p style={{ textAlign: 'center', color: '#999' }}>Chưa có dữ liệu báo cáo.</p>}
+                ) : <p style={{ textAlign: 'center', color: '#9ca3af', padding: '24px 0' }}>Chưa có dữ liệu báo cáo.</p>}
             </div>
 
             {/* DANH SÁCH LINK - TABLE ĐÃ UPDATE INLINE EDIT */}

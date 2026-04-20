@@ -187,6 +187,8 @@ export const AppDataProvider = ({ children }) => {
   const [airReportData, setAirReportData] = useState({ reportRows: [], brandHeaders: [] });
   const [isAirReportLoading, setIsAirReportLoading] = useState(false);
   const [airSortConfig, setAirSortConfig] = useState({ key: 'chi_phi_cast', direction: 'desc' });
+  // Cast budget map: { [tenNhanSu]: budget } — populated by BookingPerformanceTab
+  const [castBudgetByNhanSu, setCastBudgetByNhanSu] = useState({});
 
   // --- LOGIC ---
   const handleResize = (key) => (e, { size }) => {
@@ -1197,6 +1199,7 @@ export const AppDataProvider = ({ children }) => {
     airReportData, setAirReportData, isAirReportLoading, setIsAirReportLoading,
     airSortConfig, setAirSortConfig, handleGenerateAirLinksReport, requestAirSort,
     sortedAirReportRows, totalsRowAirReport,
+    castBudgetByNhanSu, setCastBudgetByNhanSu,
 
     // Auth
     user, handleLogin, handleLogout, isLoggingIn, loginError,
