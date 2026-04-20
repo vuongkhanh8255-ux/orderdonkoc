@@ -199,8 +199,8 @@ function AppMain({ user, onLogout, allowedViews }) {
         {/* --- MAIN CONTENT --- */}
         <div style={mainContentStyle}>
 
+          {/* Tabs render bình thường (mount/unmount theo active) */}
           {currentView === 'dashboard' && <DashboardTab />}
-          {currentView === 'booking_performance' && <BookingPerformanceTab />}
           {currentView === 'order' && <OrderTab />}
           {currentView === 'contract' && <ContractTab />}
           {currentView === 'airlinks' && <AirLinksTab />}
@@ -212,6 +212,14 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'cskh' && <CSKHTab />}
           {currentView === 'livestream' && <LivestreamTab />}
           {currentView === 'landing_orders' && <LandingOrders />}
+
+          {/* BookingPerformanceTab luôn mounted, chỉ ẩn/hiện bằng display
+              → state và data cache không mất khi đổi tab */}
+          {canView('booking_performance') && (
+            <div style={{ display: currentView === 'booking_performance' ? 'block' : 'none' }}>
+              <BookingPerformanceTab />
+            </div>
+          )}
 
         </div>
       </div>
