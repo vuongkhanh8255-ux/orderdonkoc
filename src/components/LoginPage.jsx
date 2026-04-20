@@ -5,6 +5,7 @@ const LoginPage = ({ onLogin }) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [showPass, setShowPass] = useState(false);
+    const [remember, setRemember] = useState(true);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -17,7 +18,7 @@ const LoginPage = ({ onLogin }) => {
                 a => a.username === username.trim().toLowerCase() && a.password === password
             );
             if (found) {
-                onLogin(found);
+                onLogin(found, remember);
             } else {
                 setError('Sai tên đăng nhập hoặc mật khẩu!');
             }
@@ -93,6 +94,13 @@ const LoginPage = ({ onLogin }) => {
                             </button>
                         </div>
                     </div>
+
+                    {/* Ghi nhớ đăng nhập */}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+                        <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)}
+                            style={{ width: 16, height: 16, accentColor: '#ea580c', cursor: 'pointer' }} />
+                        <span style={{ fontSize: '0.82rem', color: '#6b7280' }}>Ghi nhớ đăng nhập</span>
+                    </label>
 
                     {error && (
                         <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', color: '#dc2626', fontSize: '0.82rem', fontWeight: 600 }}>

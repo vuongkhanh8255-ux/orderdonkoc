@@ -21,16 +21,26 @@ import LoginPage, { ROLE_VIEWS } from './components/LoginPage';
 const SESSION_KEY = 'sk_session';
 
 function App() {
-  // ── AUTH STATE ──
+  // ── AUTH STATE — ưu tiên localStorage (ghi nhớ), fallback sessionStorage ──
   const [user, setUser] = useState(() => {
-    try { return JSON.parse(sessionStorage.getItem(SESSION_KEY)); } catch { return null; }
+    try {
+      return JSON.parse(localStorage.getItem(SESSION_KEY))
+          || JSON.parse(sessionStorage.getItem(SESSION_KEY));
+    } catch { return null; }
   });
 
-  const handleLogin = (account) => {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(account));
+  const handleLogin = (account, remember) => {
+    if (remember) {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(account));
+      sessionStorage.removeItem(SESSION_KEY);
+    } else {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(account));
+      localStorage.removeItem(SESSION_KEY);
+    }
     setUser(account);
   };
   const handleLogout = () => {
+    localStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem(SESSION_KEY);
     setUser(null);
   };
