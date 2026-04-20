@@ -196,14 +196,20 @@ const BookingPerformanceTab = () => {
 
     // (Removed slow hasAutoDetected logic because it causes Month/Year to be null while waiting for 100k AirLinks to load)
 
-    // Auto-load performance data from DB when month/year changes
+    // Load on mount only (first time)
     useEffect(() => {
         if (month && year) {
             const fetchId = Date.now();
             currentFetchRef.current = fetchId;
             loadPerformanceData(parseInt(month), parseInt(year), fetchId);
         }
-    }, [month, year]);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const handleLoadReport = () => {
+        const fetchId = Date.now();
+        currentFetchRef.current = fetchId;
+        loadPerformanceData(parseInt(month), parseInt(year), fetchId);
+    };
 
     // --- DB IMPORT SYSTEM (New) ---
     const [sheetUrl, setSheetUrl] = useState(localStorage.getItem('booking_sheet_url') || '');
@@ -1224,7 +1230,7 @@ ${txtFormat}
                     {/* NOTE: Import feature has been moved to the Data Archive Tab */}
 
                     {/* GLOBAL FILTER */}
-                    <div style={{ background: '#fff', border: '1px solid #eee', padding: '20px', borderRadius: '16px', marginBottom: '30px', display: 'flex', gap: '20px', flexWrap: 'wrap', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                    <div style={{ background: '#fff', border: '1px solid #eee', padding: '20px', borderRadius: '16px', marginBottom: '30px', display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'center', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                         <select value={month} onChange={e => setMonth(e.target.value)} style={{ padding: '8px', borderRadius: '8px', color: '#333', background: '#f9fafb', border: '1px solid #ddd', minWidth: '100px' }}>
                             {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1} style={{ color: 'black', backgroundColor: 'white' }}>Tháng {i + 1}</option>)}
                         </select>
@@ -1233,6 +1239,10 @@ ${txtFormat}
                                 <option key={y} value={y} style={{ color: 'black', backgroundColor: 'white' }}>{y}</option>
                             ))}
                         </select>
+                        <button onClick={handleLoadReport} disabled={isLoadingData}
+                            style={{ padding: '8px 20px', background: isLoadingData ? '#d1d5db' : 'linear-gradient(135deg,#f59e0b,#ea580c)', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: isLoadingData ? 'default' : 'pointer', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                            {isLoadingData ? '⏳ Đang tải...' : '🔄 Tải Báo Cáo'}
+                        </button>
                         <select value={filterBrand} onChange={e => setFilterBrand(e.target.value)} style={{ padding: '8px', borderRadius: '8px', flex: 1, color: '#333', background: '#f9fafb', border: '1px solid #ddd', minWidth: '150px' }}>
                             <option value="" style={{ color: 'black', backgroundColor: 'white' }}>Tất cả Brand</option>
                             {brands?.map(b => <option key={b.id} value={b.id} style={{ color: 'black', backgroundColor: 'white' }}>{b.ten_brand}</option>)}
