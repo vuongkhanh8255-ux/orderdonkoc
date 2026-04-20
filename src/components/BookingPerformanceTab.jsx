@@ -1118,13 +1118,15 @@ ${txtFormat}
     ];
 
     // Booking cast budget: max(15tr, (gmvCum + gmvMonth) × 2.5%)
-    const castBudgetData = staffStats
+    // Must be useMemo (not plain var) to keep stable reference and avoid infinite effect loop
+    const castBudgetData = useMemo(() => staffStats
         .map(s => {
             const base = (s.gmvCum + s.gmvMonth) * 0.025;
             const budget = Math.max(15000000, base);
             return { name: s.name, gmvTotal: s.gmvCum + s.gmvMonth, castBudget: budget };
         })
-        .sort((a, b) => b.castBudget - a.castBudget);
+        .sort((a, b) => b.castBudget - a.castBudget),
+    [staffStats]);
 
     // Sync budget map to context so AirLinksTab can use it
     useEffect(() => {
