@@ -1135,8 +1135,12 @@ ${txtFormat}
             const map = {};
             castBudgetData.forEach(d => { map[d.name] = d.castBudget; });
             setCastBudgetByNhanSu(map);
+            // Persist to localStorage keyed by month/year so AirLinksTab loads it automatically
+            try {
+                localStorage.setItem(`castBudget_${year}_${month}`, JSON.stringify(map));
+            } catch (e) { /* ignore storage errors */ }
         }
-    }, [castBudgetData]);
+    }, [castBudgetData, year, month]);
     const castBudgetCols = [
         { header: 'Tên Nhân Sự', accessor: 'name', isBold: true },
         { header: 'GMV Lũy Kế + Air Tháng', accessor: 'gmvTotal', formatter: formatNumber },
