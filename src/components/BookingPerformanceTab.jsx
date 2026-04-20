@@ -181,9 +181,6 @@ const BookingPerformanceTab = () => {
     const [filterBrand, setFilterBrand] = useState('');
     const [filterStaff, setFilterStaff] = useState('');
     const [filterKoc, setFilterKoc] = useState('');
-    const [isUnlocked, setIsUnlocked] = useState(false); // Password protection
-    const [lockPassword, setLockPassword] = useState(''); // Secure password input
-
     const [uploadBrandId, setUploadBrandId] = useState('');
     const [importedData, setImportedData] = useState([]); // This will now be fetched from DB
     const [isLoadingData, setIsLoadingData] = useState(false); // Track loading DB state
@@ -1157,80 +1154,6 @@ ${txtFormat}
         <div style={{ padding: '20px', maxWidth: '1600px', margin: '0 auto', fontFamily: 'Outfit, sans-serif' }}>
             <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#333', marginBottom: '20px' }}>📊 DASHBOARD HIỆU SUẤT BOOKING</h2>
 
-            {/* PASSWORD LOCK */}
-            {!isUnlocked ? (
-                <div style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    minHeight: '60vh',
-                    background: '#f9fafb',
-                    borderRadius: '20px',
-                    padding: '60px',
-                    border: '2px solid #ddd',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                }}>
-                    <div style={{ fontSize: '80px', marginBottom: '30px' }}>🔒</div>
-                    <h3 style={{ color: '#ea580c', fontSize: '2rem', marginBottom: '20px', fontWeight: 'bold' }}>
-                        Khu Vực Bảo Mật
-                    </h3>
-                    <p style={{ color: '#666', fontSize: '1.1rem', marginBottom: '30px', textAlign: 'center', maxWidth: '500px' }}>
-                        Dashboard này chứa thông tin nhạy cảm về doanh thu và hiệu suất.<br />
-                        Vui lòng nhập mật khẩu để truy cập.
-                    </p>
-                    <input
-                        type="password"
-                        value={lockPassword}
-                        onChange={(e) => setLockPassword(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                                if (lockPassword === 'QUOCKHANH8255') setIsUnlocked(true);
-                                else { alert('❌ Mật khẩu sai! Vui lòng thử lại.'); setLockPassword(''); }
-                            }
-                        }}
-                        placeholder="••••••••"
-                        style={{
-                            padding: '12px 24px',
-                            fontSize: '1.2rem',
-                            borderRadius: '50px',
-                            border: '1px solid #ccc',
-                            marginBottom: '20px',
-                            textAlign: 'center',
-                            width: '250px',
-                            outline: 'none',
-                            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)'
-                        }}
-                    />
-                    <button
-                        onClick={() => {
-                            if (lockPassword === 'QUOCKHANH8255') {
-                                setIsUnlocked(true);
-                            } else {
-                                alert('❌ Mật khẩu sai! Vui lòng thử lại.');
-                                setLockPassword('');
-                            }
-                        }}
-                        style={{
-                            padding: '15px 50px',
-                            fontSize: '1.2rem',
-                            fontWeight: 'bold',
-                            background: '#ea580c',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '50px',
-                            cursor: 'pointer',
-                            boxShadow: '0 4px 6px -1px rgba(234, 88, 12, 0.4)',
-                            transition: 'transform 0.2s'
-                        }}
-                        onMouseEnter={(e) => e.target.style.transform = 'scale(1.05)'}
-                        onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
-                    >
-                        🔓 MỞ KHÓA
-                    </button>
-                </div>
-            ) : (
-                <>
                     {/* NOTE: Import feature has been moved to the Data Archive Tab */}
 
                     {/* GLOBAL FILTER */}
@@ -1393,8 +1316,6 @@ ${txtFormat}
                         </div>
                     </div>
 
-                </>
-            )}
         </div>
     );
 };
