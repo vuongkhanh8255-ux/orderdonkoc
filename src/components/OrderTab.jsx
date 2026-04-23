@@ -362,8 +362,7 @@ const OrderTab = () => {
                                         "Mặt nạ tràm trà", "Mask Tràm Trà", "Mask Tràm Trà 60gr",
                                         "Dầu olive 250ml", "Scrub cà phê", "Dầu dừa 250ml",
                                         "Xịt bưởi 100ml", "Bột đậu đỏ", "Serum dưỡng mi", "Xịt dưỡng biotin",
-                                        "Sachi", "Body lotion", "Bột trà xanh", "Son dưỡng nha đam",
-                                        "Son trà xanh", "Son gấc", "Mas dừa", "Son dừa", "Bột yến mạch"
+                                        "Sachi", "Body lotion", "Bột trà xanh", "Mas dừa", "Bột yến mạch"
                                     ];
 
                                     return sanPhams
@@ -583,8 +582,7 @@ const OrderTab = () => {
                                     "Mặt nạ tràm trà", "Mask Tràm Trà", "Mask Tràm Trà 60gr",
                                     "Dầu olive 250ml", "Scrub cà phê", "Dầu dừa 250ml",
                                     "Xịt bưởi 100ml", "Bột đậu đỏ", "Serum dưỡng mi", "Xịt dưỡng biotin",
-                                    "Sachi", "Body lotion", "Bột trà xanh", "Son dưỡng nha đam",
-                                    "Son trà xanh", "Son gấc", "Mas dừa", "Son dừa", "Bột yến mạch"
+                                    "Sachi", "Body lotion", "Bột trà xanh", "Mas dừa", "Bột yến mạch"
                                 ];
                                 return !HIDDEN_PRODUCTS.some(hidden => sp.ten_sanpham.toLowerCase().includes(hidden.toLowerCase()));
                             })
