@@ -358,15 +358,7 @@ const OrderTab = () => {
                             <input type="text" placeholder="🔍 Tìm sản phẩm..." value={productSearchTerm} onChange={e => setProductSearchTerm(e.target.value)} disabled={!selectedBrand} style={{ width: '100%', marginBottom: '10px' }} />
                             <div style={{ border: '1px solid #E5E7EB', borderRadius: '12px', padding: '15px', maxHeight: '250px', overflowY: 'auto', backgroundColor: '#FAFAFA' }}>
                                 {(() => {
-                                    const HIDDEN_PRODUCTS = [
-                                        "Mặt nạ tràm trà", "Mask Tràm Trà", "Mask Tràm Trà 60gr",
-                                        "Dầu olive 250ml", "Scrub cà phê", "Dầu dừa 250ml",
-                                        "Xịt bưởi 100ml", "Bột đậu đỏ", "Serum dưỡng mi", "Xịt dưỡng biotin",
-                                        "Sachi", "Body lotion", "Bột trà xanh", "Mas dừa", "Bột yến mạch"
-                                    ];
-
                                     return sanPhams
-                                        .filter(sp => !HIDDEN_PRODUCTS.some(hidden => sp.ten_sanpham.toLowerCase().includes(hidden.toLowerCase())))
                                         .filter(sp => sp.ten_sanpham.toLowerCase().includes(productSearchTerm.toLowerCase()))
                                         .map(sp => (
 
@@ -577,15 +569,6 @@ const OrderTab = () => {
                     <select value={filterBrand} onChange={e => setFilterBrand(e.target.value)} style={{ flex: '1 1 200px' }}><option value="">Tất cả Brand</option>{brands.map(b => <option key={b.id} value={b.id}>{b.ten_brand}</option>)}</select>
                     <SearchableDropdown
                         options={filterSanPhams
-                            .filter(sp => {
-                                const HIDDEN_PRODUCTS = [
-                                    "Mặt nạ tràm trà", "Mask Tràm Trà", "Mask Tràm Trà 60gr",
-                                    "Dầu olive 250ml", "Scrub cà phê", "Dầu dừa 250ml",
-                                    "Xịt bưởi 100ml", "Bột đậu đỏ", "Serum dưỡng mi", "Xịt dưỡng biotin",
-                                    "Sachi", "Body lotion", "Bột trà xanh", "Mas dừa", "Bột yến mạch"
-                                ];
-                                return !HIDDEN_PRODUCTS.some(hidden => sp.ten_sanpham.toLowerCase().includes(hidden.toLowerCase()));
-                            })
                             .map(sp => ({ value: sp.id, label: sp.ten_sanpham }))}
                         value={filterSanPham}
                         onChange={setFilterSanPham}
