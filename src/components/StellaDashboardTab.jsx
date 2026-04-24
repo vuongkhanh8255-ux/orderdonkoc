@@ -604,12 +604,17 @@ const StellaDashboardTab = () => {
     const map = {};
     chartSource.forEach(d => {
       const name = normalizeBrand(d.org_name);
-      if (!map[name]) map[name] = { name, GMV: 0, orders: 0 };
+      if (!map[name]) map[name] = { name, GMV: 0, orders: 0, traffic: 0 };
       map[name].GMV += d.GMV || 0;
       map[name].orders += d.count_order || 0;
     });
+    // Add traffic per brand
+    filteredTraffic.forEach(d => {
+      const name = normalizeBrand((d.filter || '').replace(/^[^_]+_/, ''));
+      if (name && map[name]) map[name].traffic += d.traffic || 0;
+    });
     return Object.values(map).sort((a, b) => b.GMV - a.GMV).slice(0, 8);
-  }, [chartSource]);
+  }, [chartSource, filteredTraffic]);
 
   // Top products sorted by selected tab
   const topProducts = useMemo(() => {
@@ -929,6 +934,62 @@ const StellaDashboardTab = () => {
         }
       </div>
 
+      {/* Brand Table — Phân Tích theo nhãn hàng (inside Tổng Quan) */}
+      <div style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', marginBottom: 36 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem' }}>
+          <thead>
+            <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+              <th style={{ padding: '12px 20px', textAlign: 'left', fontWeight: 700, fontSize: '0.72rem', color: '#64748b' }}>Brand</th>
+              <th style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.72rem', color: '#64748b' }}>GMV</th>
+              <th style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.72rem', color: '#64748b' }}>Đơn</th>
+              <th style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.72rem', color: '#64748b' }}>AOV</th>
+              <th style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.72rem', color: '#64748b' }}>Traffic</th>
+              <th style={{ padding: '12px 20px', textAlign: 'left', fontWeight: 700, fontSize: '0.72rem', color: '#64748b' }}>Share</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? Array.from({ length: 5 }).map((_, i) => (
+              <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                {[1,2,3,4,5,6].map(j => <td key={j} style={{ padding: '14px 20px' }}><div style={{ height: 14, background: '#f1f5f9', borderRadius: 4, animation: 'pulse 1.5s infinite' }} /></td>)}
+              </tr>
+            )) : (() => {
+              const totalGMVBrand = byBrand.reduce((s, d) => s + d.GMV, 0);
+              const initials = (n) => n.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+              return byBrand.map((item, i) => {
+                const pct = totalGMVBrand > 0 ? (item.GMV / totalGMVBrand * 100) : 0;
+                const aov = item.orders > 0 ? item.GMV / item.orders : 0;
+                return (
+                  <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#fef7f0'}
+                    onMouseLeave={e => e.currentTarget.style.background = ''}>
+                    <td style={{ padding: '14px 20px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 32, height: 32, borderRadius: 8, background: COLORS[i % COLORS.length]+'20', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 900, color: COLORS[i % COLORS.length], flexShrink: 0 }}>
+                          {initials(item.name)}
+                        </div>
+                        <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.85rem' }}>{item.name}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 800, color: '#ea580c', fontSize: '0.85rem' }}>{fmt(item.GMV)}</td>
+                    <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 600, color: '#64748b', fontSize: '0.82rem' }}>{(item.orders||0).toLocaleString()}</td>
+                    <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 600, color: '#8b5cf6', fontSize: '0.82rem' }}>{fmt(aov)}</td>
+                    <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 600, color: '#6366f1', fontSize: '0.82rem' }}>{(item.traffic||0).toLocaleString('vi-VN')}</td>
+                    <td style={{ padding: '14px 20px', minWidth: 120 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ flex: 1, height: 5, background: '#f1f5f9', borderRadius: 99, overflow: 'hidden' }}>
+                          <div style={{ width: pct+'%', height: '100%', background: COLORS[i % COLORS.length], borderRadius: 99 }} />
+                        </div>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', minWidth: 32 }}>{pct.toFixed(0)}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              });
+            })()}
+          </tbody>
+        </table>
+      </div>
+
       {/* ══ SECTION 2: ADS ══ */}
       <SectionHeader title="Ads" subtitle="Hiệu suất chi tiêu quảng cáo có trả phí." />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 14 }}>
@@ -950,88 +1011,6 @@ const StellaDashboardTab = () => {
           ? <div style={{ height: 250, background: '#f9fafb', borderRadius: 12, animation: 'pulse 1.5s infinite' }} />
           : <DualChart data={s2DailyStats} cfg1={S2_CONFIGS[s2Metrics[0]]} cfg2={S2_CONFIGS[s2Metrics[1]]} />
         }
-      </div>
-
-      {/* ══ PHÂN TÍCH BRAND ══ */}
-      <SectionHeader title="Phân Tích" subtitle="Phân tích chi tiết doanh thu theo nhãn hàng." />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, marginBottom: 28, alignItems: 'start' }}>
-        {/* Brand GMV Table */}
-        <div style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem' }}>
-            <thead>
-              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                <th style={{ padding: '12px 20px', textAlign: 'left', fontWeight: 700, fontSize: '0.72rem', color: '#64748b' }}>Brand</th>
-                <th style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.72rem', color: '#64748b' }}>GMV</th>
-                <th style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.72rem', color: '#64748b' }}>Đơn</th>
-                <th style={{ padding: '12px 20px', textAlign: 'left', fontWeight: 700, fontSize: '0.72rem', color: '#64748b' }}>Share</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                  {[1,2,3,4].map(j => <td key={j} style={{ padding: '14px 20px' }}><div style={{ height: 14, background: '#f1f5f9', borderRadius: 4, animation: 'pulse 1.5s infinite' }} /></td>)}
-                </tr>
-              )) : (() => {
-                const totalGMVBrand = byBrand.reduce((s, d) => s + d.GMV, 0);
-                const initials = (n) => n.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
-                return byBrand.map((item, i) => {
-                  const pct = totalGMVBrand > 0 ? (item.GMV / totalGMVBrand * 100) : 0;
-                  return (
-                    <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}
-                      onMouseEnter={e => e.currentTarget.style.background = '#fef7f0'}
-                      onMouseLeave={e => e.currentTarget.style.background = ''}>
-                      <td style={{ padding: '14px 20px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div style={{ width: 32, height: 32, borderRadius: 8, background: COLORS[i % COLORS.length]+'20', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 900, color: COLORS[i % COLORS.length], flexShrink: 0 }}>
-                            {initials(item.name)}
-                          </div>
-                          <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.85rem' }}>{item.name}</span>
-                        </div>
-                      </td>
-                      <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 800, color: '#ea580c', fontSize: '0.85rem' }}>{fmt(item.GMV)}</td>
-                      <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 600, color: '#64748b', fontSize: '0.82rem' }}>{(item.orders||0).toLocaleString()}</td>
-                      <td style={{ padding: '14px 20px', minWidth: 120 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div style={{ flex: 1, height: 5, background: '#f1f5f9', borderRadius: 99, overflow: 'hidden' }}>
-                            <div style={{ width: pct+'%', height: '100%', background: COLORS[i % COLORS.length], borderRadius: 99 }} />
-                          </div>
-                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', minWidth: 32 }}>{pct.toFixed(0)}%</span>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                });
-              })()}
-            </tbody>
-          </table>
-        </div>
-        {/* Ring chart */}
-        <div style={{ background: '#fff', borderRadius: 14, padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', width: 280, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div style={{ fontWeight: 800, fontSize: '0.85rem', color: '#0f172a', marginBottom: 16 }}>Brand Distribution</div>
-          {loading ? <div style={{ height: 200, width: 200, background: '#f1f5f9', borderRadius: '50%', animation: 'pulse 1.5s infinite' }} /> : (
-            <ResponsiveContainer width={200} height={200}>
-              <PieChart>
-                <Pie data={byBrand} dataKey="GMV" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={88} labelLine={false}
-                  label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-                    if (percent < 0.07) return null;
-                    const R = Math.PI / 180, r = innerRadius + (outerRadius - innerRadius) * 0.55;
-                    return <text x={cx + r * Math.cos(-midAngle * R)} y={cy + r * Math.sin(-midAngle * R)} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={10} fontWeight={800}>{(percent * 100).toFixed(0)}%</text>;
-                  }}>
-                  {byBrand.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Pie>
-                <Tooltip formatter={(v, name) => [fmt(v), name]} />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
-          <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: '8px 16px', justifyContent: 'center' }}>
-            {byBrand.slice(0,4).map((item, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <div style={{ width: 7, height: 7, borderRadius: '50%', background: COLORS[i % COLORS.length] }} />
-                <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{item.name.split(' ')[0]} {byBrand.reduce((s,d)=>s+d.GMV,0) > 0 ? Math.round(item.GMV/byBrand.reduce((s,d)=>s+d.GMV,0)*100)+'%' : ''}</span>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
 
       {/* ── ADS TABLE ── */}
