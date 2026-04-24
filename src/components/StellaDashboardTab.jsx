@@ -1074,42 +1074,41 @@ const StellaDashboardTab = () => {
       </div>
 
       {/* Brand summary table */}
-      <div style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6', marginBottom: 16 }}>
-        <div style={{ padding: '14px 20px', borderBottom: '2px solid #f3f4f6', fontWeight: 800, fontSize: '0.88rem', color: '#111' }}>
-          📊 Tổng chi phí theo Brand
-        </div>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+      <div style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', marginBottom: 16 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem' }}>
           <thead>
-            <tr style={{ background: '#f9fafb' }}>
-              <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 700, color: '#374151' }}>Brand</th>
-              <th style={{ padding: '10px 16px', textAlign: 'right', fontWeight: 700, color: '#374151' }}>Chi phí Ads</th>
-              <th style={{ padding: '10px 16px', textAlign: 'right', fontWeight: 700, color: '#374151' }}>% Tổng</th>
+            <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+              <th style={{ padding: '12px 20px', textAlign: 'left',  fontWeight: 700, fontSize: '0.72rem', color: '#64748b', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Brand</th>
+              <th style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.72rem', color: '#64748b', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Chi phí Ads</th>
+              <th style={{ padding: '12px 20px', textAlign: 'left',  fontWeight: 700, fontSize: '0.72rem', color: '#64748b', letterSpacing: '0.5px', textTransform: 'uppercase' }}>% Tổng</th>
             </tr>
           </thead>
           <tbody>
             {loading
               ? Array.from({ length: 4 }).map((_, i) => (
-                <tr key={i} style={{ borderTop: '1px solid #f3f4f6' }}>
-                  {[1,2,3].map(j => <td key={j} style={{ padding: '12px 16px' }}><div style={{ height: 14, background: '#f3f4f6', borderRadius: 4, animation: 'pulse 1.5s infinite' }} /></td>)}
+                <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  {[1,2,3].map(j => <td key={j} style={{ padding: '14px 20px' }}><div style={{ height: 14, background: '#f1f5f9', borderRadius: 4, animation: 'pulse 1.5s infinite' }} /></td>)}
                 </tr>
               ))
               : campaignsByBrand.map((item, i) => {
                 const pct = totalCampaignSpend > 0 ? (item.spend / totalCampaignSpend * 100) : 0;
                 return (
-                  <tr key={i} style={{ borderTop: '1px solid #f3f4f6' }}>
-                    <td style={{ padding: '12px 16px', fontWeight: 700, color: '#111' }}>
+                  <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#fef7f0'}
+                    onMouseLeave={e => e.currentTarget.style.background = ''}>
+                    <td style={{ padding: '14px 20px', fontWeight: 700, fontSize: '0.83rem', color: '#0f172a' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: COLORS[i % COLORS.length], display: 'inline-block' }} />
+                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: COLORS[i % COLORS.length], display: 'inline-block', flexShrink: 0 }} />
                         {item.brand}
                       </span>
                     </td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: '#f43f5e' }}>{fmt(item.spend)}</td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
-                        <div style={{ width: 60, height: 6, background: '#f3f4f6', borderRadius: 99, overflow: 'hidden' }}>
+                    <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.83rem', color: '#ea580c' }}>{fmt(item.spend)}</td>
+                    <td style={{ padding: '14px 20px', minWidth: 140 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ flex: 1, height: 5, background: '#f1f5f9', borderRadius: 99, overflow: 'hidden' }}>
                           <div style={{ width: pct + '%', height: '100%', background: COLORS[i % COLORS.length], borderRadius: 99 }} />
                         </div>
-                        <span style={{ fontWeight: 700, color: '#374151', minWidth: 36 }}>{pct.toFixed(1)}%</span>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', minWidth: 36 }}>{pct.toFixed(1)}%</span>
                       </div>
                     </td>
                   </tr>
@@ -1117,10 +1116,10 @@ const StellaDashboardTab = () => {
               })
             }
             {!loading && campaignsByBrand.length > 0 && (
-              <tr style={{ borderTop: '2px solid #f3f4f6', background: '#fafafa' }}>
-                <td style={{ padding: '12px 16px', fontWeight: 900, color: '#111' }}>TỔNG</td>
-                <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 900, color: '#f43f5e' }}>{fmt(totalCampaignSpend)}</td>
-                <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: '#9ca3af' }}>100%</td>
+              <tr style={{ background: '#fff7ed', borderTop: '2px solid #fed7aa' }}>
+                <td style={{ padding: '14px 20px', fontWeight: 900, fontSize: '0.83rem', color: '#ea580c' }}>TỔNG</td>
+                <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 900, fontSize: '0.83rem', color: '#ea580c' }}>{fmt(totalCampaignSpend)}</td>
+                <td style={{ padding: '14px 20px', fontSize: '0.72rem', fontWeight: 700, color: '#475569' }}>100%</td>
               </tr>
             )}
           </tbody>
@@ -1128,52 +1127,52 @@ const StellaDashboardTab = () => {
       </div>
 
       {/* Campaign breakdown table */}
-      <div style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid #e2e8f0', marginBottom: 36 }}>
+      <div style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', marginBottom: 36 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem' }}>
           <thead>
-            <tr style={{ background: '#f9fafb', borderBottom: '2px solid #f3f4f6' }}>
-              <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 800, color: '#374151', width: 36 }}>#</th>
-              <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 800, color: '#374151' }}>Chiến dịch</th>
-              <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 800, color: '#374151' }}>Nhãn hàng</th>
-              <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: '#374151' }}>Chi phí</th>
-              <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: '#374151' }}>% Tổng</th>
-              <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: '#374151' }}>Số ngày</th>
+            <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+              <th style={{ padding: '12px 20px', textAlign: 'left',  fontWeight: 700, fontSize: '0.72rem', color: '#64748b', letterSpacing: '0.5px', textTransform: 'uppercase', width: 48 }}>#</th>
+              <th style={{ padding: '12px 20px', textAlign: 'left',  fontWeight: 700, fontSize: '0.72rem', color: '#64748b', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Chiến dịch</th>
+              <th style={{ padding: '12px 20px', textAlign: 'left',  fontWeight: 700, fontSize: '0.72rem', color: '#64748b', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Nhãn hàng</th>
+              <th style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.72rem', color: '#64748b', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Chi phí</th>
+              <th style={{ padding: '12px 20px', textAlign: 'left',  fontWeight: 700, fontSize: '0.72rem', color: '#64748b', letterSpacing: '0.5px', textTransform: 'uppercase' }}>% Tổng</th>
+              <th style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.72rem', color: '#64748b', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Số ngày</th>
             </tr>
           </thead>
           <tbody>
             {loading
               ? Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid #f9fafb' }}>
+                <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
                   {Array.from({ length: 6 }).map((_, j) => (
-                    <td key={j} style={{ padding: '14px 16px' }}><div style={{ height: 14, background: '#f3f4f6', borderRadius: 4, animation: 'pulse 1.5s infinite' }} /></td>
+                    <td key={j} style={{ padding: '14px 20px' }}><div style={{ height: 14, background: '#f1f5f9', borderRadius: 4, animation: 'pulse 1.5s infinite' }} /></td>
                   ))}
                 </tr>
               ))
               : campaignsByName.slice(0, 20).map((item, i) => {
                 const pct = totalCampaignSpend > 0 ? (item.spend / totalCampaignSpend * 100) : 0;
                 return (
-                  <tr key={i} style={{ borderBottom: '1px solid #f9fafb', transition: 'background 0.15s' }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#fff5f5'}
+                  <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#fef7f0'}
                     onMouseLeave={e => e.currentTarget.style.background = ''}>
-                    <td style={{ padding: '12px 16px', color: i < 3 ? '#f43f5e' : '#9ca3af', fontWeight: 800 }}>
+                    <td style={{ padding: '14px 20px', fontWeight: 800, fontSize: '0.83rem', color: i < 3 ? '#ea580c' : '#9ca3af' }}>
                       {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
                     </td>
-                    <td style={{ padding: '12px 16px', fontWeight: 600, color: '#111', maxWidth: 280 }}>
+                    <td style={{ padding: '14px 20px', fontWeight: 600, fontSize: '0.83rem', color: '#0f172a', maxWidth: 280 }}>
                       <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.campaign}</div>
                     </td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <span style={{ padding: '2px 10px', borderRadius: 99, background: '#fef3c7', color: '#92400e', fontSize: '0.75rem', fontWeight: 700 }}>{item.brand}</span>
+                    <td style={{ padding: '14px 20px' }}>
+                      <span style={{ padding: '2px 10px', borderRadius: 99, background: '#fff7ed', color: '#c2410c', fontSize: '0.72rem', fontWeight: 700 }}>{item.brand}</span>
                     </td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: '#f43f5e' }}>{fmt(item.spend)}</td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
-                        <div style={{ width: 60, height: 6, background: '#f3f4f6', borderRadius: 99, overflow: 'hidden' }}>
-                          <div style={{ width: pct + '%', height: '100%', background: '#f43f5e', borderRadius: 99 }} />
+                    <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.83rem', color: '#ea580c' }}>{fmt(item.spend)}</td>
+                    <td style={{ padding: '14px 20px', minWidth: 120 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ flex: 1, height: 5, background: '#f1f5f9', borderRadius: 99, overflow: 'hidden' }}>
+                          <div style={{ width: pct + '%', height: '100%', background: '#ea580c', borderRadius: 99 }} />
                         </div>
-                        <span style={{ fontWeight: 700, color: '#374151', fontSize: '0.8rem', minWidth: 36 }}>{pct.toFixed(1)}%</span>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', minWidth: 36 }}>{pct.toFixed(1)}%</span>
                       </div>
                     </td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right', color: '#6b7280', fontWeight: 600 }}>{item.days}</td>
+                    <td style={{ padding: '14px 20px', textAlign: 'right', fontSize: '0.83rem', fontWeight: 600, color: '#64748b' }}>{item.days}</td>
                   </tr>
                 );
               })
