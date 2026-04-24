@@ -1061,14 +1061,16 @@ const StellaDashboardTab = () => {
       })()}
 
       {/* Dual chart — Tổng chi phí vs Avg chi phí/ngày */}
-      <div style={{ background: '#fff', borderRadius: 16, padding: '18px 24px', marginBottom: 20, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <span style={{ fontWeight: 800, fontSize: '0.88rem', color: '#111' }}>📈 Chi phí chiến dịch theo ngày</span>
-          <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
-            — {S3_CONFIGS[s3Metrics[0]]?.label} (trái) &nbsp;·&nbsp; - - {S3_CONFIGS[s3Metrics[1]]?.label} (phải) &nbsp;·&nbsp; ({campaignDailyStats.length} ngày)
-          </span>
+      <div style={{ background: '#fff', borderRadius: 14, padding: '20px 24px', marginBottom: 36, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid #e2e8f0' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 14, gap: 16, fontSize: '0.75rem', color: '#9ca3af' }}>
+          <span><span style={{ display: 'inline-block', width: 20, height: 2.5, background: S3_CONFIGS[s3Metrics[0]]?.color, marginRight: 4, verticalAlign: 'middle' }} />{S3_CONFIGS[s3Metrics[0]]?.label} (trái)</span>
+          <span><span style={{ display: 'inline-block', width: 20, borderTop: `2px dashed ${S3_CONFIGS[s3Metrics[1]]?.color}`, marginRight: 4, verticalAlign: 'middle' }} />{S3_CONFIGS[s3Metrics[1]]?.label} (phải)</span>
+          <span>({campaignDailyStats.length} ngày)</span>
         </div>
-        <DualChart data={campaignDailyStats} cfg1={S3_CONFIGS[s3Metrics[0]]} cfg2={S3_CONFIGS[s3Metrics[1]]} height={240} />
+        {loading
+          ? <div style={{ height: 250, background: '#f9fafb', borderRadius: 12, animation: 'pulse 1.5s infinite' }} />
+          : <DualChart data={campaignDailyStats} cfg1={S3_CONFIGS[s3Metrics[0]]} cfg2={S3_CONFIGS[s3Metrics[1]]} />
+        }
       </div>
 
       {/* Brand summary table */}
