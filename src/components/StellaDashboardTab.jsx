@@ -936,15 +936,23 @@ const StellaDashboardTab = () => {
 
       {/* Brand Table — Phân Tích theo nhãn hàng (inside Tổng Quan) */}
       <div style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', marginBottom: 36 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem', tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: '24%' }} />
+            <col style={{ width: '14%' }} />
+            <col style={{ width: '14%' }} />
+            <col style={{ width: '14%' }} />
+            <col style={{ width: '14%' }} />
+            <col style={{ width: '20%' }} />
+          </colgroup>
           <thead>
             <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-              <th style={{ padding: '12px 20px', textAlign: 'left', fontWeight: 700, fontSize: '0.72rem', color: '#64748b' }}>Brand</th>
-              <th style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.72rem', color: '#64748b' }}>GMV</th>
-              <th style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.72rem', color: '#64748b' }}>Đơn</th>
-              <th style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.72rem', color: '#64748b' }}>AOV</th>
-              <th style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.72rem', color: '#64748b' }}>Traffic</th>
-              <th style={{ padding: '12px 20px', textAlign: 'left', fontWeight: 700, fontSize: '0.72rem', color: '#64748b' }}>Share</th>
+              <th style={{ padding: '12px 20px', textAlign: 'left',  fontWeight: 700, fontSize: '0.72rem', color: '#64748b', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Brand</th>
+              <th style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.72rem', color: '#64748b', letterSpacing: '0.5px', textTransform: 'uppercase' }}>GMV</th>
+              <th style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.72rem', color: '#64748b', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Đơn</th>
+              <th style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.72rem', color: '#64748b', letterSpacing: '0.5px', textTransform: 'uppercase' }}>AOV</th>
+              <th style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.72rem', color: '#64748b', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Traffic</th>
+              <th style={{ padding: '12px 20px', textAlign: 'left',  fontWeight: 700, fontSize: '0.72rem', color: '#64748b', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Share</th>
             </tr>
           </thead>
           <tbody>
@@ -958,6 +966,7 @@ const StellaDashboardTab = () => {
               return byBrand.map((item, i) => {
                 const pct = totalGMVBrand > 0 ? (item.GMV / totalGMVBrand * 100) : 0;
                 const aov = item.orders > 0 ? item.GMV / item.orders : 0;
+                const tdNum = { padding: '14px 20px', textAlign: 'right', fontWeight: 600, fontSize: '0.83rem', fontFamily: "'Outfit', sans-serif" };
                 return (
                   <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}
                     onMouseEnter={e => e.currentTarget.style.background = '#fef7f0'}
@@ -967,19 +976,19 @@ const StellaDashboardTab = () => {
                         <div style={{ width: 32, height: 32, borderRadius: 8, background: COLORS[i % COLORS.length]+'20', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 900, color: COLORS[i % COLORS.length], flexShrink: 0 }}>
                           {initials(item.name)}
                         </div>
-                        <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.85rem' }}>{item.name}</span>
+                        <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.83rem', fontFamily: "'Outfit', sans-serif" }}>{item.name}</span>
                       </div>
                     </td>
-                    <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 800, color: '#ea580c', fontSize: '0.85rem' }}>{fmt(item.GMV)}</td>
-                    <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 600, color: '#64748b', fontSize: '0.82rem' }}>{(item.orders||0).toLocaleString()}</td>
-                    <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 600, color: '#8b5cf6', fontSize: '0.82rem' }}>{fmt(aov)}</td>
-                    <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 600, color: '#6366f1', fontSize: '0.82rem' }}>{(item.traffic||0).toLocaleString('vi-VN')}</td>
-                    <td style={{ padding: '14px 20px', minWidth: 120 }}>
+                    <td style={{ ...tdNum, fontWeight: 700, color: '#ea580c' }}>{fmt(item.GMV)}</td>
+                    <td style={{ ...tdNum, color: '#64748b' }}>{(item.orders||0).toLocaleString('vi-VN')}</td>
+                    <td style={{ ...tdNum, color: '#8b5cf6' }}>{fmt(aov)}</td>
+                    <td style={{ ...tdNum, color: '#6366f1' }}>{Math.round(item.traffic||0).toLocaleString('vi-VN')}</td>
+                    <td style={{ padding: '14px 20px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <div style={{ flex: 1, height: 5, background: '#f1f5f9', borderRadius: 99, overflow: 'hidden' }}>
                           <div style={{ width: pct+'%', height: '100%', background: COLORS[i % COLORS.length], borderRadius: 99 }} />
                         </div>
-                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', minWidth: 32 }}>{pct.toFixed(0)}%</span>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', minWidth: 32, fontFamily: "'Outfit', sans-serif" }}>{pct.toFixed(0)}%</span>
                       </div>
                     </td>
                   </tr>
