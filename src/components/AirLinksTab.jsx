@@ -130,6 +130,9 @@ const AirLinksTab = () => {
     // Video blacklist (trùng lặp)
     const [videoBlacklist, setVideoBlacklist] = useState([]);
     const [vblExpanded, setVblExpanded] = useState(false);
+    const [vblSearch, setVblSearch] = useState('');
+    const [vblPage, setVblPage] = useState(1);
+    const VBL_PAGE_SIZE = 20;
     const BL_PAGE_SIZE = 20;
     const [kocOrderSet, setKocOrderSet] = useState(new Set());
 
@@ -1326,64 +1329,140 @@ const AirLinksTab = () => {
             })()}
 
             {/* VIDEO BLACKLIST ARCHIVE */}
-            {videoBlacklist.length > 0 && (
-                <div style={{ marginBottom: '2rem', border: '2px solid #fca5a5', borderRadius: '12px', overflow: 'hidden' }}>
-                    <div
-                        onClick={() => setVblExpanded(v => !v)}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', background: '#fef2f2', cursor: 'pointer', userSelect: 'none' }}
-                    >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <span style={{ fontSize: '22px' }}>🚫</span>
-                            <span style={{ fontWeight: 800, fontSize: '1rem', color: '#dc2626' }}>
-                                VIDEO BLACKLIST (do nhập trùng) — {videoBlacklist.length} video
-                            </span>
-                            <span style={{ fontSize: '0.78rem', color: '#9ca3af', fontStyle: 'italic' }}>Không được tính KPI</span>
+            {videoBlacklist.length > 0 && (() => {
+                const q = vblSearch.trim().toLowerCase();
+                const vblFiltered = q
+                    ? videoBlacklist.filter(v =>
+                        (v.id_video || '').toLowerCase().includes(q) ||
+                        (v.link_air_koc || '').toLowerCase().includes(q) ||
+                        (v.nhansu_names || '').toLowerCase().includes(q) ||
+                        (v.brand_name || '').toLowerCase().includes(q) ||
+                        (v.san_pham || '').toLowerCase().includes(q)
+                    )
+                    : videoBlacklist;
+                const totalPages = Math.max(1, Math.ceil(vblFiltered.length / VBL_PAGE_SIZE));
+                const safePage = Math.min(vblPage, totalPages);
+                const vblRows = vblFiltered.slice((safePage - 1) * VBL_PAGE_SIZE, safePage * VBL_PAGE_SIZE);
+                const thStyle = { padding: '10px 16px', fontWeight: 700, fontSize: '0.72rem', color: '#dc2626', letterSpacing: '0.5px', textTransform: 'uppercase' };
+                return (
+                    <div style={{ marginBottom: '2rem', border: '2px solid #fca5a5', borderRadius: '12px', overflow: 'hidden' }}>
+                        {/* Header */}
+                        <div
+                            onClick={() => setVblExpanded(v => !v)}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', background: '#fef2f2', cursor: 'pointer', userSelect: 'none' }}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <span style={{ fontSize: '22px' }}>🚫</span>
+                                <span style={{ fontWeight: 800, fontSize: '1rem', color: '#dc2626' }}>
+                                    VIDEO BLACKLIST (do nhập trùng) — {videoBlacklist.length} video
+                                </span>
+                                <span style={{ fontSize: '0.78rem', color: '#9ca3af', fontStyle: 'italic' }}>Không được tính KPI</span>
+                            </div>
+                            <span style={{ fontSize: '0.75rem', color: '#dc2626', transform: vblExpanded ? 'rotate(0deg)' : 'rotate(-90deg)', display: 'inline-block', transition: 'transform 0.2s' }}>▼</span>
                         </div>
-                        <span style={{ fontSize: '0.75rem', color: '#dc2626', transform: vblExpanded ? 'rotate(0deg)' : 'rotate(-90deg)', display: 'inline-block', transition: 'transform 0.2s' }}>▼</span>
+
+                        {vblExpanded && (
+                            <div style={{ background: '#fff' }}>
+                                {/* Search bar */}
+                                <div style={{ padding: '12px 16px', borderBottom: '1px solid #fee2e2', display: 'flex', alignItems: 'center', gap: 10 }}>
+                                    <input
+                                        type="text"
+                                        placeholder="🔍 Tìm theo Video ID, Link, Tên nhân sự, Brand..."
+                                        value={vblSearch}
+                                        onChange={e => { setVblSearch(e.target.value); setVblPage(1); }}
+                                        style={{ flex: 1, padding: '8px 12px', border: '1px solid #fca5a5', borderRadius: 8, fontSize: '0.83rem', outline: 'none', fontFamily: "'Outfit', sans-serif" }}
+                                        onFocus={e => e.target.style.borderColor = '#dc2626'}
+                                        onBlur={e => e.target.style.borderColor = '#fca5a5'}
+                                    />
+                                    {vblSearch && (
+                                        <button onClick={() => { setVblSearch(''); setVblPage(1); }}
+                                            style={{ padding: '7px 14px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, color: '#dc2626', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}>
+                                            ✕ Xóa lọc
+                                        </button>
+                                    )}
+                                    <span style={{ fontSize: '0.78rem', color: '#9ca3af', whiteSpace: 'nowrap' }}>
+                                        {vblFiltered.length} / {videoBlacklist.length} kết quả
+                                    </span>
+                                </div>
+
+                                {/* Table */}
+                                <div style={{ overflowX: 'auto' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem' }}>
+                                        <thead>
+                                            <tr style={{ background: '#fef2f2', borderBottom: '1px solid #fca5a5' }}>
+                                                <th style={{ ...thStyle, textAlign: 'left'   }}>Video ID / Link</th>
+                                                <th style={{ ...thStyle, textAlign: 'left'   }}>Nhân sự liên quan</th>
+                                                <th style={{ ...thStyle, textAlign: 'left'   }}>Brand</th>
+                                                <th style={{ ...thStyle, textAlign: 'left'   }}>Sản phẩm</th>
+                                                <th style={{ ...thStyle, textAlign: 'center' }}>Trùng</th>
+                                                <th style={{ ...thStyle, textAlign: 'left'   }}>Ngày blacklist</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {vblRows.length === 0 ? (
+                                                <tr><td colSpan={6} style={{ padding: 32, textAlign: 'center', color: '#9ca3af' }}>Không tìm thấy kết quả</td></tr>
+                                            ) : vblRows.map(v => (
+                                                <tr key={v.id} style={{ borderBottom: '1px solid #fee2e2' }}
+                                                    onMouseEnter={e => e.currentTarget.style.background = '#fef2f2'}
+                                                    onMouseLeave={e => e.currentTarget.style.background = ''}>
+                                                    <td style={{ padding: '12px 16px', maxWidth: 280 }}>
+                                                        <div style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                            {v.id_video || v.link_air_koc || '—'}
+                                                        </div>
+                                                        {v.link_air_koc && (
+                                                            <a href={v.link_air_koc} target="_blank" rel="noreferrer"
+                                                                style={{ fontSize: '0.7rem', color: '#6366f1' }}
+                                                                onClick={e => e.stopPropagation()}>xem link ↗</a>
+                                                        )}
+                                                    </td>
+                                                    <td style={{ padding: '12px 16px', fontSize: '0.83rem', color: '#374151' }}>{v.nhansu_names || '—'}</td>
+                                                    <td style={{ padding: '12px 16px', fontSize: '0.83rem', color: '#374151' }}>{v.brand_name || '—'}</td>
+                                                    <td style={{ padding: '12px 16px', fontSize: '0.83rem', color: '#374151' }}>{v.san_pham || '—'}</td>
+                                                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                                        <span style={{ background: '#fee2e2', color: '#dc2626', borderRadius: 99, padding: '2px 10px', fontWeight: 700, fontSize: '0.75rem' }}>{v.duplicate_count}x</span>
+                                                    </td>
+                                                    <td style={{ padding: '12px 16px', fontSize: '0.78rem', color: '#9ca3af' }}>
+                                                        {v.blacklisted_at ? new Date(v.blacklisted_at).toLocaleDateString('vi-VN') : '—'}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {/* Pagination */}
+                                {totalPages > 1 && (
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 16px', borderTop: '1px solid #fee2e2' }}>
+                                        <button onClick={() => setVblPage(1)} disabled={safePage === 1}
+                                            style={{ padding: '6px 10px', border: '1px solid #fca5a5', borderRadius: 7, background: safePage === 1 ? '#f9fafb' : '#fff', color: safePage === 1 ? '#d1d5db' : '#dc2626', cursor: safePage === 1 ? 'default' : 'pointer', fontWeight: 700, fontSize: '0.8rem' }}>«</button>
+                                        <button onClick={() => setVblPage(p => Math.max(1, p - 1))} disabled={safePage === 1}
+                                            style={{ padding: '6px 12px', border: '1px solid #fca5a5', borderRadius: 7, background: safePage === 1 ? '#f9fafb' : '#fff', color: safePage === 1 ? '#d1d5db' : '#dc2626', cursor: safePage === 1 ? 'default' : 'pointer', fontWeight: 700, fontSize: '0.8rem' }}>‹ Trước</button>
+
+                                        {Array.from({ length: totalPages }, (_, i) => i + 1)
+                                            .filter(p => p === 1 || p === totalPages || Math.abs(p - safePage) <= 2)
+                                            .reduce((acc, p, idx, arr) => {
+                                                if (idx > 0 && p - arr[idx - 1] > 1) acc.push('...');
+                                                acc.push(p);
+                                                return acc;
+                                            }, [])
+                                            .map((p, i) => p === '...'
+                                                ? <span key={`e${i}`} style={{ color: '#9ca3af', fontSize: '0.8rem' }}>…</span>
+                                                : <button key={p} onClick={() => setVblPage(p)}
+                                                    style={{ padding: '6px 10px', minWidth: 32, border: '1px solid #fca5a5', borderRadius: 7, background: safePage === p ? '#dc2626' : '#fff', color: safePage === p ? '#fff' : '#dc2626', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem' }}>{p}</button>
+                                            )}
+
+                                        <button onClick={() => setVblPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}
+                                            style={{ padding: '6px 12px', border: '1px solid #fca5a5', borderRadius: 7, background: safePage === totalPages ? '#f9fafb' : '#fff', color: safePage === totalPages ? '#d1d5db' : '#dc2626', cursor: safePage === totalPages ? 'default' : 'pointer', fontWeight: 700, fontSize: '0.8rem' }}>Sau ›</button>
+                                        <button onClick={() => setVblPage(totalPages)} disabled={safePage === totalPages}
+                                            style={{ padding: '6px 10px', border: '1px solid #fca5a5', borderRadius: 7, background: safePage === totalPages ? '#f9fafb' : '#fff', color: safePage === totalPages ? '#d1d5db' : '#dc2626', cursor: safePage === totalPages ? 'default' : 'pointer', fontWeight: 700, fontSize: '0.8rem' }}>»</button>
+                                        <span style={{ fontSize: '0.78rem', color: '#9ca3af', marginLeft: 4 }}>Trang {safePage}/{totalPages}</span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
-                    {vblExpanded && (
-                        <div style={{ background: '#fff', overflowX: 'auto' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem' }}>
-                                <thead>
-                                    <tr style={{ background: '#fef2f2', borderBottom: '1px solid #fca5a5' }}>
-                                        <th style={{ padding: '10px 16px', textAlign: 'left',  fontWeight: 700, fontSize: '0.72rem', color: '#dc2626', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Video ID / Link</th>
-                                        <th style={{ padding: '10px 16px', textAlign: 'left',  fontWeight: 700, fontSize: '0.72rem', color: '#dc2626', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Nhân sự liên quan</th>
-                                        <th style={{ padding: '10px 16px', textAlign: 'left',  fontWeight: 700, fontSize: '0.72rem', color: '#dc2626', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Brand</th>
-                                        <th style={{ padding: '10px 16px', textAlign: 'left',  fontWeight: 700, fontSize: '0.72rem', color: '#dc2626', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Sản phẩm</th>
-                                        <th style={{ padding: '10px 16px', textAlign: 'center', fontWeight: 700, fontSize: '0.72rem', color: '#dc2626', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Trùng</th>
-                                        <th style={{ padding: '10px 16px', textAlign: 'left',  fontWeight: 700, fontSize: '0.72rem', color: '#dc2626', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Ngày blacklist</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {videoBlacklist.map((v, i) => (
-                                        <tr key={v.id} style={{ borderBottom: '1px solid #fee2e2' }}
-                                            onMouseEnter={e => e.currentTarget.style.background = '#fef2f2'}
-                                            onMouseLeave={e => e.currentTarget.style.background = ''}>
-                                            <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: '0.78rem', color: '#374151', maxWidth: 280 }}>
-                                                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                    {v.id_video || v.link_air_koc || '—'}
-                                                </div>
-                                                {v.link_air_koc && v.id_video && (
-                                                    <a href={v.link_air_koc} target="_blank" rel="noreferrer" style={{ fontSize: '0.7rem', color: '#6366f1' }}>xem link</a>
-                                                )}
-                                            </td>
-                                            <td style={{ padding: '12px 16px', fontSize: '0.83rem', color: '#374151' }}>{v.nhansu_names || '—'}</td>
-                                            <td style={{ padding: '12px 16px', fontSize: '0.83rem', color: '#374151' }}>{v.brand_name || '—'}</td>
-                                            <td style={{ padding: '12px 16px', fontSize: '0.83rem', color: '#374151' }}>{v.san_pham || '—'}</td>
-                                            <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                                                <span style={{ background: '#fee2e2', color: '#dc2626', borderRadius: 99, padding: '2px 10px', fontWeight: 700, fontSize: '0.75rem' }}>{v.duplicate_count}x</span>
-                                            </td>
-                                            <td style={{ padding: '12px 16px', fontSize: '0.78rem', color: '#9ca3af' }}>
-                                                {v.blacklisted_at ? new Date(v.blacklisted_at).toLocaleDateString('vi-VN') : '—'}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-                </div>
-            )}
+                );
+            })()}
 
             {/* CHARTS */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', marginBottom: '30px' }}>
