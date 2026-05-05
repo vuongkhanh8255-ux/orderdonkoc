@@ -126,6 +126,10 @@ const AirLinksTab = () => {
     // Blacklist state
     const [blacklistChannels, setBlacklistChannels] = useState([]);
     const [blacklistModal, setBlacklistModal] = useState({ isOpen: false, unlocked: false, pwInput: '', newChannel: '', search: '', page: 1 });
+
+    // Video blacklist (trùng lặp)
+    const [videoBlacklist, setVideoBlacklist] = useState([]);
+    const [vblExpanded, setVblExpanded] = useState(false);
     const BL_PAGE_SIZE = 20;
     const [kocOrderSet, setKocOrderSet] = useState(new Set());
 
@@ -153,6 +157,14 @@ const AirLinksTab = () => {
         loadBlacklist();
     }, []);
 
+    const loadVideoBlacklist = async () => {
+        try {
+            const { data } = await supabase.from('video_blacklist').select('*').order('blacklisted_at', { ascending: false });
+            if (data) setVideoBlacklist(data);
+        } catch (e) { console.error('Failed to load video blacklist:', e); }
+    };
+    useEffect(() => { loadVideoBlacklist(); }, []);
+
     const addToBlacklist = async (channelId) => {
         const trimmed = channelId.trim();
         if (!trimmed || blacklistChannels.includes(trimmed)) return;
@@ -164,6 +176,50 @@ const AirLinksTab = () => {
         const { error } = await supabase.from('koc_blacklist').delete().eq('id_kenh', channelId);
         if (!error) setBlacklistChannels(prev => prev.filter(c => c !== channelId));
         else alert('Lỗi khi xóa khỏi blacklist: ' + error.message);
+    };
+
+    // Auto xử lý tất cả video trùng: xóa khỏi air_links + lưu vào video_blacklist
+    const handleAutoDeduplicate = async () => {
+        const dupMap = {};
+        airLinks.forEach(item => {
+            const key = (item.id_video ? item.id_video.trim() : null) || (item.link_air_koc ? item.link_air_koc.trim() : null);
+            if (key) {
+                if (!dupMap[key]) dupMap[key] = [];
+                dupMap[key].push(item);
+            }
+        });
+        const dupeGroups = Object.values(dupMap).filter(g => g.length > 1);
+        if (dupeGroups.length === 0) { alert('Không có video trùng nào!'); return; }
+
+        const totalRecords = dupeGroups.reduce((s, g) => s + g.length, 0);
+        if (!window.confirm(`Xác nhận tự động xử lý ${dupeGroups.length} video trùng (${totalRecords} bản ghi)?\n\n→ Tất cả sẽ bị XÓA khỏi danh sách\n→ Lưu vào Video Blacklist\n→ Không ai được tính KPI`)) return;
+
+        try {
+            // Lưu vào video_blacklist
+            const entries = dupeGroups.map(group => ({
+                id_video: group[0].id_video?.trim() || null,
+                link_air_koc: group[0].link_air_koc || null,
+                duplicate_count: group.length,
+                nhansu_names: [...new Set(group.map(i => i.nhansu?.ten_nhansu).filter(Boolean))].join(', '),
+                brand_name: group[0].brands?.ten_brand || '',
+                san_pham: group[0].san_pham || '',
+                reason: 'Nhập trùng',
+                raw_records: group.map(i => ({ id: i.id, nhansu: i.nhansu?.ten_nhansu, brand: i.brands?.ten_brand }))
+            }));
+            await supabase.from('video_blacklist').insert(entries);
+
+            // Xóa tất cả bản ghi trùng khỏi air_links
+            const idsToDelete = dupeGroups.flatMap(g => g.map(i => i.id));
+            await supabase.from('air_links').delete().in('id', idsToDelete);
+
+            await loadVideoBlacklist();
+            loadAirLinks();
+            handleGenerateAirLinksReport();
+            alert(`✅ Hoàn tất!\n• ${dupeGroups.length} video trùng → đưa vào Blacklist\n• ${totalRecords} bản ghi → đã xóa\n• Không ai được tính KPI`);
+        } catch (e) {
+            console.error(e);
+            alert('Lỗi khi xử lý: ' + e.message);
+        }
     };
 
     // Get password based on brand
@@ -372,6 +428,14 @@ const AirLinksTab = () => {
             alert(`🚫 Kênh "${newLink.id_kenh}" đang trong danh sách Black List!\nKhông thể nhập link air cho kênh này.`);
             return;
         }
+        // Video blacklist check (trùng lặp)
+        if (newLink.id_video) {
+            const vid = newLink.id_video.trim();
+            if (videoBlacklist.some(v => v.id_video && v.id_video.trim() === vid)) {
+                alert(`🚫 Video ID "${vid}" đã bị blacklist do nhập trùng trước đó!\nVideo này không được ghi nhận KPI cho bất kỳ ai.`);
+                return;
+            }
+        }
         setIsSubmitting(true);
         try {
             // Logic CMS: Mặc định 10%
@@ -567,7 +631,15 @@ const AirLinksTab = () => {
                 for (const item of validRows) {
                     uniqueRowsMap.set(item.link_air_koc, item);
                 }
-                const uniqueValidRows = Array.from(uniqueRowsMap.values());
+                const deduped = Array.from(uniqueRowsMap.values());
+
+                // VIDEO BLACKLIST CHECK: Lọc bỏ video đã bị blacklist
+                const blacklistedVids = new Set(videoBlacklist.map(v => v.id_video).filter(Boolean));
+                const blockedByVBL = deduped.filter(r => r.id_video && blacklistedVids.has(r.id_video.trim()));
+                const uniqueValidRows = deduped.filter(r => !r.id_video || !blacklistedVids.has(r.id_video.trim()));
+                if (blockedByVBL.length > 0) {
+                    console.warn('Blocked by video blacklist:', blockedByVBL.map(r => r.id_video));
+                }
 
                 if (uniqueValidRows.length > 0) {
                     // [NEW] Auto-map `ngay_air` from Data Archive for bulk upload
@@ -599,11 +671,12 @@ const AirLinksTab = () => {
                     if (error) throw error;
                     successCount = uniqueValidRows.length;
 
-                    // Warning about internal file duplicates (we still dedup within the file itself to prevent accidental double-paste)
-                    const duplicatesInFile = validRows.length - uniqueValidRows.length;
-                    alert(`Xử lý thành công: ${successCount} dòng.\n(Đã tự động lọc bỏ ${duplicatesInFile} dòng trùng trong chính file excel này).\nThất bại/Bỏ qua: ${failCount} dòng.`);
-                    loadAirLinks(); handleGenerateAirLinksReport();
-                    alert(`Xử lý thành công: ${successCount} dòng.\n(Đã tự động lọc bỏ ${duplicatesInFile} dòng trùng trong chính file excel này).\nThất bại/Bỏ qua: ${failCount} dòng.`);
+                    const duplicatesInFile = validRows.length - deduped.length;
+                    const vblBlocked = blockedByVBL.length;
+                    let msg = `✅ Xử lý thành công: ${successCount} dòng.\nThất bại/Bỏ qua: ${failCount} dòng.`;
+                    if (duplicatesInFile > 0) msg += `\n⚠️ Lọc bỏ ${duplicatesInFile} dòng trùng trong file.`;
+                    if (vblBlocked > 0) msg += `\n🚫 Chặn ${vblBlocked} video đã có trong Blacklist.`;
+                    alert(msg);
                     loadAirLinks(); handleGenerateAirLinksReport();
                 } else {
                     alert("Không tìm thấy dòng dữ liệu hợp lệ nào (Kiểm tra chính xác Tên Brand/Nhân sự trong file).");
@@ -1090,21 +1163,20 @@ const AirLinksTab = () => {
                                     CẢNH BÁO NHẬP TRÙNG ({filteredDuplicates.length}/{duplicates.length} video)
                                 </h3>
                             </div>
-                            <button
-                                onClick={handleExportDuplicates}
-                                style={{
-                                    padding: '10px 20px',
-                                    background: 'linear-gradient(90deg, #10B981, #059669)',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '8px',
-                                    fontWeight: 'bold',
-                                    cursor: 'pointer',
-                                    fontSize: '0.95rem'
-                                }}
-                            >
-                                📥 Xuất Excel
-                            </button>
+                            <div style={{ display: 'flex', gap: 10 }}>
+                                <button
+                                    onClick={handleAutoDeduplicate}
+                                    style={{ padding: '10px 20px', background: 'linear-gradient(90deg, #ef4444, #dc2626)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.95rem' }}
+                                >
+                                    🚫 Tự động xử lý trùng
+                                </button>
+                                <button
+                                    onClick={handleExportDuplicates}
+                                    style={{ padding: '10px 20px', background: 'linear-gradient(90deg, #10B981, #059669)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.95rem' }}
+                                >
+                                    📥 Xuất Excel
+                                </button>
+                            </div>
                         </div>
 
                         {/* Filters */}
@@ -1252,6 +1324,66 @@ const AirLinksTab = () => {
                     </div>
                 );
             })()}
+
+            {/* VIDEO BLACKLIST ARCHIVE */}
+            {videoBlacklist.length > 0 && (
+                <div style={{ marginBottom: '2rem', border: '2px solid #fca5a5', borderRadius: '12px', overflow: 'hidden' }}>
+                    <div
+                        onClick={() => setVblExpanded(v => !v)}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', background: '#fef2f2', cursor: 'pointer', userSelect: 'none' }}
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ fontSize: '22px' }}>🚫</span>
+                            <span style={{ fontWeight: 800, fontSize: '1rem', color: '#dc2626' }}>
+                                VIDEO BLACKLIST (do nhập trùng) — {videoBlacklist.length} video
+                            </span>
+                            <span style={{ fontSize: '0.78rem', color: '#9ca3af', fontStyle: 'italic' }}>Không được tính KPI</span>
+                        </div>
+                        <span style={{ fontSize: '0.75rem', color: '#dc2626', transform: vblExpanded ? 'rotate(0deg)' : 'rotate(-90deg)', display: 'inline-block', transition: 'transform 0.2s' }}>▼</span>
+                    </div>
+                    {vblExpanded && (
+                        <div style={{ background: '#fff', overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem' }}>
+                                <thead>
+                                    <tr style={{ background: '#fef2f2', borderBottom: '1px solid #fca5a5' }}>
+                                        <th style={{ padding: '10px 16px', textAlign: 'left',  fontWeight: 700, fontSize: '0.72rem', color: '#dc2626', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Video ID / Link</th>
+                                        <th style={{ padding: '10px 16px', textAlign: 'left',  fontWeight: 700, fontSize: '0.72rem', color: '#dc2626', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Nhân sự liên quan</th>
+                                        <th style={{ padding: '10px 16px', textAlign: 'left',  fontWeight: 700, fontSize: '0.72rem', color: '#dc2626', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Brand</th>
+                                        <th style={{ padding: '10px 16px', textAlign: 'left',  fontWeight: 700, fontSize: '0.72rem', color: '#dc2626', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Sản phẩm</th>
+                                        <th style={{ padding: '10px 16px', textAlign: 'center', fontWeight: 700, fontSize: '0.72rem', color: '#dc2626', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Trùng</th>
+                                        <th style={{ padding: '10px 16px', textAlign: 'left',  fontWeight: 700, fontSize: '0.72rem', color: '#dc2626', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Ngày blacklist</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {videoBlacklist.map((v, i) => (
+                                        <tr key={v.id} style={{ borderBottom: '1px solid #fee2e2' }}
+                                            onMouseEnter={e => e.currentTarget.style.background = '#fef2f2'}
+                                            onMouseLeave={e => e.currentTarget.style.background = ''}>
+                                            <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: '0.78rem', color: '#374151', maxWidth: 280 }}>
+                                                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                    {v.id_video || v.link_air_koc || '—'}
+                                                </div>
+                                                {v.link_air_koc && v.id_video && (
+                                                    <a href={v.link_air_koc} target="_blank" rel="noreferrer" style={{ fontSize: '0.7rem', color: '#6366f1' }}>xem link</a>
+                                                )}
+                                            </td>
+                                            <td style={{ padding: '12px 16px', fontSize: '0.83rem', color: '#374151' }}>{v.nhansu_names || '—'}</td>
+                                            <td style={{ padding: '12px 16px', fontSize: '0.83rem', color: '#374151' }}>{v.brand_name || '—'}</td>
+                                            <td style={{ padding: '12px 16px', fontSize: '0.83rem', color: '#374151' }}>{v.san_pham || '—'}</td>
+                                            <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                                <span style={{ background: '#fee2e2', color: '#dc2626', borderRadius: 99, padding: '2px 10px', fontWeight: 700, fontSize: '0.75rem' }}>{v.duplicate_count}x</span>
+                                            </td>
+                                            <td style={{ padding: '12px 16px', fontSize: '0.78rem', color: '#9ca3af' }}>
+                                                {v.blacklisted_at ? new Date(v.blacklisted_at).toLocaleDateString('vi-VN') : '—'}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* CHARTS */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', marginBottom: '30px' }}>
