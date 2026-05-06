@@ -130,9 +130,36 @@ export default function LivestreamTab() {
   useEffect(() => {
     setLoading(true);
     // PERFORMANCE LIVES: data header ở row 14 → range lớn để lấy hết 2025+2026
-    Promise.all([fetchSheet(SHEET_VIDEO, 'A2:J10000'), fetchSheet(SHEET_LIVE, 'A14:Q15000')])
+    Promise.all([fetchSheet(SHEET_VIDEO), fetchSheet(SHEET_LIVE, 'A14:Q15000')])
       .then(([vid, live]) => {
-        setVideoRows(vid.data || []);
+        let vidRows = vid.data || [];
+        const vidHeaders = vid.headers || [];
+
+        // gviz may fall back to col-letter IDs (A, B, C…) when row 1 is a
+        // merged title cell. In that case, find the actual header row inside
+        // the data (the row where one of the values is 'NGÀY') and remap.
+        const hasRealHeaders = vidHeaders.some(h =>
+          h === 'NGÀY' || h === 'Ngày' || h === 'TALENT' || h === 'Talent'
+        );
+        if (!hasRealHeaders && vidRows.length > 0) {
+          const hIdx = vidRows.findIndex(r =>
+            Object.values(r).some(v => String(v).trim() === 'NGÀY' || String(v).trim() === 'Ngày')
+          );
+          if (hIdx >= 0) {
+            const colMap = vidRows[hIdx]; // { A:'NGÀY', B:'TALENT', … }
+            vidRows = vidRows.slice(hIdx + 1)
+              .filter(r => Object.values(r).some(v => v !== ''))
+              .map(r => {
+                const obj = {};
+                Object.entries(colMap).forEach(([k, name]) => {
+                  if (name) obj[String(name).trim()] = r[k];
+                });
+                return obj;
+              });
+          }
+        }
+
+        setVideoRows(vidRows);
         setLiveRows(live.data  || []);
         setLoading(false);
       })
