@@ -53,9 +53,10 @@ function fmtHours(h) {
 // Dùng Supabase Edge Function proxy (ổn định, không CORS)
 const PROXY_URL = 'https://xkyhvcmnkrxdtmwtghln.supabase.co/functions/v1/sheets-proxy';
 
-async function fetchSheet(sheetName, range = '') {
+async function fetchSheet(sheetName, range = '', noHeaders = false) {
   let url = `${PROXY_URL}?sheetId=${SHEET_ID}&sheet=${encodeURIComponent(sheetName)}`;
-  if (range) url += `&range=${encodeURIComponent(range)}`;
+  if (range)     url += `&range=${encodeURIComponent(range)}`;
+  if (noHeaders) url += `&noHeaders=true`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
@@ -129,34 +130,30 @@ export default function LivestreamTab() {
   // Fetch
   useEffect(() => {
     setLoading(true);
-    // PERFORMANCE LIVES: data header ở row 14 → range lớn để lấy hết 2025+2026
-    Promise.all([fetchSheet(SHEET_VIDEO), fetchSheet(SHEET_LIVE, 'A14:Q15000')])
+    // SHEET_VIDEO: row 1 = merged title "PFM.Video", row 2 = actual headers.
+    // Use noHeaders=true so gviz passes headers=0 → ALL rows come back as data
+    // with col-letter keys (A, B, C…). We then locate the header row (the one
+    // containing 'NGÀY') and remap every subsequent row to real column names.
+    Promise.all([fetchSheet(SHEET_VIDEO, '', true), fetchSheet(SHEET_LIVE, 'A14:Q15000')])
       .then(([vid, live]) => {
         let vidRows = vid.data || [];
-        const vidHeaders = vid.headers || [];
 
-        // gviz may fall back to col-letter IDs (A, B, C…) when row 1 is a
-        // merged title cell. In that case, find the actual header row inside
-        // the data (the row where one of the values is 'NGÀY') and remap.
-        const hasRealHeaders = vidHeaders.some(h =>
-          h === 'NGÀY' || h === 'Ngày' || h === 'TALENT' || h === 'Talent'
+        // Find the row that has 'NGÀY' as one of its values → that is the real header row
+        const hIdx = vidRows.findIndex(r =>
+          Object.values(r).some(v => String(v).trim() === 'NGÀY' || String(v).trim() === 'Ngày')
         );
-        if (!hasRealHeaders && vidRows.length > 0) {
-          const hIdx = vidRows.findIndex(r =>
-            Object.values(r).some(v => String(v).trim() === 'NGÀY' || String(v).trim() === 'Ngày')
-          );
-          if (hIdx >= 0) {
-            const colMap = vidRows[hIdx]; // { A:'NGÀY', B:'TALENT', … }
-            vidRows = vidRows.slice(hIdx + 1)
-              .filter(r => Object.values(r).some(v => v !== ''))
-              .map(r => {
-                const obj = {};
-                Object.entries(colMap).forEach(([k, name]) => {
-                  if (name) obj[String(name).trim()] = r[k];
-                });
-                return obj;
+
+        if (hIdx >= 0) {
+          const colMap = vidRows[hIdx]; // e.g. { A:'NGÀY', B:'TALENT', C:'KÊNH', … }
+          vidRows = vidRows.slice(hIdx + 1)
+            .filter(r => Object.values(r).some(v => v !== '')) // drop fully empty rows
+            .map(r => {
+              const obj = {};
+              Object.entries(colMap).forEach(([letter, name]) => {
+                if (name) obj[String(name).trim()] = r[letter] ?? '';
               });
-          }
+              return obj;
+            });
         }
 
         setVideoRows(vidRows);
