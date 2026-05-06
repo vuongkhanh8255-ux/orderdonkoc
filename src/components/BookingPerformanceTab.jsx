@@ -1246,7 +1246,9 @@ ${txtFormat}
 
     // Booking cast budget: max(15tr, (gmvCum + gmvMonth) × 2.2%)
     // Must be useMemo (not plain var) to keep stable reference and avoid infinite effect loop
+    // Chỉ hiển thị nhân sự có GMV > 0 (ẩn những người chưa có hoạt động)
     const castBudgetData = useMemo(() => staffStats
+        .filter(s => (s.gmvCum + s.gmvMonth) > 0)
         .map(s => {
             const base = (s.gmvCum + s.gmvMonth) * 0.022;
             const budget = Math.max(15000000, base);
