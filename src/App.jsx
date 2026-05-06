@@ -56,7 +56,7 @@ function App() {
 function AppMain({ user, onLogout, allowedViews }) {
   const defaultView = allowedViews[0] || 'dashboard';
   const [currentView, setCurrentView] = useState(defaultView);
-  const [openGroups, setOpenGroups] = useState({ ecom: true, booking: true, archive: true });
+  const [openGroups, setOpenGroups] = useState({ ecom: true, cskh: true, livestream: true, booking: true, archive: true });
   const toggleGroup = (key) => setOpenGroups(prev => ({ ...prev, [key]: !prev[key] }));
 
   const canView = (v) => allowedViews.includes(v);
@@ -141,8 +141,12 @@ function AppMain({ user, onLogout, allowedViews }) {
             {[
               { key: 'ecom', label: '🛍️ Ecom', items: [
                 { view: 'stella_dashboard', icon: '📊', name: 'Stella Dashboard' },
-                { view: 'cskh',             icon: '📋', name: 'CSKH' },
-                { view: 'livestream',       icon: '🎬', name: 'Livestream' },
+              ]},
+              { key: 'cskh', label: '📋 CSKH', items: [
+                { view: 'cskh', icon: '📋', name: 'CSKH' },
+              ]},
+              { key: 'livestream', label: '🎬 Livestream', items: [
+                { view: 'livestream', icon: '🎬', name: 'Livestream' },
               ]},
               { key: 'booking', label: '📅 Booking', items: [
                 { view: 'dashboard',           icon: '📊', name: 'Dashboard' },
@@ -153,9 +157,8 @@ function AppMain({ user, onLogout, allowedViews }) {
                 { view: 'booking',             icon: '📅', name: 'Booking Manager' },
               ]},
               { key: 'archive', label: '🗄️ Lưu trữ', items: [
-                { view: 'data_archive',   icon: '🗄️', name: 'Lưu Trữ Data' },
-                { view: 'expense',        icon: '💸', name: 'Ngân Sách Ecom' },
-                { view: 'landing_orders', icon: '🛒', name: 'Đơn hàng Landing Page' },
+                { view: 'data_archive', icon: '🗄️', name: 'Lưu Trữ Data' },
+                { view: 'expense',      icon: '💸', name: 'Ngân Sách Ecom' },
               ]},
             ].map(group => {
               const visibleItems = group.items.filter(i => canView(i.view));
