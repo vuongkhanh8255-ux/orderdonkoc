@@ -127,30 +127,41 @@ export default function LivestreamTab() {
   const PAGE_SIZE = 50;
   const [page, setPage] = useState(1);
 
+  // Hard-coded column map for SHEET_VIDEO (col-letter → real header name).
+  // The sheet has a merged title row 1 ("PFM.Video") that causes gviz to
+  // fall back to column-letter IDs (A, B, C…) instead of real labels.
+  const VIDEO_COL_MAP = {
+    A: 'NGÀY', B: 'TALENT', C: 'KÊNH', D: 'SẢN PHẨM',
+    E: 'CONTENT', F: 'KEYWORD 1', G: 'KEYWORD 2 (OPTIONAL)',
+    H: 'LINK', I: 'TEAM (KÉO CÔNG THỨC)',
+  };
+
   // Fetch
   useEffect(() => {
     setLoading(true);
-    // SHEET_VIDEO: row 1 = merged title "PFM.Video", row 2 = actual headers.
-    // Use noHeaders=true so gviz passes headers=0 → ALL rows come back as data
-    // with col-letter keys (A, B, C…). We then locate the header row (the one
-    // containing 'NGÀY') and remap every subsequent row to real column names.
+    // noHeaders=true → proxy adds &headers=0 to gviz so ALL rows return as data
+    // with col-letter keys. We filter out title/header rows (where col A is NOT
+    // an ISO date) then remap using VIDEO_COL_MAP.
     Promise.all([fetchSheet(SHEET_VIDEO, '', true), fetchSheet(SHEET_LIVE, 'A14:Q15000')])
       .then(([vid, live]) => {
         let vidRows = vid.data || [];
 
-        // Find the row that has 'NGÀY' as one of its values → that is the real header row
-        const hIdx = vidRows.findIndex(r =>
-          Object.values(r).some(v => String(v).trim() === 'NGÀY' || String(v).trim() === 'Ngày')
-        );
-
-        if (hIdx >= 0) {
-          const colMap = vidRows[hIdx]; // e.g. { A:'NGÀY', B:'TALENT', C:'KÊNH', … }
-          vidRows = vidRows.slice(hIdx + 1)
-            .filter(r => Object.values(r).some(v => v !== '')) // drop fully empty rows
+        // If gviz returned col-letter keys (A, B, C…), remap to real names
+        if (vidRows.length > 0 && 'A' in (vidRows[0] || {})) {
+          vidRows = vidRows
+            .filter(r => {
+              // Keep only real data rows: col A must be empty or an ISO date
+              // Title rows ("PFM.Video") and header rows ("NGÀY") are excluded
+              const a = r['A'];
+              if (a === '' || a === null || a === undefined) return true;
+              if (typeof a === 'number') return true;
+              if (typeof a === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(a)) return true;
+              return false; // text that isn't a date → header/title row, skip
+            })
             .map(r => {
               const obj = {};
-              Object.entries(colMap).forEach(([letter, name]) => {
-                if (name) obj[String(name).trim()] = r[letter] ?? '';
+              Object.entries(VIDEO_COL_MAP).forEach(([letter, name]) => {
+                obj[name] = r[letter] ?? '';
               });
               return obj;
             });
