@@ -174,6 +174,24 @@ const DataTable = ({ columns, data = [], title }) => {
 const BookingPerformanceTab = () => {
     const { brands, nhanSus, airLinks, loadAirLinks, setCastBudgetByNhanSu } = useAppData();
     const fileInputRef = useRef(null);
+    const [savingBudget, setSavingBudget] = useState(false);
+    const [savedBudgetInfo, setSavedBudgetInfo] = useState(null); // { month, year, savedAt }
+
+    // Load thông tin lần lưu cuối từ Supabase
+    useEffect(() => {
+        supabase.from('cast_budget_saved')
+            .select('source_month, source_year, saved_at')
+            .limit(1)
+            .then(({ data }) => {
+                if (data && data.length > 0) {
+                    setSavedBudgetInfo({
+                        month: data[0].source_month,
+                        year: data[0].source_year,
+                        savedAt: data[0].saved_at,
+                    });
+                }
+            });
+    }, []);
 
     // FILTERS
     const [month, setMonth] = useState(new Date().getMonth() + 1); // Default to current month immediately
@@ -1377,9 +1395,47 @@ ${txtFormat}
 
                         {/* BOOKING CAST BUDGET TABLE */}
                         <div style={{ marginTop: 32, background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-                            <div style={{ padding: '14px 20px', background: 'linear-gradient(135deg, #ea580c, #c2410c)', color: '#fff' }}>
-                                <div style={{ fontWeight: 800, fontSize: '1rem' }}>💰 Định Mức Booking Cast theo Nhân Sự</div>
-                                <div style={{ fontSize: '0.78rem', opacity: 0.85, marginTop: 2 }}>Công thức: max(15.000.000₫, (GMV lũy kế + GMV air tháng) × 2.2%)</div>
+                            <div style={{ padding: '14px 20px', background: 'linear-gradient(135deg, #ea580c, #c2410c)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div>
+                                    <div style={{ fontWeight: 800, fontSize: '1rem' }}>💰 Định Mức Booking Cast theo Nhân Sự</div>
+                                    <div style={{ fontSize: '0.78rem', opacity: 0.85, marginTop: 2 }}>Công thức: max(15.000.000₫, (GMV lũy kế + GMV air tháng) × 2.2%)</div>
+                                    {savedBudgetInfo && (
+                                        <div style={{ fontSize: '0.72rem', opacity: 0.75, marginTop: 3 }}>
+                                            💾 Đã lưu từ tháng {savedBudgetInfo.month}/{savedBudgetInfo.year} · {new Date(savedBudgetInfo.savedAt).toLocaleString('vi-VN')}
+                                        </div>
+                                    )}
+                                </div>
+                                <button
+                                    onClick={async () => {
+                                        if (!castBudgetData.length) return;
+                                        setSavingBudget(true);
+                                        const rows = castBudgetData.map(d => ({
+                                            nhansu_name: d.name,
+                                            budget: d.castBudget,
+                                            source_month: parseInt(month),
+                                            source_year: parseInt(year),
+                                            saved_at: new Date().toISOString(),
+                                        }));
+                                        const { error } = await supabase
+                                            .from('cast_budget_saved')
+                                            .upsert(rows, { onConflict: 'nhansu_name' });
+                                        setSavingBudget(false);
+                                        if (error) {
+                                            alert('❌ Lỗi khi lưu: ' + error.message);
+                                        } else {
+                                            const map = {};
+                                            castBudgetData.forEach(d => { map[d.name] = d.castBudget; });
+                                            setCastBudgetByNhanSu(map);
+                                            const info = { month: parseInt(month), year: parseInt(year), savedAt: new Date().toISOString() };
+                                            setSavedBudgetInfo(info);
+                                            alert(`✅ Đã lưu định mức cast tháng ${parseInt(month) + 1}/${parseInt(month) === 12 ? parseInt(year) + 1 : year} thành công!\nBáo Cáo Air Links sẽ tự động dùng định mức này.`);
+                                        }
+                                    }}
+                                    disabled={savingBudget || !castBudgetData.length}
+                                    style={{ background: savingBudget ? '#9ca3af' : '#fff', color: savingBudget ? '#fff' : '#ea580c', border: 'none', borderRadius: 8, padding: '8px 18px', fontWeight: 700, fontSize: '0.85rem', cursor: savingBudget ? 'default' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+                                >
+                                    {savingBudget ? '⏳ Đang lưu...' : '💾 Lưu Định Mức Tháng Sau'}
+                                </button>
                             </div>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                                 <thead>

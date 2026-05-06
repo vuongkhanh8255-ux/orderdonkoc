@@ -1039,6 +1039,21 @@ export const AppDataProvider = ({ children }) => {
     }
     getCommonData();
   }, []);
+
+  // Load định mức cast đã lưu từ Supabase khi app mount
+  // → AirLinksTab luôn có sẵn định mức mà không cần vào BookingPerformanceTab trước
+  useEffect(() => {
+    supabase.from('cast_budget_saved').select('nhansu_name, budget')
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          const map = {};
+          data.forEach(r => { map[r.nhansu_name] = r.budget; });
+          setCastBudgetByNhanSu(prev =>
+            Object.keys(prev).length === 0 ? map : prev
+          );
+        }
+      });
+  }, []);
   useEffect(() => { loadInitialData(); }, [currentPage, filterIdKenh, filterSdt, filterNhanSu, filterNgay, filterLoaiShip, filterEditedStatus, filterBrand, filterSanPham]);
   useEffect(() => { if (currentPage !== 1) { setCurrentPage(1); } }, [filterIdKenh, filterSdt, filterNhanSu, filterNgay, filterLoaiShip, filterEditedStatus, filterBrand, filterSanPham]);
   useEffect(() => { loadSanPhamsByBrand(selectedBrand); setProductSearchTerm(''); }, [selectedBrand]);

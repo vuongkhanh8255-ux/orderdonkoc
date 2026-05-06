@@ -1594,7 +1594,7 @@ const AirLinksTab = () => {
                 </div>
                 {Object.keys(castBudgetByNhanSu).length === 0 && (
                     <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 14px', marginBottom: 12, fontSize: '0.8rem', color: '#92400e' }}>
-                        💡 Để xem cột <b>Định Mức Cast</b> & <b>Còn Lại</b>, hãy vào tab <b>Báo Cáo Hiệu Suất</b> và import data tháng tương ứng trước.
+                        💡 Chưa có định mức cast đã lưu. Vào <b>Báo Cáo Hiệu Suất</b> → tính xong → bấm <b>💾 Lưu Định Mức Tháng Sau</b> để cập nhật.
                     </div>
                 )}
                 {airReportData.reportRows.length > 0 ? (
