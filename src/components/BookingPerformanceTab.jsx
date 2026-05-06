@@ -176,14 +176,18 @@ const BookingPerformanceTab = () => {
     const fileInputRef = useRef(null);
     const [savingBudget, setSavingBudget] = useState(false);
     const [savedBudgetInfo, setSavedBudgetInfo] = useState(null); // { month, year, savedAt }
+    const [actualCastByNhanSu, setActualCastByNhanSu] = useState({}); // chi phí cast thực tế tháng này
+    const [prevBudgetByNhanSu, setPrevBudgetByNhanSu] = useState({}); // định mức tháng trước từ Supabase
 
-    // Load thông tin lần lưu cuối từ Supabase
+    // Load thông tin lần lưu cuối + định mức tháng trước từ Supabase
     useEffect(() => {
         supabase.from('cast_budget_saved')
-            .select('source_month, source_year, saved_at')
-            .limit(1)
+            .select('nhansu_name, budget, source_month, source_year, saved_at')
             .then(({ data }) => {
                 if (data && data.length > 0) {
+                    const map = {};
+                    data.forEach(r => { map[r.nhansu_name] = r.budget; });
+                    setPrevBudgetByNhanSu(map);
                     setSavedBudgetInfo({
                         month: data[0].source_month,
                         year: data[0].source_year,
@@ -206,6 +210,29 @@ const BookingPerformanceTab = () => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [loadProgress, setLoadProgress] = useState({ current: 0, total: 0 }); // Track DB fetch progress
     const [lastLoadedLabel, setLastLoadedLabel] = useState(''); // "Đã lưu X tiếng trước"
+
+    // Load chi phí cast thực tế của tháng đang xem (từ air_links)
+    useEffect(() => {
+        if (!month || !year) return;
+        const m = parseInt(month), y = parseInt(year);
+        const pad = s => String(s).padStart(2, '0');
+        const start = `${y}-${pad(m)}-01`;
+        const end   = `${y}-${pad(m)}-31`;
+        // Links có ngay_air trong tháng
+        const q1 = supabase.from('air_links').select('cast, nhansu(ten_nhansu)')
+            .gte('ngay_air', start).lte('ngay_air', end);
+        // Links không có ngay_air nhưng ngay_booking trong tháng
+        const q2 = supabase.from('air_links').select('cast, nhansu(ten_nhansu)')
+            .is('ngay_air', null).gte('ngay_booking', start).lte('ngay_booking', end);
+        Promise.all([q1, q2]).then(([r1, r2]) => {
+            const map = {};
+            [...(r1.data || []), ...(r2.data || [])].forEach(link => {
+                const name = link.nhansu?.ten_nhansu;
+                if (name) map[name] = (map[name] || 0) + (parseFloat(link.cast) || 0);
+            });
+            setActualCastByNhanSu(map);
+        });
+    }, [month, year]);
 
     // In-memory session cache: { "2026_4": [...data] }
     const sessionCacheRef = useRef({});
@@ -1437,27 +1464,55 @@ ${txtFormat}
                                     {savingBudget ? '⏳ Đang lưu...' : '💾 Lưu Định Mức Tháng Sau'}
                                 </button>
                             </div>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem' }}>
                                 <thead>
                                     <tr style={{ background: '#fef7f0', borderBottom: '2px solid #fed7aa' }}>
-                                        <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 700, color: '#92400e' }}>Nhân Sự</th>
-                                        <th style={{ padding: '10px 16px', textAlign: 'right', fontWeight: 700, color: '#92400e' }}>GMV Lũy Kế + Air Tháng</th>
-                                        <th style={{ padding: '10px 16px', textAlign: 'right', fontWeight: 700, color: '#92400e' }}>Định Mức Cast Tháng</th>
-                                        <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 700, color: '#92400e' }}>Ghi Chú</th>
+                                        <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: '#92400e' }}>Nhân Sự</th>
+                                        <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: '#92400e' }}>GMV Lũy Kế + Air Tháng</th>
+                                        <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: '#6b21a8', background: '#faf5ff', borderLeft: '2px solid #e9d5ff' }}>
+                                            Định Mức Tháng Trước
+                                            {savedBudgetInfo && <div style={{ fontSize: '0.68rem', fontWeight: 400, opacity: 0.8 }}>(từ tháng {savedBudgetInfo.month}/{savedBudgetInfo.year})</div>}
+                                        </th>
+                                        <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: '#0369a1', background: '#f0f9ff', borderLeft: '2px solid #bae6fd' }}>
+                                            Đã Chi Tháng {month}/{year}
+                                        </th>
+                                        <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: '#166534', background: '#f0fdf4', borderLeft: '2px solid #bbf7d0' }}>
+                                            Còn Lại / Vượt
+                                        </th>
+                                        <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: '#ea580c' }}>Định Mức Tháng Sau</th>
+                                        <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: '#92400e' }}>Ghi Chú</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {castBudgetData.map((row, i) => {
                                         const isMin = (row.gmvTotal * 0.022) < 15000000;
+                                        const prevBudget  = prevBudgetByNhanSu[row.name] ?? null;
+                                        const actualCast  = actualCastByNhanSu[row.name] ?? 0;
+                                        const remaining   = prevBudget != null ? prevBudget - actualCast : null;
+                                        const isOver      = remaining != null && remaining < 0;
+                                        const rowBg = i % 2 === 0 ? '#fff' : '#fffbf5';
                                         return (
-                                            <tr key={i} style={{ borderBottom: '1px solid #fef3c7', background: i % 2 === 0 ? '#fff' : '#fffbf5' }}
+                                            <tr key={i} style={{ borderBottom: '1px solid #fef3c7', background: rowBg }}
                                                 onMouseEnter={e => e.currentTarget.style.background = '#fef3c7'}
-                                                onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? '#fff' : '#fffbf5'}>
-                                                <td style={{ padding: '12px 16px', fontWeight: 700 }}>{row.name}</td>
-                                                <td style={{ padding: '12px 16px', textAlign: 'right', color: '#64748b' }}>{formatNumber(row.gmvTotal)} ₫</td>
-                                                <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 900, color: '#ea580c', fontSize: '1rem' }}>{formatNumber(row.castBudget)} ₫</td>
-                                                <td style={{ padding: '12px 16px', fontSize: '0.75rem', color: isMin ? '#dc2626' : '#16a34a', fontWeight: 600 }}>
-                                                    {isMin ? '⚠️ Áp dụng mức tối thiểu 15tr' : '✅ Tính theo 2.2% GMV'}
+                                                onMouseLeave={e => e.currentTarget.style.background = rowBg}>
+                                                <td style={{ padding: '11px 14px', fontWeight: 700 }}>{row.name}</td>
+                                                <td style={{ padding: '11px 14px', textAlign: 'right', color: '#64748b' }}>{formatNumber(row.gmvTotal)} ₫</td>
+                                                {/* ĐỊNH MỨC THÁNG TRƯỚC */}
+                                                <td style={{ padding: '11px 14px', textAlign: 'right', fontWeight: 700, color: '#7c3aed', background: '#faf5ff', borderLeft: '2px solid #e9d5ff' }}>
+                                                    {prevBudget != null ? `${formatNumber(prevBudget)} ₫` : '—'}
+                                                </td>
+                                                {/* ĐÃ CHI */}
+                                                <td style={{ padding: '11px 14px', textAlign: 'right', fontWeight: 600, color: actualCast > 0 ? '#0284c7' : '#94a3b8', background: '#f0f9ff', borderLeft: '2px solid #bae6fd' }}>
+                                                    {actualCast > 0 ? `${formatNumber(actualCast)} ₫` : '—'}
+                                                </td>
+                                                {/* CÒN LẠI / VƯỢT */}
+                                                <td style={{ padding: '11px 14px', textAlign: 'right', fontWeight: 700, color: remaining == null ? '#94a3b8' : isOver ? '#dc2626' : '#16a34a', background: '#f0fdf4', borderLeft: '2px solid #bbf7d0' }}>
+                                                    {remaining == null ? '—' : isOver ? `▲ ${formatNumber(Math.abs(remaining))} ₫` : `${formatNumber(remaining)} ₫`}
+                                                </td>
+                                                {/* ĐỊNH MỨC THÁNG SAU */}
+                                                <td style={{ padding: '11px 14px', textAlign: 'right', fontWeight: 900, color: '#ea580c', fontSize: '0.95rem' }}>{formatNumber(row.castBudget)} ₫</td>
+                                                <td style={{ padding: '11px 14px', fontSize: '0.73rem', color: isMin ? '#dc2626' : '#16a34a', fontWeight: 600 }}>
+                                                    {isMin ? '⚠️ Tối thiểu 15tr' : '✅ 2.2% GMV'}
                                                 </td>
                                             </tr>
                                         );
