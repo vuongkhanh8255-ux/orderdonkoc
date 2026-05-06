@@ -179,6 +179,10 @@ const BookingPerformanceTab = () => {
     const [actualCastByNhanSu, setActualCastByNhanSu] = useState({}); // chi phí cast thực tế tháng này
     const [prevBudgetByNhanSu, setPrevBudgetByNhanSu] = useState({}); // định mức tháng trước từ Supabase
 
+    // FILTERS — declared BEFORE the useEffects that depend on them to avoid TDZ errors
+    const [month, setMonth] = useState(new Date().getMonth() + 1); // Default to current month immediately
+    const [year, setYear] = useState(new Date().getFullYear()); // Default to current year immediately
+
     // Load định mức tháng trước = budget đã lưu với applied_month = tháng đang xem
     // Reload mỗi khi month/year thay đổi
     useEffect(() => {
@@ -202,10 +206,6 @@ const BookingPerformanceTab = () => {
                 setPrevBudgetByNhanSu(map);
             });
     }, [month, year]);
-
-    // FILTERS
-    const [month, setMonth] = useState(new Date().getMonth() + 1); // Default to current month immediately
-    const [year, setYear] = useState(new Date().getFullYear()); // Default to current year immediately
     const [filterBrand, setFilterBrand] = useState('');
     const [filterStaff, setFilterStaff] = useState('');
     const [filterKoc, setFilterKoc] = useState('');
