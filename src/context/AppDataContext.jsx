@@ -1040,20 +1040,24 @@ export const AppDataProvider = ({ children }) => {
     getCommonData();
   }, []);
 
-  // Load định mức cast đã lưu từ Supabase khi app mount
-  // → AirLinksTab luôn có sẵn định mức mà không cần vào BookingPerformanceTab trước
+  // Load định mức cast từ Supabase khi app mount (applied_month = tháng hiện tại)
+  // Mỗi khi airReportMonth/Year thay đổi, cũng reload để Air Links report dùng đúng định mức
   useEffect(() => {
-    supabase.from('cast_budget_saved').select('nhansu_name, budget')
+    const m = airReportMonth || (new Date().getMonth() + 1);
+    const y = airReportYear  || new Date().getFullYear();
+    supabase.from('cast_budget_saved')
+      .select('nhansu_name, budget')
+      .eq('applied_month', parseInt(m))
+      .eq('applied_year', parseInt(y))
       .then(({ data }) => {
+        const map = {};
         if (data && data.length > 0) {
-          const map = {};
           data.forEach(r => { map[r.nhansu_name] = r.budget; });
-          setCastBudgetByNhanSu(prev =>
-            Object.keys(prev).length === 0 ? map : prev
-          );
         }
+        // Luôn cập nhật khi tháng thay đổi để Air Links dùng đúng định mức của tháng đó
+        setCastBudgetByNhanSu(map);
       });
-  }, []);
+  }, [airReportMonth, airReportYear]);
   useEffect(() => { loadInitialData(); }, [currentPage, filterIdKenh, filterSdt, filterNhanSu, filterNgay, filterLoaiShip, filterEditedStatus, filterBrand, filterSanPham]);
   useEffect(() => { if (currentPage !== 1) { setCurrentPage(1); } }, [filterIdKenh, filterSdt, filterNhanSu, filterNgay, filterLoaiShip, filterEditedStatus, filterBrand, filterSanPham]);
   useEffect(() => { loadSanPhamsByBrand(selectedBrand); setProductSearchTerm(''); }, [selectedBrand]);

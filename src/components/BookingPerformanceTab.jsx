@@ -179,23 +179,29 @@ const BookingPerformanceTab = () => {
     const [actualCastByNhanSu, setActualCastByNhanSu] = useState({}); // chi phí cast thực tế tháng này
     const [prevBudgetByNhanSu, setPrevBudgetByNhanSu] = useState({}); // định mức tháng trước từ Supabase
 
-    // Load thông tin lần lưu cuối + định mức tháng trước từ Supabase
+    // Load định mức tháng trước = budget đã lưu với applied_month = tháng đang xem
+    // Reload mỗi khi month/year thay đổi
     useEffect(() => {
+        if (!month || !year) return;
         supabase.from('cast_budget_saved')
             .select('nhansu_name, budget, source_month, source_year, saved_at')
+            .eq('applied_month', parseInt(month))
+            .eq('applied_year', parseInt(year))
             .then(({ data }) => {
+                const map = {};
                 if (data && data.length > 0) {
-                    const map = {};
                     data.forEach(r => { map[r.nhansu_name] = r.budget; });
-                    setPrevBudgetByNhanSu(map);
                     setSavedBudgetInfo({
                         month: data[0].source_month,
                         year: data[0].source_year,
                         savedAt: data[0].saved_at,
                     });
+                } else {
+                    setSavedBudgetInfo(null);
                 }
+                setPrevBudgetByNhanSu(map);
             });
-    }, []);
+    }, [month, year]);
 
     // FILTERS
     const [month, setMonth] = useState(new Date().getMonth() + 1); // Default to current month immediately
@@ -1436,16 +1442,22 @@ ${txtFormat}
                                     onClick={async () => {
                                         if (!castBudgetData.length) return;
                                         setSavingBudget(true);
+                                        const srcMonth = parseInt(month);
+                                        const srcYear  = parseInt(year);
+                                        const appMonth = srcMonth === 12 ? 1  : srcMonth + 1;
+                                        const appYear  = srcMonth === 12 ? srcYear + 1 : srcYear;
                                         const rows = castBudgetData.map(d => ({
-                                            nhansu_name: d.name,
-                                            budget: d.castBudget,
-                                            source_month: parseInt(month),
-                                            source_year: parseInt(year),
-                                            saved_at: new Date().toISOString(),
+                                            nhansu_name:   d.name,
+                                            budget:        d.castBudget,
+                                            source_month:  srcMonth,
+                                            source_year:   srcYear,
+                                            applied_month: appMonth,
+                                            applied_year:  appYear,
+                                            saved_at:      new Date().toISOString(),
                                         }));
                                         const { error } = await supabase
                                             .from('cast_budget_saved')
-                                            .upsert(rows, { onConflict: 'nhansu_name' });
+                                            .upsert(rows, { onConflict: 'nhansu_name,applied_month,applied_year' });
                                         setSavingBudget(false);
                                         if (error) {
                                             alert('❌ Lỗi khi lưu: ' + error.message);
@@ -1453,9 +1465,7 @@ ${txtFormat}
                                             const map = {};
                                             castBudgetData.forEach(d => { map[d.name] = d.castBudget; });
                                             setCastBudgetByNhanSu(map);
-                                            const info = { month: parseInt(month), year: parseInt(year), savedAt: new Date().toISOString() };
-                                            setSavedBudgetInfo(info);
-                                            alert(`✅ Đã lưu định mức cast tháng ${parseInt(month) + 1}/${parseInt(month) === 12 ? parseInt(year) + 1 : year} thành công!\nBáo Cáo Air Links sẽ tự động dùng định mức này.`);
+                                            alert(`✅ Đã lưu định mức cast cho tháng ${appMonth}/${appYear} thành công!\nBáo Cáo Air Links tháng ${appMonth} sẽ tự động dùng định mức này.`);
                                         }
                                     }}
                                     disabled={savingBudget || !castBudgetData.length}
