@@ -222,8 +222,9 @@ const BookingPerformanceTab = () => {
         if (!month || !year) return;
         const m = parseInt(month), y = parseInt(year);
         const pad = s => String(s).padStart(2, '0');
+        const lastDay = new Date(y, m, 0).getDate(); // ngày cuối tháng đúng (tháng 4=30, tháng 2=28/29...)
         const start = `${y}-${pad(m)}-01`;
-        const end   = `${y}-${pad(m)}-31`;
+        const end   = `${y}-${pad(m)}-${pad(lastDay)}`;
         // Links có ngay_air trong tháng
         const q1 = supabase.from('air_links').select('cast, nhansu(ten_nhansu)')
             .gte('ngay_air', start).lte('ngay_air', end);
