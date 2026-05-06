@@ -7,7 +7,7 @@ import {
 
 // ── CONFIG ──────────────────────────────────────────────────────────────────
 const SHEET_ID    = '19XM9DYn6ZUNNiY2T1OhkndSsC5OQTQXB-bWI-R6CZk4';
-const SHEET_VIDEO = 'TỔNG - VIDEO 2025';
+const SHEET_VIDEO = 'TỔNG - VIDEO 2026';
 const SHEET_LIVE  = 'TỔNG - PERFORMANCE LIVES 2025';
 
 const BRANDS = ['Tất cả', 'Bodymiss', 'Milaganics', 'Moaw Moaws', 'eHerb', 'Masube', 'Real Steel', 'Healmi'];
