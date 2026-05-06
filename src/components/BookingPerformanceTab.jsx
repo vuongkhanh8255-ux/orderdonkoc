@@ -217,26 +217,21 @@ const BookingPerformanceTab = () => {
     const [loadProgress, setLoadProgress] = useState({ current: 0, total: 0 }); // Track DB fetch progress
     const [lastLoadedLabel, setLastLoadedLabel] = useState(''); // "Đã lưu X tiếng trước"
 
-    // Load chi phí cast thực tế của tháng đang xem (từ air_links)
+    // Load chi phí cast thực tế của tháng đang xem
+    // Dùng cùng RPC với Air Links Report để đảm bảo số liệu khớp 100%
     useEffect(() => {
         if (!month || !year) return;
-        const m = parseInt(month), y = parseInt(year);
-        const pad = s => String(s).padStart(2, '0');
-        const lastDay = new Date(y, m, 0).getDate(); // ngày cuối tháng đúng (tháng 4=30, tháng 2=28/29...)
-        const start = `${y}-${pad(m)}-01`;
-        const end   = `${y}-${pad(m)}-${pad(lastDay)}`;
-        // Links có ngay_air trong tháng
-        const q1 = supabase.from('air_links').select('cast, nhansu(ten_nhansu)')
-            .gte('ngay_air', start).lte('ngay_air', end);
-        // Links không có ngay_air nhưng ngay_booking trong tháng
-        const q2 = supabase.from('air_links').select('cast, nhansu(ten_nhansu)')
-            .is('ngay_air', null).gte('ngay_booking', start).lte('ngay_booking', end);
-        Promise.all([q1, q2]).then(([r1, r2]) => {
+        supabase.rpc('generate_air_links_report', {
+            target_month: parseInt(month),
+            target_year:  parseInt(year),
+        }).then(({ data, error }) => {
+            if (error) { console.error('Lỗi load cast thực tế:', error); return; }
             const map = {};
-            [...(r1.data || []), ...(r2.data || [])].forEach(link => {
-                const name = link.nhansu?.ten_nhansu;
-                if (name) map[name] = (map[name] || 0) + (parseFloat(link.cast) || 0);
-            });
+            if (data) {
+                data.forEach(row => {
+                    if (row.ten_nhansu) map[row.ten_nhansu] = parseFloat(row.chi_phi_cast) || 0;
+                });
+            }
             setActualCastByNhanSu(map);
         });
     }, [month, year]);
