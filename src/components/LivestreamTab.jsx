@@ -130,7 +130,7 @@ export default function LivestreamTab() {
   useEffect(() => {
     setLoading(true);
     // PERFORMANCE LIVES: data header ở row 14 → range lớn để lấy hết 2025+2026
-    Promise.all([fetchSheet(SHEET_VIDEO), fetchSheet(SHEET_LIVE, 'A14:Q15000')])
+    Promise.all([fetchSheet(SHEET_VIDEO, 'A1:R5000'), fetchSheet(SHEET_LIVE, 'A14:Q15000')])
       .then(([vid, live]) => {
         console.log('[VIDEO] headers:', vid.headers);
         console.log('[VIDEO] first row:', vid.data?.[0]);
