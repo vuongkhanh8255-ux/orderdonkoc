@@ -87,7 +87,7 @@ const SearchableDropdown = ({ options, value, onChange, placeholder, style, isMu
                     animation: 'fadeIn 0.2s'
                 }}>
                     {showSearch && (
-                        <div style={{ position: 'sticky', top: 0, padding: '10px', backgroundColor: '#f9fafb', borderBottom: '1px solid #eee', zIndex: 2 }}>
+                        <div style={{ position: 'sticky', top: 0, padding: '10px', backgroundColor: '#f9fafb', borderBottom: '1px solid #eee', zIndex: 2, overflowX: 'hidden' }}>
                             <input
                                 type="text"
                                 placeholder="🔍 Tìm..."
@@ -96,6 +96,7 @@ const SearchableDropdown = ({ options, value, onChange, placeholder, style, isMu
                                 autoFocus
                                 style={{
                                     width: '100%',
+                                    boxSizing: 'border-box',
                                     padding: '8px 12px',
                                     borderRadius: '8px',
                                     border: '1px solid #ddd',
