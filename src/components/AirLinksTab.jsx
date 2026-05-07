@@ -252,7 +252,7 @@ const AirLinksTab = () => {
         }
         // Thêm rule: Xóa trùng lặp chéo người phân quyền
         else if (passwordModal.type === 'duplicate') {
-            if (passwordModal.input === 'bichhue123') {
+            if (passwordModal.input === 'quockhanh8255') {
                 isAuthorized = true;
             }
         }
