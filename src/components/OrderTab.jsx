@@ -573,7 +573,7 @@ const OrderTab = () => {
                         value={filterSanPham}
                         onChange={setFilterSanPham}
                         placeholder={!filterBrand ? "Chọn Brand trước" : "Tất cả Sản phẩm"}
-                        style={{ flex: '1 1 200px', opacity: !filterBrand ? 0.6 : 1, pointerEvents: !filterBrand ? 'none' : 'auto' }}
+                        style={{ flex: '1 1 320px', opacity: !filterBrand ? 0.6 : 1, pointerEvents: !filterBrand ? 'none' : 'auto' }}
                     />
                     <select value={filterNhanSu} onChange={e => setFilterNhanSu(e.target.value)} style={{ flex: '1 1 180px' }}><option value="">Tất cả nhân sự</option>{nhanSus.map(ns => <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>)}</select>
                     <select value={filterLoaiShip} onChange={e => setFilterLoaiShip(e.target.value)} style={{ flex: '1 1 150px' }}><option value="">Tất cả loại ship</option><option value="Ship thường">Ship thường</option><option value="Hỏa tốc">Hỏa tốc</option></select>

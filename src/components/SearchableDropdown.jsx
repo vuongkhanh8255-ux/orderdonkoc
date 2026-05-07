@@ -63,7 +63,7 @@ const SearchableDropdown = ({ options, value, onChange, placeholder, style, isMu
                     boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                 }}
             >
-                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px', fontWeight: (isMulti ? value.length > 0 : value) ? '600' : '400' }}>
+                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 'calc(100% - 24px)', fontWeight: (isMulti ? value.length > 0 : value) ? '600' : '400' }}>
                     {getDisplayValue()}
                 </span>
                 <span style={{ fontSize: '10px', color: '#666' }}>▼</span>
