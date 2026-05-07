@@ -1657,7 +1657,7 @@ const AirLinksTab = () => {
 
             {/* DANH SÁCH LINK - TABLE ĐÃ UPDATE INLINE EDIT */}
             {/* DANH SÁCH LINK - TABLE ĐÃ UPDATE INLINE EDIT */}
-            <div className="mirinda-card" style={{ marginBottom: '2rem', padding: '1.5rem', position: 'relative', zIndex: 20 }}>
+            <div className="mirinda-card" style={{ marginBottom: '2rem', padding: '1.5rem', position: 'relative', zIndex: 20, overflow: 'visible', transform: 'none' }}>
                 <h2 className="section-title" style={{ textAlign: 'left' }}>DANH SÁCH LINK ĐÃ NHẬP</h2>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', marginBottom: '1.5rem', alignItems: 'center' }}>
                     {selectedRowIds.length > 0 && (
