@@ -1250,11 +1250,12 @@ ${txtFormat}
     //   castBudget = gmvBudget + carryOver  ← định mức tháng sau
     // Chỉ hiển thị nhân sự có GMV > 0
     const castBudgetData = useMemo(() => staffStats
-        .filter(s => (s.gmvCum + s.gmvMonth) > 0)
+        .filter(s => s.gmvCum > 0)
         .map(s => {
-            const gmvBase  = (s.gmvCum + s.gmvMonth) * 0.022;
+            // gmvCum đã bao gồm tất cả video (cũ + tháng này) → dùng thẳng, không cộng thêm gmvMonth
+            const gmvBase   = s.gmvCum * 0.022;
             const gmvBudget = Math.max(15000000, gmvBase);
-            const isMin    = gmvBase < 15000000;
+            const isMin     = gmvBase < 15000000;
 
             // Carry-over: phần dư từ tháng đang xem sang tháng sau
             const prevBudget = prevBudgetByNhanSu[s.name] ?? null;
@@ -1264,9 +1265,9 @@ ${txtFormat}
 
             return {
                 name:       s.name,
-                gmvTotal:   s.gmvCum + s.gmvMonth,
-                gmvBudget,  // phần tính từ GMV
-                carryOver,  // phần dư tháng trước cộng thêm
+                gmvTotal:   s.gmvCum,   // tổng GMV thực tế (không đếm trùng)
+                gmvBudget,
+                carryOver,
                 isMin,
                 castBudget: gmvBudget + carryOver,
             };
@@ -1493,7 +1494,7 @@ ${txtFormat}
                                 <thead>
                                     <tr style={{ background: '#fef7f0', borderBottom: '2px solid #fed7aa' }}>
                                         <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: '#92400e' }}>Nhân Sự</th>
-                                        <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: '#92400e' }}>GMV Lũy Kế + Air Tháng</th>
+                                        <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: '#92400e' }}>Tổng GMV (Lũy Kế)</th>
                                         <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: '#6b21a8', background: '#faf5ff', borderLeft: '2px solid #e9d5ff' }}>
                                             Định Mức Tháng Trước
                                             {savedBudgetInfo && <div style={{ fontSize: '0.68rem', fontWeight: 400, opacity: 0.8 }}>(từ tháng {savedBudgetInfo.month}/{savedBudgetInfo.year})</div>}
