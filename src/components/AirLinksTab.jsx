@@ -1774,10 +1774,7 @@ const AirLinksTab = () => {
                                                 {/* SẢN PHẨM */}
                                                 <td style={{ textAlign: 'center', padding: '12px' }}>
                                                     {isEditing ? (
-                                                        <select value={editFormData.san_pham} onChange={(e) => handleEditFormChange(e, 'san_pham')} style={tableInputStyle}>
-                                                            <option value="">--SP--</option>
-                                                            {PRODUCT_OPTIONS.map(prod => (<option key={prod} value={prod}>{prod}</option>))}
-                                                        </select>
+                                                        <input type="text" value={editFormData.san_pham} onChange={(e) => handleEditFormChange(e, 'san_pham')} style={tableInputStyle} placeholder="Tên sản phẩm..." />
                                                     ) : normalizeProductName(link.san_pham)}
                                                 </td>
 
