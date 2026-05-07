@@ -561,7 +561,7 @@ const OrderTab = () => {
                 </div>
             </div>
 
-            <div className="mirinda-card" style={{ marginBottom: '1.5rem', padding: '1.5rem', position: 'relative', zIndex: 20 }}>
+            <div className="mirinda-card" style={{ marginBottom: '1.5rem', padding: '1.5rem', position: 'relative', zIndex: 20, overflow: 'visible' }}>
                 <h2 className="section-title" style={{ textAlign: 'center', width: '100%' }}>Danh Sách Đơn Hàng</h2>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', marginBottom: '1.5rem', alignItems: 'center' }}>
                     <input type="text" placeholder="ID kênh..." value={filterIdKenh} onChange={e => setFilterIdKenh(e.target.value)} style={{ flex: '1 1 150px' }} />
