@@ -18,6 +18,7 @@ import LandingOrders from './components/LandingOrders';
 import AIChat from './components/AIChat';
 import LoginPage, { ROLE_VIEWS } from './components/LoginPage';
 import CampRegistrationTab from './components/CampRegistrationTab';
+import SidebarNotes from './components/SidebarNotes';
 
 const SESSION_KEY = 'sk_session';
 
@@ -155,7 +156,6 @@ function AppMain({ user, onLogout, allowedViews }) {
                 { view: 'booking_performance', icon: '📈', name: 'Báo Cáo Hiệu Suất' },
                 { view: 'contract',            icon: '📝', name: 'Hợp Đồng' },
                 { view: 'airlinks',            icon: '🔗', name: 'Quản Lý Link Air' },
-                { view: 'booking',             icon: '📅', name: 'Booking Manager' },
               ]},
               { key: 'archive', label: '🗄️ Lưu trữ', items: [
                 { view: 'data_archive', icon: '🗄️', name: 'Lưu Trữ Data' },
@@ -188,6 +188,9 @@ function AppMain({ user, onLogout, allowedViews }) {
               );
             })}
           </div>
+
+          {/* Take Note */}
+          <SidebarNotes />
 
           {/* User info + logout */}
           <div style={{ padding: '12px 16px', borderTop: '1px solid #eee' }}>
