@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 
 // ─── helpers ────────────────────────────────────────────────
 const toInt = (val) => {
@@ -102,11 +102,25 @@ function processFiles(tiktokRows, campainRows) {
     return { kept, removed, special };
 }
 
+const MEO_TEXT =
+    'Mẹo: Kiểm tra các yêu cầu của chiến dịch trước khi tải tệp lên\r\n\r\n' +
+    '    1,Hiệu suất cửa hàng: Đáp ứng các tiêu chí đăng ký chiến dịch TikTok Shop.\r\n' +
+    '    2,Cửa hàng được chỉ định: Chỉ những cửa hàng được chỉ định mới có thể đăng ký cho chiến dịch này.\r\n' +
+    '    3,Chất lượng sản phẩm: Đáp ứng tiêu chí đăng ký sản phẩm cho chiến dịch TikTok Shop.\r\n' +
+    'Các trường bắt buộc: ID sản phẩm, ID SKU, giá chiến dịch.';
+
+const YELLOW_FILL = { fill: { patternType: 'solid', fgColor: { rgb: 'FFFF00' }, bgColor: { rgb: 'FFFF00' } } };
+
 function buildOutputXlsx(kept, special) {
+    const keptRows    = kept.map(r => [r.productId, r.skuId, r.campaignPrice, r.note || '']);
+    const specialRows = special.map(r => [r.productId, r.skuId, r.campaignPrice, r.note || '']);
+
+    // Row 0 = TikTok "Mẹo:" template header  |  Row 1 = column headers
     const allRows = [
-        ['Product ID', 'SKU ID', 'Campaign price', 'Note'],
-        ...kept.map(r => [r.productId, r.skuId, r.campaignPrice, r.note]),
-        ...special.map(r => [r.productId, r.skuId, r.campaignPrice, r.note]),
+        [MEO_TEXT, null, null, null],
+        ['Product ID', 'SKU ID', 'Campaign price', null],
+        ...keptRows,
+        ...specialRows,
     ];
 
     const wb = XLSX.utils.book_new();
@@ -115,7 +129,18 @@ function buildOutputXlsx(kept, special) {
     // Column widths
     ws['!cols'] = [{ wch: 22 }, { wch: 22 }, { wch: 16 }, { wch: 80 }];
 
-    XLSX.utils.book_append_sheet(wb, ws, 'KET_QUA');
+    // Yellow fill on TH4 (special) rows — data starts at Excel row 3 (index 2)
+    const specialStartExcelRow = 2 + keptRows.length + 1; // 1-indexed
+    for (let i = 0; i < specialRows.length; i++) {
+        const excelRow = specialStartExcelRow + i;
+        ['A', 'B', 'C', 'D'].forEach(col => {
+            const ref = col + excelRow;
+            if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+            ws[ref].s = YELLOW_FILL;
+        });
+    }
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
     return XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
 }
 
