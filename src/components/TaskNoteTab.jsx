@@ -77,15 +77,33 @@ export default function TaskNoteTab() {
     };
 
     /* ── filter ── */
-    const filtered = filter === 'Tất cả' ? tasks : tasks.filter(t => t.status === filter);
-    const countOf  = (s) => tasks.filter(t => t.status === s).length;
+    const filtered  = filter === 'Tất cả' ? tasks : tasks.filter(t => t.status === filter);
+    const countOf   = (s) => tasks.filter(t => t.status === s).length;
     const isOverdue = (t) => t.deadline && daysDiff(t.deadline) < 0 && t.status !== 'Hoàn thành';
+
+    /* ── dashboard stats ── */
+    const total      = tasks.length;
+    const cntMoi     = countOf('Mới');
+    const cntDang    = countOf('Đang thực hiện');
+    const cntXong    = countOf('Hoàn thành');
+    const cntHoan    = countOf('Tạm hoãn');
+    const cntOverdue = tasks.filter(isOverdue).length;
+    const avgTienDo  = total > 0 ? Math.round(tasks.reduce((s, t) => s + (t.tienDo || 0), 0) / total) : 0;
+
+    const DASH_CARDS = [
+        { icon: '📋', label: 'Tổng Tasks',       value: total,      accent: '#ea580c', bg: '#fff7ed', border: '#fed7aa' },
+        { icon: '🆕', label: 'Mới',              value: cntMoi,     accent: '#6366f1', bg: '#eef2ff', border: '#c7d2fe' },
+        { icon: '⚙️', label: 'Đang thực hiện',  value: cntDang,    accent: '#d97706', bg: '#fffbeb', border: '#fde68a' },
+        { icon: '✅', label: 'Hoàn thành',       value: cntXong,    accent: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
+        { icon: '⏸️', label: 'Tạm hoãn',        value: cntHoan,    accent: '#9ca3af', bg: '#f9fafb', border: '#e5e7eb' },
+        { icon: '⚠️', label: 'Quá hạn',         value: cntOverdue, accent: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
+    ];
 
     return (
         <div style={{ fontFamily: "'Outfit', sans-serif", maxWidth: 1200, margin: '0 auto' }}>
 
             {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                 <div>
                     <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 900, color: '#ea580c' }}>📝 Task & Notes</h1>
                     <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#9ca3af' }}>Quản lý công việc và ghi chú nội bộ</p>
@@ -96,6 +114,66 @@ export default function TaskNoteTab() {
                     fontSize: '0.88rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(234,88,12,0.3)',
                     fontFamily: "'Outfit', sans-serif"
                 }}>➕ Thêm Task</button>
+            </div>
+
+            {/* ── Dashboard ── */}
+            <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #f0f0f0', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', padding: '20px 24px', marginBottom: 24 }}>
+
+                {/* Stat cards row */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
+                    {DASH_CARDS.map(card => (
+                        <div key={card.label}
+                            onClick={() => setFilter(card.label === 'Tổng Tasks' ? 'Tất cả' : card.label === 'Quá hạn' ? filter : card.label)}
+                            style={{
+                                background: card.bg, border: `1px solid ${card.border}`,
+                                borderRadius: 12, padding: '14px 16px', cursor: 'pointer',
+                                transition: 'transform 0.15s, box-shadow 0.15s',
+                                borderTop: `3px solid ${card.accent}`,
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.1)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+                        >
+                            <div style={{ fontSize: '1.4rem', marginBottom: 6 }}>{card.icon}</div>
+                            <div style={{ fontSize: '1.7rem', fontWeight: 900, color: card.accent, lineHeight: 1 }}>{card.value}</div>
+                            <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: 4, fontWeight: 600 }}>{card.label}</div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Overall progress bar */}
+                <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151' }}>📊 Tiến độ trung bình toàn bộ tasks</span>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 900, color: avgTienDo >= 100 ? '#16a34a' : '#ea580c' }}>{avgTienDo}%</span>
+                    </div>
+                    <div style={{ height: 10, background: '#f3f4f6', borderRadius: 99, overflow: 'hidden' }}>
+                        <div style={{
+                            height: '100%', borderRadius: 99,
+                            width: `${avgTienDo}%`, transition: 'width 0.6s ease',
+                            background: avgTienDo >= 100
+                                ? 'linear-gradient(90deg,#22c55e,#16a34a)'
+                                : avgTienDo >= 60
+                                    ? 'linear-gradient(90deg,#f59e0b,#ea580c)'
+                                    : 'linear-gradient(90deg,#f59e0b,#ea580c)',
+                        }} />
+                    </div>
+                    {/* Completion rate */}
+                    {total > 0 && (
+                        <div style={{ display: 'flex', gap: 16, marginTop: 10, flexWrap: 'wrap' }}>
+                            {[
+                                { label: 'Tỉ lệ hoàn thành', value: `${Math.round(cntXong / total * 100)}%`, color: '#16a34a' },
+                                { label: 'Đang xử lý', value: `${Math.round(cntDang / total * 100)}%`, color: '#d97706' },
+                                { label: 'Cần chú ý', value: `${cntOverdue} quá hạn`, color: cntOverdue > 0 ? '#dc2626' : '#9ca3af' },
+                            ].map(s => (
+                                <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.74rem' }}>
+                                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.color, display: 'inline-block', flexShrink: 0 }} />
+                                    <span style={{ color: '#6b7280' }}>{s.label}:</span>
+                                    <span style={{ fontWeight: 700, color: s.color }}>{s.value}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Filter bar */}
