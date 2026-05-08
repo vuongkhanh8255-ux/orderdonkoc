@@ -109,7 +109,7 @@ const MEO_TEXT =
     '    3,Chất lượng sản phẩm: Đáp ứng tiêu chí đăng ký sản phẩm cho chiến dịch TikTok Shop.\r\n' +
     'Các trường bắt buộc: ID sản phẩm, ID SKU, giá chiến dịch.';
 
-const YELLOW_FILL = { fill: { patternType: 'solid', fgColor: { rgb: 'FFFF00' }, bgColor: { rgb: 'FFFF00' } } };
+const YELLOW_FILL = { patternType: 'solid', fgColor: { rgb: 'FFFF00' }, bgColor: { rgb: 'FFFF00' } };
 
 function buildOutputXlsx(kept, special) {
     const keptRows    = kept.map(r => [r.productId, r.skuId, r.campaignPrice, r.note || '']);
@@ -126,17 +126,57 @@ function buildOutputXlsx(kept, special) {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(allRows);
 
-    // Column widths
-    ws['!cols'] = [{ wch: 22 }, { wch: 22 }, { wch: 16 }, { wch: 80 }];
+    // ── Column widths ──
+    ws['!cols'] = [{ wch: 24 }, { wch: 24 }, { wch: 18 }, { wch: 90 }];
 
-    // Yellow fill on TH4 (special) rows — data starts at Excel row 3 (index 2)
+    // ── Merge A1:D1 for the Mẹo title row ──
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }];
+
+    // ── Row heights ──
+    ws['!rows'] = [
+        { hpt: 85 },   // row 1 — Mẹo text (tall for multi-line)
+        { hpt: 22 },   // row 2 — headers
+        ...Array(keptRows.length).fill({ hpt: 20 }),     // normal data rows
+        ...Array(specialRows.length).fill({ hpt: 38 }),  // TH4 rows (longer note text)
+    ];
+
+    // ── Style: Mẹo title cell ──
+    ws['A1'].s = {
+        font: { sz: 11 },
+        alignment: { wrapText: true, vertical: 'top', horizontal: 'left' },
+    };
+
+    // ── Style: Header row — bold, light grey bg ──
+    ['A2', 'B2', 'C2', 'D2'].forEach(ref => {
+        if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+        ws[ref].s = {
+            font:      { sz: 12, bold: true },
+            fill:      { patternType: 'solid', fgColor: { rgb: 'F2F2F2' }, bgColor: { rgb: 'F2F2F2' } },
+            alignment: { horizontal: 'center', vertical: 'center' },
+        };
+    });
+
+    // ── Style: Normal data rows — font 12 ──
+    for (let ri = 0; ri < keptRows.length; ri++) {
+        const excelRow = ri + 3; // rows start at Excel row 3
+        ['A', 'B', 'C', 'D'].forEach(col => {
+            const ref = col + excelRow;
+            if (ws[ref]) ws[ref].s = { font: { sz: 12 } };
+        });
+    }
+
+    // ── Style: TH4 rows — yellow fill + font 12 ──
     const specialStartExcelRow = 2 + keptRows.length + 1; // 1-indexed
     for (let i = 0; i < specialRows.length; i++) {
         const excelRow = specialStartExcelRow + i;
         ['A', 'B', 'C', 'D'].forEach(col => {
             const ref = col + excelRow;
             if (!ws[ref]) ws[ref] = { t: 's', v: '' };
-            ws[ref].s = YELLOW_FILL;
+            ws[ref].s = {
+                fill:      YELLOW_FILL,
+                font:      { sz: 12 },
+                alignment: col === 'D' ? { wrapText: true, vertical: 'top' } : { vertical: 'center' },
+            };
         });
     }
 
