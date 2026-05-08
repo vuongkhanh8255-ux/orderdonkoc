@@ -134,10 +134,10 @@ export const ACCOUNTS = [
 
 // ── ROLE PERMISSIONS ──────────────────────────────────────
 export const ROLE_VIEWS = {
-    admin:      ['stella_dashboard','cskh','livestream','dashboard','order','booking_performance','contract','airlinks','booking','data_archive','expense','landing_orders','camp_registration'],
-    booking:    ['dashboard','order','booking_performance','contract','airlinks','booking','expense','camp_registration'],
-    cs:         ['order','airlinks','expense'],
-    livestream: ['stella_dashboard','livestream','expense'],
+    admin:      ['stella_dashboard','cskh','livestream','dashboard','order','booking_performance','contract','airlinks','booking','data_archive','expense','landing_orders','camp_registration','task_notes'],
+    booking:    ['dashboard','order','booking_performance','contract','airlinks','booking','expense','camp_registration','task_notes'],
+    cs:         ['order','airlinks','expense','task_notes'],
+    livestream: ['stella_dashboard','livestream','expense','task_notes'],
 };
 
 export default LoginPage;

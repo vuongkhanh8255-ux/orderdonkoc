@@ -18,7 +18,7 @@ import LandingOrders from './components/LandingOrders';
 import AIChat from './components/AIChat';
 import LoginPage, { ROLE_VIEWS } from './components/LoginPage';
 import CampRegistrationTab from './components/CampRegistrationTab';
-import SidebarNotes from './components/SidebarNotes';
+import TaskNoteTab from './components/TaskNoteTab';
 
 const SESSION_KEY = 'sk_session';
 
@@ -58,7 +58,7 @@ function App() {
 function AppMain({ user, onLogout, allowedViews }) {
   const defaultView = allowedViews[0] || 'dashboard';
   const [currentView, setCurrentView] = useState(defaultView);
-  const [openGroups, setOpenGroups] = useState({ ecom: true, cskh: true, livestream: true, booking: true, archive: true, camp: true });
+  const [openGroups, setOpenGroups] = useState({ ecom: true, cskh: true, livestream: true, booking: true, archive: true, camp: true, tools: true });
   const toggleGroup = (key) => setOpenGroups(prev => ({ ...prev, [key]: !prev[key] }));
 
   const canView = (v) => allowedViews.includes(v);
@@ -164,6 +164,9 @@ function AppMain({ user, onLogout, allowedViews }) {
               { key: 'camp', label: '🛒 Camp TikTok', items: [
                 { view: 'camp_registration', icon: '🛒', name: 'Đăng Kí Camp' },
               ]},
+              { key: 'tools', label: '🛠️ Công Cụ', items: [
+                { view: 'task_notes', icon: '📝', name: 'Task & Notes' },
+              ]},
             ].map(group => {
               const visibleItems = group.items.filter(i => canView(i.view));
               if (visibleItems.length === 0) return null;
@@ -188,9 +191,6 @@ function AppMain({ user, onLogout, allowedViews }) {
               );
             })}
           </div>
-
-          {/* Take Note */}
-          <SidebarNotes />
 
           {/* User info + logout */}
           <div style={{ padding: '12px 16px', borderTop: '1px solid #eee' }}>
@@ -223,6 +223,7 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'livestream' && <LivestreamTab />}
           {currentView === 'landing_orders' && <LandingOrders />}
           {currentView === 'camp_registration' && <CampRegistrationTab />}
+          {currentView === 'task_notes' && <TaskNoteTab />}
 
           {/* BookingPerformanceTab luôn mounted, chỉ ẩn/hiện bằng display
               → state và data cache không mất khi đổi tab */}
