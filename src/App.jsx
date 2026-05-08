@@ -17,6 +17,7 @@ import LivestreamTab from './components/LivestreamTab';
 import LandingOrders from './components/LandingOrders';
 import AIChat from './components/AIChat';
 import LoginPage, { ROLE_VIEWS } from './components/LoginPage';
+import CampRegistrationTab from './components/CampRegistrationTab';
 
 const SESSION_KEY = 'sk_session';
 
@@ -56,7 +57,7 @@ function App() {
 function AppMain({ user, onLogout, allowedViews }) {
   const defaultView = allowedViews[0] || 'dashboard';
   const [currentView, setCurrentView] = useState(defaultView);
-  const [openGroups, setOpenGroups] = useState({ ecom: true, cskh: true, livestream: true, booking: true, archive: true });
+  const [openGroups, setOpenGroups] = useState({ ecom: true, cskh: true, livestream: true, booking: true, archive: true, camp: true });
   const toggleGroup = (key) => setOpenGroups(prev => ({ ...prev, [key]: !prev[key] }));
 
   const canView = (v) => allowedViews.includes(v);
@@ -160,6 +161,9 @@ function AppMain({ user, onLogout, allowedViews }) {
                 { view: 'data_archive', icon: '🗄️', name: 'Lưu Trữ Data' },
                 { view: 'expense',      icon: '💸', name: 'Ngân Sách Ecom' },
               ]},
+              { key: 'camp', label: '🛒 Camp TikTok', items: [
+                { view: 'camp_registration', icon: '🛒', name: 'Đăng Kí Camp' },
+              ]},
             ].map(group => {
               const visibleItems = group.items.filter(i => canView(i.view));
               if (visibleItems.length === 0) return null;
@@ -215,6 +219,7 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'cskh' && <CSKHTab />}
           {currentView === 'livestream' && <LivestreamTab />}
           {currentView === 'landing_orders' && <LandingOrders />}
+          {currentView === 'camp_registration' && <CampRegistrationTab />}
 
           {/* BookingPerformanceTab luôn mounted, chỉ ẩn/hiện bằng display
               → state và data cache không mất khi đổi tab */}
