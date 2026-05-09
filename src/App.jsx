@@ -78,37 +78,36 @@ function AppMain({ user, onLogout, allowedViews }) {
     top: 0,
     zIndex: 1000,
     fontFamily: "'Outfit', sans-serif",
-    borderRight: '1px solid #eee',
+    borderRight: '1px solid #e5e7eb',
     whiteSpace: 'nowrap',
-    boxShadow: '4px 0 10px rgba(0, 0, 0, 0.05)'
+    boxShadow: '1px 0 0 rgba(15, 23, 42, 0.02)'
   };
 
   const menuItemStyle = (isActive) => ({
     justifyContent: 'flex-start',
-    margin: '2px 16px 2px 24px',
-    padding: '10px 14px',
+    margin: '2px 14px',
+    padding: '10px 12px',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
-    background: isActive
-      ? 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)'
-      : 'transparent',
-    borderRadius: '10px',
-    color: isActive ? '#fff' : '#6b7280',
+    background: isActive ? '#fff7ed' : 'transparent',
+    borderRadius: '8px',
+    color: isActive ? '#c2410c' : '#64748b',
     fontWeight: isActive ? '700' : '500',
-    transition: 'all 0.2s',
+    transition: 'background 0.18s ease, color 0.18s ease, border-color 0.18s ease',
     fontSize: '0.83rem',
-    border: 'none',
-    boxShadow: isActive ? '0 3px 8px rgba(234, 88, 12, 0.2)' : 'none',
-    letterSpacing: '0.2px',
+    border: isActive ? '1px solid #fed7aa' : '1px solid transparent',
+    borderLeft: isActive ? '3px solid #ea580c' : '3px solid transparent',
+    boxShadow: 'none',
+    letterSpacing: 0,
   });
 
   const mainContentStyle = {
     marginLeft: SIDEBAR_WIDTH,
-    background: '#f9fafb',
+    background: '#f6f7f9',
     minHeight: '100vh',
-    padding: '32px',
+    padding: '28px 32px',
     position: 'relative',
     flex: 1,
     transition: 'margin-left 0.3s ease-in-out'
@@ -128,11 +127,11 @@ function AppMain({ user, onLogout, allowedViews }) {
         {/* --- SIDEBAR --- */}
         <div style={sidebarStyle}>
           {/* Header Sidebar - LIGHT ORANGE THEME */}
-          <div style={{ padding: '28px 0', textAlign: 'center', minHeight: '120px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid #eee' }}>
+          <div style={{ padding: '24px 0', textAlign: 'center', minHeight: '110px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid #e5e7eb', background: '#fff' }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '50px', height: '50px', background: 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '900', fontSize: '1.6rem', marginBottom: '5px', boxShadow: '0 4px 10px rgba(234, 88, 12, 0.2)' }}>✦</div>
+              <div style={{ width: '46px', height: '46px', background: '#ea580c', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '900', fontSize: '1.45rem', marginBottom: '4px', boxShadow: '0 8px 18px rgba(234, 88, 12, 0.16)' }}>✦</div>
               <span style={{ fontSize: '0.75rem', color: '#999', fontStyle: 'italic', letterSpacing: '2px', textTransform: 'uppercase' }}>powered by</span>
-              <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '800', color: '#ea580c', letterSpacing: '2px', textTransform: 'uppercase', lineHeight: '1.1', fontFamily: "'Outfit', sans-serif" }}>
+              <h2 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#111827', letterSpacing: '1.4px', textTransform: 'uppercase', lineHeight: '1.1', fontFamily: "'Outfit', sans-serif" }}>
                 STELLA KINETICS
               </h2>
             </div>
@@ -173,16 +172,16 @@ function AppMain({ user, onLogout, allowedViews }) {
               return (
                 <div key={group.key} style={{ marginBottom: 4 }}>
                   <div onClick={() => toggleGroup(group.key)}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '10px 16px 4px', padding: '12px 16px', cursor: 'pointer', userSelect: 'none', borderRadius: 12, background: 'linear-gradient(135deg, #fff7ed, #fef3c7)', border: '1px solid #fed7aa' }}>
-                    <span style={{ fontSize: '0.92rem', fontWeight: 800, color: '#c2410c', letterSpacing: '0.3px' }}>{group.label}</span>
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '10px 14px 4px', padding: '10px 12px', cursor: 'pointer', userSelect: 'none', borderRadius: 8, background: '#f8fafc', border: '1px solid #e5e7eb' }}>
+                    <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#475569', letterSpacing: 0 }}>{group.label}</span>
                     <span style={{ fontSize: '0.7rem', color: '#f97316', transition: 'transform 0.2s', display: 'inline-block', transform: openGroups[group.key] ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
                   </div>
                   {openGroups[group.key] && visibleItems.map(({ view, icon, name }) => (
                     <div key={view}
                       style={menuItemStyle(currentView === view)}
                       onClick={() => setCurrentView(view)}
-                      onMouseEnter={(e) => { if (currentView !== view) { e.currentTarget.style.background = '#fff7ed'; e.currentTarget.style.color = '#ea580c'; } }}
-                      onMouseLeave={(e) => { if (currentView !== view) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#666'; } }}>
+                      onMouseEnter={(e) => { if (currentView !== view) { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.color = '#c2410c'; e.currentTarget.style.borderColor = '#e5e7eb'; } }}
+                      onMouseLeave={(e) => { if (currentView !== view) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#64748b'; e.currentTarget.style.borderColor = 'transparent'; } }}>
                       <span>{icon}</span>
                       <span>{name}</span>
                     </div>
@@ -193,13 +192,13 @@ function AppMain({ user, onLogout, allowedViews }) {
           </div>
 
           {/* User info + logout */}
-          <div style={{ padding: '12px 16px', borderTop: '1px solid #eee' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff7ed', borderRadius: 10, padding: '10px 12px', border: '1px solid #fed7aa' }}>
+          <div style={{ padding: '12px 14px', borderTop: '1px solid #e5e7eb', background: '#fff' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', borderRadius: 8, padding: '10px 12px', border: '1px solid #e5e7eb' }}>
               <div>
                 <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#ea580c' }}>👤 {user.name}</div>
                 <div style={{ fontSize: '0.68rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{user.role}</div>
               </div>
-              <button onClick={onLogout} style={{ padding: '5px 10px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 7, color: '#dc2626', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>
+              <button onClick={onLogout} style={{ padding: '5px 10px', background: '#fff', border: '1px solid #fecaca', borderRadius: 7, color: '#dc2626', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>
                 Đăng xuất
               </button>
             </div>

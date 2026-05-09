@@ -29,20 +29,20 @@ const LoginPage = ({ onLogin }) => {
     return (
         <div style={{
             minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'linear-gradient(135deg, #fff7ed 0%, #fef3c7 50%, #ffedd5 100%)',
+            background: '#f6f7f9',
             fontFamily: "'Outfit', sans-serif"
         }}>
             <div style={{
-                background: '#fff', borderRadius: 24, padding: '48px 40px', width: 400,
-                boxShadow: '0 20px 60px rgba(234,88,12,0.15), 0 4px 20px rgba(0,0,0,0.08)',
-                border: '1px solid #fed7aa'
+                background: '#fff', borderRadius: 12, padding: '42px 38px', width: 400,
+                boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 16px 40px rgba(15,23,42,0.08)',
+                border: '1px solid #e5e7eb'
             }}>
                 {/* Logo */}
                 <div style={{ textAlign: 'center', marginBottom: 32 }}>
                     <div style={{
-                        width: 64, height: 64, background: 'linear-gradient(135deg, #f59e0b, #ea580c)',
-                        borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        margin: '0 auto 12px', boxShadow: '0 8px 20px rgba(234,88,12,0.3)',
+                        width: 58, height: 58, background: '#ea580c',
+                        borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        margin: '0 auto 12px', boxShadow: '0 10px 22px rgba(234,88,12,0.16)',
                         fontSize: '2rem', color: '#fff', fontWeight: 900
                     }}>✦</div>
                     <p style={{ margin: 0, fontSize: '0.7rem', color: '#999', letterSpacing: 2, textTransform: 'uppercase' }}>powered by</p>
@@ -110,11 +110,11 @@ const LoginPage = ({ onLogin }) => {
 
                     <button type="submit" disabled={loading}
                         style={{
-                            marginTop: 4, padding: '14px', borderRadius: 12, border: 'none',
-                            background: loading ? '#d1d5db' : 'linear-gradient(135deg, #f59e0b, #ea580c)',
+                            marginTop: 4, padding: '13px', borderRadius: 8, border: 'none',
+                            background: loading ? '#d1d5db' : '#ea580c',
                             color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: loading ? 'default' : 'pointer',
-                            boxShadow: loading ? 'none' : '0 4px 12px rgba(234,88,12,0.3)',
-                            transition: 'all 0.2s', fontFamily: "'Outfit', sans-serif", letterSpacing: '0.5px'
+                            boxShadow: loading ? 'none' : '0 8px 18px rgba(234,88,12,0.18)',
+                            transition: 'all 0.2s', fontFamily: "'Outfit', sans-serif", letterSpacing: 0
                         }}>
                         {loading ? '⏳ Đang xử lý...' : '🔑 ĐĂNG NHẬP'}
                     </button>
