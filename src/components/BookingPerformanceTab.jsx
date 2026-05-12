@@ -29,6 +29,360 @@ const cardStyle = {
     flexDirection: 'column'
 };
 
+const getTableIcon = (title = '') => {
+    const lowerTitle = title.toLowerCase();
+    if (lowerTitle.includes('brand')) return '▦';
+    if (lowerTitle.includes('kol') || lowerTitle.includes('koc')) return '◉';
+    if (lowerTitle.includes('nhân') || lowerTitle.includes('nhÃ¢n')) return '▣';
+    return '↗';
+};
+
+const getTableVariant = (title = '') => {
+    const lowerTitle = title.toLowerCase();
+    if (lowerTitle.includes('brand')) return 'is-brand-table';
+    if (lowerTitle.includes('kol') || lowerTitle.includes('koc')) return 'is-koc-table';
+    if (lowerTitle.includes('nh')) return 'is-staff-table';
+    return 'is-general-table';
+};
+
+const isNumericColumn = (col) => {
+    if (!col) return false;
+    if (col.align) return col.align === 'right';
+    return !!col.formatter && !['name', 'id'].includes(col.accessor);
+};
+
+const isMetricColumn = (accessor = '') => (
+    ['gmvVideo', 'gmvMonth', 'videoMonth', 'gmvCum', 'viewsCum', 'ordersAff', 'gmv', 'totalVideo', 'orders', 'totalGmv', 'videoCount', 'bookingCost'].includes(accessor)
+);
+
+const KOC_ASSIGNMENTS_STORAGE_KEY = 'stella_koc_brand_assignments_v1';
+const KOC_ASSIGNMENTS_TABLE = 'koc_brand_assignments';
+
+const buildAssignmentKey = (kocId, brandName) => `${kocId || ''}__${brandName || ''}`;
+
+const formatAssignmentTime = (value) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleString('vi-VN', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+};
+
+const loadLocalKocAssignments = () => {
+    try {
+        const raw = localStorage.getItem(KOC_ASSIGNMENTS_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : {};
+    } catch (error) {
+        console.warn('Cannot load local KOC assignments', error);
+        return {};
+    }
+};
+
+const saveLocalKocAssignments = (nextAssignments) => {
+    try {
+        localStorage.setItem(KOC_ASSIGNMENTS_STORAGE_KEY, JSON.stringify(nextAssignments));
+    } catch (error) {
+        console.warn('Cannot save local KOC assignments', error);
+    }
+};
+
+const KocIdentityCell = ({ value }) => {
+    if (!value) return <span className="koc-identity-cell__empty">-</span>;
+    const lines = String(value).split('||').filter(Boolean);
+    return (
+        <div className="koc-identity-cell">
+            {lines.map((line, index) => {
+                const [owner, note] = line.split('::');
+                return (
+                    <div key={index} className="koc-identity-cell__line">
+                        <span className="koc-identity-cell__owner">{owner}</span>
+                        {note && <span className="koc-identity-cell__note">{note}</span>}
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
+const KocIdentityOverview = ({ data = [], brandHeaders = [], formatNumber, staffOptions = [] }) => {
+    const [currentPage, setCurrentPage] = useState(1);
+    const [search, setSearch] = useState('');
+    const [activeBrand, setActiveBrand] = useState('__all');
+    const [assignments, setAssignments] = useState({});
+    const [assignModal, setAssignModal] = useState(null);
+    const [selectedStaff, setSelectedStaff] = useState('');
+    const pageSize = 25;
+
+    useEffect(() => {
+        let isMounted = true;
+        const localAssignments = loadLocalKocAssignments();
+        setAssignments(localAssignments);
+
+        supabase
+            .from(KOC_ASSIGNMENTS_TABLE)
+            .select('koc_id, brand_name, staff_name, assigned_at, updated_at')
+            .then(({ data: rows, error }) => {
+                if (!isMounted) return;
+                if (error) {
+                    console.warn('KOC brand assignments Supabase table is not ready yet', error);
+                    return;
+                }
+                const remoteAssignments = {};
+                (rows || []).forEach(item => {
+                    remoteAssignments[buildAssignmentKey(item.koc_id, item.brand_name)] = item;
+                });
+                setAssignments(remoteAssignments);
+                saveLocalKocAssignments(remoteAssignments);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, []);
+
+    const staffNames = useMemo(() => {
+        const names = (staffOptions || [])
+            .map(item => item?.ten_nhansu || item?.name || item?.id || '')
+            .filter(Boolean);
+        return [...new Set(names)].sort((a, b) => a.localeCompare(b, 'vi'));
+    }, [staffOptions]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [search, activeBrand, data]);
+
+    const activeBrandIndex = activeBrand === '__all' ? -1 : brandHeaders.indexOf(activeBrand);
+
+    const filteredData = useMemo(() => {
+        const term = search.trim().toLowerCase();
+        const matched = !term ? data : data.filter(row => {
+            if (String(row.id || '').toLowerCase().includes(term)) return true;
+            return brandHeaders.some((brandName, idx) => {
+                const cell = String(row[`brand_${idx}`] || '').toLowerCase();
+                const assignment = assignments[buildAssignmentKey(row.id, brandName)];
+                return brandName.toLowerCase().includes(term)
+                    || cell.includes(term)
+                    || String(assignment?.staff_name || '').toLowerCase().includes(term);
+            });
+        });
+        return [...matched].sort((a, b) => {
+            if (activeBrandIndex >= 0) {
+                const aBrandGmv = a[`brand_${activeBrandIndex}_gmv`] || 0;
+                const bBrandGmv = b[`brand_${activeBrandIndex}_gmv`] || 0;
+                const aBrandVideos = a[`brand_${activeBrandIndex}_videos`] || 0;
+                const bBrandVideos = b[`brand_${activeBrandIndex}_videos`] || 0;
+                const aBrandOrders = a[`brand_${activeBrandIndex}_orders`] || 0;
+                const bBrandOrders = b[`brand_${activeBrandIndex}_orders`] || 0;
+                return bBrandGmv - aBrandGmv || bBrandOrders - aBrandOrders || bBrandVideos - aBrandVideos || (b.totalGmv || 0) - (a.totalGmv || 0);
+            }
+            return (b.totalGmv || 0) - (a.totalGmv || 0) || (b.orders || 0) - (a.orders || 0);
+        });
+    }, [data, search, brandHeaders, activeBrandIndex, assignments]);
+
+    const totalPages = Math.ceil(filteredData.length / pageSize) || 1;
+    const paginatedData = filteredData.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+    const openAssignModal = (row, brandName) => {
+        const key = buildAssignmentKey(row.id, brandName);
+        const currentAssignment = assignments[key];
+        setAssignModal({ key, kocId: row.id, brandName, currentAssignment });
+        setSelectedStaff(currentAssignment?.staff_name || staffNames[0] || '');
+    };
+
+    const persistAssignments = (nextAssignments) => {
+        setAssignments(nextAssignments);
+        saveLocalKocAssignments(nextAssignments);
+    };
+
+    const handleSaveAssignment = async () => {
+        const staffName = selectedStaff.trim();
+        if (!assignModal || !staffName) return;
+
+        const assignedAt = new Date().toISOString();
+        const record = {
+            koc_id: assignModal.kocId,
+            brand_name: assignModal.brandName,
+            staff_name: staffName,
+            assigned_at: assignedAt,
+            updated_at: assignedAt
+        };
+        const nextAssignments = { ...assignments, [assignModal.key]: record };
+        persistAssignments(nextAssignments);
+        setAssignModal(null);
+
+        const { error } = await supabase
+            .from(KOC_ASSIGNMENTS_TABLE)
+            .upsert(record, { onConflict: 'koc_id,brand_name' });
+        if (error) console.warn('Cannot sync KOC brand assignment to Supabase', error);
+    };
+
+    const handleRemoveAssignment = async () => {
+        if (!assignModal) return;
+        const nextAssignments = { ...assignments };
+        delete nextAssignments[assignModal.key];
+        persistAssignments(nextAssignments);
+        setAssignModal(null);
+
+        const { error } = await supabase
+            .from(KOC_ASSIGNMENTS_TABLE)
+            .delete()
+            .eq('koc_id', assignModal.kocId)
+            .eq('brand_name', assignModal.brandName);
+        if (error) console.warn('Cannot remove KOC brand assignment from Supabase', error);
+    };
+
+    const renderBrandSummary = (row) => {
+        const visibleBrands = activeBrand === '__all' ? brandHeaders : [activeBrand];
+        const activeBrands = visibleBrands.map(brandName => {
+            const idx = brandHeaders.indexOf(brandName);
+            const assignment = assignments[buildAssignmentKey(row.id, brandName)];
+            return {
+                brandName,
+                value: idx >= 0 ? row[`brand_${idx}`] : '',
+                orders: idx >= 0 ? row[`brand_${idx}_orders`] || 0 : 0,
+                videos: idx >= 0 ? row[`brand_${idx}_videos`] || 0 : 0,
+                assignment,
+            };
+        });
+
+        if (activeBrand === '__all' && activeBrands.every(item => !item.value && !item.assignment)) {
+            return <span className="koc-identity-overview__empty">Chưa có video air trong tháng này</span>;
+        }
+
+        return (
+            <div className="koc-identity-overview__brands">
+                {activeBrands.map(({ brandName, value, orders, videos, assignment }) => (
+                    <div key={brandName} className={`koc-identity-overview__brand ${!value ? 'is-empty' : ''} ${assignment ? 'is-assigned' : ''}`}>
+                        <div className="koc-identity-overview__brand-head">
+                            <div className="koc-identity-overview__brand-name">{brandName}</div>
+                            <div className="koc-identity-overview__brand-actions">
+                                <div className="koc-identity-overview__brand-stats">
+                                    <span>{formatNumber(orders)} đơn</span>
+                                    <span>{formatNumber(videos)} video</span>
+                                </div>
+                                <button
+                                    type="button"
+                                    className="koc-identity-overview__assign-button"
+                                    onClick={() => openAssignModal(row, brandName)}
+                                    title={assignment ? 'Sửa gán nhân sự booking' : 'Gán nhân sự booking'}
+                                    aria-label={assignment ? 'Sửa gán nhân sự booking' : 'Gán nhân sự booking'}
+                                >
+                                    +
+                                </button>
+                            </div>
+                        </div>
+                        {value ? (
+                            <KocIdentityCell value={value} />
+                        ) : assignment ? (
+                            <div className="koc-identity-cell">
+                                <div className="koc-identity-cell__line">
+                                    <span className="koc-identity-cell__owner">{assignment.staff_name}</span>
+                                    <span className="koc-identity-cell__note">Gán booking từ {formatAssignmentTime(assignment.assigned_at)}</span>
+                                </div>
+                            </div>
+                        ) : (
+                            <span className="koc-identity-overview__empty">Trống</span>
+                        )}
+                        {assignment && value && (
+                            <div className="koc-identity-overview__assignment">
+                                <span>Gán: {assignment.staff_name}</span>
+                                <small>{formatAssignmentTime(assignment.assigned_at)}</small>
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
+        );
+    };
+
+    return (
+        <div className="performance-table-card koc-identity-overview">
+            <div className="performance-table-card__accent" />
+            <div className="performance-table-card__header">
+                <div className="performance-table-card__title">
+                    <span className="performance-table-card__icon">◉</span>
+                    <span>Định danh KOC theo đơn & Brand quản lí</span>
+                </div>
+                <div className="performance-table-card__badge">Hiển thị {paginatedData.length} / Tổng {filteredData.length} kết quả</div>
+            </div>
+
+            <div className="koc-identity-overview__toolbar">
+                <div className="performance-table__filter-wrap">
+                    <span className="performance-table__filter-icon">⌕</span>
+                    <input type="text" placeholder="Lọc ID KOC, brand, nhân sự, sản phẩm..." value={search} onChange={(event) => setSearch(event.target.value)} className="performance-table__filter" />
+                </div>
+            </div>
+
+            <div className="koc-identity-overview__tabs">
+                <button type="button" onClick={() => setActiveBrand('__all')} className={activeBrand === '__all' ? 'is-active' : ''}>Tất cả brand</button>
+                {brandHeaders.map(brandName => (
+                    <button key={brandName} type="button" onClick={() => setActiveBrand(brandName)} className={activeBrand === brandName ? 'is-active' : ''}>{brandName}</button>
+                ))}
+            </div>
+
+            <div className="koc-identity-overview__list">
+                {paginatedData.map((row, index) => (
+                    <div key={row.id} className="koc-identity-overview__row">
+                        <div className="koc-identity-overview__koc">
+                            <div className="koc-identity-overview__rank">#{(currentPage - 1) * pageSize + index + 1}</div>
+                            <div className="koc-identity-overview__id">{row.id}</div>
+                            <div className="koc-identity-overview__meta">
+                                <span>{formatNumber(row.orders)} đơn AFF</span>
+                                <span>{formatNumber(row.totalGmv)} GMV</span>
+                                <span>{formatNumber(row.videoCount)} video tháng</span>
+                            </div>
+                        </div>
+                        <div>{renderBrandSummary(row)}</div>
+                    </div>
+                ))}
+            </div>
+
+            <div className="performance-table-card__pagination">
+                <div className="performance-table-card__page-status">Trang <strong>{currentPage}</strong> / {totalPages}</div>
+                <div className="performance-table-card__page-actions">
+                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="performance-table-card__page-button">◀ TRƯỚC</button>
+                    <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="performance-table-card__page-button is-next">SAU ▶</button>
+                </div>
+            </div>
+
+            {assignModal && (
+                <div className="koc-identity-assign-modal" role="dialog" aria-modal="true">
+                    <div className="koc-identity-assign-modal__panel">
+                        <div className="koc-identity-assign-modal__header">
+                            <div>
+                                <div className="koc-identity-assign-modal__eyebrow">Phân bổ nhân sự booking</div>
+                                <h3>{assignModal.brandName}</h3>
+                                <p>KOC: {assignModal.kocId}</p>
+                            </div>
+                            <button type="button" onClick={() => setAssignModal(null)}>×</button>
+                        </div>
+                        <label className="koc-identity-assign-modal__field">
+                            <span>Nhân sự phụ trách</span>
+                            <select value={selectedStaff} onChange={(event) => setSelectedStaff(event.target.value)}>
+                                {!staffNames.length && <option value="">Chưa có nhân sự</option>}
+                                {staffNames.map(name => <option key={name} value={name}>{name}</option>)}
+                            </select>
+                        </label>
+                        {assignModal.currentAssignment && (
+                            <div className="koc-identity-assign-modal__current">
+                                Đang gán cho <strong>{assignModal.currentAssignment.staff_name}</strong> từ {formatAssignmentTime(assignModal.currentAssignment.assigned_at)}
+                            </div>
+                        )}
+                        <div className="koc-identity-assign-modal__actions">
+                            {assignModal.currentAssignment && <button type="button" className="is-ghost" onClick={handleRemoveAssignment}>Bỏ gán</button>}
+                            <button type="button" className="is-muted" onClick={() => setAssignModal(null)}>Hủy</button>
+                            <button type="button" className="is-primary" onClick={handleSaveAssignment} disabled={!selectedStaff}>Lưu gán</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
 // --- REUSABLE DATA TABLE COMPONENT WITH SORT & FILTER ---
 const DataTable = ({ columns, data = [], title }) => {
     // STATES
@@ -92,25 +446,32 @@ const DataTable = ({ columns, data = [], title }) => {
 
     const totalPages = Math.ceil(processedData.length / pageSize) || 1;
     const paginatedData = processedData.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+    const tableVariant = getTableVariant(title);
 
     return (
-        <div style={cardStyle}>
-            <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ color: '#ea580c', fontWeight: 'bold', fontSize: '1.1rem', textTransform: 'uppercase' }}>{title}</div>
-                <div style={{ fontSize: '0.8rem', color: '#666' }}>Hiển thị {paginatedData.length} / Tổng {processedData.length} kết quả</div>
+        <div className={`performance-table-card ${tableVariant}`}>
+            <div className="performance-table-card__accent" />
+            <div className="performance-table-card__header">
+                <div>
+                    <div className="performance-table-card__title">
+                        <span className="performance-table-card__icon">{getTableIcon(title)}</span>
+                        <span>{title}</span>
+                    </div>
+                </div>
+                <div className="performance-table-card__badge">Hiển thị {paginatedData.length} / Tổng {processedData.length} kết quả</div>
             </div>
 
-            <div style={{ overflowX: 'auto', maxHeight: '500px', border: '1px solid #eee', borderRadius: '12px' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
-                    <thead style={{ background: '#f9fafb', position: 'sticky', top: 0, zIndex: 10 }}>
+            <div className="performance-table-scroll">
+                <table className="performance-table">
+                    <thead>
                         <tr>
                             {columns.map((col, idx) => (
-                                <th key={idx} style={{ padding: '12px 16px', textAlign: 'left', borderBottom: '1px solid #eee', minWidth: '120px' }}>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                <th key={idx} className={isNumericColumn(col) ? 'is-number' : ''}>
+                                    <div className="performance-table__th-inner">
                                         {/* HEADER TITLE + SORT */}
                                         <div
                                             onClick={() => handleSort(col.accessor)}
-                                            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', color: '#ea580c', fontSize: '0.8rem', fontWeight: '700', textTransform: 'uppercase' }}
+                                            className={`performance-table__sort ${isNumericColumn(col) ? 'is-number' : ''}`}
                                         >
                                             {col.header}
                                             {sortConfig.key === col.accessor && (
@@ -119,13 +480,16 @@ const DataTable = ({ columns, data = [], title }) => {
                                         </div>
 
                                         {/* EXCEL-LIKE FILTER INPUT */}
-                                        <input
-                                            type="text"
-                                            placeholder="..."
-                                            value={filters[col.accessor] || ''}
-                                            onChange={(e) => handleFilterChange(col.accessor, e.target.value)}
-                                            style={{ width: '100%', padding: '4px', borderRadius: '4px', border: '1px solid #ddd', background: '#fff', color: '#333', fontSize: '0.75rem' }}
-                                        />
+                                        <div className="performance-table__filter-wrap">
+                                            <span className="performance-table__filter-icon">⌕</span>
+                                            <input
+                                                type="text"
+                                                placeholder="Lọc..."
+                                                value={filters[col.accessor] || ''}
+                                                onChange={(e) => handleFilterChange(col.accessor, e.target.value)}
+                                                className="performance-table__filter"
+                                            />
+                                        </div>
                                     </div>
                                 </th>
                             ))}
@@ -133,9 +497,16 @@ const DataTable = ({ columns, data = [], title }) => {
                     </thead>
                     <tbody>
                         {paginatedData.map((row, rowIdx) => (
-                            <tr key={rowIdx} style={{ backgroundColor: rowIdx % 2 === 0 ? '#f9fafb' : 'transparent' }}>
+                            <tr key={rowIdx}>
                                 {columns.map((col, colIdx) => (
-                                    <td key={colIdx} style={{ padding: '12px 16px', borderBottom: '1px solid #eee', color: col.isBold ? '#333' : '#666', fontSize: '0.9rem' }}>
+                                    <td
+                                        key={colIdx}
+                                        className={[
+                                            col.isBold ? 'is-primary' : '',
+                                            isNumericColumn(col) ? 'is-number' : '',
+                                            isMetricColumn(col.accessor) ? 'is-metric' : ''
+                                        ].filter(Boolean).join(' ')}
+                                    >
                                         {col.formatter ? col.formatter(row[col.accessor], row) : row[col.accessor]}
                                     </td>
                                 ))}
@@ -146,22 +517,22 @@ const DataTable = ({ columns, data = [], title }) => {
             </div>
 
             {/* PAGINATION CONTROLS */}
-            <div style={{ marginTop: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', color: '#666' }}>
-                <div>
-                    Trang <strong style={{ color: '#ea580c' }}>{currentPage}</strong> / {totalPages}
+            <div className="performance-table-card__pagination">
+                <div className="performance-table-card__page-status">
+                    Trang <strong>{currentPage}</strong> / {totalPages}
                 </div>
-                <div style={{ display: 'flex', gap: '10px' }}>
+                <div className="performance-table-card__page-actions">
                     <button
                         onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                         disabled={currentPage === 1}
-                        style={{ padding: '6px 16px', background: currentPage === 1 ? '#f3f4f6' : '#fff', color: currentPage === 1 ? '#999' : '#ea580c', border: '1px solid #ddd', borderRadius: '6px', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
+                        className="performance-table-card__page-button"
                     >
                         ◀ TRƯỚC
                     </button>
                     <button
                         onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                         disabled={currentPage === totalPages}
-                        style={{ padding: '6px 16px', background: currentPage === totalPages ? '#f3f4f6' : '#ea580c', color: currentPage === totalPages ? '#999' : '#fff', border: '1px solid #ddd', borderRadius: '6px', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
+                        className="performance-table-card__page-button is-next"
                     >
                         SAU ▶
                     </button>
@@ -1048,9 +1419,11 @@ ${txtFormat}
     }, [airLinks, filterBrand, filterStaff, month, year, importedData]);
 
     // 2. Calculate Stats
-    const { brandStats, kocStats, staffStats, kocBrandPivot, calculatedStats, chartData } = useMemo(() => {
+    const { brandStats, kocStats, staffStats, kocBrandPivot, kocIdentityRows, kocIdentityBrandHeaders, calculatedStats, chartData } = useMemo(() => {
         const brandMap = {}; const kocMap = {}; const staffMap = {};
         const pivotObj = {};
+        const kocIdentityMap = {};
+        const kocIdentityBrandSet = new Set();
         let tGMV = 0; let tGMVMonth = 0; let tVideo = 0; let tOrders = 0; let tCast = 0; let tViews = 0;
 
         // [FIX] Initialize Staff Map with ALL staff from DB to ensure everyone appears
@@ -1061,7 +1434,8 @@ ${txtFormat}
                 gmvMonth: 0,
                 videoMonth: 0,
                 viewsCum: 0,
-                ordersAff: 0
+                ordersAff: 0,
+                bookingCost: 0
             };
         });
 
@@ -1163,26 +1537,29 @@ ${txtFormat}
 
             // Brand Stats
             const bName = link.brands?.ten_brand || 'Unknown';
-            if (!brandMap[bName]) brandMap[bName] = { name: bName, gmvVideo: 0, gmvMonth: 0, videoMonth: 0, viewsCum: 0, viewsMonth: 0 };
+            if (!brandMap[bName]) brandMap[bName] = { name: bName, gmvVideo: 0, gmvMonth: 0, videoMonth: 0, viewsCum: 0, viewsMonth: 0, bookingCost: 0 };
             brandMap[bName].gmvVideo += gmvVideo;
             brandMap[bName].gmvMonth += gmvMonth;
             brandMap[bName].videoMonth += isVideoMonth;
+            if (isCurrentMonth) brandMap[bName].bookingCost += cast;
 
             // KOC Stats
             const kId = link.id_kenh || 'Unknown';
-            if (!kocMap[kId]) kocMap[kId] = { id: kId, gmvVideo: 0, gmvMonth: 0, videoMonth: 0 };
+            if (!kocMap[kId]) kocMap[kId] = { id: kId, gmvVideo: 0, gmvMonth: 0, videoMonth: 0, bookingCost: 0 };
             kocMap[kId].gmvVideo += gmvVideo;
             kocMap[kId].gmvMonth += gmvMonth;
             kocMap[kId].videoMonth += isVideoMonth;
+            if (isCurrentMonth) kocMap[kId].bookingCost += cast;
 
             // Staff Stats
             const sName = link.nhansu?.ten_nhansu || 'Unknown';
-            if (!staffMap[sName]) staffMap[sName] = { name: sName, gmvCum: 0, gmvMonth: 0, videoMonth: 0, viewsCum: 0, ordersAff: 0 };
+            if (!staffMap[sName]) staffMap[sName] = { name: sName, gmvCum: 0, gmvMonth: 0, videoMonth: 0, viewsCum: 0, ordersAff: 0, bookingCost: 0 };
             staffMap[sName].gmvCum += gmvVideo;
             staffMap[sName].gmvMonth += gmvMonth;
             staffMap[sName].videoMonth += isVideoMonth;
             staffMap[sName].viewsCum += metrics.views; // [FIX] Add Views
             staffMap[sName].ordersAff += orders;
+            if (isCurrentMonth) staffMap[sName].bookingCost += cast;
 
             // Pivot
             if (!pivotObj[kId]) pivotObj[kId] = { id: kId, gmv: 0, totalVideo: 0, brands: {} };
@@ -1190,10 +1567,75 @@ ${txtFormat}
             pivotObj[kId].totalVideo += 1; // All time
             if (!pivotObj[kId].brands[bName]) pivotObj[kId].brands[bName] = 0;
             pivotObj[kId].brands[bName] += 1;
+
+            // KOC Identity Matrix: top KOC by orders, then brand ownership/airing notes.
+            kocIdentityBrandSet.add(bName);
+            if (!kocIdentityMap[kId]) {
+                kocIdentityMap[kId] = {
+                    id: kId,
+                    orders: 0,
+                    totalGmv: 0,
+                    videoCount: 0,
+                    brandCells: {}
+                };
+            }
+            const identityRow = kocIdentityMap[kId];
+            identityRow.orders += orders;
+            identityRow.totalGmv += gmvVideo;
+            identityRow.videoCount += isVideoMonth;
+            if (isCurrentMonth) {
+                if (!identityRow.brandCells[bName]) identityRow.brandCells[bName] = {};
+                if (!identityRow.brandCells[bName][sName]) {
+                    identityRow.brandCells[bName][sName] = {
+                        products: new Set(),
+                        count: 0,
+                        orders: 0,
+                        gmv: 0
+                    };
+                }
+                identityRow.brandCells[bName][sName].count += 1;
+                identityRow.brandCells[bName][sName].orders += orders;
+                identityRow.brandCells[bName][sName].gmv += gmvVideo;
+                if (link.san_pham) identityRow.brandCells[bName][sName].products.add(link.san_pham);
+            }
         });
 
         // Pivot Array Transform
         const pivotArray = Object.values(pivotObj); // Simple list for now
+        const identityBrandHeaders = Array.from(kocIdentityBrandSet).sort();
+        const identityRows = Object.values(kocIdentityMap)
+            .map(row => {
+                const flattened = {
+                    id: row.id,
+                    orders: row.orders,
+                    totalGmv: row.totalGmv,
+                    videoCount: row.videoCount
+                };
+                identityBrandHeaders.forEach((brandName, idx) => {
+                    const managers = row.brandCells[brandName] || {};
+                    let brandOrders = 0;
+                    let brandGmv = 0;
+                    let brandVideos = 0;
+                    Object.values(managers).forEach(info => {
+                        brandOrders += info.orders || 0;
+                        brandGmv += info.gmv || 0;
+                        brandVideos += info.count || 0;
+                    });
+                    flattened[`brand_${idx}_orders`] = brandOrders;
+                    flattened[`brand_${idx}_gmv`] = brandGmv;
+                    flattened[`brand_${idx}_videos`] = brandVideos;
+                    flattened[`brand_${idx}`] = Object.entries(managers)
+                        .map(([managerName, info]) => {
+                            const products = Array.from(info.products).slice(0, 3);
+                            const productNote = products.length > 0 ? products.join(', ') : `${info.count} video`;
+                            const more = info.products.size > 3 ? ` +${info.products.size - 3} SP` : '';
+                            return `${managerName}::${productNote}${more}`;
+                        })
+                        .join('||');
+                });
+                return flattened;
+            })
+            .sort((a, b) => (b.totalGmv || 0) - (a.totalGmv || 0) || (b.orders || 0) - (a.orders || 0));
 
         console.log(`[Stats Calc] Videos with GMV > 0: ${matchedCount}`);
         console.log(`[Stats Calc] Total GMV from matches: ${totalGMVFromMatches}`);
@@ -1209,9 +1651,11 @@ ${txtFormat}
 
         return {
             brandStats: Object.values(brandMap),
-            kocStats: Object.values(kocMap),
+            kocStats: Object.values(kocMap).sort((a, b) => (b.gmvVideo || 0) - (a.gmvVideo || 0) || (b.gmvMonth || 0) - (a.gmvMonth || 0)),
             staffStats: Object.values(staffMap),
             kocBrandPivot: pivotArray,
+            kocIdentityRows: identityRows,
+            kocIdentityBrandHeaders: identityBrandHeaders,
             calculatedStats: { gmv: tGMV, gmvMonthAir: tGMVMonth, videoAirMonth: tVideo, orders: tOrders, castMonth: tCast, totalViews: tViews },
             chartData: Object.values(staffMap).map(i => ({
                 name: i.name,
@@ -1225,25 +1669,27 @@ ${txtFormat}
     // COLUMNS
     const brandCols = [
         { header: 'Brand', accessor: 'name', isBold: true },
+        { header: 'Chi phí Booking', accessor: 'bookingCost', formatter: (v) => `${formatNumber(v)} ₫` },
         { header: 'GMV Video', accessor: 'gmvVideo', formatter: formatNumber },
         { header: 'GMV Tháng Air', accessor: 'gmvMonth', formatter: formatNumber },
         { header: 'Video Trong Tháng', accessor: 'videoMonth', formatter: formatNumber },
     ];
     const kocCols = [
         { header: 'ID KOC', accessor: 'id', isBold: true },
+        { header: 'Chi phí Booking', accessor: 'bookingCost', formatter: (v) => `${formatNumber(v)} ₫` },
         { header: 'GMV Video', accessor: 'gmvVideo', formatter: formatNumber },
         { header: 'GMV Tháng Air', accessor: 'gmvMonth', formatter: formatNumber },
         { header: 'Video Trong Tháng', accessor: 'videoMonth', formatter: formatNumber },
     ];
     const staffCols = [
         { header: 'Tên Nhân Sự', accessor: 'name', isBold: true },
+        { header: 'Chi phí Booking', accessor: 'bookingCost', formatter: (v) => `${formatNumber(v)} ₫` },
         { header: 'Tổng GMV Lũy Kế', accessor: 'gmvCum', formatter: formatNumber },
         { header: 'GMV Tháng Air', accessor: 'gmvMonth', formatter: formatNumber },
         { header: 'Video Air Trong Tháng', accessor: 'videoMonth', formatter: formatNumber },
         { header: 'Tổng Lượt Xem', accessor: 'viewsCum', formatter: formatNumber },
         { header: 'Đơn Hàng AFF', accessor: 'ordersAff', formatter: formatNumber },
     ];
-
     // Booking cast budget:
     //   gmvBudget  = max(15tr, GMV × 2.2%)
     //   carryOver  = phần dư tháng này (prevBudget - actualCast) nếu > 0
@@ -1437,14 +1883,15 @@ ${txtFormat}
 
                     {/* TABLES */}
                     <div style={{ opacity: isLoadingData ? 0.5 : 1, pointerEvents: isLoadingData ? 'none' : 'auto' }}>
+                        <KocIdentityOverview data={kocIdentityRows} brandHeaders={kocIdentityBrandHeaders} formatNumber={formatNumber} staffOptions={nhanSus} />
                         <DataTable title="Performance theo Brand" columns={brandCols} data={brandStats} />
                         <DataTable title="Performance theo KOL/KOC" columns={kocCols} data={kocStats} />
                         <DataTable title="Performance theo Nhân sự" columns={staffCols} data={staffStats} />
                         <DataTable title="KOC Theo Brand (Pivot)" columns={pivotCols} data={kocBrandPivot} />
 
                         {/* BOOKING CAST BUDGET TABLE */}
-                        <div style={{ marginTop: 32, background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-                            <div style={{ padding: '14px 20px', background: 'linear-gradient(135deg, #ea580c, #c2410c)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div className="performance-table-card performance-budget-card" style={{ marginTop: 32, overflow: 'hidden' }}>
+                            <div className="performance-budget-card__header">
                                 <div>
                                     <div style={{ fontWeight: 800, fontSize: '1rem' }}>💰 Định Mức Booking Cast theo Nhân Sự</div>
                                     <div style={{ fontSize: '0.78rem', opacity: 0.85, marginTop: 2 }}>Công thức: max(15.000.000₫, GMV × 2.2%) + Phần dư tháng trước (nếu xài không hết)</div>
@@ -1490,7 +1937,8 @@ ${txtFormat}
                                     {savingBudget ? '⏳ Đang lưu...' : '💾 Lưu Định Mức Tháng Sau'}
                                 </button>
                             </div>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem' }}>
+                            <div className="performance-table-scroll performance-budget-card__table-wrap">
+                            <table className="performance-table performance-budget-table">
                                 <thead>
                                     <tr style={{ background: '#fef7f0', borderBottom: '2px solid #fed7aa' }}>
                                         <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: '#92400e' }}>Nhân Sự</th>
@@ -1559,6 +2007,7 @@ ${txtFormat}
                                     })}
                                 </tbody>
                             </table>
+                            </div>
                         </div>
                     </div>
 

@@ -127,15 +127,15 @@ const LoginPage = ({ onLogin }) => {
 // ── ACCOUNTS ──────────────────────────────────────────────
 export const ACCOUNTS = [
     { username: 'admin',      password: 'Admin@SK2025',    role: 'admin',      name: 'Admin Tổng'  },
-    { username: 'booking',    password: 'Booking@SK2025',  role: 'booking',    name: 'Booking'     },
+    { username: 'booking',    password: 'booking8255',     role: 'booking',    name: 'Booking'     },
     { username: 'cs',         password: 'CS@SK2025',       role: 'cs',         name: 'CS'          },
     { username: 'livestream', password: 'Live@SK2025',     role: 'livestream', name: 'Livestream'  },
 ];
 
 // ── ROLE PERMISSIONS ──────────────────────────────────────
 export const ROLE_VIEWS = {
-    admin:      ['stella_dashboard','cskh','livestream','dashboard','order','booking_performance','contract','airlinks','booking','data_archive','expense','landing_orders','camp_registration','task_notes'],
-    booking:    ['dashboard','order','booking_performance','contract','airlinks','booking','expense','camp_registration','task_notes'],
+    admin:      ['stella_dashboard','listed_price','tiktok_orders','cskh','livestream','dashboard','order','booking_performance','contract','airlinks','booking','data_archive','expense','landing_orders','camp_registration','task_notes'],
+    booking:    ['dashboard','order','booking_performance','contract','airlinks','booking','expense','camp_registration','listed_price','tiktok_orders','task_notes'],
     cs:         ['order','airlinks','expense','task_notes'],
     livestream: ['stella_dashboard','livestream','expense','task_notes'],
 };

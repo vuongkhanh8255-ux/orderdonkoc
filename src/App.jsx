@@ -19,10 +19,17 @@ import AIChat from './components/AIChat';
 import LoginPage, { ROLE_VIEWS } from './components/LoginPage';
 import CampRegistrationTab from './components/CampRegistrationTab';
 import TaskNoteTab from './components/TaskNoteTab';
+import TikTokShopCallback from './components/TikTokShopCallback';
+import ListedPriceTab from './components/ListedPriceTab';
+import TikTokOrdersTab from './components/TikTokOrdersTab';
 
 const SESSION_KEY = 'sk_session';
 
 function App() {
+  if (window.location.pathname === '/tiktok-shop/callback') {
+    return <TikTokShopCallback />;
+  }
+
   // ── AUTH STATE — ưu tiên localStorage (ghi nhớ), fallback sessionStorage ──
   const [user, setUser] = useState(() => {
     try {
@@ -141,7 +148,10 @@ function AppMain({ user, onLogout, allowedViews }) {
           <div style={{ flex: 1, paddingTop: '8px', overflowY: 'auto' }}>
             {[
               { key: 'ecom', label: '🛍️ Ecom', items: [
-                { view: 'stella_dashboard', icon: '📊', name: 'Stella Dashboard' },
+                { view: 'stella_dashboard',  icon: '📊', name: 'Stella Dashboard' },
+                { view: 'listed_price',      icon: '🏷️', name: 'Bảng giá niêm yết' },
+                { view: 'tiktok_orders',     icon: '🛒', name: 'TikTok Shop Orders' },
+                { view: 'camp_registration', icon: '🎪', name: 'Đăng Kí Camp' },
               ]},
               { key: 'cskh', label: '📋 CSKH', items: [
                 { view: 'cskh', icon: '📋', name: 'CSKH' },
@@ -150,18 +160,15 @@ function AppMain({ user, onLogout, allowedViews }) {
                 { view: 'livestream', icon: '🎬', name: 'Livestream' },
               ]},
               { key: 'booking', label: '📅 Booking', items: [
-                { view: 'dashboard',           icon: '📊', name: 'Dashboard' },
+                { view: 'dashboard',           icon: '📊', name: 'Phân tích sản phẩm booking' },
                 { view: 'order',               icon: '🛒', name: 'Đơn Hàng KOC' },
-                { view: 'booking_performance', icon: '📈', name: 'Báo Cáo Hiệu Suất' },
+                { view: 'booking_performance', icon: '📈', name: 'Dashboard booking' },
                 { view: 'contract',            icon: '📝', name: 'Hợp Đồng' },
                 { view: 'airlinks',            icon: '🔗', name: 'Quản Lý Link Air' },
               ]},
               { key: 'archive', label: '🗄️ Lưu trữ', items: [
                 { view: 'data_archive', icon: '🗄️', name: 'Lưu Trữ Data' },
                 { view: 'expense',      icon: '💸', name: 'Ngân Sách Ecom' },
-              ]},
-              { key: 'camp', label: '🛒 Camp TikTok', items: [
-                { view: 'camp_registration', icon: '🛒', name: 'Đăng Kí Camp' },
               ]},
               { key: 'tools', label: '🛠️ Công Cụ', items: [
                 { view: 'task_notes', icon: '📝', name: 'Task & Notes' },
@@ -218,6 +225,8 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'data_archive' && <DataArchiveTab />}
           {currentView === 'gmv_realtime' && <GmvRealtimeTab />}
           {currentView === 'stella_dashboard' && <StellaDashboardTab />}
+          {currentView === 'listed_price' && <ListedPriceTab />}
+          {currentView === 'tiktok_orders' && <TikTokOrdersTab />}
           {currentView === 'cskh' && <CSKHTab />}
           {currentView === 'livestream' && <LivestreamTab />}
           {currentView === 'landing_orders' && <LandingOrders />}

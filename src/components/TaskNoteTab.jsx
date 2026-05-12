@@ -1,7 +1,13 @@
 // src/components/TaskNoteTab.jsx
 import React, { useState, useRef, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 
 const STORAGE_KEY = 'sk_task_notes_v2';
+const DB_NAME = 'sk_task_notes_db';
+const DB_VERSION = 1;
+const DB_STORE = 'kv';
+const DB_TASKS_KEY = 'tasks';
+const SUPABASE_TABLE = 'task_notes';
 
 const STATUS_CONFIG = {
     'Mới':              { color: '#6366f1', bg: '#eef2ff', border: '#c7d2fe' },
@@ -11,11 +17,125 @@ const STATUS_CONFIG = {
 };
 const STATUS_LIST = Object.keys(STATUS_CONFIG);
 
+const normalizeTaskList = (value) => Array.isArray(value) ? value : [];
+
 const loadTasks = () => {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+    try { return normalizeTaskList(JSON.parse(localStorage.getItem(STORAGE_KEY))); }
     catch { return []; }
 };
-const saveTasks = (tasks) => localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+
+const openTaskDb = () => new Promise((resolve, reject) => {
+    if (!window.indexedDB) {
+        reject(new Error('IndexedDB is not supported'));
+        return;
+    }
+
+    const request = window.indexedDB.open(DB_NAME, DB_VERSION);
+    request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE);
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+});
+
+const loadTasksFromDb = async () => {
+    try {
+        const db = await openTaskDb();
+        return await new Promise((resolve, reject) => {
+            const tx = db.transaction(DB_STORE, 'readonly');
+            const store = tx.objectStore(DB_STORE);
+            const request = store.get(DB_TASKS_KEY);
+            request.onsuccess = () => resolve(normalizeTaskList(request.result));
+            request.onerror = () => reject(request.error);
+            tx.oncomplete = () => db.close();
+        });
+    } catch {
+        return null;
+    }
+};
+
+const saveTasksToDb = async (tasks) => {
+    try {
+        const db = await openTaskDb();
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction(DB_STORE, 'readwrite');
+            tx.objectStore(DB_STORE).put(tasks, DB_TASKS_KEY);
+            tx.oncomplete = () => { db.close(); resolve(); };
+            tx.onerror = () => { db.close(); reject(tx.error); };
+        });
+    } catch (error) {
+        console.warn('Không lưu được task vào IndexedDB:', error);
+    }
+};
+
+const saveTasks = (tasks) => {
+    saveTasksToDb(tasks);
+
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    } catch {
+        // Base64 ảnh có thể vượt quota localStorage; IndexedDB phía trên vẫn là nơi lưu chính.
+        try {
+            const lightweightTasks = tasks.map(({ imgSrc, ...task }) => ({
+                ...task,
+                imgSrc: imgSrc ? null : imgSrc,
+                hasImageBackup: Boolean(imgSrc)
+            }));
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(lightweightTasks));
+        } catch {
+            // Ignore localStorage fallback errors.
+        }
+    }
+};
+
+const mapDbTask = (row) => ({
+    id: row.id,
+    title: row.title || '',
+    desc: row.description || '',
+    imgSrc: row.image_src || null,
+    ngayYeuCau: row.requested_date || todayStr(),
+    deadline: row.deadline || '',
+    tienDo: Number(row.progress) || 0,
+    status: row.status || 'Mới'
+});
+
+const mapTaskPayload = (task) => ({
+    id: String(task.id),
+    title: task.title || '',
+    description: task.desc || '',
+    image_src: task.imgSrc || null,
+    requested_date: task.ngayYeuCau || null,
+    deadline: task.deadline || null,
+    progress: Number(task.tienDo) || 0,
+    status: task.status || 'Mới',
+    updated_at: new Date().toISOString()
+});
+
+const loadTasksFromSupabase = async () => {
+    const { data, error } = await supabase
+        .from(SUPABASE_TABLE)
+        .select('*')
+        .order('updated_at', { ascending: false });
+
+    if (error) throw error;
+    return normalizeTaskList(data).map(mapDbTask);
+};
+
+const upsertTasksToSupabase = async (tasks) => {
+    if (!tasks.length) return;
+    const { error } = await supabase
+        .from(SUPABASE_TABLE)
+        .upsert(tasks.map(mapTaskPayload), { onConflict: 'id' });
+    if (error) throw error;
+};
+
+const deleteTaskFromSupabase = async (id) => {
+    const { error } = await supabase.from(SUPABASE_TABLE).delete().eq('id', String(id));
+    if (error) throw error;
+};
+
+const isMissingTaskTable = (error) => ['42P01', 'PGRST205'].includes(error?.code);
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
@@ -40,6 +160,8 @@ const EMPTY_FORM = { title: '', desc: '', imgSrc: null, ngayYeuCau: todayStr(), 
 
 export default function TaskNoteTab() {
     const [tasks,    setTasks]    = useState(loadTasks);
+    const [dbReady,  setDbReady]  = useState(false);
+    const [syncStatus, setSyncStatus] = useState('Đang đồng bộ...');
     const [filter,   setFilter]   = useState('Tất cả');
     const [modal,    setModal]    = useState(false);
     const [form,     setForm]     = useState(EMPTY_FORM);
@@ -47,7 +169,49 @@ export default function TaskNoteTab() {
     const [lightbox, setLightbox] = useState(null);
     const fileRef = useRef();
 
-    useEffect(() => saveTasks(tasks), [tasks]);
+    useEffect(() => {
+        let mounted = true;
+        const hydrateTasks = async () => {
+            const localTasks = await loadTasksFromDb();
+            if (!mounted) return;
+            const fallbackTasks = localTasks && localTasks.length > 0 ? localTasks : loadTasks();
+            if (fallbackTasks.length > 0) setTasks(fallbackTasks);
+            setDbReady(true);
+
+            try {
+                const remoteTasks = await loadTasksFromSupabase();
+                if (!mounted) return;
+
+                if (remoteTasks.length > 0) {
+                    setTasks(remoteTasks);
+                    saveTasks(remoteTasks);
+                    setSyncStatus('Đã đồng bộ Supabase');
+                    return;
+                }
+
+                if (fallbackTasks.length > 0) {
+                    await upsertTasksToSupabase(fallbackTasks);
+                    setSyncStatus('Đã đưa note local lên Supabase');
+                    return;
+                }
+
+                setSyncStatus('Đã đồng bộ Supabase');
+            } catch (error) {
+                console.warn('Không đồng bộ được Task & Notes với Supabase:', error);
+                if (!mounted) return;
+                setSyncStatus(isMissingTaskTable(error)
+                    ? 'Chưa có bảng task_notes trên Supabase'
+                    : 'Đang lưu local, Supabase lỗi');
+            }
+        };
+        hydrateTasks();
+        return () => { mounted = false; };
+    }, []);
+
+    useEffect(() => {
+        if (!dbReady) return;
+        saveTasks(tasks);
+    }, [tasks, dbReady]);
 
     /* ── helpers ── */
     const openAdd  = () => { setForm({ ...EMPTY_FORM, ngayYeuCau: todayStr() }); setEditId(null); setModal(true); };
@@ -65,15 +229,49 @@ export default function TaskNoteTab() {
     const handleSave = () => {
         if (!form.title.trim()) return;
         if (editId !== null) {
-            setTasks(prev => prev.map(t => t.id === editId ? { ...form, id: editId } : t));
+            setTasks(prev => {
+                const savedTask = { ...form, id: editId, title: form.title.trim() };
+                const next = prev.map(t => t.id === editId ? savedTask : t);
+                saveTasks(next);
+                upsertTasksToSupabase([savedTask])
+                    .then(() => setSyncStatus('Đã lưu Supabase'))
+                    .catch(error => {
+                        console.warn('Lưu task lên Supabase lỗi:', error);
+                        setSyncStatus(isMissingTaskTable(error) ? 'Chưa có bảng task_notes trên Supabase' : 'Lưu local, Supabase lỗi');
+                    });
+                return next;
+            });
         } else {
-            setTasks(prev => [{ ...form, id: Date.now(), title: form.title.trim() }, ...prev]);
+            setTasks(prev => {
+                const savedTask = { ...form, id: String(Date.now()), title: form.title.trim() };
+                const next = [savedTask, ...prev];
+                saveTasks(next);
+                upsertTasksToSupabase([savedTask])
+                    .then(() => setSyncStatus('Đã lưu Supabase'))
+                    .catch(error => {
+                        console.warn('Lưu task lên Supabase lỗi:', error);
+                        setSyncStatus(isMissingTaskTable(error) ? 'Chưa có bảng task_notes trên Supabase' : 'Lưu local, Supabase lỗi');
+                    });
+                return next;
+            });
         }
         closeModal();
     };
 
     const handleDelete = (id) => {
-        if (window.confirm('Xoá task này?')) setTasks(prev => prev.filter(t => t.id !== id));
+        if (window.confirm('Xoá task này?')) {
+            setTasks(prev => {
+                const next = prev.filter(t => t.id !== id);
+                saveTasks(next);
+                deleteTaskFromSupabase(id)
+                    .then(() => setSyncStatus('Đã xoá trên Supabase'))
+                    .catch(error => {
+                        console.warn('Xoá task trên Supabase lỗi:', error);
+                        setSyncStatus(isMissingTaskTable(error) ? 'Chưa có bảng task_notes trên Supabase' : 'Xoá local, Supabase lỗi');
+                    });
+                return next;
+            });
+        }
     };
 
     /* ── filter ── */
@@ -107,6 +305,9 @@ export default function TaskNoteTab() {
                 <div>
                     <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 900, color: '#ea580c' }}>📝 Task & Notes</h1>
                     <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#9ca3af' }}>Quản lý công việc và ghi chú nội bộ</p>
+                    <p style={{ margin: '4px 0 0', fontSize: '0.72rem', color: syncStatus.includes('lỗi') || syncStatus.includes('Chưa') ? '#dc2626' : '#16a34a', fontWeight: 700 }}>
+                        {syncStatus}
+                    </p>
                 </div>
                 <button onClick={openAdd} style={{
                     padding: '10px 20px', background: 'linear-gradient(135deg,#f59e0b,#ea580c)',

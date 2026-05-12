@@ -3,6 +3,10 @@
     {
       "source": "/bluecore-api/:match*",
       "destination": "https://admin-apis.bluecore.vn/:match*"
+    },
+    {
+      "source": "/tiktok-shop/callback",
+      "destination": "/api/tiktok-shop/callback"
     }
   ]
 }
