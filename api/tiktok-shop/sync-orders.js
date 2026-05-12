@@ -150,9 +150,9 @@ export default async function handler(req, res) {
     });
   }
 
-  // Sync window: last 90 days
+  // Sync window: last 180 days
   const now = Math.floor(Date.now() / 1000);
-  const createTimeGe = now - 90 * 24 * 3600;
+  const createTimeGe = now - 180 * 24 * 3600;
 
   const results = [];
   let totalSynced = 0;
@@ -187,7 +187,22 @@ export default async function handler(req, res) {
       }
 
       if (allOrderIds.length === 0) {
-        results.push({ shop: shopLabel, synced: 0, note: 'No orders in sync window' });
+        // Capture raw response for debugging
+        const debugResp = await fetchOrderIds({
+          appKey, appSecret,
+          accessToken: conn.access_token,
+          shopCipher: conn.shop_cipher,
+          createTimeGe,
+          createTimeLt: now,
+        });
+        results.push({
+          shop: shopLabel,
+          synced: 0,
+          note: 'No orders in sync window',
+          api_code: debugResp?.code,
+          api_message: debugResp?.message,
+          api_debug: JSON.stringify(debugResp).slice(0, 500),
+        });
         continue;
       }
 
