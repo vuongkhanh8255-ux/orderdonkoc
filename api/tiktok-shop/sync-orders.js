@@ -135,7 +135,7 @@ export default async function handler(req, res) {
     try {
       const allOrders = [];
       let firstWindowDebug = null;
-      const MAX_PAGES_PER_WINDOW = 300; // 300 pages × 50 orders = 15,000 max per window (covers 1000 orders/day × 15 days)
+      const MAX_PAGES_PER_WINDOW = 150; // 150 pages × 50 orders = 7,500 max per window (~500 orders/day × 15 days)
 
       for (const { createTimeGe, createTimeLt } of timeWindows) {
         let pageToken = undefined;

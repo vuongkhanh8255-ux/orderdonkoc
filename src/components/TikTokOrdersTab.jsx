@@ -93,7 +93,19 @@ const TikTokOrdersTab = () => {
     setSyncResult(null);
     try {
       const res = await fetch('/api/tiktok-shop/sync-orders', { method: 'POST' });
-      const data = await res.json();
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        // Vercel trả về plain text khi timeout hoặc crash
+        const preview = text.slice(0, 120);
+        if (res.status === 504 || text.includes('FUNCTION_INVOCATION_TIMEOUT') || text.includes('timeout')) {
+          data = { error: '⏱ Sync timeout — quá nhiều đơn hàng trong 1 lần. Thử lại, lần này sẽ lấy được thêm.' };
+        } else {
+          data = { error: `Server lỗi (${res.status}): ${preview}` };
+        }
+      }
       setSyncResult(data);
       if (data.success) fetchData();
     } catch (err) {
