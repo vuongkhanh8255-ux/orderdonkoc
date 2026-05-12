@@ -142,10 +142,17 @@ export default async function handler(req, res) {
         const FROM_TS = 1743465600; // 01/04/2026 00:00:00 UTC
         const rangeSize   = now - FROM_TS;
         const numWindows  = Math.ceil(rangeSize / WINDOW_SEC);
-        timeWindows = Array.from({ length: numWindows }, (_, i) => ({
+        const allWindows  = Array.from({ length: numWindows }, (_, i) => ({
           createTimeLt: now - i * WINDOW_SEC,
           createTimeGe: Math.max(FROM_TS, now - (i + 1) * WINDOW_SEC),
         }));
+        // Optional: process only a specific window index (sent by frontend)
+        const windowIdx = req.query?.window_index !== undefined ? parseInt(req.query.window_index) : null;
+        if (windowIdx !== null && !isNaN(windowIdx)) {
+          timeWindows = allWindows[windowIdx] ? [allWindows[windowIdx]] : [];
+        } else {
+          timeWindows = allWindows;
+        }
       } else {
         // ── Incremental: chỉ kéo từ đơn cuối trong DB ──
         syncMode = 'incremental';
@@ -256,5 +263,7 @@ export default async function handler(req, res) {
     }
   }
 
-  return res.status(200).json({ success: true, totalSynced, connections: connections.length, results, syncedAt: new Date().toISOString() });
+  const FROM_TS_RESP = 1743465600;
+  const totalWindows = Math.ceil((now - FROM_TS_RESP) / WINDOW_SEC);
+  return res.status(200).json({ success: true, totalSynced, connections: connections.length, results, syncedAt: new Date().toISOString(), totalWindows });
 }

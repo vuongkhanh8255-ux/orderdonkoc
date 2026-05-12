@@ -98,23 +98,18 @@ const TikTokOrdersTab = () => {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   // ── Sync orders from TikTok API ───────────────────────────────────────────
-  const doSync = async (full = false) => {
+  const doSync = async () => {
     setSyncing(true);
     setSyncResult(null);
     try {
-      const url = full ? '/api/tiktok-shop/sync-orders?full=true' : '/api/tiktok-shop/sync-orders';
-      const res  = await fetch(url, { method: 'POST' });
+      const res  = await fetch('/api/tiktok-shop/sync-orders', { method: 'POST' });
       const text = await res.text();
       let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        const preview = text.slice(0, 120);
-        if (res.status === 504 || text.includes('FUNCTION_INVOCATION_TIMEOUT') || text.includes('timeout')) {
-          data = { error: '⏱ Timeout — bấm Full Resync thêm vài lần nữa để kéo hết dữ liệu cũ.' };
-        } else {
-          data = { error: `Server lỗi (${res.status}): ${preview}` };
-        }
+      try { data = JSON.parse(text); }
+      catch {
+        data = res.status === 504 || text.includes('timeout')
+          ? { error: '⏱ Timeout — thử lại sau.' }
+          : { error: `Server lỗi (${res.status}): ${text.slice(0, 120)}` };
       }
       setSyncResult(data);
       if (data.success) fetchData();
@@ -124,8 +119,51 @@ const TikTokOrdersTab = () => {
     setSyncing(false);
   };
 
-  const syncOrders     = () => doSync(false);
-  const fullResync     = () => doSync(true);
+  // Full resync: gọi từng window một để tránh timeout 300s
+  const fullResync = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+
+    // Tính số windows giống backend (FROM_TS = 01/04/2026, 15 ngày/window)
+    const FROM_TS    = 1743465600;
+    const WINDOW_SEC = 15 * 24 * 3600;
+    const nowSec     = Math.floor(Date.now() / 1000);
+    const numWindows = Math.ceil((nowSec - FROM_TS) / WINDOW_SEC);
+
+    let totalSynced = 0;
+    const allResults = [];
+    let lastSyncedAt = null;
+    let hadError = false;
+
+    for (let i = 0; i < numWindows; i++) {
+      setSyncResult({ _progress: true, message: `⏳ Đang kéo cửa sổ ${i + 1} / ${numWindows}...` });
+      try {
+        const res  = await fetch(`/api/tiktok-shop/sync-orders?full=true&window_index=${i}`, { method: 'POST' });
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); }
+        catch {
+          data = res.status === 504 || text.includes('timeout')
+            ? { error: `⏱ Timeout ở cửa sổ ${i + 1}/${numWindows} — thử lại.` }
+            : { error: `Server lỗi (${res.status}): ${text.slice(0, 120)}` };
+        }
+        if (data.error) { setSyncResult({ error: data.error }); hadError = true; break; }
+        totalSynced  += data.totalSynced || 0;
+        if (data.results)  allResults.push(...data.results);
+        if (data.syncedAt) lastSyncedAt = data.syncedAt;
+      } catch (err) {
+        setSyncResult({ error: err.message }); hadError = true; break;
+      }
+    }
+
+    if (!hadError) {
+      setSyncResult({ success: true, totalSynced, results: allResults, syncedAt: lastSyncedAt });
+      fetchData();
+    }
+    setSyncing(false);
+  };
+
+  const syncOrders = () => doSync();
 
   // ── Filtered rows ─────────────────────────────────────────────────────────
   const filtered = orders.filter(o => {
@@ -220,15 +258,17 @@ const TikTokOrdersTab = () => {
       {syncResult && (
         <div style={{
           marginBottom: 16, padding: '12px 16px', borderRadius: 10,
-          background: syncResult.error ? '#fef2f2' : '#f0fdf4',
-          border: `1px solid ${syncResult.error ? '#fca5a5' : '#bbf7d0'}`,
-          color: syncResult.error ? '#dc2626' : '#166534',
+          background: syncResult._progress ? '#eff6ff' : syncResult.error ? '#fef2f2' : '#f0fdf4',
+          border: `1px solid ${syncResult._progress ? '#bfdbfe' : syncResult.error ? '#fca5a5' : '#bbf7d0'}`,
+          color: syncResult._progress ? '#1d4ed8' : syncResult.error ? '#dc2626' : '#166534',
           fontSize: '0.85rem',
         }}>
           <div style={{ fontWeight: 700 }}>
-            {syncResult.error
-              ? `❌ Lỗi khi sync: ${syncResult.error}`
-              : `✅ Sync thành công — ${syncResult.totalSynced} đơn hàng được cập nhật`}
+            {syncResult._progress
+              ? syncResult.message
+              : syncResult.error
+                ? `❌ Lỗi khi sync: ${syncResult.error}`
+                : `✅ Sync thành công — ${syncResult.totalSynced} đơn hàng được cập nhật`}
           </div>
           {syncResult.results && (
             <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
