@@ -3,9 +3,10 @@
  *
  * Vercel serverless function — POST /api/tiktok-shop/sync-orders
  *
- * Uses POST /order/202309/orders/search (new TikTok endpoint)
- * Time filters go in request BODY (not query params)
- * Returns full order objects including line_items — no separate detail fetch needed
+ * TikTok Sign Algorithm (per official docs):
+ *   base = appSecret + path + sorted_url_params (exclude ONLY sign & access_token) + raw_body_json + appSecret
+ *   sign = HMAC-SHA256(key=appSecret, msg=base)
+ *   Note: shop_cipher IS included in the sign (unlike access_token)
  */
 
 import crypto from 'crypto';
@@ -13,52 +14,39 @@ import { createClient } from '@supabase/supabase-js';
 
 const TIKTOK_BASE = 'https://open-api.tiktokglobalshop.com';
 
-// ── TikTok Shop API Signature ─────────────────────────────────────────────────
-const buildSign = (appSecret, path, params) => {
-  const keys = Object.keys(params)
-    .filter(k => k !== 'sign' && k !== 'access_token' && k !== 'shop_cipher')
+// ── TikTok Sign ───────────────────────────────────────────────────────────────
+// Official docs: exclude ONLY 'sign' and 'access_token'
+// shop_cipher IS included in the sorted URL params
+// body (raw JSON string) is appended after URL params
+const buildSign = (appSecret, path, urlParams, bodyStr = '') => {
+  const keys = Object.keys(urlParams)
+    .filter(k => k !== 'sign' && k !== 'access_token')
     .sort();
-  const paramStr = keys.map(k => `${k}${params[k]}`).join('');
-  const base = `${appSecret}${path}${paramStr}${appSecret}`;
+  const paramStr = keys.map(k => `${k}${urlParams[k]}`).join('');
+  // base = secret + path + sortedURLParams + bodyStr + secret
+  const base = `${appSecret}${path}${paramStr}${bodyStr}${appSecret}`;
   return crypto.createHmac('sha256', appSecret).update(base).digest('hex');
 };
 
-const buildUrl = (appKey, appSecret, path, extraParams = {}) => {
-  const ts = String(Math.floor(Date.now() / 1000));
-  const params = { app_key: appKey, timestamp: ts, ...extraParams };
-  params.sign = buildSign(appSecret, path, params);
-  return `${TIKTOK_BASE}${path}?${new URLSearchParams(params).toString()}`;
-};
-
-// ── POST /order/202309/orders/search — time filters in BODY ──────────────────
-// TikTok sign rule: include ALL params (URL + body) except sign/access_token/shop_cipher
+// ── POST /order/202309/orders/search ─────────────────────────────────────────
 const searchOrders = async ({ appKey, appSecret, accessToken, shopCipher, createTimeGe, createTimeLt, pageToken }) => {
   const path = '/order/202309/orders/search';
   const ts = String(Math.floor(Date.now() / 1000));
 
-  // Body params
   const bodyObj = {
     create_time_ge: createTimeGe,
     create_time_lt: createTimeLt,
     page_size: 50,
   };
   if (pageToken) bodyObj.page_token = pageToken;
+  const bodyStr = JSON.stringify(bodyObj);
 
-  // Sign includes: URL params (app_key, timestamp) + body params (create_time_ge, create_time_lt, page_size, [page_token])
-  // Excluded from sign: shop_cipher, sign, access_token
-  const signParams = {
-    app_key: appKey,
-    timestamp: ts,
-    create_time_ge: String(createTimeGe),
-    create_time_lt: String(createTimeLt),
-    page_size: '50',
-  };
-  if (pageToken) signParams.page_token = pageToken;
+  // URL params — shop_cipher is included in sign calculation
+  const urlParams = { app_key: appKey, timestamp: ts, shop_cipher: shopCipher };
+  const sign = buildSign(appSecret, path, urlParams, bodyStr);
 
-  const sign = buildSign(appSecret, path, signParams);
-
-  const urlParams = new URLSearchParams({ app_key: appKey, timestamp: ts, shop_cipher: shopCipher, sign });
-  const url = `${TIKTOK_BASE}${path}?${urlParams.toString()}`;
+  const qs = new URLSearchParams({ ...urlParams, sign });
+  const url = `${TIKTOK_BASE}${path}?${qs.toString()}`;
 
   const res = await fetch(url, {
     method: 'POST',
@@ -66,7 +54,7 @@ const searchOrders = async ({ appKey, appSecret, accessToken, shopCipher, create
       'x-tts-access-token': accessToken,
       'content-type': 'application/json',
     },
-    body: JSON.stringify(bodyObj),
+    body: bodyStr,
   });
   const text = await res.text();
   try { return JSON.parse(text); } catch { return { _raw: text }; }
@@ -112,12 +100,7 @@ export default async function handler(req, res) {
   if (!appKey || !appSecret || !supabaseUrl || !supabaseKey) {
     return res.status(500).json({
       error: 'Missing configuration',
-      missing: {
-        TIKTOK_SHOP_APP_KEY: !appKey,
-        TIKTOK_SHOP_APP_SECRET: !appSecret,
-        SUPABASE_URL: !supabaseUrl,
-        SUPABASE_KEY: !supabaseKey,
-      }
+      missing: { TIKTOK_SHOP_APP_KEY: !appKey, TIKTOK_SHOP_APP_SECRET: !appSecret, SUPABASE_URL: !supabaseUrl, SUPABASE_KEY: !supabaseKey }
     });
   }
 
@@ -131,29 +114,18 @@ export default async function handler(req, res) {
     .not('access_token', 'is', null)
     .not('shop_cipher', 'is', null);
 
-  if (connErr) {
-    return res.status(500).json({ error: `Supabase error: ${connErr.message}` });
-  }
+  if (connErr) return res.status(500).json({ error: `Supabase error: ${connErr.message}` });
   if (!connections?.length) {
-    return res.status(200).json({
-      success: true,
-      totalSynced: 0,
-      message: 'No active TikTok Shop connections found. Please authorize a shop first.',
-    });
+    return res.status(200).json({ success: true, totalSynced: 0, message: 'No active TikTok Shop connections found.' });
   }
 
-  // ── Build 15-day time windows (TikTok max window per query = 15 days) ────────
+  // 6 × 15-day windows = last 90 days
   const now = Math.floor(Date.now() / 1000);
-  const WINDOW_SEC  = 15 * 24 * 3600;
-  const NUM_WINDOWS = 6; // 6 × 15 = 90 days
-
-  const timeWindows = [];
-  for (let i = 0; i < NUM_WINDOWS; i++) {
-    timeWindows.push({
-      createTimeLt: now - i * WINDOW_SEC,
-      createTimeGe: now - (i + 1) * WINDOW_SEC,
-    });
-  }
+  const WINDOW_SEC = 15 * 24 * 3600;
+  const timeWindows = Array.from({ length: 6 }, (_, i) => ({
+    createTimeLt: now - i * WINDOW_SEC,
+    createTimeGe: now - (i + 1) * WINDOW_SEC,
+  }));
 
   const results = [];
   let totalSynced = 0;
@@ -162,14 +134,14 @@ export default async function handler(req, res) {
     const shopLabel = conn.seller_name || conn.shop_id || '(unknown)';
     try {
       const allOrders = [];
-      const MAX_PAGES_PER_WINDOW = 3;
       let firstWindowDebug = null;
+      const MAX_PAGES = 3;
 
       for (const { createTimeGe, createTimeLt } of timeWindows) {
         let pageToken = undefined;
         let page = 0;
 
-        while (page < MAX_PAGES_PER_WINDOW) {
+        while (page < MAX_PAGES) {
           const resp = await searchOrders({
             appKey, appSecret,
             accessToken: conn.access_token,
@@ -178,7 +150,6 @@ export default async function handler(req, res) {
             pageToken,
           });
 
-          // Capture debug from first call
           if (firstWindowDebug === null) {
             firstWindowDebug = {
               window: `${new Date(createTimeGe * 1000).toISOString().slice(0, 10)} → ${new Date(createTimeLt * 1000).toISOString().slice(0, 10)}`,
@@ -202,34 +173,24 @@ export default async function handler(req, res) {
       }
 
       if (allOrders.length === 0) {
-        results.push({
-          shop: shopLabel,
-          synced: 0,
-          note: 'No orders found across last 90 days',
-          first_window_debug: firstWindowDebug,
-        });
+        results.push({ shop: shopLabel, synced: 0, note: 'No orders found across last 90 days', first_window_debug: firstWindowDebug });
         continue;
       }
 
-      // Deduplicate by order ID
+      // Deduplicate
       const seen = new Set();
       const uniqueOrders = allOrders.filter(o => {
         const id = String(o.id || o.order_id || '');
         if (!id || seen.has(id)) return false;
-        seen.add(id);
-        return true;
+        seen.add(id); return true;
       });
 
-      // Upsert to Supabase
-      const records = uniqueOrders
-        .map(o => normalizeOrder(o, conn))
-        .filter(r => r.id);
+      const records = uniqueOrders.map(o => normalizeOrder(o, conn)).filter(r => r.id);
 
       if (records.length > 0) {
         const { error: upsertErr } = await supabase
           .from('tiktok_shop_orders')
           .upsert(records, { onConflict: 'id' });
-
         if (upsertErr) throw new Error(upsertErr.message);
         totalSynced += records.length;
         results.push({ shop: shopLabel, synced: records.length, total_found: uniqueOrders.length });
@@ -240,11 +201,5 @@ export default async function handler(req, res) {
     }
   }
 
-  return res.status(200).json({
-    success: true,
-    totalSynced,
-    connections: connections.length,
-    results,
-    syncedAt: new Date().toISOString(),
-  });
+  return res.status(200).json({ success: true, totalSynced, connections: connections.length, results, syncedAt: new Date().toISOString() });
 }
