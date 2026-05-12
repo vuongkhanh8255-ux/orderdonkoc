@@ -1,36 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <defs>
-    <linearGradient id="teal" x1="50%" y1="0%" x2="50%" y2="100%">
-      <stop offset="0%" stop-color="#4dd9c0"/>
-      <stop offset="60%" stop-color="#2196f3"/>
-      <stop offset="100%" stop-color="#0d47a1"/>
-    </linearGradient>
-    <linearGradient id="wing" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#29b6f6"/>
-      <stop offset="100%" stop-color="#0a3080"/>
-    </linearGradient>
-  </defs>
+  <!-- Orange rounded square background -->
+  <rect width="100" height="100" rx="22" fill="#ea580c"/>
 
-  <!-- Navy background -->
-  <rect width="100" height="100" rx="16" fill="#0e2761"/>
-
-  <!-- Left wing -->
-  <path d="M43,45 C40,37 32,35 27,41 C22,48 26,57 33,60 C39,63 45,58 45,52 C45,49 44,47 43,45Z"
-        fill="url(#wing)" opacity="0.95"/>
-
-  <!-- Right wing -->
-  <path d="M57,45 C60,37 68,35 73,41 C78,48 74,57 67,60 C61,63 55,58 55,52 C55,49 56,47 57,45Z"
-        fill="url(#wing)" opacity="0.95"/>
-
-  <!-- Center teardrop flame (pointing up) -->
-  <path d="M50,11 C47,20 41,33 41,44 C41,53 45,59 50,61 C55,59 59,53 59,44 C59,33 53,20 50,11Z"
-        fill="url(#teal)"/>
-
-  <!-- Bottom stem -->
-  <path d="M45,60 C43,67 45,74 50,78 C55,74 57,67 55,60 C53,62 50,63 50,63 C50,63 47,62 45,60Z"
-        fill="url(#teal)" opacity="0.85"/>
-
-  <!-- White 4-pointed star -->
-  <path d="M50,39 L52,46 L59,48 L52,50 L50,57 L48,50 L41,48 L48,46 Z"
+  <!-- White 4-pointed star (like the sidebar icon) -->
+  <path d="M50,18 C50,18 54,38 62,46 C54,54 50,74 50,74 C50,74 46,54 38,46 C46,38 50,18 50,18Z"
         fill="white"/>
 </svg>
