@@ -1,10 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 
-const DEFAULT_TOKEN_URL = 'https://auth.tiktok-shops.com/api/v2/token/get';
+// ── Correct TikTok Shop Open Platform v2 token endpoint ───────────────────────
+// ALWAYS use auth.tiktok-shops.com — NOT open-api.tiktokglobalshop.com
+const TIKTOK_TOKEN_URL = 'https://auth.tiktok-shops.com/api/v2/token/get';
 
 const html = ({ title, status, details = [], tone = 'success' }) => {
-  const color = tone === 'error' ? '#dc2626' : '#16a34a';
-  const bg = tone === 'error' ? '#fef2f2' : '#f0fdf4';
+  const color  = tone === 'error' ? '#dc2626' : '#16a34a';
+  const bg     = tone === 'error' ? '#fef2f2' : '#f0fdf4';
   const border = tone === 'error' ? '#fecaca' : '#bbf7d0';
 
   return `<!doctype html>
@@ -46,226 +48,143 @@ const toIsoFromEpochSeconds = (value) => {
   return new Date(num * 1000).toISOString();
 };
 
-const getTokenBundle = (payload) => {
-  const data = payload?.data || payload;
+const getTokenBundle = (data) => {
+  // TikTok v2 wraps everything in data.data; some responses return flat
+  const d = data?.data || data;
   return {
-    access_token: data?.access_token,
-    refresh_token: data?.refresh_token,
-    access_token_expire_in: data?.access_token_expire_in || data?.access_token_expire_at || data?.access_token_expires_at,
-    refresh_token_expire_in: data?.refresh_token_expire_in || data?.refresh_token_expire_at || data?.refresh_token_expires_at,
-    open_id: data?.open_id,
-    seller_name: data?.seller_name,
-    seller_base_region: data?.seller_base_region,
-    user_type: data?.user_type,
-    shop_id: data?.shop_id,
-    shop_cipher: data?.shop_cipher
+    access_token:          d?.access_token,
+    refresh_token:         d?.refresh_token,
+    access_token_expire_in:  d?.access_token_expire_in  || d?.access_token_expire_at  || d?.access_token_expires_at,
+    refresh_token_expire_in: d?.refresh_token_expire_in || d?.refresh_token_expire_at || d?.refresh_token_expires_at,
+    open_id:             d?.open_id,
+    seller_name:         d?.seller_name,
+    seller_base_region:  d?.seller_base_region,
+    user_type:           d?.user_type,
+    shop_id:             d?.shop_id,
+    shop_cipher:         d?.shop_cipher,
   };
 };
 
-const readJsonSafely = async (response) => {
+// ── Exchange auth_code → access_token via TikTok Shop v2 API ─────────────────
+// Correct format: GET https://auth.tiktok-shops.com/api/v2/token/get?app_key=...&app_secret=...&auth_code=...&grant_type=authorized_code
+const exchangeAuthCode = async (appKey, appSecret, authCode) => {
+  const url = new URL(TIKTOK_TOKEN_URL);
+  url.searchParams.set('app_key',    appKey);
+  url.searchParams.set('app_secret', appSecret);
+  url.searchParams.set('auth_code',  authCode);
+  url.searchParams.set('grant_type', 'authorized_code');
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+  });
+
   const text = await response.text();
-  try {
-    return text ? JSON.parse(text) : {};
-  } catch {
-    return { raw: text };
-  }
-};
+  let payload;
+  try { payload = JSON.parse(text); } catch { payload = { _raw: text }; }
 
-const isTokenSuccess = (response, payload) => {
-  const data = payload?.data || payload;
-  if (!response.ok) return false;
-  if (payload?.code !== undefined && Number(payload.code) !== 0) return false;
-  return !!data?.access_token;
-};
-
-const buildTokenAttempts = ({ appKey, appSecret, authCode, merchantId, tokenUrl }) => {
-  if (merchantId) {
-    return [{
-      name: 'merchant-oauth-access-token',
-      url: 'https://open.tiktokapis.com/merchant/oauth/token/',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'x-tt-target-idc': 'alisg'
-      },
-      body: new URLSearchParams({
-        client_key: appKey,
-        client_secret: appSecret,
-        grant_type: 'access_token',
-        merchant_id: merchantId
-      }).toString()
-    }];
-  }
-
-  return [
-    {
-      name: 'auth-v2-token-get-query',
-      method: 'GET',
-      url: `${tokenUrl}?${new URLSearchParams({
-        app_key: appKey,
-        app_secret: appSecret,
-        grant_type: 'authorized_code',
-        auth_code: authCode
-      }).toString()}`,
-      headers: {},
-      body: undefined
-    },
-    {
-      name: 'shop-v2-token-get-form',
-      url: tokenUrl,
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        app_key: appKey,
-        app_secret: appSecret,
-        grant_type: 'authorized_code',
-        auth_code: authCode
-      }).toString()
-    },
-    {
-      name: 'auth-v2-token-get-json',
-      url: tokenUrl,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        app_key: appKey,
-        app_secret: appSecret,
-        grant_type: 'authorized_code',
-        auth_code: authCode
-      })
-    },
-    {
-      name: 'legacy-getAccessToken-json',
-      url: 'https://open-api.tiktokglobalshop.com/api/token/getAccessToken',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        app_key: appKey,
-        app_secret: appSecret,
-        grant_type: 'authorized_code',
-        auth_code: authCode
-      })
-    }
-  ];
+  return { url: url.toString(), httpStatus: response.status, payload };
 };
 
 export default async function handler(req, res) {
-  const requestUrl = new URL(req.url, `https://${req.headers.host || 'koc-tool.vercel.app'}`);
-  const authCode = requestUrl.searchParams.get('auth_code') || requestUrl.searchParams.get('code');
-  const merchantId = requestUrl.searchParams.get('merchant_id')
-    || requestUrl.searchParams.get('merchantId')
-    || requestUrl.searchParams.get('seller_id')
-    || requestUrl.searchParams.get('shop_id');
-  const state = requestUrl.searchParams.get('state');
-  const callbackError = requestUrl.searchParams.get('error') || requestUrl.searchParams.get('error_description');
+  const requestUrl  = new URL(req.url, `https://${req.headers.host || 'koc-tool.vercel.app'}`);
+  const authCode    = requestUrl.searchParams.get('auth_code') || requestUrl.searchParams.get('code');
+  const state       = requestUrl.searchParams.get('state');
+  const callbackErr = requestUrl.searchParams.get('error') || requestUrl.searchParams.get('error_description');
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
-  if (callbackError) {
-    res.status(400).send(html({
+  // ── TikTok returned an error ──────────────────────────────────────────────
+  if (callbackErr) {
+    return res.status(400).send(html({
       title: 'TikTok Shop authorization failed',
-      status: callbackError,
+      status: callbackErr,
       tone: 'error',
-      details: Array.from(requestUrl.searchParams.entries())
+      details: Array.from(requestUrl.searchParams.entries()),
     }));
-    return;
   }
 
-  if (!authCode && !merchantId) {
-    res.status(200).send(html({
+  // ── No auth code present ──────────────────────────────────────────────────
+  if (!authCode) {
+    return res.status(200).send(html({
       title: 'TikTok Shop Callback',
       status: 'Callback URL hoạt động, nhưng chưa có authorization code.',
-      details: Array.from(requestUrl.searchParams.entries())
+      details: Array.from(requestUrl.searchParams.entries()),
     }));
-    return;
   }
 
-  const appKey = process.env.TIKTOK_SHOP_APP_KEY?.trim();
-  const appSecret = process.env.TIKTOK_SHOP_APP_SECRET?.trim();
-  const tokenUrl = process.env.TIKTOK_SHOP_TOKEN_URL?.trim() || DEFAULT_TOKEN_URL;
+  // ── Read env vars ─────────────────────────────────────────────────────────
+  const appKey      = process.env.TIKTOK_SHOP_APP_KEY?.trim();
+  const appSecret   = process.env.TIKTOK_SHOP_APP_SECRET?.trim();
   const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL)?.trim();
   const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY)?.trim();
 
   if (!appKey || !appSecret || !supabaseUrl || !supabaseKey) {
-    res.status(500).send(html({
-      title: 'Thiếu cấu hình TikTok/Supabase',
+    return res.status(500).send(html({
+      title: 'Thiếu cấu hình TikTok / Supabase',
       status: 'Cần set TIKTOK_SHOP_APP_KEY, TIKTOK_SHOP_APP_SECRET và Supabase env trên Vercel.',
       tone: 'error',
       details: [
-        ['TIKTOK_SHOP_APP_KEY', appKey ? 'OK' : 'Missing'],
-        ['TIKTOK_SHOP_APP_SECRET', appSecret ? 'OK' : 'Missing'],
-        ['SUPABASE_URL/VITE_SUPABASE_URL', supabaseUrl ? 'OK' : 'Missing'],
-        ['SUPABASE key', supabaseKey ? 'OK' : 'Missing']
-      ]
+        ['TIKTOK_SHOP_APP_KEY',    appKey      ? '✅ OK' : '❌ Missing'],
+        ['TIKTOK_SHOP_APP_SECRET', appSecret   ? '✅ OK' : '❌ Missing'],
+        ['SUPABASE_URL',           supabaseUrl ? '✅ OK' : '❌ Missing'],
+        ['SUPABASE key',           supabaseKey ? '✅ OK' : '❌ Missing'],
+      ],
     }));
-    return;
   }
 
   try {
-    const attempts = buildTokenAttempts({ appKey, appSecret, authCode, merchantId, tokenUrl });
-    const attemptResults = [];
-    let tokenResponse = null;
-    let tokenPayload = null;
+    // ── Exchange code for token ─────────────────────────────────────────────
+    const { url: tokenUrl, httpStatus, payload } = await exchangeAuthCode(appKey, appSecret, authCode);
+    const bundle = getTokenBundle(payload);
 
-    for (const attempt of attempts) {
-      const response = await fetch(attempt.url, {
-        method: attempt.method || 'POST',
-        headers: attempt.headers,
-        body: attempt.body
-      });
-      const payload = await readJsonSafely(response);
-      attemptResults.push({
-        name: attempt.name,
-        url: attempt.url,
-        http_status: response.status,
-        response: payload
-      });
-      if (isTokenSuccess(response, payload)) {
-        tokenResponse = response;
-        tokenPayload = payload;
-        break;
-      }
-    }
+    // ── Check for success ───────────────────────────────────────────────────
+    const apiCode = payload?.code !== undefined ? Number(payload.code) : null;
+    const success = httpStatus >= 200 && httpStatus < 300 && (apiCode === null || apiCode === 0) && !!bundle.access_token;
 
-    const bundle = getTokenBundle(tokenPayload);
-
-    if (!tokenResponse || !bundle.access_token) {
-      const lastAttempt = attemptResults[attemptResults.length - 1] || {};
-      res.status(502).send(html({
-        title: 'Kh?ng ??i ???c TikTok token',
-        status: lastAttempt.response?.message || lastAttempt.response?.error_description || 'TikTok token API failed',
+    if (!success) {
+      return res.status(502).send(html({
+        title: 'Không đổi được TikTok token',
+        status: payload?.message || `HTTP ${httpStatus} — token API failed`,
         tone: 'error',
         details: [
-          ['token_url', lastAttempt.url || tokenUrl],
-          ['http_status', lastAttempt.http_status || '-'],
-          ['merchant_id', merchantId || '-'],
-          ['auth_code_present', authCode ? 'yes' : 'no'],
-          ['grant_type', merchantId ? 'access_token' : 'authorized_code'],
-          ['query', JSON.stringify(Object.fromEntries(requestUrl.searchParams.entries()))],
-          ['attempts', JSON.stringify(attemptResults)]
-        ]
+          ['token_url',     tokenUrl],
+          ['http_status',   httpStatus],
+          ['api_code',      apiCode ?? '-'],
+          ['api_message',   payload?.message || '-'],
+          ['auth_code',     authCode?.slice(0, 20) + '...'],
+          ['raw_response',  JSON.stringify(payload)],
+        ],
       }));
-      return;
     }
 
+    // ── Save to Supabase ────────────────────────────────────────────────────
     const supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: { persistSession: false, autoRefreshToken: false }
+      auth: { persistSession: false, autoRefreshToken: false },
     });
 
+    const shopIdFromQuery = requestUrl.searchParams.get('shop_id');
+    const shopCipherFromQuery = requestUrl.searchParams.get('shop_cipher');
+
     const record = {
-      connection_type: 'shop',
-      open_id: bundle.open_id || null,
-      shop_id: requestUrl.searchParams.get('shop_id') || bundle.shop_id || merchantId || null,
-      shop_cipher: requestUrl.searchParams.get('shop_cipher') || bundle.shop_cipher || null,
-      seller_name: bundle.seller_name || null,
-      seller_base_region: bundle.seller_base_region || null,
-      user_type: bundle.user_type ?? null,
-      access_token: bundle.access_token,
-      refresh_token: bundle.refresh_token || null,
-      access_token_expires_at: toIsoFromEpochSeconds(bundle.access_token_expire_in),
+      connection_type:          'shop',
+      open_id:                  bundle.open_id || null,
+      shop_id:                  shopIdFromQuery || bundle.shop_id || null,
+      shop_cipher:              shopCipherFromQuery || bundle.shop_cipher || null,
+      seller_name:              bundle.seller_name || null,
+      seller_base_region:       bundle.seller_base_region || null,
+      user_type:                bundle.user_type ?? null,
+      access_token:             bundle.access_token,
+      refresh_token:            bundle.refresh_token || null,
+      access_token_expires_at:  toIsoFromEpochSeconds(bundle.access_token_expire_in),
       refresh_token_expires_at: toIsoFromEpochSeconds(bundle.refresh_token_expire_in),
-      raw_response: tokenPayload,
-      last_auth_code: authCode,
-      state: state || null,
-      updated_at: new Date().toISOString()
+      raw_response:             payload,
+      last_auth_code:           authCode,
+      state:                    state || null,
+      updated_at:               new Date().toISOString(),
     };
 
+    // Upsert: prefer open_id as conflict key, fallback to shop_id, else insert
     const conflictKey = record.open_id ? 'open_id' : record.shop_id ? 'shop_id' : undefined;
     const query = supabase.from('tiktok_shop_connections');
     const { error: saveError } = conflictKey
@@ -274,27 +193,29 @@ export default async function handler(req, res) {
 
     if (saveError) throw saveError;
 
-    res.status(200).send(html({
-      title: 'TikTok Shop đã kết nối',
-      status: 'Đã đổi token và lưu connection vào Supabase.',
+    return res.status(200).send(html({
+      title: 'TikTok Shop đã kết nối ✅',
+      status: 'Đã đổi token thành công và lưu vào Supabase. Bạn có thể đóng trang này.',
       details: [
-        ['seller_name', record.seller_name || '-'],
-        ['open_id', record.open_id || '-'],
-        ['shop_id', record.shop_id || '-'],
-        ['shop_cipher', record.shop_cipher || '-'],
-        ['access_token_expires_at', record.access_token_expires_at || '-']
-      ]
+        ['seller_name',            record.seller_name || '-'],
+        ['open_id',                record.open_id || '-'],
+        ['shop_id',                record.shop_id || '-'],
+        ['shop_cipher',            record.shop_cipher || '-'],
+        ['access_token_expires_at', record.access_token_expires_at || '-'],
+        ['seller_base_region',     record.seller_base_region || '-'],
+      ],
     }));
+
   } catch (error) {
-    res.status(500).send(html({
+    return res.status(500).send(html({
       title: 'Lỗi callback TikTok Shop',
       status: error?.message || 'Unknown error',
       tone: 'error',
       details: [
-        ['code', error?.code || '-'],
+        ['code',    error?.code    || '-'],
         ['details', error?.details || '-'],
-        ['hint', error?.hint || '-']
-      ]
+        ['hint',    error?.hint    || '-'],
+      ],
     }));
   }
 }
