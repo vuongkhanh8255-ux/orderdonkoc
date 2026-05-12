@@ -196,10 +196,19 @@ const TikTokOrdersTab = () => {
               : `✅ Sync thành công — ${syncResult.totalSynced} đơn hàng được cập nhật`}
           </div>
           {syncResult.results && (
-            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
               {syncResult.results.map((r, i) => (
-                <div key={i} style={{ fontSize: '0.8rem', color: r.error ? '#dc2626' : '#166534' }}>
-                  {r.shop}: {r.error ? `Lỗi — ${r.error}` : r.note || `${r.synced} đơn`}
+                <div key={i}>
+                  <div style={{ fontSize: '0.8rem', color: r.error ? '#dc2626' : '#166534' }}>
+                    {r.shop}: {r.error ? `Lỗi — ${r.error}` : r.note || `${r.synced} đơn`}
+                  </div>
+                  {r.first_window_debug && (
+                    <div style={{ marginTop: 4, padding: '8px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: '0.72rem', fontFamily: 'monospace', color: '#374151', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                      <div><b>API code:</b> {r.first_window_debug.code} | <b>message:</b> {r.first_window_debug.message}</div>
+                      <div><b>data keys:</b> {(r.first_window_debug.data_keys || []).join(', ') || '(none)'}</div>
+                      <div style={{ marginTop: 4 }}><b>raw:</b> {r.first_window_debug.raw}</div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

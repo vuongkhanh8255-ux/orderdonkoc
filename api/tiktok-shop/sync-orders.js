@@ -194,13 +194,15 @@ export default async function handler(req, res) {
 
           // Capture debug info from first window's first page
           if (allOrderIds.length === 0 && page === 0 && windowDebug.length === 0) {
-            windowDebug.push({
+            const dbg = {
               window: `${new Date(createTimeGe * 1000).toISOString().slice(0, 10)} → ${new Date(createTimeLt * 1000).toISOString().slice(0, 10)}`,
               code: listResp?.code,
               message: listResp?.message,
               data_keys: Object.keys(listResp?.data || {}),
-              raw: JSON.stringify(listResp).slice(0, 600),
-            });
+              raw: JSON.stringify(listResp).slice(0, 800),
+            };
+            windowDebug.push(dbg);
+            console.log('[sync-orders] first window response:', JSON.stringify(dbg));
           }
 
           const orderList = listResp?.data?.order_list || listResp?.data?.orders || [];
