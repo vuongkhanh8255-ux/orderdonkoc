@@ -71,7 +71,7 @@ const TikTokOrdersTab = () => {
           .from('tiktok_shop_orders')
           .select('id,shop_id,open_id,order_status,create_time,update_time,total_amount,currency,line_items,synced_at')
           .order('create_time', { ascending: false })
-          .limit(300),
+          .limit(1000),
         supabase
           .from('tiktok_shop_connections')
           .select('shop_id,seller_name,seller_base_region,access_token_expires_at')
