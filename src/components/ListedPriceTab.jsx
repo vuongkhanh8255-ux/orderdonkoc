@@ -361,10 +361,8 @@ const ListedPriceTab = () => {
           onFocus={() => setEditingCell({ id: row.id, key: col.key })}
           onBlur={() => setEditingCell(null)}
           style={{
-            color: !isEditing && hasFormula
-              ? (isError ? '#dc2626' : '#1d4ed8')
-              : '#0f172a',
-            fontStyle: !isEditing && hasFormula ? 'italic' : 'normal',
+            color: !isEditing && hasFormula && isError ? '#dc2626' : '#0f172a',
+            fontStyle: 'normal',
           }}
         />
         {/* Live preview while editing a formula */}
