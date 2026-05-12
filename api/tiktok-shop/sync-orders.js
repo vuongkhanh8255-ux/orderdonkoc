@@ -119,13 +119,10 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, totalSynced: 0, message: 'No active TikTok Shop connections found.' });
   }
 
-  // 4 × 15-day windows = last 60 days (2 months)
   const now = Math.floor(Date.now() / 1000);
-  const WINDOW_SEC = 15 * 24 * 3600;
-  const timeWindows = Array.from({ length: 4 }, (_, i) => ({
-    createTimeLt: now - i * WINDOW_SEC,
-    createTimeGe: now - (i + 1) * WINDOW_SEC,
-  }));
+  const WINDOW_SEC  = 15 * 24 * 3600;
+  const BUFFER_SEC  =  2 * 24 * 3600; // 2 ngày overlap để không bỏ sót
+  const FULL_WINDOWS = 4;             // fallback full-sync = 60 ngày
 
   const results = [];
   let totalSynced = 0;
@@ -133,9 +130,50 @@ export default async function handler(req, res) {
   for (const conn of connections) {
     const shopLabel = conn.seller_name || conn.shop_id || '(unknown)';
     try {
+      // ── Incremental: chỉ kéo từ đơn cuối cùng trong DB ──────────────────
+      let timeWindows;
+      let syncMode = 'incremental';
+
+      const { data: latestRows } = await supabase
+        .from('tiktok_shop_orders')
+        .select('create_time')
+        .eq('shop_id', conn.shop_id)
+        .order('create_time', { ascending: false })
+        .limit(1);
+
+      const latestTs = latestRows?.[0]?.create_time;
+
+      if (latestTs) {
+        // Có đơn trong DB → chỉ sync từ (đơn cuối - 2 ngày buffer) đến now
+        const fromTs = latestTs - BUFFER_SEC;
+        const rangeSize = now - fromTs;
+
+        if (rangeSize <= WINDOW_SEC) {
+          // Nằm trong 1 window (< 15 ngày)
+          timeWindows = [{ createTimeGe: fromTs, createTimeLt: now }];
+        } else {
+          // Chia thành nhiều window nếu gap lớn (token hết hạn lâu ngày)
+          const numWindows = Math.min(Math.ceil(rangeSize / WINDOW_SEC), FULL_WINDOWS);
+          timeWindows = Array.from({ length: numWindows }, (_, i) => ({
+            createTimeLt: now - i * WINDOW_SEC,
+            createTimeGe: Math.max(fromTs, now - (i + 1) * WINDOW_SEC),
+          }));
+        }
+      } else {
+        // Chưa có đơn nào → full sync 60 ngày
+        syncMode = 'full';
+        timeWindows = Array.from({ length: FULL_WINDOWS }, (_, i) => ({
+          createTimeLt: now - i * WINDOW_SEC,
+          createTimeGe: now - (i + 1) * WINDOW_SEC,
+        }));
+      }
+
+      console.log(`[sync-orders] ${shopLabel}: mode=${syncMode} windows=${timeWindows.length} latestTs=${latestTs}`);
+
       const allOrders = [];
       let firstWindowDebug = null;
-      const MAX_PAGES_PER_WINDOW = 150; // 150 pages × 50 orders = 7,500 max per window (~500 orders/day × 15 days)
+      // Incremental: ít đơn → ít page cần. Full: cần nhiều page hơn
+      const MAX_PAGES_PER_WINDOW = syncMode === 'incremental' ? 20 : 150;
 
       for (const { createTimeGe, createTimeLt } of timeWindows) {
         let pageToken = undefined;
@@ -173,7 +211,7 @@ export default async function handler(req, res) {
       }
 
       if (allOrders.length === 0) {
-        results.push({ shop: shopLabel, synced: 0, note: 'No orders found across last 90 days', first_window_debug: firstWindowDebug });
+        results.push({ shop: shopLabel, synced: 0, mode: syncMode, note: 'No new orders found', first_window_debug: firstWindowDebug });
         continue;
       }
 
@@ -193,7 +231,7 @@ export default async function handler(req, res) {
           .upsert(records, { onConflict: 'id' });
         if (upsertErr) throw new Error(upsertErr.message);
         totalSynced += records.length;
-        results.push({ shop: shopLabel, synced: records.length, total_found: uniqueOrders.length });
+        results.push({ shop: shopLabel, synced: records.length, total_found: uniqueOrders.length, mode: syncMode });
       }
 
     } catch (err) {
