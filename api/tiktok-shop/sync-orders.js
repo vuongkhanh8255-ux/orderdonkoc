@@ -137,11 +137,14 @@ export default async function handler(req, res) {
       let syncMode;
 
       if (forceFullSync) {
-        // ── Full resync: kéo toàn bộ 60 ngày ──
+        // ── Full resync: từ 01/04/2026 đến nay ──
         syncMode = 'full';
-        timeWindows = Array.from({ length: FULL_WINDOWS }, (_, i) => ({
+        const FROM_TS = 1743465600; // 01/04/2026 00:00:00 UTC
+        const rangeSize   = now - FROM_TS;
+        const numWindows  = Math.ceil(rangeSize / WINDOW_SEC);
+        timeWindows = Array.from({ length: numWindows }, (_, i) => ({
           createTimeLt: now - i * WINDOW_SEC,
-          createTimeGe: now - (i + 1) * WINDOW_SEC,
+          createTimeGe: Math.max(FROM_TS, now - (i + 1) * WINDOW_SEC),
         }));
       } else {
         // ── Incremental: chỉ kéo từ đơn cuối trong DB ──
