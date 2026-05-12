@@ -42,17 +42,32 @@ const buildUrl = (appKey, appSecret, path, extraParams = {}, debug = false) => {
 // ── Get order list for a specific time window ────────────────────────────────
 const fetchOrderIds = async ({ appKey, appSecret, accessToken, shopCipher, createTimeGe, createTimeLt, pageToken, isFirstCall = false }) => {
   const path = '/order/202309/orders';
-  // Note: sort_field/sort_order removed — fewer params = simpler sign, less chance of error
-  const extra = {
+
+  // Build URL using two approaches and test both
+  // Approach A: minimal params (same pattern as getAuthorizedShops which works)
+  const extraA = { shop_cipher: shopCipher };
+  const urlA = buildUrl(appKey, appSecret, path, extraA, false);
+
+  // Approach B: with time filters
+  const extraB = {
     shop_cipher: shopCipher,
     page_size: '50',
     create_time_ge: String(createTimeGe),
     create_time_lt: String(createTimeLt),
   };
-  if (pageToken) extra.page_token = pageToken;
+  if (pageToken) extraB.page_token = pageToken;
+  const urlB = buildUrl(appKey, appSecret, path, extraB, isFirstCall);
 
-  const url = buildUrl(appKey, appSecret, path, extra, isFirstCall);
-  if (isFirstCall) console.log('[sync-orders] calling order list URL (partial):', url.split('?')[0], '| params:', Object.keys(extra).join(','));
+  // Try approach A first (minimal params to verify sign works)
+  if (isFirstCall) {
+    const resA = await fetch(urlA, { headers: { 'x-tts-access-token': accessToken, 'content-type': 'application/json' } });
+    const textA = await resA.text();
+    let parsedA;
+    try { parsedA = JSON.parse(textA); } catch { parsedA = { _raw: textA }; }
+    console.log('[sync-orders] approach-A (minimal params) code:', parsedA?.code, 'msg:', parsedA?.message);
+  }
+
+  const url = urlB;
   const res = await fetch(url, {
     headers: { 'x-tts-access-token': accessToken, 'content-type': 'application/json' }
   });
