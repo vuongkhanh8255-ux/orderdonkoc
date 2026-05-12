@@ -3,12 +3,9 @@
  *
  * Vercel serverless function — POST /api/tiktok-shop/sync-orders
  *
- * 1. Reads all active connections from tiktok_shop_connections
- * 2. For each connection, queries TikTok Order List API in 15-day windows
- *    (TikTok max window = 15 days per query — larger windows return empty silently)
- * 3. Fetches order details in batches of 50
- * 4. Upserts into tiktok_shop_orders table
- * 5. Returns sync summary
+ * Uses POST /order/202309/orders/search (new TikTok endpoint)
+ * Time filters go in request BODY (not query params)
+ * Returns full order objects including line_items — no separate detail fetch needed
  */
 
 import crypto from 'crypto';
@@ -17,90 +14,49 @@ import { createClient } from '@supabase/supabase-js';
 const TIKTOK_BASE = 'https://open-api.tiktokglobalshop.com';
 
 // ── TikTok Shop API Signature ─────────────────────────────────────────────────
-// Algorithm: HMAC-SHA256(key=appSecret, msg=appSecret + path + sorted_param_concat + appSecret)
-// Exclude: 'sign', 'access_token', 'shop_cipher' from signing (per TikTok docs)
-const buildSign = (appSecret, path, params, debug = false) => {
+const buildSign = (appSecret, path, params) => {
   const keys = Object.keys(params)
     .filter(k => k !== 'sign' && k !== 'access_token' && k !== 'shop_cipher')
     .sort();
   const paramStr = keys.map(k => `${k}${params[k]}`).join('');
   const base = `${appSecret}${path}${paramStr}${appSecret}`;
-  if (debug) {
-    console.log('[sign-debug] keys_signed:', keys.join(','));
-    console.log('[sign-debug] base_string:', base.replace(appSecret, '<secret>').replace(appSecret, '<secret>'));
-  }
   return crypto.createHmac('sha256', appSecret).update(base).digest('hex');
 };
 
-const buildUrl = (appKey, appSecret, path, extraParams = {}, debug = false) => {
+const buildUrl = (appKey, appSecret, path, extraParams = {}) => {
   const ts = String(Math.floor(Date.now() / 1000));
   const params = { app_key: appKey, timestamp: ts, ...extraParams };
-  params.sign = buildSign(appSecret, path, params, debug);
+  params.sign = buildSign(appSecret, path, params);
   return `${TIKTOK_BASE}${path}?${new URLSearchParams(params).toString()}`;
 };
 
-// ── Get order list for a specific time window ────────────────────────────────
-const fetchOrderIds = async ({ appKey, appSecret, accessToken, shopCipher, createTimeGe, createTimeLt, pageToken, isFirstCall = false }) => {
-  const path = '/order/202309/orders';
+// ── POST /order/202309/orders/search — time filters in BODY ──────────────────
+const searchOrders = async ({ appKey, appSecret, accessToken, shopCipher, createTimeGe, createTimeLt, pageToken }) => {
+  const path = '/order/202309/orders/search';
+  const url = buildUrl(appKey, appSecret, path, { shop_cipher: shopCipher });
 
-  // Build URL using two approaches and test both
-  // Approach A: minimal params (same pattern as getAuthorizedShops which works)
-  const extraA = { shop_cipher: shopCipher };
-  const urlA = buildUrl(appKey, appSecret, path, extraA, false);
-
-  // Approach B: with time filters
-  const extraB = {
-    shop_cipher: shopCipher,
-    page_size: '50',
-    create_time_ge: String(createTimeGe),
-    create_time_lt: String(createTimeLt),
+  const body = {
+    create_time_ge: createTimeGe,
+    create_time_lt: createTimeLt,
+    page_size: 50,
   };
-  if (pageToken) extraB.page_token = pageToken;
-  const urlB = buildUrl(appKey, appSecret, path, extraB, isFirstCall);
-
-  // Try approach A first (minimal params to verify sign works)
-  if (isFirstCall) {
-    const resA = await fetch(urlA, { headers: { 'x-tts-access-token': accessToken, 'content-type': 'application/json' } });
-    const textA = await resA.text();
-    let parsedA;
-    try { parsedA = JSON.parse(textA); } catch { parsedA = { _raw: textA }; }
-    console.log('[sync-orders] approach-A (minimal params) code:', parsedA?.code, 'msg:', parsedA?.message);
-  }
-
-  const url = urlB;
-  const res = await fetch(url, {
-    headers: { 'x-tts-access-token': accessToken, 'content-type': 'application/json' }
-  });
-  const text = await res.text();
-  try { return JSON.parse(text); } catch { return { _raw: text }; }
-};
-
-// ── Get order details ─────────────────────────────────────────────────────────
-const fetchOrderDetails = async ({ appKey, appSecret, accessToken, shopCipher, orderIds }) => {
-  const path = '/order/202309/orders/detail';
-  const extra = { shop_cipher: shopCipher };
-  const url = buildUrl(appKey, appSecret, path, extra);
+  if (pageToken) body.page_token = pageToken;
 
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'x-tts-access-token': accessToken, 'content-type': 'application/json' },
-    body: JSON.stringify({ order_id_list: orderIds })
+    headers: {
+      'x-tts-access-token': accessToken,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
   });
   const text = await res.text();
   try { return JSON.parse(text); } catch { return { _raw: text }; }
-};
-
-// ── Chunk array helper ────────────────────────────────────────────────────────
-const chunk = (arr, size) => {
-  const chunks = [];
-  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
-  return chunks;
 };
 
 // ── Normalize order for Supabase ──────────────────────────────────────────────
 const normalizeOrder = (order, conn) => {
-  const payment = order.payment || {};
-  const items = order.line_items || order.item_list || [];
+  const items = order.line_items || [];
   return {
     id: String(order.id || order.order_id || ''),
     shop_id: conn.shop_id || null,
@@ -109,14 +65,14 @@ const normalizeOrder = (order, conn) => {
     create_time: order.create_time || null,
     update_time: order.update_time || null,
     buyer_uid: order.buyer_uid || order.user_id || null,
-    total_amount: String(payment.total_amount || order.payment_info?.total_amount || order.total_amount || ''),
-    currency: payment.currency || order.payment_info?.currency || order.currency || null,
+    total_amount: String(order.payment?.total_amount || order.total_amount || ''),
+    currency: order.currency || items[0]?.currency || null,
     line_items: items.map(item => ({
-      item_id: item.item_id || item.product_id,
+      item_id: item.item_id || item.id,
       sku_id: item.sku_id,
-      product_name: item.product_name || item.item_name || item.sku_name,
+      product_name: item.product_name || item.sku_name,
       quantity: item.quantity || 1,
-      sale_price: item.sale_price || item.sku_sale_price,
+      sale_price: item.sale_price || item.original_price,
       currency: item.currency,
     })),
     raw_data: order,
@@ -126,13 +82,12 @@ const normalizeOrder = (order, conn) => {
 
 // ── Main handler ──────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
-  // Allow GET for easy browser testing too
   if (req.method !== 'GET' && req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const appKey    = process.env.TIKTOK_SHOP_APP_KEY?.trim();
-  const appSecret = process.env.TIKTOK_SHOP_APP_SECRET?.trim();
+  const appKey      = process.env.TIKTOK_SHOP_APP_KEY?.trim();
+  const appSecret   = process.env.TIKTOK_SHOP_APP_SECRET?.trim();
   const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL)?.trim();
   const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY)?.trim();
 
@@ -152,7 +107,6 @@ export default async function handler(req, res) {
     auth: { persistSession: false, autoRefreshToken: false }
   });
 
-  // Get all active TikTok Shop connections
   const { data: connections, error: connErr } = await supabase
     .from('tiktok_shop_connections')
     .select('access_token, shop_cipher, shop_id, open_id, seller_name, access_token_expires_at')
@@ -171,11 +125,9 @@ export default async function handler(req, res) {
   }
 
   // ── Build 15-day time windows (TikTok max window per query = 15 days) ────────
-  // Query last 90 days split into 6 windows of 15 days each
   const now = Math.floor(Date.now() / 1000);
-  const WINDOW_DAYS = 15;
-  const WINDOW_SEC  = WINDOW_DAYS * 24 * 3600;
-  const NUM_WINDOWS = 6; // 6 × 15 = 90 days total
+  const WINDOW_SEC  = 15 * 24 * 3600;
+  const NUM_WINDOWS = 6; // 6 × 15 = 90 days
 
   const timeWindows = [];
   for (let i = 0; i < NUM_WINDOWS; i++) {
@@ -191,90 +143,69 @@ export default async function handler(req, res) {
   for (const conn of connections) {
     const shopLabel = conn.seller_name || conn.shop_id || '(unknown)';
     try {
-      // Step 1: Collect all order IDs across all time windows (paginated)
-      const allOrderIds = [];
-      const windowDebug = [];
-      const MAX_PAGES_PER_WINDOW = 3; // max 150 orders per 15-day window
+      const allOrders = [];
+      const MAX_PAGES_PER_WINDOW = 3;
+      let firstWindowDebug = null;
 
       for (const { createTimeGe, createTimeLt } of timeWindows) {
         let pageToken = undefined;
         let page = 0;
-        let windowIds = 0;
 
         while (page < MAX_PAGES_PER_WINDOW) {
-          const listResp = await fetchOrderIds({
+          const resp = await searchOrders({
             appKey, appSecret,
             accessToken: conn.access_token,
             shopCipher: conn.shop_cipher,
-            createTimeGe,
-            createTimeLt,
+            createTimeGe, createTimeLt,
             pageToken,
-            isFirstCall: allOrderIds.length === 0 && page === 0 && windowDebug.length === 0,
           });
 
-          // Capture debug info from first window's first page
-          if (allOrderIds.length === 0 && page === 0 && windowDebug.length === 0) {
-            const dbg = {
+          // Capture debug from first call
+          if (firstWindowDebug === null) {
+            firstWindowDebug = {
               window: `${new Date(createTimeGe * 1000).toISOString().slice(0, 10)} → ${new Date(createTimeLt * 1000).toISOString().slice(0, 10)}`,
-              code: listResp?.code,
-              message: listResp?.message,
-              data_keys: Object.keys(listResp?.data || {}),
-              raw: JSON.stringify(listResp).slice(0, 800),
+              code: resp?.code,
+              message: resp?.message,
+              orders_count: resp?.data?.orders?.length ?? 0,
             };
-            windowDebug.push(dbg);
-            console.log('[sync-orders] first window response:', JSON.stringify(dbg));
+            console.log('[sync-orders] first window:', JSON.stringify(firstWindowDebug));
           }
 
-          const orderList = listResp?.data?.order_list || listResp?.data?.orders || [];
-          const ids = orderList.map(o => String(o.order_id || o.id)).filter(Boolean);
-          allOrderIds.push(...ids);
-          windowIds += ids.length;
+          if (resp?.code !== 0) break;
 
-          const nextToken = listResp?.data?.next_page_token || listResp?.data?.cursor;
-          if (!nextToken || ids.length === 0) break;
+          const orders = resp?.data?.orders || [];
+          allOrders.push(...orders);
+
+          const nextToken = resp?.data?.next_page_token;
+          if (!nextToken || orders.length === 0) break;
           pageToken = nextToken;
           page++;
         }
       }
 
-      if (allOrderIds.length === 0) {
+      if (allOrders.length === 0) {
         results.push({
           shop: shopLabel,
           synced: 0,
-          note: 'No orders found across last 90 days (6 × 15-day windows)',
-          windows_checked: timeWindows.length,
-          first_window_debug: windowDebug[0] || null,
+          note: 'No orders found across last 90 days',
+          first_window_debug: firstWindowDebug,
         });
         continue;
       }
 
-      // Deduplicate (in case same order appears in overlapping windows)
-      const uniqueOrderIds = [...new Set(allOrderIds)];
+      // Deduplicate by order ID
+      const seen = new Set();
+      const uniqueOrders = allOrders.filter(o => {
+        const id = String(o.id || o.order_id || '');
+        if (!id || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
 
-      // Step 2: Fetch details in batches of 50
-      const orderBatches = chunk(uniqueOrderIds, 50);
-      const allOrders = [];
-
-      for (const batch of orderBatches) {
-        const detailResp = await fetchOrderDetails({
-          appKey, appSecret,
-          accessToken: conn.access_token,
-          shopCipher: conn.shop_cipher,
-          orderIds: batch,
-        });
-        const orders = detailResp?.data?.order_list || detailResp?.data?.orders || [];
-        allOrders.push(...orders);
-      }
-
-      if (allOrders.length === 0) {
-        results.push({ shop: shopLabel, synced: 0, note: `${uniqueOrderIds.length} order IDs found but detail fetch returned empty` });
-        continue;
-      }
-
-      // Step 3: Upsert to Supabase
-      const records = allOrders
+      // Upsert to Supabase
+      const records = uniqueOrders
         .map(o => normalizeOrder(o, conn))
-        .filter(r => r.id); // skip orders without ID
+        .filter(r => r.id);
 
       if (records.length > 0) {
         const { error: upsertErr } = await supabase
@@ -283,7 +214,7 @@ export default async function handler(req, res) {
 
         if (upsertErr) throw new Error(upsertErr.message);
         totalSynced += records.length;
-        results.push({ shop: shopLabel, synced: records.length, order_ids_found: uniqueOrderIds.length });
+        results.push({ shop: shopLabel, synced: records.length, total_found: uniqueOrders.length });
       }
 
     } catch (err) {
