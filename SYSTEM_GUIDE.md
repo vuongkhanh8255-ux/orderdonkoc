@@ -1,7 +1,7 @@
 # SYSTEM GUIDE — Stella Kinetics KOC Tool
 
 > Tài liệu mô tả toàn bộ hệ thống, dành cho AI assistant hoặc developer mới tiếp cận dự án.
-> Cập nhật lần cuối: 2026-05-08
+> Cập nhật lần cuối: 2026-05-12
 
 ---
 
@@ -336,6 +336,78 @@ gradient:  'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)'
 
 ---
 
+### 5.13 TikTok Shop Orders (`TikTokOrdersTab`)
+- Hiển thị đơn hàng thực từ TikTok Shop Open API
+- Sync qua Vercel serverless function `/api/tiktok-shop/sync-orders`
+- Dữ liệu lưu vào Supabase bảng `tiktok_shop_orders`
+- Hiển thị: Order ID, trạng thái, shop, ngày tạo, tổng tiền, sản phẩm
+- Stat cards: Tổng đơn / Hoàn thành / Đang giao / Đã hủy
+- Filter theo trạng thái, search theo Order ID / Shop ID
+
+---
+
+## 6B. TikTok Shop Integration
+
+### Tổng quan
+App kết nối TikTok Shop Open API để sync đơn hàng thực về Supabase, hiển thị trong tab "TikTok Shop Orders".
+
+### Các file liên quan
+| File | Mục đích |
+|------|---------|
+| `api/tiktok-shop/callback.js` | OAuth callback — nhận auth_code, đổi token, lưu vào Supabase |
+| `api/tiktok-shop/sync-orders.js` | Sync orders từ TikTok API vào Supabase |
+| `src/components/TikTokOrdersTab.jsx` | UI hiển thị orders |
+| `src/components/TikTokShopCallback.jsx` | Debug component cho OAuth callback |
+
+### Supabase Tables
+- `tiktok_shop_connections` — lưu access_token, shop_cipher, shop_id, open_id của từng shop đã authorize
+- `tiktok_shop_orders` — lưu orders sync từ TikTok (id là primary key, upsert)
+
+### OAuth Flow
+1. Redirect user đến TikTok authorization URL
+2. TikTok redirect về `/tiktok-shop/callback?auth_code=...`
+3. `callback.js` đổi auth_code → access_token + refresh_token
+4. Tự động gọi `/authorization/202309/shops` để lấy `shop_id` + `shop_cipher`
+5. Lưu tất cả vào `tiktok_shop_connections`
+
+### Sign Algorithm (QUAN TRỌNG — đã debug kỹ)
+TikTok Shop API v202309 dùng HMAC-SHA256. Công thức:
+```
+base = appSecret + path + sorted_url_params_string + raw_body_json + appSecret
+sign = HMAC-SHA256(key=appSecret, msg=base)
+```
+
+**Các lỗi dễ mắc:**
+- ❌ **Exclude `shop_cipher` khỏi sign** → sai! Chỉ exclude `sign` và `access_token`
+- ❌ Đưa body params vào URL params khi sign → sai! Body phải append dưới dạng raw JSON string
+- ❌ Đưa `page_size` vào body → sai! `page_size` là URL query param
+- ✅ Đúng: URL params (app_key, timestamp, shop_cipher, page_size) + body JSON string, tất cả đều vào sign base
+
+### Sync Orders Endpoint
+- **Path:** `POST /order/202309/orders/search`
+- **URL params:** `app_key`, `timestamp`, `shop_cipher`, `page_size=50`, `sign`
+- **Header:** `x-tts-access-token: <token>`
+- **Body:** `{"create_time_ge": <unix>, "create_time_lt": <unix>}`
+- **Chiến lược:** 6 cửa sổ × 15 ngày = 90 ngày lịch sử, mỗi cửa sổ page hết (tối đa 50 trang)
+- **Lưu ý:** TikTok trả `code: 0` khi thành công, `code: 106001` nếu sign sai, `code: 36009004` nếu thiếu params
+
+### App Review Status
+- App đang ở **Beta Testing mode** (tối đa 25 shop test)
+- Không cần pass App Review để dùng nội bộ — chỉ cần khi mở rộng cho nhiều seller khác
+- Shop "Body Miss Việt Nam" đã authorize → sync orders bình thường
+
+### Token Expiry
+- `access_token` hết hạn: **19/05/2026**
+- Cần re-authorize trước ngày đó bằng cách vào lại OAuth flow
+- Hoặc implement refresh token: `POST https://auth.tiktok-shops.com/api/v2/token/refresh`
+
+### Data có thể khai thác
+- ✅ GMV (tính từ `total_amount`)
+- ✅ Doanh thu từng sản phẩm (từ `line_items`)
+- ⏳ Chi phí sàn / doanh thu thực → cần pull thêm Finance API (`/finance/202309/seller_transactions`)
+
+---
+
 ## 10. Thêm Tab / View Mới
 
 1. Tạo `src/components/TenTabMoi.jsx`
@@ -356,3 +428,47 @@ git push origin main
 ```
 
 Build command: `vite build` | Output dir: `dist`
+
+---
+
+## 12. Nhật Ký Phát Triển (Dev Log)
+
+### 2026-05-12 — Fix TikTok Shop Order Sync (với Claude)
+
+**Vấn đề ban đầu:** Sync orders luôn trả về 0 đơn / error 106001 "sign invalid"
+
+**Quá trình debug:**
+
+1. **Lỗi đầu tiên — Time window quá lớn**
+   - TikTok API giới hạn tối đa 15 ngày/query, query lớn hơn trả về empty silently
+   - Fix: chia thành 6 cửa sổ × 15 ngày = 90 ngày
+
+2. **Lỗi thứ hai — Sai endpoint**
+   - Đang dùng `GET /order/202309/orders` (cũ) → bị block 106001
+   - TikTok có endpoint mới: `POST /order/202309/orders/search`
+   - Phát hiện qua API Testing Tool trong Partner Center → cURL cho thấy endpoint mới
+
+3. **Lỗi thứ ba — Sign algorithm sai (bug chính)**
+   - Code cũ: exclude cả `shop_cipher` khỏi sign (sai)
+   - Code cũ: đưa body params vào URL params riêng lẻ để sign (sai)
+   - Đọc docs chính thức tại `partner.tiktokshop.com/docv2/page/678e3a45786253031531b942`
+   - Fix: chỉ exclude `sign` và `access_token`, `shop_cipher` PHẢI include; body append dưới dạng raw JSON string
+
+4. **Lỗi thứ tư — `page_size` sai chỗ**
+   - `page_size` phải là URL query param, không phải body
+   - Error mới: `36009004 "PageSize is a required field"` → xác nhận sign đúng, chỉ cần di chuyển `page_size`
+
+5. **Kết quả:** 900 đơn sync thành công, orders có ID bắt đầu bằng `58` ✅
+
+**Commits liên quan:**
+- `2a0c9bd` — Switch to POST /orders/search endpoint
+- `7df13c1` — Include body params in sign (attempt, still wrong)
+- `c2fe150` — Correct sign: include shop_cipher, append raw JSON body ✅
+- `a9acee8` — Move page_size to URL query param ✅
+- `0dc250d` — Increase MAX_PAGES from 3 to 50 per window
+
+**Bài học:**
+- TikTok 106001 có thể là sign sai THẬT (không phải lúc nào cũng do app chưa duyệt)
+- API Testing Tool trong Partner Center bypass sign → dùng để test endpoint, không để test sign
+- Với POST JSON request: body params KHÔNG nằm trong URL, nhưng raw JSON string phải append vào sign base string
+- `page_size`, `page_token`, `sort_field`, `sort_order` là URL query params; time filters là body params
