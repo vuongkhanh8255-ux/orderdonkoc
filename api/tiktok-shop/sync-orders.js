@@ -135,13 +135,13 @@ export default async function handler(req, res) {
     try {
       const allOrders = [];
       let firstWindowDebug = null;
-      const MAX_PAGES = 3;
+      const MAX_PAGES_PER_WINDOW = 50; // 50 pages × 50 orders = 2500 max per window
 
       for (const { createTimeGe, createTimeLt } of timeWindows) {
         let pageToken = undefined;
         let page = 0;
 
-        while (page < MAX_PAGES) {
+        while (page < MAX_PAGES_PER_WINDOW) {
           const resp = await searchOrders({
             appKey, appSecret,
             accessToken: conn.access_token,
@@ -166,7 +166,7 @@ export default async function handler(req, res) {
           allOrders.push(...orders);
 
           const nextToken = resp?.data?.next_page_token;
-          if (!nextToken || orders.length === 0) break;
+          if (!nextToken || orders.length === 0) break; // no more pages
           pageToken = nextToken;
           page++;
         }
