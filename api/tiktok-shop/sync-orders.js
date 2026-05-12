@@ -119,10 +119,10 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, totalSynced: 0, message: 'No active TikTok Shop connections found.' });
   }
 
-  // 6 × 15-day windows = last 90 days
+  // 4 × 15-day windows = last 60 days (2 months)
   const now = Math.floor(Date.now() / 1000);
   const WINDOW_SEC = 15 * 24 * 3600;
-  const timeWindows = Array.from({ length: 6 }, (_, i) => ({
+  const timeWindows = Array.from({ length: 4 }, (_, i) => ({
     createTimeLt: now - i * WINDOW_SEC,
     createTimeGe: now - (i + 1) * WINDOW_SEC,
   }));
@@ -135,7 +135,7 @@ export default async function handler(req, res) {
     try {
       const allOrders = [];
       let firstWindowDebug = null;
-      const MAX_PAGES_PER_WINDOW = 50; // 50 pages × 50 orders = 2500 max per window
+      const MAX_PAGES_PER_WINDOW = 300; // 300 pages × 50 orders = 15,000 max per window (covers 1000 orders/day × 15 days)
 
       for (const { createTimeGe, createTimeLt } of timeWindows) {
         let pageToken = undefined;
