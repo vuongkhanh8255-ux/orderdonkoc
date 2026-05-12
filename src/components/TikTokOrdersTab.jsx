@@ -2,7 +2,7 @@
 // Hiển thị đơn hàng thực tế từ TikTok Shop API
 // Dữ liệu được sync qua /api/tiktok-shop/sync-orders và lưu vào Supabase
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 
 // ── Mapping trạng thái ────────────────────────────────────────────────────────
@@ -50,55 +50,154 @@ const formatAmount = (amount, currency) => {
 };
 
 const ALL_STATUSES = Object.keys(STATUS_LABELS);
+const PAGE_SIZE = 50;
+
+// ── Pagination bar ────────────────────────────────────────────────────────────
+const Pagination = ({ page, totalPages, onChange }) => {
+  if (totalPages <= 1) return null;
+
+  const pages = [];
+  const delta = 2;
+  const left  = page - delta;
+  const right = page + delta;
+
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || (i >= left && i <= right)) {
+      pages.push(i);
+    } else if (pages[pages.length - 1] !== '...') {
+      pages.push('...');
+    }
+  }
+
+  const btn = (label, target, disabled = false, active = false) => (
+    <button
+      key={label}
+      onClick={() => !disabled && target && onChange(target)}
+      disabled={disabled}
+      style={{
+        padding: '6px 11px', borderRadius: 7, border: '1.5px solid',
+        borderColor: active ? '#ea580c' : '#e5e7eb',
+        background: active ? '#ea580c' : '#fff',
+        color: active ? '#fff' : disabled ? '#d1d5db' : '#374151',
+        fontWeight: active ? 700 : 500, fontSize: '0.82rem',
+        cursor: disabled ? 'default' : 'pointer',
+        minWidth: 34, fontFamily: 'inherit',
+      }}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div style={{ display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', padding: '14px 16px' }}>
+      {btn('‹', page - 1, page === 1)}
+      {pages.map((p, i) =>
+        p === '...'
+          ? <span key={`dots-${i}`} style={{ padding: '6px 4px', color: '#9ca3af', fontSize: '0.82rem' }}>…</span>
+          : btn(p, p, false, p === page)
+      )}
+      {btn('›', page + 1, page === totalPages)}
+    </div>
+  );
+};
 
 // ── Component ─────────────────────────────────────────────────────────────────
 const TikTokOrdersTab = () => {
-  const [orders,      setOrders]      = useState([]);
-  const [connections, setConnections] = useState([]);
-  const [loading,     setLoading]     = useState(false);
-  const [syncing,     setSyncing]     = useState(false);
-  const [syncResult,  setSyncResult]  = useState(null);
-  const [search,      setSearch]      = useState('');
+  const [orders,       setOrders]       = useState([]);
+  const [connections,  setConnections]  = useState([]);
+  const [loading,      setLoading]      = useState(false);
+  const [syncing,      setSyncing]      = useState(false);
+  const [syncResult,   setSyncResult]   = useState(null);
+  const [search,       setSearch]       = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [expanded,    setExpanded]    = useState(null); // order id
+  const [expanded,     setExpanded]     = useState(null);
+  const [page,         setPage]         = useState(1);
+  const [totalCount,   setTotalCount]   = useState(0);
+  const [stats,        setStats]        = useState({ total: 0, completed: 0, shipping: 0, cancelled: 0 });
 
-  // ── Fetch from Supabase ───────────────────────────────────────────────────
-  const fetchData = useCallback(async () => {
+  const searchDebounce = useRef(null);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  // Debounce search input 350ms
+  useEffect(() => {
+    clearTimeout(searchDebounce.current);
+    searchDebounce.current = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 350);
+    return () => clearTimeout(searchDebounce.current);
+  }, [search]);
+
+  // Reset page khi đổi filter
+  useEffect(() => { setPage(1); }, [statusFilter]);
+
+  // ── Fetch stats (4 count queries song song) ───────────────────────────────
+  const fetchStats = useCallback(async () => {
+    const [all, completed, shipping, cancelled] = await Promise.all([
+      supabase.from('tiktok_shop_orders').select('*', { count: 'exact', head: true }),
+      supabase.from('tiktok_shop_orders').select('*', { count: 'exact', head: true }).eq('order_status', 'COMPLETED'),
+      supabase.from('tiktok_shop_orders').select('*', { count: 'exact', head: true })
+        .in('order_status', ['IN_TRANSIT', 'AWAITING_SHIPMENT', 'AWAITING_COLLECTION', 'PARTIALLY_SHIPPING']),
+      supabase.from('tiktok_shop_orders').select('*', { count: 'exact', head: true }).eq('order_status', 'CANCELLED'),
+    ]);
+    setStats({
+      total:     all.count     || 0,
+      completed: completed.count || 0,
+      shipping:  shipping.count  || 0,
+      cancelled: cancelled.count || 0,
+    });
+  }, []);
+
+  // ── Fetch connections ─────────────────────────────────────────────────────
+  const fetchConnections = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('tiktok_shop_connections')
+      .select('shop_id,seller_name,seller_base_region,access_token_expires_at,refresh_token_expires_at');
+    if (error) { console.error('fetchConnections error:', error); return; }
+    if (data) setConnections(data);
+  }, []);
+
+  // ── Fetch 1 page of orders (server-side filter) ───────────────────────────
+  const fetchOrders = useCallback(async (pg, searchTerm, statusF) => {
     setLoading(true);
-    try {
-      // Supabase mặc định giới hạn 1000 rows/query → dùng range pagination
-      const PAGE = 1000;
-      let allOrders = [];
-      let from = 0;
-      while (true) {
-        const { data, error } = await supabase
-          .from('tiktok_shop_orders')
-          .select('id,shop_id,open_id,order_status,create_time,update_time,total_amount,currency,line_items,synced_at')
-          .order('create_time', { ascending: false })
-          .range(from, from + PAGE - 1);
-        if (error) { console.error('fetchData page error:', error); break; }
-        if (!data?.length) break;
-        allOrders = [...allOrders, ...data];
-        if (data.length < PAGE) break; // last page
-        from += PAGE;
-      }
-      setOrders(allOrders);
+    const from = (pg - 1) * PAGE_SIZE;
+    const to   = from + PAGE_SIZE - 1;
 
-      const connRes = await supabase
-        .from('tiktok_shop_connections')
-        .select('shop_id,seller_name,seller_base_region,access_token_expires_at,refresh_token_expires_at');
-      if (connRes.error) {
-        console.error('fetchConnections error:', connRes.error);
-      } else if (connRes.data) {
-        setConnections(connRes.data);
-      }
-    } catch (err) {
-      console.error('TikTokOrdersTab fetchData error:', err);
+    let q = supabase
+      .from('tiktok_shop_orders')
+      .select('id,shop_id,open_id,order_status,create_time,update_time,total_amount,currency,line_items,synced_at', { count: 'exact' })
+      .order('create_time', { ascending: false })
+      .range(from, to);
+
+    if (statusF)            q = q.eq('order_status', statusF);
+    if (searchTerm.trim())  q = q.or(`id.ilike.%${searchTerm.trim()}%,shop_id.ilike.%${searchTerm.trim()}%`);
+
+    const { data, error, count } = await q;
+    if (error) { console.error('fetchOrders error:', error); }
+    else {
+      setOrders(data || []);
+      setTotalCount(count || 0);
     }
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  // ── Initial load ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    fetchConnections();
+    fetchStats();
+  }, [fetchConnections, fetchStats]);
+
+  // ── Re-fetch orders when page / filter / search changes ───────────────────
+  useEffect(() => {
+    fetchOrders(page, debouncedSearch, statusFilter);
+  }, [page, debouncedSearch, statusFilter, fetchOrders]);
+
+  // ── Reload all ───────────────────────────────────────────────────────────
+  const reloadAll = () => {
+    fetchConnections();
+    fetchStats();
+    fetchOrders(page, debouncedSearch, statusFilter);
+  };
 
   // ── Sync orders from TikTok API ───────────────────────────────────────────
   const doSync = async () => {
@@ -115,7 +214,7 @@ const TikTokOrdersTab = () => {
           : { error: `Server lỗi (${res.status}): ${text.slice(0, 120)}` };
       }
       setSyncResult(data);
-      if (data.success) fetchData();
+      if (data.success) { fetchStats(); fetchOrders(1, debouncedSearch, statusFilter); setPage(1); }
     } catch (err) {
       setSyncResult({ error: err.message });
     }
@@ -127,8 +226,7 @@ const TikTokOrdersTab = () => {
     setSyncing(true);
     setSyncResult(null);
 
-    // Tính số windows giống backend (FROM_TS = 01/04/2026 UTC = 1775001600, 15 ngày/window)
-    const FROM_TS    = 1775001600;
+    const FROM_TS    = 1775001600; // 01/04/2026 UTC
     const WINDOW_SEC = 15 * 24 * 3600;
     const nowSec     = Math.floor(Date.now() / 1000);
     const numWindows = Math.ceil((nowSec - FROM_TS) / WINDOW_SEC);
@@ -161,30 +259,15 @@ const TikTokOrdersTab = () => {
 
     if (!hadError) {
       setSyncResult({ success: true, totalSynced, results: allResults, syncedAt: lastSyncedAt });
-      fetchData();
+      fetchStats();
+      fetchOrders(1, debouncedSearch, statusFilter);
+      setPage(1);
     }
     setSyncing(false);
   };
 
   const syncOrders = () => doSync();
-
-  // ── Filtered rows ─────────────────────────────────────────────────────────
-  const filtered = orders.filter(o => {
-    const term = search.trim().toLowerCase();
-    const matchSearch = !term
-      || (o.id || '').toLowerCase().includes(term)
-      || (o.shop_id || '').toLowerCase().includes(term);
-    const matchStatus = !statusFilter || o.order_status === statusFilter;
-    return matchSearch && matchStatus;
-  });
-
-  // ── Stats ─────────────────────────────────────────────────────────────────
-  const stats = {
-    total:     orders.length,
-    completed: orders.filter(o => o.order_status === 'COMPLETED').length,
-    shipping:  orders.filter(o => ['IN_TRANSIT','AWAITING_SHIPMENT','AWAITING_COLLECTION','PARTIALLY_SHIPPING'].includes(o.order_status)).length,
-    cancelled: orders.filter(o => o.order_status === 'CANCELLED').length,
-  };
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -200,12 +283,12 @@ const TikTokOrdersTab = () => {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
-          <button onClick={fetchData} disabled={loading}
+          <button onClick={reloadAll} disabled={loading}
             style={{ padding: '9px 16px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}>
             {loading ? '⏳' : '↺'} Tải lại
           </button>
           <button onClick={fullResync} disabled={syncing}
-            title="Kéo lại toàn bộ 60 ngày — dùng khi cần lấy dữ liệu lịch sử"
+            title="Kéo lại toàn bộ từ 01/04/2026 — dùng khi cần lấy dữ liệu lịch sử"
             style={{
               padding: '9px 18px', borderRadius: 8, border: '1.5px solid #ea580c',
               background: '#fff7ed', color: '#ea580c', fontWeight: 700,
@@ -231,19 +314,26 @@ const TikTokOrdersTab = () => {
       {connections.length > 0 && (
         <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
           {connections.map(conn => {
-            const expiry = conn.access_token_expires_at ? new Date(conn.access_token_expires_at) : null;
+            const expiry  = conn.access_token_expires_at ? new Date(conn.access_token_expires_at) : null;
             const expired = expiry && expiry < new Date();
+            const soonExp = expiry && !expired && (expiry - Date.now()) < 7 * 24 * 3600 * 1000;
             return (
               <div key={conn.shop_id} style={{
-                background: '#fff', border: `1px solid ${expired ? '#fca5a5' : '#e5e7eb'}`,
+                background: '#fff',
+                border: `1px solid ${expired ? '#fca5a5' : soonExp ? '#fde68a' : '#e5e7eb'}`,
                 borderRadius: 10, padding: '10px 16px', fontSize: '0.82rem', minWidth: 180,
               }}>
                 <div style={{ fontWeight: 700, color: '#111827', marginBottom: 2 }}>🏪 {conn.seller_name || conn.shop_id}</div>
                 {conn.seller_base_region && (
                   <div style={{ fontSize: '0.72rem', color: '#9ca3af' }}>📍 {conn.seller_base_region}</div>
                 )}
-                <div style={{ fontSize: '0.72rem', color: expired ? '#dc2626' : '#64748b', marginTop: 3 }}>
-                  {expired ? '⚠️ Token đã hết hạn' : `Token hết hạn: ${expiry ? expiry.toLocaleDateString('vi-VN') : '—'}`}
+                <div style={{ fontSize: '0.72rem', marginTop: 3,
+                  color: expired ? '#dc2626' : soonExp ? '#b45309' : '#64748b' }}>
+                  {expired
+                    ? '⚠️ Token đã hết hạn'
+                    : soonExp
+                      ? `⚡ Hết hạn ${expiry.toLocaleDateString('vi-VN')} (sắp hết)`
+                      : `Token hết hạn: ${expiry ? expiry.toLocaleDateString('vi-VN') : '—'}`}
                 </div>
               </div>
             );
@@ -274,19 +364,10 @@ const TikTokOrdersTab = () => {
                 : `✅ Sync thành công — ${syncResult.totalSynced} đơn hàng được cập nhật`}
           </div>
           {syncResult.results && (
-            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
               {syncResult.results.map((r, i) => (
-                <div key={i}>
-                  <div style={{ fontSize: '0.8rem', color: r.error ? '#dc2626' : '#166534' }}>
-                    {r.shop}: {r.error ? `Lỗi — ${r.error}` : r.note || `${r.synced} đơn`}
-                  </div>
-                  {r.first_window_debug && (
-                    <div style={{ marginTop: 4, padding: '8px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: '0.72rem', fontFamily: 'monospace', color: '#374151', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                      <div><b>API code:</b> {r.first_window_debug.code} | <b>message:</b> {r.first_window_debug.message}</div>
-                      <div><b>data keys:</b> {(r.first_window_debug.data_keys || []).join(', ') || '(none)'}</div>
-                      <div style={{ marginTop: 4 }}><b>raw:</b> {r.first_window_debug.raw}</div>
-                    </div>
-                  )}
+                <div key={i} style={{ fontSize: '0.8rem', color: r.error ? '#dc2626' : '#166534' }}>
+                  {r.shop}: {r.error ? `Lỗi — ${r.error}` : r.note || `${r.synced} đơn`}
                 </div>
               ))}
             </div>
@@ -300,31 +381,31 @@ const TikTokOrdersTab = () => {
       )}
 
       {/* ── Stats Cards ── */}
-      {orders.length > 0 && (
-        <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-          {[
-            { label: 'Tổng đơn',     value: stats.total,     color: '#ea580c', icon: '🛒' },
-            { label: 'Hoàn thành',   value: stats.completed, color: '#16a34a', icon: '✅' },
-            { label: 'Đang giao',    value: stats.shipping,  color: '#2563eb', icon: '🚚' },
-            { label: 'Đã hủy',      value: stats.cancelled, color: '#dc2626', icon: '❌' },
-          ].map(stat => (
-            <div key={stat.label} style={{
-              background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12,
-              padding: '14px 20px', minWidth: 110, flex: 1,
-              boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
-            }}>
-              <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: 4 }}>{stat.icon} {stat.label}</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: stat.color }}>{stat.value}</div>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+        {[
+          { label: 'Tổng đơn',   value: stats.total,     color: '#ea580c', icon: '🛒' },
+          { label: 'Hoàn thành', value: stats.completed, color: '#16a34a', icon: '✅' },
+          { label: 'Đang giao',  value: stats.shipping,  color: '#2563eb', icon: '🚚' },
+          { label: 'Đã hủy',    value: stats.cancelled, color: '#dc2626', icon: '❌' },
+        ].map(stat => (
+          <div key={stat.label} style={{
+            background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12,
+            padding: '14px 20px', minWidth: 110, flex: 1,
+            boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
+          }}>
+            <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: 4 }}>{stat.icon} {stat.label}</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: stat.color }}>
+              {stat.value.toLocaleString('vi-VN')}
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        ))}
+      </div>
 
       {/* ── Filters ── */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
         <input
           type="text"
-          placeholder="🔍 Tìm Order ID, Shop ID..."
+          placeholder="🔍 Tìm Order ID..."
           value={search}
           onChange={e => setSearch(e.target.value)}
           style={{
@@ -346,7 +427,9 @@ const TikTokOrdersTab = () => {
           ))}
         </select>
         <div style={{ marginLeft: 'auto', fontSize: '0.82rem', color: '#64748b', whiteSpace: 'nowrap' }}>
-          Hiển thị <strong>{filtered.length}</strong> / {orders.length} đơn
+          {totalCount > 0
+            ? <>Trang <strong>{page}</strong>/{totalPages} — <strong>{totalCount.toLocaleString('vi-VN')}</strong> đơn</>
+            : 'Không có đơn nào'}
         </div>
       </div>
 
@@ -367,24 +450,24 @@ const TikTokOrdersTab = () => {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={6} style={{ padding: 40, textAlign: 'center', color: '#9ca3af' }}>⏳ Đang tải dữ liệu...</td>
+                  <td colSpan={6} style={{ padding: 40, textAlign: 'center', color: '#9ca3af' }}>⏳ Đang tải...</td>
                 </tr>
               )}
-              {!loading && filtered.length === 0 && (
+              {!loading && orders.length === 0 && (
                 <tr>
                   <td colSpan={6} style={{ padding: 48, textAlign: 'center', color: '#9ca3af' }}>
-                    {orders.length === 0
+                    {stats.total === 0
                       ? <div>
                           <div style={{ fontSize: '2rem', marginBottom: 8 }}>📭</div>
                           <div style={{ fontWeight: 600, marginBottom: 4 }}>Chưa có đơn hàng nào</div>
-                          <div style={{ fontSize: '0.82rem' }}>Nhấn <strong>Sync Orders</strong> để lấy dữ liệu từ TikTok Shop API.</div>
+                          <div style={{ fontSize: '0.82rem' }}>Nhấn <strong>Sync Orders</strong> để lấy dữ liệu từ TikTok Shop.</div>
                         </div>
                       : 'Không tìm thấy đơn phù hợp với bộ lọc.'
                     }
                   </td>
                 </tr>
               )}
-              {!loading && filtered.map((order, idx) => {
+              {!loading && orders.map((order, idx) => {
                 const sc = getStatusStyle(order.order_status);
                 const isExpanded = expanded === order.id;
                 const items = Array.isArray(order.line_items) ? order.line_items : [];
@@ -396,36 +479,26 @@ const TikTokOrdersTab = () => {
                       style={{
                         borderBottom: '1px solid #f1f5f9',
                         background: isExpanded ? '#fff7ed' : idx % 2 === 0 ? '#fff' : '#fafafa',
-                        cursor: 'pointer',
-                        transition: 'background 0.15s',
+                        cursor: 'pointer', transition: 'background 0.15s',
                       }}
                     >
-                      {/* Order ID */}
                       <td style={{ padding: '12px 16px', fontFamily: 'ui-monospace, monospace', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', fontSize: '0.82rem' }}>
                         {order.id}
                       </td>
-                      {/* Status */}
                       <td style={{ padding: '12px 16px' }}>
-                        <span style={{
-                          padding: '3px 10px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 700,
-                          background: sc.bg, color: sc.text,
-                        }}>
+                        <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 700, background: sc.bg, color: sc.text }}>
                           {STATUS_LABELS[order.order_status] || order.order_status || '—'}
                         </span>
                       </td>
-                      {/* Shop */}
                       <td style={{ padding: '12px 16px', color: '#64748b', fontSize: '0.8rem' }}>
                         {connections.find(c => c.shop_id === order.shop_id)?.seller_name || order.shop_id || '—'}
                       </td>
-                      {/* Date */}
                       <td style={{ padding: '12px 16px', color: '#64748b', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
                         {formatDate(order.create_time)}
                       </td>
-                      {/* Amount */}
                       <td style={{ padding: '12px 16px', fontWeight: 700, color: '#111827', textAlign: 'right', whiteSpace: 'nowrap' }}>
                         {formatAmount(order.total_amount, order.currency)}
                       </td>
-                      {/* Items preview */}
                       <td style={{ padding: '12px 16px', color: '#64748b', fontSize: '0.78rem', maxWidth: 220 }}>
                         {items.length === 0
                           ? <span style={{ color: '#d1d5db' }}>—</span>
@@ -438,7 +511,6 @@ const TikTokOrdersTab = () => {
                         {items.length > 2 && <div style={{ color: '#9ca3af', fontSize: '0.72rem' }}>+{items.length - 2} sản phẩm khác</div>}
                       </td>
                     </tr>
-                    {/* Expanded row with all items */}
                     {isExpanded && (
                       <tr key={`${order.id}-detail`} style={{ background: '#fffbf5' }}>
                         <td colSpan={6} style={{ padding: '0 16px 14px 16px' }}>
@@ -480,9 +552,11 @@ const TikTokOrdersTab = () => {
             </tbody>
           </table>
         </div>
+
+        {/* ── Pagination ── */}
+        <Pagination page={page} totalPages={totalPages} onChange={p => { setPage(p); setExpanded(null); }} />
       </div>
 
-      {/* Bottom note */}
       <div style={{ marginTop: 14, fontSize: '0.75rem', color: '#9ca3af', textAlign: 'right' }}>
         Order ID từ TikTok Shop thường bắt đầu bằng 57 hoặc 58. Dữ liệu được lưu trong Supabase bảng <code>tiktok_shop_orders</code>.
       </div>
