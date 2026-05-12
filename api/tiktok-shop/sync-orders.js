@@ -4,8 +4,9 @@
  * Vercel serverless function — POST /api/tiktok-shop/sync-orders
  *
  * 1. Reads all active connections from tiktok_shop_connections
- * 2. For each connection, calls TikTok Shop Order List API (last 30 days)
- * 3. Fetches order details in batches
+ * 2. For each connection, queries TikTok Order List API in 15-day windows
+ *    (TikTok max window = 15 days per query — larger windows return empty silently)
+ * 3. Fetches order details in batches of 50
  * 4. Upserts into tiktok_shop_orders table
  * 5. Returns sync summary
  */
@@ -34,7 +35,7 @@ const buildUrl = (appKey, appSecret, path, extraParams = {}) => {
   return `${TIKTOK_BASE}${path}?${new URLSearchParams(params).toString()}`;
 };
 
-// ── Get order list (returns array of { order_id } objects) ───────────────────
+// ── Get order list for a specific time window ────────────────────────────────
 const fetchOrderIds = async ({ appKey, appSecret, accessToken, shopCipher, createTimeGe, createTimeLt, pageToken }) => {
   const path = '/order/202309/orders';
   const extra = {
@@ -150,9 +151,20 @@ export default async function handler(req, res) {
     });
   }
 
-  // Sync window: last 180 days
+  // ── Build 15-day time windows (TikTok max window per query = 15 days) ────────
+  // Query last 90 days split into 6 windows of 15 days each
   const now = Math.floor(Date.now() / 1000);
-  const createTimeGe = now - 180 * 24 * 3600;
+  const WINDOW_DAYS = 15;
+  const WINDOW_SEC  = WINDOW_DAYS * 24 * 3600;
+  const NUM_WINDOWS = 6; // 6 × 15 = 90 days total
+
+  const timeWindows = [];
+  for (let i = 0; i < NUM_WINDOWS; i++) {
+    timeWindows.push({
+      createTimeLt: now - i * WINDOW_SEC,
+      createTimeGe: now - (i + 1) * WINDOW_SEC,
+    });
+  }
 
   const results = [];
   let totalSynced = 0;
@@ -160,54 +172,65 @@ export default async function handler(req, res) {
   for (const conn of connections) {
     const shopLabel = conn.seller_name || conn.shop_id || '(unknown)';
     try {
-      // Step 1: Collect all order IDs (paginated)
+      // Step 1: Collect all order IDs across all time windows (paginated)
       const allOrderIds = [];
-      let pageToken = undefined;
-      let page = 0;
-      const MAX_PAGES = 5; // max 250 orders per sync
+      const windowDebug = [];
+      const MAX_PAGES_PER_WINDOW = 3; // max 150 orders per 15-day window
 
-      while (page < MAX_PAGES) {
-        const listResp = await fetchOrderIds({
-          appKey, appSecret,
-          accessToken: conn.access_token,
-          shopCipher: conn.shop_cipher,
-          createTimeGe,
-          createTimeLt: now,
-          pageToken,
-        });
+      for (const { createTimeGe, createTimeLt } of timeWindows) {
+        let pageToken = undefined;
+        let page = 0;
+        let windowIds = 0;
 
-        const orderList = listResp?.data?.order_list || listResp?.data?.orders || [];
-        const ids = orderList.map(o => String(o.order_id || o.id)).filter(Boolean);
-        allOrderIds.push(...ids);
+        while (page < MAX_PAGES_PER_WINDOW) {
+          const listResp = await fetchOrderIds({
+            appKey, appSecret,
+            accessToken: conn.access_token,
+            shopCipher: conn.shop_cipher,
+            createTimeGe,
+            createTimeLt,
+            pageToken,
+          });
 
-        const nextToken = listResp?.data?.next_page_token || listResp?.data?.cursor;
-        if (!nextToken || ids.length === 0) break;
-        pageToken = nextToken;
-        page++;
+          // Capture debug info from first window's first page
+          if (allOrderIds.length === 0 && page === 0 && windowDebug.length === 0) {
+            windowDebug.push({
+              window: `${new Date(createTimeGe * 1000).toISOString().slice(0, 10)} → ${new Date(createTimeLt * 1000).toISOString().slice(0, 10)}`,
+              code: listResp?.code,
+              message: listResp?.message,
+              data_keys: Object.keys(listResp?.data || {}),
+              raw: JSON.stringify(listResp).slice(0, 600),
+            });
+          }
+
+          const orderList = listResp?.data?.order_list || listResp?.data?.orders || [];
+          const ids = orderList.map(o => String(o.order_id || o.id)).filter(Boolean);
+          allOrderIds.push(...ids);
+          windowIds += ids.length;
+
+          const nextToken = listResp?.data?.next_page_token || listResp?.data?.cursor;
+          if (!nextToken || ids.length === 0) break;
+          pageToken = nextToken;
+          page++;
+        }
       }
 
       if (allOrderIds.length === 0) {
-        // Capture raw response for debugging
-        const debugResp = await fetchOrderIds({
-          appKey, appSecret,
-          accessToken: conn.access_token,
-          shopCipher: conn.shop_cipher,
-          createTimeGe,
-          createTimeLt: now,
-        });
         results.push({
           shop: shopLabel,
           synced: 0,
-          note: 'No orders in sync window',
-          api_code: debugResp?.code,
-          api_message: debugResp?.message,
-          api_debug: JSON.stringify(debugResp).slice(0, 500),
+          note: 'No orders found across last 90 days (6 × 15-day windows)',
+          windows_checked: timeWindows.length,
+          first_window_debug: windowDebug[0] || null,
         });
         continue;
       }
 
+      // Deduplicate (in case same order appears in overlapping windows)
+      const uniqueOrderIds = [...new Set(allOrderIds)];
+
       // Step 2: Fetch details in batches of 50
-      const orderBatches = chunk(allOrderIds, 50);
+      const orderBatches = chunk(uniqueOrderIds, 50);
       const allOrders = [];
 
       for (const batch of orderBatches) {
@@ -222,7 +245,7 @@ export default async function handler(req, res) {
       }
 
       if (allOrders.length === 0) {
-        results.push({ shop: shopLabel, synced: 0, note: 'Order IDs found but detail fetch returned empty' });
+        results.push({ shop: shopLabel, synced: 0, note: `${uniqueOrderIds.length} order IDs found but detail fetch returned empty` });
         continue;
       }
 
@@ -238,7 +261,7 @@ export default async function handler(req, res) {
 
         if (upsertErr) throw new Error(upsertErr.message);
         totalSynced += records.length;
-        results.push({ shop: shopLabel, synced: records.length });
+        results.push({ shop: shopLabel, synced: records.length, order_ids_found: uniqueOrderIds.length });
       }
 
     } catch (err) {
