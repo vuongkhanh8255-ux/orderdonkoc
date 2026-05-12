@@ -124,8 +124,8 @@ const TikTokOrdersTab = () => {
     setSyncing(true);
     setSyncResult(null);
 
-    // Tính số windows giống backend (FROM_TS = 01/04/2026, 15 ngày/window)
-    const FROM_TS    = 1743465600;
+    // Tính số windows giống backend (FROM_TS = 01/04/2026 UTC = 1775001600, 15 ngày/window)
+    const FROM_TS    = 1775001600;
     const WINDOW_SEC = 15 * 24 * 3600;
     const nowSec     = Math.floor(Date.now() / 1000);
     const numWindows = Math.ceil((nowSec - FROM_TS) / WINDOW_SEC);

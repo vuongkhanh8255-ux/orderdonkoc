@@ -139,7 +139,7 @@ export default async function handler(req, res) {
       if (forceFullSync) {
         // ── Full resync: từ 01/04/2026 đến nay ──
         syncMode = 'full';
-        const FROM_TS = 1743465600; // 01/04/2026 00:00:00 UTC
+        const FROM_TS = 1775001600; // 01/04/2026 00:00:00 UTC
         const rangeSize   = now - FROM_TS;
         const numWindows  = Math.ceil(rangeSize / WINDOW_SEC);
         const allWindows  = Array.from({ length: numWindows }, (_, i) => ({
@@ -263,7 +263,7 @@ export default async function handler(req, res) {
     }
   }
 
-  const FROM_TS_RESP = 1743465600;
+  const FROM_TS_RESP = 1775001600;
   const totalWindows = Math.ceil((now - FROM_TS_RESP) / WINDOW_SEC);
   return res.status(200).json({ success: true, totalSynced, connections: connections.length, results, syncedAt: new Date().toISOString(), totalWindows });
 }
