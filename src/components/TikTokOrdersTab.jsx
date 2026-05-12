@@ -66,19 +66,29 @@ const TikTokOrdersTab = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [ordersRes, connRes] = await Promise.all([
-        supabase
+      // Supabase mặc định giới hạn 1000 rows/query → dùng range pagination
+      const PAGE = 1000;
+      let allOrders = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase
           .from('tiktok_shop_orders')
           .select('id,shop_id,open_id,order_status,create_time,update_time,total_amount,currency,line_items,synced_at')
           .order('create_time', { ascending: false })
-          .limit(50000),
-        supabase
-          .from('tiktok_shop_connections')
-          .select('shop_id,seller_name,seller_base_region,access_token_expires_at')
-          .order('updated_at', { ascending: false }),
-      ]);
-      if (ordersRes.data) setOrders(ordersRes.data);
-      if (connRes.data)   setConnections(connRes.data);
+          .range(from, from + PAGE - 1);
+        if (error) { console.error('fetchData page error:', error); break; }
+        if (!data?.length) break;
+        allOrders = [...allOrders, ...data];
+        if (data.length < PAGE) break; // last page
+        from += PAGE;
+      }
+      setOrders(allOrders);
+
+      const connRes = await supabase
+        .from('tiktok_shop_connections')
+        .select('shop_id,seller_name,seller_base_region,access_token_expires_at')
+        .order('updated_at', { ascending: false });
+      if (connRes.data) setConnections(connRes.data);
     } catch (err) {
       console.error('TikTokOrdersTab fetchData error:', err);
     }

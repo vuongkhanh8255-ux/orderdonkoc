@@ -233,10 +233,14 @@ export default async function handler(req, res) {
       const records = uniqueOrders.map(o => normalizeOrder(o, conn)).filter(r => r.id);
 
       if (records.length > 0) {
-        const { error: upsertErr } = await supabase
-          .from('tiktok_shop_orders')
-          .upsert(records, { onConflict: 'id' });
-        if (upsertErr) throw new Error(upsertErr.message);
+        // Batch upsert 500 rows mỗi lần để tránh payload quá lớn
+        const BATCH = 500;
+        for (let i = 0; i < records.length; i += BATCH) {
+          const { error: upsertErr } = await supabase
+            .from('tiktok_shop_orders')
+            .upsert(records.slice(i, i + BATCH), { onConflict: 'id' });
+          if (upsertErr) throw new Error(upsertErr.message);
+        }
         totalSynced += records.length;
         results.push({ shop: shopLabel, synced: records.length, total_found: uniqueOrders.length, mode: syncMode });
       }
