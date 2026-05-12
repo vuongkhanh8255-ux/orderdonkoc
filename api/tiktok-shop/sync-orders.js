@@ -17,38 +17,42 @@ import { createClient } from '@supabase/supabase-js';
 const TIKTOK_BASE = 'https://open-api.tiktokglobalshop.com';
 
 // ── TikTok Shop API Signature ─────────────────────────────────────────────────
-// Algorithm: HMAC-SHA256( appSecret, appSecret + path + sorted_param_concat + appSecret )
+// Algorithm: HMAC-SHA256(key=appSecret, msg=appSecret + path + sorted_param_concat + appSecret)
 // Exclude: 'sign', 'access_token', 'shop_cipher' from signing (per TikTok docs)
-const buildSign = (appSecret, path, params) => {
+const buildSign = (appSecret, path, params, debug = false) => {
   const keys = Object.keys(params)
     .filter(k => k !== 'sign' && k !== 'access_token' && k !== 'shop_cipher')
     .sort();
   const paramStr = keys.map(k => `${k}${params[k]}`).join('');
   const base = `${appSecret}${path}${paramStr}${appSecret}`;
+  if (debug) {
+    console.log('[sign-debug] keys_signed:', keys.join(','));
+    console.log('[sign-debug] base_string:', base.replace(appSecret, '<secret>').replace(appSecret, '<secret>'));
+  }
   return crypto.createHmac('sha256', appSecret).update(base).digest('hex');
 };
 
-const buildUrl = (appKey, appSecret, path, extraParams = {}) => {
+const buildUrl = (appKey, appSecret, path, extraParams = {}, debug = false) => {
   const ts = String(Math.floor(Date.now() / 1000));
   const params = { app_key: appKey, timestamp: ts, ...extraParams };
-  params.sign = buildSign(appSecret, path, params);
+  params.sign = buildSign(appSecret, path, params, debug);
   return `${TIKTOK_BASE}${path}?${new URLSearchParams(params).toString()}`;
 };
 
 // ── Get order list for a specific time window ────────────────────────────────
-const fetchOrderIds = async ({ appKey, appSecret, accessToken, shopCipher, createTimeGe, createTimeLt, pageToken }) => {
+const fetchOrderIds = async ({ appKey, appSecret, accessToken, shopCipher, createTimeGe, createTimeLt, pageToken, isFirstCall = false }) => {
   const path = '/order/202309/orders';
+  // Note: sort_field/sort_order removed — fewer params = simpler sign, less chance of error
   const extra = {
     shop_cipher: shopCipher,
     page_size: '50',
-    sort_field: 'CREATE_TIME',
-    sort_order: 'DESC',
     create_time_ge: String(createTimeGe),
     create_time_lt: String(createTimeLt),
   };
   if (pageToken) extra.page_token = pageToken;
 
-  const url = buildUrl(appKey, appSecret, path, extra);
+  const url = buildUrl(appKey, appSecret, path, extra, isFirstCall);
+  if (isFirstCall) console.log('[sync-orders] calling order list URL (partial):', url.split('?')[0], '| params:', Object.keys(extra).join(','));
   const res = await fetch(url, {
     headers: { 'x-tts-access-token': accessToken, 'content-type': 'application/json' }
   });
@@ -190,6 +194,7 @@ export default async function handler(req, res) {
             createTimeGe,
             createTimeLt,
             pageToken,
+            isFirstCall: allOrderIds.length === 0 && page === 0 && windowDebug.length === 0,
           });
 
           // Capture debug info from first window's first page
