@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { AppDataContext } from '../context/AppDataContext';
 import * as XLSX from 'xlsx-js-style';
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
@@ -161,6 +162,8 @@ const AddOptionInline = ({ placeholder, onAdd, onClose }) => {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 const ListedPriceTab = () => {
+  const { brands: ctxBrands = [] } = useContext(AppDataContext) || {};
+
   const [rows, setRows]             = useState(loadRows);
   const [brands, setBrands]         = useState(() => loadArray(BRANDS_KEY, DEFAULT_BRANDS));
   const [promotions, setPromotions] = useState(() => loadArray(PROMOTIONS_KEY, DEFAULT_PROMOTIONS));
@@ -181,6 +184,13 @@ const ListedPriceTab = () => {
   useEffect(() => { localStorage.setItem(STORAGE_KEY,    JSON.stringify(rows));       }, [rows]);
   useEffect(() => { localStorage.setItem(BRANDS_KEY,     JSON.stringify(brands));     }, [brands]);
   useEffect(() => { localStorage.setItem(PROMOTIONS_KEY, JSON.stringify(promotions)); }, [promotions]);
+
+  // Sync brands từ Supabase (AppDataContext) — merge với options đã thêm tay
+  useEffect(() => {
+    if (!ctxBrands?.length) return;
+    const ctxNames = ctxBrands.map(b => b.ten_brand).filter(Boolean);
+    setBrands(prev => [...new Set([...ctxNames, ...prev])]);
+  }, [ctxBrands]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const addBrand     = (v) => { if (!brands.includes(v))     setBrands(p => [...p, v]); };
   const addPromotion = (v) => { if (!promotions.includes(v)) setPromotions(p => [...p, v]); };
