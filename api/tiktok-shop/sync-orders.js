@@ -183,7 +183,10 @@ export default async function handler(req, res) {
 
       const allOrders = [];
       let firstWindowDebug = null;
-      const MAX_PAGES_PER_WINDOW = syncMode === 'incremental' ? 20 : 150;
+      // incremental: 20 pages (vài trăm đơn mới/ngày)
+      // full: 340 pages × 50 orders × 3 windows = 51,000 orders capacity
+      //       340 × 3 windows × ~250ms/call ≈ 255s → fits in 300s timeout
+      const MAX_PAGES_PER_WINDOW = syncMode === 'incremental' ? 20 : 340;
 
       for (const { createTimeGe, createTimeLt } of timeWindows) {
         let pageToken = undefined;
