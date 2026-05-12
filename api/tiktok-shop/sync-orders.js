@@ -31,16 +31,34 @@ const buildUrl = (appKey, appSecret, path, extraParams = {}) => {
 };
 
 // ── POST /order/202309/orders/search — time filters in BODY ──────────────────
+// TikTok sign rule: include ALL params (URL + body) except sign/access_token/shop_cipher
 const searchOrders = async ({ appKey, appSecret, accessToken, shopCipher, createTimeGe, createTimeLt, pageToken }) => {
   const path = '/order/202309/orders/search';
-  const url = buildUrl(appKey, appSecret, path, { shop_cipher: shopCipher });
+  const ts = String(Math.floor(Date.now() / 1000));
 
-  const body = {
+  // Body params
+  const bodyObj = {
     create_time_ge: createTimeGe,
     create_time_lt: createTimeLt,
     page_size: 50,
   };
-  if (pageToken) body.page_token = pageToken;
+  if (pageToken) bodyObj.page_token = pageToken;
+
+  // Sign includes: URL params (app_key, timestamp) + body params (create_time_ge, create_time_lt, page_size, [page_token])
+  // Excluded from sign: shop_cipher, sign, access_token
+  const signParams = {
+    app_key: appKey,
+    timestamp: ts,
+    create_time_ge: String(createTimeGe),
+    create_time_lt: String(createTimeLt),
+    page_size: '50',
+  };
+  if (pageToken) signParams.page_token = pageToken;
+
+  const sign = buildSign(appSecret, path, signParams);
+
+  const urlParams = new URLSearchParams({ app_key: appKey, timestamp: ts, shop_cipher: shopCipher, sign });
+  const url = `${TIKTOK_BASE}${path}?${urlParams.toString()}`;
 
   const res = await fetch(url, {
     method: 'POST',
@@ -48,7 +66,7 @@ const searchOrders = async ({ appKey, appSecret, accessToken, shopCipher, create
       'x-tts-access-token': accessToken,
       'content-type': 'application/json',
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(bodyObj),
   });
   const text = await res.text();
   try { return JSON.parse(text); } catch { return { _raw: text }; }
