@@ -12,7 +12,66 @@
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 
-const TIKTOK_BASE = 'https://open-api.tiktokglobalshop.com';
+const TIKTOK_BASE      = 'https://open-api.tiktokglobalshop.com';
+const TIKTOK_AUTH_BASE = 'https://auth.tiktok-shops.com';
+
+// ── Helper: epoch seconds → ISO string ───────────────────────────────────────
+const toIso = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? new Date(n * 1000).toISOString() : null;
+};
+
+// ── Auto-refresh access token using refresh_token ─────────────────────────────
+// Gọi API TikTok để lấy access_token mới, cập nhật vào Supabase
+const tryRefreshToken = async ({ appKey, appSecret, conn, supabase }) => {
+  if (!conn.refresh_token) return false;
+
+  try {
+    const url = new URL(`${TIKTOK_AUTH_BASE}/api/v2/token/refresh`);
+    url.searchParams.set('app_key',       appKey);
+    url.searchParams.set('app_secret',    appSecret);
+    url.searchParams.set('refresh_token', conn.refresh_token);
+    url.searchParams.set('grant_type',    'refresh_token');
+
+    const res  = await fetch(url.toString());
+    const text = await res.text();
+    let payload;
+    try { payload = JSON.parse(text); } catch { return false; }
+
+    const d = payload?.data;
+    if (payload?.code !== 0 || !d?.access_token) {
+      console.warn(`[sync-orders] token refresh failed: code=${payload?.code} msg=${payload?.message}`);
+      return false;
+    }
+
+    // Cập nhật token mới vào Supabase
+    const { error } = await supabase
+      .from('tiktok_shop_connections')
+      .update({
+        access_token:             d.access_token,
+        refresh_token:            d.refresh_token            || conn.refresh_token,
+        access_token_expires_at:  toIso(d.access_token_expire_in),
+        refresh_token_expires_at: toIso(d.refresh_token_expire_in),
+        updated_at:               new Date().toISOString(),
+      })
+      .eq('shop_id', conn.shop_id);
+
+    if (error) {
+      console.error(`[sync-orders] token refresh save error: ${error.message}`);
+      return false;
+    }
+
+    // Cập nhật object conn để dùng token mới ngay trong lần sync này
+    conn.access_token = d.access_token;
+    if (d.refresh_token) conn.refresh_token = d.refresh_token;
+
+    console.log(`[sync-orders] token refreshed for shop ${conn.shop_id}, new expiry: ${toIso(d.access_token_expire_in)}`);
+    return true;
+  } catch (err) {
+    console.error(`[sync-orders] token refresh exception: ${err.message}`);
+    return false;
+  }
+};
 
 // ── TikTok Sign ───────────────────────────────────────────────────────────────
 // Official docs: exclude ONLY 'sign' and 'access_token'
@@ -110,7 +169,7 @@ export default async function handler(req, res) {
 
   const { data: connections, error: connErr } = await supabase
     .from('tiktok_shop_connections')
-    .select('access_token, shop_cipher, shop_id, open_id, seller_name, access_token_expires_at')
+    .select('access_token, refresh_token, shop_cipher, shop_id, open_id, seller_name, access_token_expires_at, refresh_token_expires_at')
     .not('access_token', 'is', null)
     .not('shop_cipher', 'is', null);
 
@@ -133,6 +192,14 @@ export default async function handler(req, res) {
   for (const conn of connections) {
     const shopLabel = conn.seller_name || conn.shop_id || '(unknown)';
     try {
+      // ── Auto-refresh token nếu còn < 7 ngày hết hạn ──
+      const REFRESH_THRESHOLD_MS = 7 * 24 * 3600 * 1000;
+      const expiresAt = conn.access_token_expires_at ? new Date(conn.access_token_expires_at) : null;
+      const shouldRefresh = !expiresAt || (expiresAt - Date.now()) < REFRESH_THRESHOLD_MS;
+      if (shouldRefresh) {
+        await tryRefreshToken({ appKey, appSecret, conn, supabase });
+      }
+
       let timeWindows;
       let syncMode;
 
