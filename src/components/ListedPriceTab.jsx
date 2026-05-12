@@ -6,21 +6,24 @@ import * as XLSX from 'xlsx-js-style';
 const STORAGE_KEY    = 'stella_listed_price_rows_v1';
 const BRANDS_KEY     = 'stella_listed_price_brands_v1';
 const PROMOTIONS_KEY = 'stella_listed_price_promotions_v1';
+const PLATFORMS_KEY  = 'stella_listed_price_platforms_v1';
 
 const DEFAULT_BRANDS     = ['Body Miss', 'Stella Kinetics'];
 const DEFAULT_PROMOTIONS = ['M1T1', 'M2G50%', 'M2G30%', 'BÁN LẺ'];
+const DEFAULT_PLATFORMS  = ['TikTok', 'Shopee'];
 
-// ── Columns ───────────────────────────────────────────────────────────────────
+// ── Columns (Sàn ngay sau Brand) ──────────────────────────────────────────────
+// A  B        C      D         E            F          G             H        I        J
 const columns = [
   { key: 'productName', label: 'Tên sản phẩm', minWidth: 240 },
   { key: 'barcode',     label: 'Barcode',       minWidth: 150 },
   { key: 'brand',       label: 'Brand',         minWidth: 150, type: 'brand' },
+  { key: 'platform',    label: 'Sàn',           minWidth: 130, type: 'platform' },
   { key: 'listedPrice', label: 'Giá Niêm yết',  minWidth: 150 },
   { key: 'promotion',   label: 'Promotion',     minWidth: 150, type: 'promotion' },
   { key: 'regularPrice',label: 'Giá regular',   minWidth: 150 },
   { key: 'fsPrice',     label: 'Giá FS',        minWidth: 130 },
   { key: 'voucher',     label: 'Voucher',       minWidth: 130 },
-  { key: 'platform',    label: 'Sàn',           minWidth: 130 },
   { key: 'finalPrice',  label: 'Giá final',     minWidth: 150 },
 ];
 
@@ -40,9 +43,8 @@ const formulaAliases = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const createRow = () => ({
   id: crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`,
-  productName: '', barcode: '', brand: '', listedPrice: '',
-  promotion: '', regularPrice: '', fsPrice: '',
-  voucher: '', platform: '', finalPrice: '',
+  productName: '', barcode: '', brand: '', platform: '', listedPrice: '',
+  promotion: '', regularPrice: '', fsPrice: '', voucher: '', finalPrice: '',
 });
 
 const loadArray = (key, def) => {
@@ -58,7 +60,7 @@ const loadRows = () => {
   return rows || [createRow(), createRow(), createRow()];
 };
 
-const isFormula  = (v) => String(v || '').trim().startsWith('=');
+const isFormula   = (v) => String(v || '').trim().startsWith('=');
 const parseNumber = (value) => {
   if (value === null || value === undefined || value === '') return 0;
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
@@ -96,16 +98,15 @@ const evaluateFormula = (formula, row, rowIndex, allRows, currentKey) => {
   return run(formula, row, rowIndex);
 };
 
-// ── Excel export ──────────────────────────────────────────────────────────────
+// ── Excel export (column order khớp với columns array) ────────────────────────
 const exportExcel = (rows) => {
-  const headers = ['Tên sản phẩm','Barcode','Brand','Giá Niêm yết','Promotion','Giá regular','Giá FS','Voucher','Sàn','Giá final'];
+  const headers = ['Tên sản phẩm','Barcode','Brand','Sàn','Giá Niêm yết','Promotion','Giá regular','Giá FS','Voucher','Giá final'];
   const data = [
     headers,
-    ...rows.map(r => [r.productName, r.barcode, r.brand, r.listedPrice, r.promotion, r.regularPrice, r.fsPrice, r.voucher, r.platform, r.finalPrice])
+    ...rows.map(r => [r.productName, r.barcode, r.brand, r.platform, r.listedPrice, r.promotion, r.regularPrice, r.fsPrice, r.voucher, r.finalPrice])
   ];
   const ws = XLSX.utils.aoa_to_sheet(data);
 
-  // Style header row
   headers.forEach((_, ci) => {
     const cellRef = XLSX.utils.encode_cell({ r: 0, c: ci });
     if (ws[cellRef]) ws[cellRef].s = {
@@ -115,8 +116,7 @@ const exportExcel = (rows) => {
     };
   });
 
-  // Column widths
-  ws['!cols'] = [{ wch: 40 }, { wch: 20 }, { wch: 20 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 18 }];
+  ws['!cols'] = [{ wch: 40 }, { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 18 }];
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Bang Gia Niem Yet');
@@ -135,15 +135,27 @@ const importExcel = (file, onSuccess) => {
                      String(firstRow[0] || '').toLowerCase().includes('san') ||
                      String(firstRow[0] || '').toLowerCase().includes('product');
     const start = isHeader ? 1 : 0;
+    // col order: productName, barcode, brand, platform, listedPrice, promotion, regularPrice, fsPrice, voucher, finalPrice
     const newRows = raw.slice(start)
-      .map(r => ({ ...createRow(), productName: String(r[0]||''), barcode: String(r[1]||''), brand: String(r[2]||''), listedPrice: String(r[3]||''), promotion: String(r[4]||''), regularPrice: String(r[5]||''), fsPrice: String(r[6]||''), voucher: String(r[7]||''), platform: String(r[8]||''), finalPrice: String(r[9]||'') }))
+      .map(r => ({ ...createRow(),
+        productName:  String(r[0] || ''),
+        barcode:      String(r[1] || ''),
+        brand:        String(r[2] || ''),
+        platform:     String(r[3] || ''),
+        listedPrice:  String(r[4] || ''),
+        promotion:    String(r[5] || ''),
+        regularPrice: String(r[6] || ''),
+        fsPrice:      String(r[7] || ''),
+        voucher:      String(r[8] || ''),
+        finalPrice:   String(r[9] || ''),
+      }))
       .filter(r => r.productName || r.barcode || r.brand);
     onSuccess(newRows.length ? newRows : [createRow()]);
   };
   reader.readAsArrayBuffer(file);
 };
 
-// ── Inline AddOption modal ────────────────────────────────────────────────────
+// ── Inline AddOption ──────────────────────────────────────────────────────────
 const AddOptionInline = ({ placeholder, onAdd, onClose }) => {
   const [val, setVal] = useState('');
   return (
@@ -167,54 +179,60 @@ const ListedPriceTab = () => {
   const [rows, setRows]             = useState(loadRows);
   const [brands, setBrands]         = useState(() => loadArray(BRANDS_KEY, DEFAULT_BRANDS));
   const [promotions, setPromotions] = useState(() => loadArray(PROMOTIONS_KEY, DEFAULT_PROMOTIONS));
+  const [platforms, setPlatforms]   = useState(() => loadArray(PLATFORMS_KEY, DEFAULT_PLATFORMS));
 
   // Filter state
   const [filterText,      setFilterText]      = useState('');
   const [filterBrand,     setFilterBrand]     = useState('');
   const [filterPromotion, setFilterPromotion] = useState('');
+  const [filterPlatform,  setFilterPlatform]  = useState('');
   const [filterBarcode,   setFilterBarcode]   = useState('');
 
-  // Add option UI
+  // Add option UI toggles
   const [addingBrand,     setAddingBrand]     = useState(false);
   const [addingPromotion, setAddingPromotion] = useState(false);
+  const [addingPlatform,  setAddingPlatform]  = useState(false);
 
   const importRef = useRef(null);
 
-  // Persist
+  // Persist to localStorage
   useEffect(() => { localStorage.setItem(STORAGE_KEY,    JSON.stringify(rows));       }, [rows]);
   useEffect(() => { localStorage.setItem(BRANDS_KEY,     JSON.stringify(brands));     }, [brands]);
   useEffect(() => { localStorage.setItem(PROMOTIONS_KEY, JSON.stringify(promotions)); }, [promotions]);
+  useEffect(() => { localStorage.setItem(PLATFORMS_KEY,  JSON.stringify(platforms));  }, [platforms]);
 
-  // Sync brands từ Supabase (AppDataContext) — merge với options đã thêm tay
+  // Sync brands từ Supabase (AppDataContext) — merge với options thêm tay
   useEffect(() => {
     if (!ctxBrands?.length) return;
     const ctxNames = ctxBrands.map(b => b.ten_brand).filter(Boolean);
     setBrands(prev => [...new Set([...ctxNames, ...prev])]);
   }, [ctxBrands]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const addBrand     = (v) => { if (!brands.includes(v))     setBrands(p => [...p, v]); };
+  const addBrand     = (v) => { if (!brands.includes(v))     setBrands(p     => [...p, v]); };
   const addPromotion = (v) => { if (!promotions.includes(v)) setPromotions(p => [...p, v]); };
+  const addPlatform  = (v) => { if (!platforms.includes(v))  setPlatforms(p  => [...p, v]); };
 
-  // Filter
+  // Filtered rows
   const filteredRows = useMemo(() => {
     return rows.map((row, index) => ({ row, index })).filter(({ row }) => {
       if (filterBrand     && row.brand     !== filterBrand)     return false;
       if (filterPromotion && row.promotion !== filterPromotion) return false;
-      if (filterBarcode   && !String(row.barcode     || '').toLowerCase().includes(filterBarcode.toLowerCase()))   return false;
+      if (filterPlatform  && row.platform  !== filterPlatform)  return false;
+      if (filterBarcode   && !String(row.barcode || '').toLowerCase().includes(filterBarcode.toLowerCase()))  return false;
       if (filterText      && !columns.some(c => String(row[c.key] || '').toLowerCase().includes(filterText.toLowerCase()))) return false;
       return true;
     });
-  }, [rows, filterBrand, filterPromotion, filterBarcode, filterText]);
+  }, [rows, filterBrand, filterPromotion, filterPlatform, filterBarcode, filterText]);
 
-  const hasFilter = filterBrand || filterPromotion || filterBarcode || filterText;
+  const hasFilter = filterBrand || filterPromotion || filterPlatform || filterBarcode || filterText;
 
   // CRUD
-  const updateCell  = (id, key, value) => setRows(p => p.map(r => r.id === id ? { ...r, [key]: value } : r));
-  const addRow      = () => setRows(p => [...p, createRow()]);
+  const updateCell   = (id, key, value) => setRows(p => p.map(r => r.id === id ? { ...r, [key]: value } : r));
+  const addRow       = () => setRows(p => [...p, createRow()]);
   const duplicateRow = (row) => setRows(p => [...p, { ...row, id: createRow().id }]);
-  const deleteRow   = (id) => setRows(p => p.length <= 1 ? [createRow()] : p.filter(r => r.id !== id));
-  const clearAll    = () => { if (window.confirm('Xóa toàn bộ bảng giá niêm yết?')) setRows([createRow()]); };
-  const clearFilter = () => { setFilterText(''); setFilterBrand(''); setFilterPromotion(''); setFilterBarcode(''); };
+  const deleteRow    = (id) => setRows(p => p.length <= 1 ? [createRow()] : p.filter(r => r.id !== id));
+  const clearAll     = () => { if (window.confirm('Xóa toàn bộ bảng giá niêm yết?')) setRows([createRow()]); };
+  const clearFilter  = () => { setFilterText(''); setFilterBrand(''); setFilterPromotion(''); setFilterPlatform(''); setFilterBarcode(''); };
 
   // Import handler
   const handleImportFile = (e) => {
@@ -230,7 +248,7 @@ const ListedPriceTab = () => {
     e.target.value = '';
   };
 
-  // ── Render ──
+  // ── Styles ──
   const selectStyle = {
     width: '100%', padding: '5px 6px', border: 'none', background: 'transparent',
     fontSize: '0.82rem', outline: 'none', cursor: 'pointer',
@@ -240,8 +258,14 @@ const ListedPriceTab = () => {
   const filterSelectStyle = {
     padding: '7px 10px', borderRadius: 8, border: '1.5px solid #e5e7eb',
     fontSize: '0.82rem', outline: 'none', cursor: 'pointer', background: '#fff',
-    color: '#374151', minWidth: 150,
+    color: '#374151', minWidth: 130,
   };
+
+  const addBtnStyle = (active) => ({
+    padding: '6px 10px', background: active ? '#ea580c' : '#fff7ed',
+    border: '1.5px solid #fed7aa', borderRadius: 8,
+    color: '#ea580c', fontWeight: 700, cursor: 'pointer', fontSize: 14,
+  });
 
   return (
     <div className="listed-price-page">
@@ -256,14 +280,12 @@ const ListedPriceTab = () => {
           <button onClick={clearAll} className="listed-price-page__button is-muted">Xóa bảng</button>
           <button onClick={addRow}   className="listed-price-page__button is-primary">+ Thêm dòng</button>
 
-          {/* Import Excel */}
           <input ref={importRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={handleImportFile} />
           <button onClick={() => importRef.current?.click()}
             style={{ padding: '8px 14px', borderRadius: 8, border: '1.5px solid #3b82f6', background: '#eff6ff', color: '#1d4ed8', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
             📥 Import Excel
           </button>
 
-          {/* Export Excel */}
           <button onClick={() => exportExcel(rows)}
             style={{ padding: '8px 14px', borderRadius: 8, border: '1.5px solid #16a34a', background: '#f0fdf4', color: '#15803d', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
             📤 Export Excel
@@ -275,17 +297,17 @@ const ListedPriceTab = () => {
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: 12, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '12px 14px' }}>
 
         {/* Search text */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: 8, padding: '6px 10px', flex: '1 1 200px', minWidth: 180 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: 8, padding: '6px 10px', flex: '1 1 180px', minWidth: 160 }}>
           <span style={{ color: '#94a3b8', fontSize: 15 }}>⌕</span>
           <input type="text" value={filterText} onChange={e => setFilterText(e.target.value)}
-            placeholder="Tìm tên SP, barcode, sàn..."
+            placeholder="Tìm tên SP, barcode..."
             style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.82rem', width: '100%' }} />
         </div>
 
         {/* Filter barcode */}
         <input type="text" value={filterBarcode} onChange={e => setFilterBarcode(e.target.value)}
           placeholder="Lọc Barcode..."
-          style={{ ...filterSelectStyle, minWidth: 140 }} />
+          style={{ ...filterSelectStyle, minWidth: 130 }} />
 
         {/* Filter brand */}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -294,10 +316,21 @@ const ListedPriceTab = () => {
               <option value="">Tất cả brand</option>
               {brands.map(b => <option key={b} value={b}>{b}</option>)}
             </select>
-            <button onClick={() => setAddingBrand(v => !v)} title="Thêm brand"
-              style={{ padding: '6px 10px', background: addingBrand ? '#ea580c' : '#fff7ed', border: '1.5px solid #fed7aa', borderRadius: 8, color: '#ea580c', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>+</button>
+            <button onClick={() => setAddingBrand(v => !v)} title="Thêm brand" style={addBtnStyle(addingBrand)}>+</button>
           </div>
           {addingBrand && <AddOptionInline placeholder="Tên brand mới..." onAdd={addBrand} onClose={() => setAddingBrand(false)} />}
+        </div>
+
+        {/* Filter sàn */}
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <select value={filterPlatform} onChange={e => setFilterPlatform(e.target.value)} style={filterSelectStyle}>
+              <option value="">Tất cả sàn</option>
+              {platforms.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+            <button onClick={() => setAddingPlatform(v => !v)} title="Thêm sàn" style={addBtnStyle(addingPlatform)}>+</button>
+          </div>
+          {addingPlatform && <AddOptionInline placeholder="Tên sàn mới..." onAdd={addPlatform} onClose={() => setAddingPlatform(false)} />}
         </div>
 
         {/* Filter promotion */}
@@ -307,8 +340,7 @@ const ListedPriceTab = () => {
               <option value="">Tất cả promotion</option>
               {promotions.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
-            <button onClick={() => setAddingPromotion(v => !v)} title="Thêm promotion"
-              style={{ padding: '6px 10px', background: addingPromotion ? '#ea580c' : '#fff7ed', border: '1.5px solid #fed7aa', borderRadius: 8, color: '#ea580c', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>+</button>
+            <button onClick={() => setAddingPromotion(v => !v)} title="Thêm promotion" style={addBtnStyle(addingPromotion)}>+</button>
           </div>
           {addingPromotion && <AddOptionInline placeholder="Tên promotion mới..." onAdd={addPromotion} onClose={() => setAddingPromotion(false)} />}
         </div>
@@ -328,7 +360,7 @@ const ListedPriceTab = () => {
 
       {/* ── Formula hint ── */}
       <div className="listed-price-formula-help">
-        Nhập công thức bằng dấu <strong>=</strong>. Ví dụ: <code>=D2-F2-H2</code>, <code>=regularPrice-voucher</code>, <code>=listedPrice*0.9</code>.
+        Nhập công thức bằng dấu <strong>=</strong>. Ví dụ: <code>=E2-G2-I2</code>, <code>=regularPrice-voucher</code>, <code>=listedPrice*0.9</code>.
       </div>
 
       {/* ── Table ── */}
@@ -360,6 +392,16 @@ const ListedPriceTab = () => {
                         <select value={row[col.key] || ''} onChange={e => updateCell(row.id, col.key, e.target.value)} style={selectStyle}>
                           <option value="">— chọn brand —</option>
                           {brands.map(b => <option key={b} value={b}>{b}</option>)}
+                        </select>
+                      </td>
+                    );
+
+                    // Platform dropdown
+                    if (col.type === 'platform') return (
+                      <td key={col.key}>
+                        <select value={row[col.key] || ''} onChange={e => updateCell(row.id, col.key, e.target.value)} style={selectStyle}>
+                          <option value="">— chọn sàn —</option>
+                          {platforms.map(p => <option key={p} value={p}>{p}</option>)}
                         </select>
                       </td>
                     );
