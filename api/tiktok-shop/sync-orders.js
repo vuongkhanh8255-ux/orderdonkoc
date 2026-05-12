@@ -29,20 +29,20 @@ const buildSign = (appSecret, path, urlParams, bodyStr = '') => {
 };
 
 // ── POST /order/202309/orders/search ─────────────────────────────────────────
+// page_size and page_token are URL query params (not body)
+// create_time_ge, create_time_lt are body params
 const searchOrders = async ({ appKey, appSecret, accessToken, shopCipher, createTimeGe, createTimeLt, pageToken }) => {
   const path = '/order/202309/orders/search';
   const ts = String(Math.floor(Date.now() / 1000));
 
-  const bodyObj = {
-    create_time_ge: createTimeGe,
-    create_time_lt: createTimeLt,
-    page_size: 50,
-  };
-  if (pageToken) bodyObj.page_token = pageToken;
+  // Body: only time filters
+  const bodyObj = { create_time_ge: createTimeGe, create_time_lt: createTimeLt };
   const bodyStr = JSON.stringify(bodyObj);
 
-  // URL params — shop_cipher is included in sign calculation
-  const urlParams = { app_key: appKey, timestamp: ts, shop_cipher: shopCipher };
+  // URL params: app_key, timestamp, shop_cipher, page_size (and optional page_token)
+  const urlParams = { app_key: appKey, timestamp: ts, shop_cipher: shopCipher, page_size: '50' };
+  if (pageToken) urlParams.page_token = pageToken;
+
   const sign = buildSign(appSecret, path, urlParams, bodyStr);
 
   const qs = new URLSearchParams({ ...urlParams, sign });
