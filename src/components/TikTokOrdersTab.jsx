@@ -71,7 +71,7 @@ const TikTokOrdersTab = () => {
           .from('tiktok_shop_orders')
           .select('id,shop_id,open_id,order_status,create_time,update_time,total_amount,currency,line_items,synced_at')
           .order('create_time', { ascending: false })
-          .limit(1000),
+          .limit(50000),
         supabase
           .from('tiktok_shop_connections')
           .select('shop_id,seller_name,seller_base_region,access_token_expires_at')
@@ -88,20 +88,20 @@ const TikTokOrdersTab = () => {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   // ── Sync orders from TikTok API ───────────────────────────────────────────
-  const syncOrders = async () => {
+  const doSync = async (full = false) => {
     setSyncing(true);
     setSyncResult(null);
     try {
-      const res = await fetch('/api/tiktok-shop/sync-orders', { method: 'POST' });
+      const url = full ? '/api/tiktok-shop/sync-orders?full=true' : '/api/tiktok-shop/sync-orders';
+      const res  = await fetch(url, { method: 'POST' });
       const text = await res.text();
       let data;
       try {
         data = JSON.parse(text);
       } catch {
-        // Vercel trả về plain text khi timeout hoặc crash
         const preview = text.slice(0, 120);
         if (res.status === 504 || text.includes('FUNCTION_INVOCATION_TIMEOUT') || text.includes('timeout')) {
-          data = { error: '⏱ Sync timeout — quá nhiều đơn hàng trong 1 lần. Thử lại, lần này sẽ lấy được thêm.' };
+          data = { error: '⏱ Timeout — bấm Full Resync thêm vài lần nữa để kéo hết dữ liệu cũ.' };
         } else {
           data = { error: `Server lỗi (${res.status}): ${preview}` };
         }
@@ -113,6 +113,9 @@ const TikTokOrdersTab = () => {
     }
     setSyncing(false);
   };
+
+  const syncOrders     = () => doSync(false);
+  const fullResync     = () => doSync(true);
 
   // ── Filtered rows ─────────────────────────────────────────────────────────
   const filtered = orders.filter(o => {
@@ -149,6 +152,16 @@ const TikTokOrdersTab = () => {
           <button onClick={fetchData} disabled={loading}
             style={{ padding: '9px 16px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}>
             {loading ? '⏳' : '↺'} Tải lại
+          </button>
+          <button onClick={fullResync} disabled={syncing}
+            title="Kéo lại toàn bộ 60 ngày — dùng khi cần lấy dữ liệu lịch sử"
+            style={{
+              padding: '9px 18px', borderRadius: 8, border: '1.5px solid #ea580c',
+              background: '#fff7ed', color: '#ea580c', fontWeight: 700,
+              fontSize: '0.88rem', cursor: syncing ? 'not-allowed' : 'pointer',
+              opacity: syncing ? 0.6 : 1,
+            }}>
+            {syncing ? '⏳' : '📦'} Full Resync (60 ngày)
           </button>
           <button onClick={syncOrders} disabled={syncing}
             style={{
