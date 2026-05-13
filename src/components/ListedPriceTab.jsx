@@ -279,27 +279,49 @@ const ListedPriceTab = () => {
 
   // Auto-convert prices when switching platform to Shopee
   // Shopee regular = TikTok regular × 1.10  |  Shopee FS = TikTok regular × 1.05
+  // Switching back to TikTok restores the original saved prices.
   const handlePlatformChange = (rowId, newPlatform, currentRow) => {
+    // ── Switching TO Shopee ──────────────────────────────────────────────────
     if (newPlatform === 'Shopee') {
-      const regRaw = currentRow.regularPrice;
-      if (regRaw) {
+      // Always use saved TikTok base (if exists) so repeated toggles don't compound
+      const baseRegRaw = currentRow._tiktokRegularPrice ?? currentRow.regularPrice;
+      const baseFsRaw  = currentRow._tiktokFsPrice       ?? currentRow.fsPrice;
+      if (baseRegRaw) {
         const rowIndex = rows.findIndex(r => r.id === rowId);
-        const regNum = isFormula(regRaw)
-          ? evaluateFormula(regRaw, currentRow, rowIndex, rows, 'regularPrice')
-          : parseNumber(regRaw);
+        // For formula evaluation, temporarily substitute the TikTok base value
+        const evalRow = currentRow._tiktokRegularPrice
+          ? { ...currentRow, regularPrice: currentRow._tiktokRegularPrice }
+          : currentRow;
+        const regNum = isFormula(baseRegRaw)
+          ? evaluateFormula(baseRegRaw, evalRow, rowIndex, rows, 'regularPrice')
+          : parseNumber(baseRegRaw);
         if (Number.isFinite(regNum) && regNum > 0) {
-          const shopeeReg = Math.round(regNum * 1.10);
-          const shopeeFS  = Math.round(regNum * 1.05);
           setRows(p => p.map(r => r.id === rowId ? {
             ...r,
-            platform:     newPlatform,
-            regularPrice: String(shopeeReg),
-            fsPrice:      String(shopeeFS),
+            platform:            newPlatform,
+            regularPrice:        String(Math.round(regNum * 1.10)),
+            fsPrice:             String(Math.round(regNum * 1.05)),
+            _tiktokRegularPrice: baseRegRaw,   // remember TikTok base
+            _tiktokFsPrice:      baseFsRaw,
           } : r));
           return;
         }
       }
     }
+
+    // ── Switching back to TikTok — restore saved prices ──────────────────────
+    if (newPlatform === 'TikTok' && currentRow._tiktokRegularPrice != null) {
+      setRows(p => p.map(r => r.id === rowId ? {
+        ...r,
+        platform:            newPlatform,
+        regularPrice:        currentRow._tiktokRegularPrice,
+        fsPrice:             currentRow._tiktokFsPrice ?? r.fsPrice,
+        _tiktokRegularPrice: null,
+        _tiktokFsPrice:      null,
+      } : r));
+      return;
+    }
+
     updateCell(rowId, 'platform', newPlatform);
   };
 
