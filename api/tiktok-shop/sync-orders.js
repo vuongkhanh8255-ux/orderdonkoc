@@ -140,7 +140,6 @@ const normalizeOrder = (order, conn) => {
       sale_price: item.sale_price || item.original_price,
       currency: item.currency,
     })),
-    raw_data: order,
     synced_at: new Date().toISOString(),
   };
 };
