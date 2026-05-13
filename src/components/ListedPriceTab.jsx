@@ -281,41 +281,42 @@ const ListedPriceTab = () => {
   // Shopee regular = TikTok regular × 1.10  |  Shopee FS = TikTok regular × 1.05
   // Switching back to TikTok restores the original saved prices.
   const handlePlatformChange = (rowId, newPlatform, currentRow) => {
-    // ── Switching TO Shopee ──────────────────────────────────────────────────
-    if (newPlatform === 'Shopee') {
-      // Always use saved TikTok base (if exists) so repeated toggles don't compound
-      const baseRegRaw = currentRow._tiktokRegularPrice ?? currentRow.regularPrice;
-      const baseFsRaw  = currentRow._tiktokFsPrice       ?? currentRow.fsPrice;
-      if (baseRegRaw) {
+    const prevPlatform = currentRow.platform;
+
+    // ── ? → Shopee: save TikTok base, apply markup ───────────────────────────
+    if (newPlatform === 'Shopee' && prevPlatform !== 'Shopee') {
+      // Use already-saved TikTok base if exists (prevents compounding on re-toggle)
+      const baseReg = currentRow._tiktokRegularPrice ?? currentRow.regularPrice;
+      const baseFS  = currentRow._tiktokFsPrice       ?? currentRow.fsPrice;
+      if (baseReg) {
         const rowIndex = rows.findIndex(r => r.id === rowId);
-        // For formula evaluation, temporarily substitute the TikTok base value
-        const evalRow = currentRow._tiktokRegularPrice
+        const evalRow  = currentRow._tiktokRegularPrice
           ? { ...currentRow, regularPrice: currentRow._tiktokRegularPrice }
           : currentRow;
-        const regNum = isFormula(baseRegRaw)
-          ? evaluateFormula(baseRegRaw, evalRow, rowIndex, rows, 'regularPrice')
-          : parseNumber(baseRegRaw);
+        const regNum = isFormula(baseReg)
+          ? evaluateFormula(baseReg, evalRow, rowIndex, rows, 'regularPrice')
+          : parseNumber(baseReg);
         if (Number.isFinite(regNum) && regNum > 0) {
           setRows(p => p.map(r => r.id === rowId ? {
             ...r,
             platform:            newPlatform,
             regularPrice:        String(Math.round(regNum * 1.10)),
             fsPrice:             String(Math.round(regNum * 1.05)),
-            _tiktokRegularPrice: baseRegRaw,   // remember TikTok base
-            _tiktokFsPrice:      baseFsRaw,
+            _tiktokRegularPrice: baseReg,
+            _tiktokFsPrice:      baseFS,
           } : r));
           return;
         }
       }
     }
 
-    // ── Switching back to TikTok — restore saved prices ──────────────────────
-    if (newPlatform === 'TikTok' && currentRow._tiktokRegularPrice != null) {
+    // ── Shopee → TikTok: restore both saved prices ────────────────────────────
+    if (newPlatform === 'TikTok' && prevPlatform === 'Shopee') {
       setRows(p => p.map(r => r.id === rowId ? {
         ...r,
         platform:            newPlatform,
-        regularPrice:        currentRow._tiktokRegularPrice,
-        fsPrice:             currentRow._tiktokFsPrice ?? r.fsPrice,
+        regularPrice:        currentRow._tiktokRegularPrice ?? currentRow.regularPrice,
+        fsPrice:             currentRow._tiktokFsPrice       ?? currentRow.fsPrice,
         _tiktokRegularPrice: null,
         _tiktokFsPrice:      null,
       } : r));
