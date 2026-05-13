@@ -276,6 +276,30 @@ const ListedPriceTab = () => {
 
   // ── CRUD ──
   const updateCell   = (id, key, value) => setRows(p => p.map(r => r.id === id ? { ...r, [key]: value } : r));
+
+  // Auto-convert prices when switching platform to Shopee
+  // Shopee regular = TikTok regular × 1.10  |  Shopee FS = TikTok regular × 1.05
+  const handlePlatformChange = (rowId, newPlatform, currentRow) => {
+    if (newPlatform === 'Shopee') {
+      const regRaw = currentRow.regularPrice;
+      if (regRaw && !isFormula(regRaw)) {
+        const regNum = parseNumber(regRaw);
+        if (regNum > 0) {
+          const shopeeReg = Math.round(regNum * 1.10);
+          const shopeeFS  = Math.round(regNum * 1.05);
+          setRows(p => p.map(r => r.id === rowId ? {
+            ...r,
+            platform:     newPlatform,
+            regularPrice: String(shopeeReg),
+            fsPrice:      String(shopeeFS),
+          } : r));
+          return;
+        }
+      }
+    }
+    updateCell(rowId, 'platform', newPlatform);
+  };
+
   const addRow       = () => setRows(p => [...p, createRow()]);
   const duplicateRow = (row) => setRows(p => [...p, { ...row, id: createRow().id }]);
   const deleteRow    = (id) => setRows(p => p.length <= 1 ? [createRow()] : p.filter(r => r.id !== id));
@@ -332,7 +356,7 @@ const ListedPriceTab = () => {
     // Dropdown: platform
     if (col.type === 'platform') return (
       <td key={col.key} style={{ position: 'relative' }}>
-        <select value={rawValue} onChange={e => updateCell(row.id, col.key, e.target.value)} style={selectStyle}>
+        <select value={rawValue} onChange={e => handlePlatformChange(row.id, e.target.value, row)} style={selectStyle}>
           <option value="">— chọn sàn —</option>
           {platforms.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
@@ -497,12 +521,7 @@ const ListedPriceTab = () => {
         </div>
       </div>
 
-      {/* ── Formula hint ── */}
-      <div className="listed-price-formula-help">
-        Nhập công thức bằng dấu <strong>=</strong>. Ví dụ: <code>=E1-G1-I1</code>, <code>=regularPrice-voucher</code>, <code>=listedPrice*0,9</code>.
-        &nbsp;Cell hiển thị kết quả — click vào để xem/sửa công thức.
-        &nbsp;<strong>Kéo ô cam</strong> ở góc phải để áp dụng công thức cho các dòng bên dưới.
-      </div>
+      {/* Formula hint hidden */}
 
       {/* ── Table ── */}
       <div className="listed-price-table-card">
