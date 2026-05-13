@@ -120,28 +120,46 @@ const KocIdentityOverview = ({ data = [], brandHeaders = [], formatNumber, staff
     useEffect(() => {
         let isMounted = true;
         const localAssignments = loadLocalKocAssignments();
-        setAssignments(localAssignments);
+        setAssignments(localAssignments); // Hiện localStorage ngay lập tức trong khi chờ Supabase
 
         supabase
             .from(KOC_ASSIGNMENTS_TABLE)
             .select('koc_id, brand_name, staff_name, assigned_at, updated_at')
-            .then(({ data: rows, error }) => {
+            .then(async ({ data: rows, error }) => {
                 if (!isMounted) return;
                 if (error) {
-                    console.warn('KOC brand assignments Supabase table is not ready yet', error);
+                    console.warn('KOC brand assignments Supabase error:', error);
                     return;
                 }
+
+                // Build remote map
                 const remoteAssignments = {};
                 (rows || []).forEach(item => {
                     remoteAssignments[buildAssignmentKey(item.koc_id, item.brand_name)] = item;
                 });
-                setAssignments(remoteAssignments);
-                saveLocalKocAssignments(remoteAssignments);
+
+                // Merge: giữ localStorage-only items + Supabase thắng khi conflict
+                const merged = { ...localAssignments, ...remoteAssignments };
+                if (isMounted) {
+                    setAssignments(merged);
+                    saveLocalKocAssignments(merged);
+                }
+
+                // Push các item chỉ có trong localStorage lên Supabase (migration 1 lần)
+                const localOnlyItems = Object.values(localAssignments).filter(item =>
+                    item?.koc_id && item?.brand_name &&
+                    !remoteAssignments[buildAssignmentKey(item.koc_id, item.brand_name)]
+                );
+                if (localOnlyItems.length > 0) {
+                    const { error: upsertErr } = await supabase
+                        .from(KOC_ASSIGNMENTS_TABLE)
+                        .upsert(localOnlyItems, { onConflict: 'koc_id,brand_name' });
+                    if (upsertErr) console.warn('Cannot migrate local assignments to Supabase:', upsertErr);
+                    else console.log(`Migrated ${localOnlyItems.length} local assignments to Supabase`);
+                }
             });
 
-        return () => {
-            isMounted = false;
-        };
+        return () => { isMounted = false; };
     }, []);
 
     const staffNames = useMemo(() => {
