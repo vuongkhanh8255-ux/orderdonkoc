@@ -1,33 +1,39 @@
-import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppDataContext } from '../context/AppDataContext';
 import * as XLSX from 'xlsx-js-style';
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
-const STORAGE_KEY    = 'stella_listed_price_rows_v1';
+const STORAGE_KEY    = 'stella_listed_price_rows_v2';  // v2: grouped TikTok+Shopee pairs
 const BRANDS_KEY     = 'stella_listed_price_brands_v1';
 const PROMOTIONS_KEY = 'stella_listed_price_promotions_v1';
-const PLATFORMS_KEY  = 'stella_listed_price_platforms_v1';
 
 const DEFAULT_BRANDS     = ['Body Miss', 'Stella Kinetics'];
 const DEFAULT_PROMOTIONS = ['M1T1', 'M2G50%', 'M2G30%', 'BÁN LẺ'];
-const DEFAULT_PLATFORMS  = ['TikTok', 'Shopee'];
 
-// ── Columns: A–J ──────────────────────────────────────────────────────────────
-const columns = [
-  { key: 'productName', label: 'Tên sản phẩm', minWidth: 240 },
-  { key: 'barcode',     label: 'Barcode',       minWidth: 150 },
-  { key: 'brand',       label: 'Brand',         minWidth: 150, type: 'brand' },
-  { key: 'platform',   label: 'Sàn',            minWidth: 130, type: 'platform' },
-  { key: 'listedPrice', label: 'Giá Niêm yết',  minWidth: 150 },
-  { key: 'promotion',   label: 'Promotion',     minWidth: 150, type: 'promotion' },
-  { key: 'regularPrice',label: 'Giá regular',   minWidth: 150 },
-  { key: 'fsPrice',     label: 'Giá FS',        minWidth: 130 },
-  { key: 'voucher',     label: 'Voucher',       minWidth: 130 },
-  { key: 'finalPrice',  label: 'Giá final',     minWidth: 150 },
+// ── Columns (A–J kept for formula engine) ─────────────────────────────────────
+// A=productName B=barcode C=brand D=platform(fixed) E=listedPrice F=promotion G=regularPrice H=fsPrice I=voucher J=finalPrice
+const ALL_COLUMNS = [
+  { key: 'productName',  label: 'Tên sản phẩm', minWidth: 240 },
+  { key: 'barcode',      label: 'Barcode',       minWidth: 150 },
+  { key: 'brand',        label: 'Brand',         minWidth: 150, type: 'brand' },
+  { key: 'platform',     label: 'Sàn',           minWidth: 90  },
+  { key: 'listedPrice',  label: 'Giá Niêm yết',  minWidth: 150 },
+  { key: 'promotion',    label: 'Promotion',     minWidth: 150, type: 'promotion' },
+  { key: 'regularPrice', label: 'Giá regular',   minWidth: 150 },
+  { key: 'fsPrice',      label: 'Giá FS',        minWidth: 130 },
+  { key: 'voucher',      label: 'Voucher',       minWidth: 130 },
+  { key: 'finalPrice',   label: 'Giá final',     minWidth: 150 },
 ];
 
-// A=productName B=barcode C=brand D=platform E=listedPrice F=promotion G=regularPrice H=fsPrice I=voucher J=finalPrice
-const columnLetters = columns.reduce((acc, col, i) => {
+// Sub-sets used for rendering
+const PRODUCT_COLS_LIST = ALL_COLUMNS.slice(0, 3);          // A B C
+const PLATFORM_COL      = ALL_COLUMNS[3];                   // D
+const PRICE_COLS        = ALL_COLUMNS.slice(4);             // E–J
+
+// Column keys that are shared across the product group (sync both rows)
+const SHARED_KEYS = new Set(['productName', 'barcode', 'brand']);
+
+const columnLetters = ALL_COLUMNS.reduce((acc, col, i) => {
   acc[String.fromCharCode(65 + i)] = col.key;
   return acc;
 }, {});
@@ -41,11 +47,22 @@ const formulaAliases = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+const newId = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+
 const createRow = () => ({
-  id: crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`,
-  productName: '', barcode: '', brand: '', platform: '', listedPrice: '',
-  promotion: '', regularPrice: '', fsPrice: '', voucher: '', finalPrice: '',
+  id: newId(), groupId: null,
+  productName: '', barcode: '', brand: '', platform: '',
+  listedPrice: '', promotion: '', regularPrice: '', fsPrice: '', voucher: '', finalPrice: '',
 });
+
+const createGroupPair = () => {
+  const groupId = newId();
+  const shared  = { productName: '', barcode: '', brand: '' };
+  return [
+    { ...createRow(), groupId, platform: 'TikTok', ...shared },
+    { ...createRow(), groupId, platform: 'Shopee', ...shared },
+  ];
+};
 
 const loadArray = (key, def) => {
   try {
@@ -57,7 +74,7 @@ const loadArray = (key, def) => {
 
 const loadRows = () => {
   const rows = loadArray(STORAGE_KEY, null);
-  return rows || [createRow(), createRow(), createRow()];
+  return rows?.length ? rows : createGroupPair();
 };
 
 const isFormula   = (v) => String(v || '').trim().startsWith('=');
@@ -100,7 +117,6 @@ const evaluateFormula = (formula, row, rowIndex, allRows, currentKey) => {
   return run(formula, row, rowIndex);
 };
 
-// ── Shift row numbers in a formula when dragging down ─────────────────────────
 const shiftFormula = (formula, offset) => {
   if (!offset) return formula;
   return formula.replace(/\b([A-Ja-j])(\d+)\b/g, (_, col, rowNum) =>
@@ -109,27 +125,20 @@ const shiftFormula = (formula, offset) => {
 };
 
 // ── Excel export ──────────────────────────────────────────────────────────────
-const normalizeFormulaDecimalForExcel = (formula) =>
-  String(formula || '').replace(/(\d+)\.(\d+)/g, '$1,$2');
-
 const toExcelFormulaText = (value) =>
-  isFormula(value) ? normalizeFormulaDecimalForExcel(shiftFormula(value, 1)) : value;
+  isFormula(value)
+    ? String(value || '').replace(/(\d+)\.(\d+)/g, '$1,$2').replace(/\b([A-Ja-j])(\d+)\b/g, (_, c, n) => `${c.toUpperCase()}${parseInt(n) + 1}`)
+    : value;
 
 const exportExcel = (rows) => {
   const headers = ['Tên sản phẩm','Barcode','Brand','Sàn','Giá Niêm yết','Promotion','Giá regular','Giá FS','Voucher','Giá final'];
   const data = [
     headers,
     ...rows.map(r => [
-      r.productName,
-      r.barcode,
-      r.brand,
-      r.platform,
-      toExcelFormulaText(r.listedPrice),
-      r.promotion,
-      toExcelFormulaText(r.regularPrice),
-      toExcelFormulaText(r.fsPrice),
-      toExcelFormulaText(r.voucher),
-      toExcelFormulaText(r.finalPrice)
+      r.productName, r.barcode, r.brand, r.platform,
+      toExcelFormulaText(r.listedPrice), r.promotion,
+      toExcelFormulaText(r.regularPrice), toExcelFormulaText(r.fsPrice),
+      toExcelFormulaText(r.voucher),      toExcelFormulaText(r.finalPrice),
     ])
   ];
   const ws = XLSX.utils.aoa_to_sheet(data);
@@ -141,7 +150,7 @@ const exportExcel = (rows) => {
       alignment: { horizontal: 'center' },
     };
   });
-  ws['!cols'] = [{ wch: 40 }, { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 18 }];
+  ws['!cols'] = [{ wch: 40 }, { wch: 20 }, { wch: 20 }, { wch: 12 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 18 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Bang Gia Niem Yet');
   XLSX.writeFile(wb, 'bang-gia-niem-yet.xlsx');
@@ -156,19 +165,41 @@ const importExcel = (file, onSuccess) => {
     const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
     const firstRow = raw[0] || [];
     const isHeader = String(firstRow[0] || '').toLowerCase().includes('tên') ||
-                     String(firstRow[0] || '').toLowerCase().includes('san') ||
                      String(firstRow[0] || '').toLowerCase().includes('product');
     const start = isHeader ? 1 : 0;
-    const newRows = raw.slice(start)
+    const flatRows = raw.slice(start)
       .map(r => ({ ...createRow(),
-        productName:  String(r[0] || ''), barcode:      String(r[1] || ''),
-        brand:        String(r[2] || ''), platform:     String(r[3] || ''),
-        listedPrice:  String(r[4] || ''), promotion:    String(r[5] || ''),
-        regularPrice: String(r[6] || ''), fsPrice:      String(r[7] || ''),
-        voucher:      String(r[8] || ''), finalPrice:   String(r[9] || ''),
+        productName: String(r[0] || ''), barcode: String(r[1] || ''),
+        brand: String(r[2] || ''), platform: String(r[3] || '') || 'TikTok',
+        listedPrice: String(r[4] || ''), promotion: String(r[5] || ''),
+        regularPrice: String(r[6] || ''), fsPrice: String(r[7] || ''),
+        voucher: String(r[8] || ''), finalPrice: String(r[9] || ''),
       }))
       .filter(r => r.productName || r.barcode || r.brand);
-    onSuccess(newRows.length ? newRows : [createRow()]);
+
+    // Pair consecutive TikTok+Shopee rows with same product into groups
+    const paired = [];
+    for (let i = 0; i < flatRows.length; i++) {
+      const row = flatRows[i];
+      const next = flatRows[i + 1];
+      const isAlreadyPaired = next && next.platform === 'Shopee' &&
+        next.productName === row.productName && next.barcode === row.barcode;
+      const groupId = newId();
+      if (row.platform === 'TikTok' && isAlreadyPaired) {
+        paired.push({ ...row, groupId }, { ...next, groupId });
+        i++;
+      } else if (row.platform !== 'Shopee') {
+        const shopeeRow = { ...createRow(), groupId, platform: 'Shopee',
+          productName: row.productName, barcode: row.barcode, brand: row.brand,
+          regularPrice: row.regularPrice ? String(Math.round(parseNumber(row.regularPrice) * 1.10)) : '',
+          fsPrice:      row.regularPrice ? String(Math.round(parseNumber(row.regularPrice) * 1.05)) : '',
+        };
+        paired.push({ ...row, groupId }, shopeeRow);
+      } else {
+        paired.push({ ...row, groupId });
+      }
+    }
+    onSuccess(paired.length ? paired : createGroupPair());
   };
   reader.readAsArrayBuffer(file);
 };
@@ -197,27 +228,21 @@ const ListedPriceTab = () => {
   const [rows, setRows]             = useState(loadRows);
   const [brands, setBrands]         = useState(() => loadArray(BRANDS_KEY, DEFAULT_BRANDS));
   const [promotions, setPromotions] = useState(() => loadArray(PROMOTIONS_KEY, DEFAULT_PROMOTIONS));
-  const [platforms, setPlatforms]   = useState(() => loadArray(PLATFORMS_KEY, DEFAULT_PLATFORMS));
 
   // Filter state
   const [filterText,      setFilterText]      = useState('');
   const [filterBrand,     setFilterBrand]     = useState('');
   const [filterPromotion, setFilterPromotion] = useState('');
-  const [filterPlatform,  setFilterPlatform]  = useState('');
   const [filterBarcode,   setFilterBarcode]   = useState('');
 
   // Add-option toggles
   const [addingBrand,     setAddingBrand]     = useState(false);
   const [addingPromotion, setAddingPromotion] = useState(false);
-  const [addingPlatform,  setAddingPlatform]  = useState(false);
 
-  // Cell currently in edit mode
-  const [editingCell, setEditingCell] = useState(null); // { id, key }
-
-  // Drag-to-fill state
-  const [fillDrag, setFillDrag] = useState(null); // { fromIndex, colKey, sourceValue }
-  const [fillOver, setFillOver] = useState(null); // rowIndex hovered during drag
-  const fillOverRef = useRef(null);               // ref giữ giá trị mới nhất tránh stale closure
+  // Cell edit + drag-to-fill
+  const [editingCell, setEditingCell] = useState(null);
+  const [fillDrag,    setFillDrag]    = useState(null);
+  const [fillOver,    setFillOver]    = useState(null);
 
   const importRef = useRef(null);
 
@@ -225,7 +250,6 @@ const ListedPriceTab = () => {
   useEffect(() => { localStorage.setItem(STORAGE_KEY,    JSON.stringify(rows));       }, [rows]);
   useEffect(() => { localStorage.setItem(BRANDS_KEY,     JSON.stringify(brands));     }, [brands]);
   useEffect(() => { localStorage.setItem(PROMOTIONS_KEY, JSON.stringify(promotions)); }, [promotions]);
-  useEffect(() => { localStorage.setItem(PLATFORMS_KEY,  JSON.stringify(platforms));  }, [platforms]);
 
   // Sync brands from Supabase
   useEffect(() => {
@@ -244,8 +268,7 @@ const ListedPriceTab = () => {
         const hi = Math.max(fromIndex, fillOver);
         setRows(prev => prev.map((r, i) => {
           if (i === fromIndex || i < lo || i > hi) return r;
-          const offset = i - fromIndex;
-          const newVal = isFormula(sourceValue) ? shiftFormula(sourceValue, offset) : sourceValue;
+          const newVal = isFormula(sourceValue) ? shiftFormula(sourceValue, i - fromIndex) : sourceValue;
           return { ...r, [colKey]: newVal };
         }));
       }
@@ -258,91 +281,108 @@ const ListedPriceTab = () => {
 
   const addBrand     = (v) => { if (!brands.includes(v))     setBrands(p     => [...p, v]); };
   const addPromotion = (v) => { if (!promotions.includes(v)) setPromotions(p => [...p, v]); };
-  const addPlatform  = (v) => { if (!platforms.includes(v))  setPlatforms(p  => [...p, v]); };
 
-  // ── Filtered rows ──
-  const filteredRows = useMemo(() => {
-    return rows.map((row, index) => ({ row, index })).filter(({ row }) => {
-      if (filterBrand     && row.brand     !== filterBrand)     return false;
-      if (filterPromotion && row.promotion !== filterPromotion) return false;
-      if (filterPlatform  && row.platform  !== filterPlatform)  return false;
-      if (filterBarcode   && !String(row.barcode || '').toLowerCase().includes(filterBarcode.toLowerCase())) return false;
-      if (filterText      && !columns.some(c => String(row[c.key] || '').toLowerCase().includes(filterText.toLowerCase()))) return false;
-      return true;
-    });
-  }, [rows, filterBrand, filterPromotion, filterPlatform, filterBarcode, filterText]);
+  // ── CRUD ─────────────────────────────────────────────────────────────────────
 
-  const hasFilter = filterBrand || filterPromotion || filterPlatform || filterBarcode || filterText;
+  // updateCell: sync shared keys (name/barcode/brand) across group + auto-calc Shopee prices
+  const updateCell = (id, key, value) => {
+    setRows(prev => {
+      const targetRow = prev.find(r => r.id === id);
+      if (!targetRow) return prev;
 
-  // ── CRUD ──
-  const updateCell   = (id, key, value) => setRows(p => p.map(r => r.id === id ? { ...r, [key]: value } : r));
+      // 1. Update target row + sync shared columns across the group
+      let updated = prev.map(r => {
+        if (r.id === id) return { ...r, [key]: value };
+        if (targetRow.groupId && SHARED_KEYS.has(key) && r.groupId === targetRow.groupId)
+          return { ...r, [key]: value };
+        return r;
+      });
 
-  // Auto-convert prices when switching platform to Shopee
-  // Shopee regular = TikTok regular × 1.10  |  Shopee FS = TikTok regular × 1.05
-  // Switching back to TikTok restores the original saved prices.
-  const handlePlatformChange = (rowId, newPlatform, currentRow) => {
-    const prevPlatform = currentRow.platform;
-
-    // ── ? → Shopee: save TikTok base, apply markup ───────────────────────────
-    if (newPlatform === 'Shopee' && prevPlatform !== 'Shopee') {
-      // Use already-saved TikTok base if exists (prevents compounding on re-toggle)
-      const baseReg = currentRow._tiktokRegularPrice ?? currentRow.regularPrice;
-      const baseFS  = currentRow._tiktokFsPrice       ?? currentRow.fsPrice;
-      if (baseReg) {
-        const rowIndex = rows.findIndex(r => r.id === rowId);
-        const evalRow  = currentRow._tiktokRegularPrice
-          ? { ...currentRow, regularPrice: currentRow._tiktokRegularPrice }
-          : currentRow;
-        const regNum = isFormula(baseReg)
-          ? evaluateFormula(baseReg, evalRow, rowIndex, rows, 'regularPrice')
-          : parseNumber(baseReg);
+      // 2. Auto-calc Shopee prices when TikTok regularPrice changes
+      if (key === 'regularPrice' && targetRow.platform === 'TikTok' && targetRow.groupId) {
+        const rowIdx = prev.findIndex(r => r.id === id);
+        const regNum = isFormula(value)
+          ? evaluateFormula(value, { ...targetRow, regularPrice: value }, rowIdx, prev, 'regularPrice')
+          : parseNumber(value);
         if (Number.isFinite(regNum) && regNum > 0) {
-          setRows(p => p.map(r => r.id === rowId ? {
-            ...r,
-            platform:            newPlatform,
-            regularPrice:        String(Math.round(regNum * 1.10)),
-            fsPrice:             String(Math.round(regNum * 1.05)),
-            _tiktokRegularPrice: baseReg,
-            _tiktokFsPrice:      baseFS,
-          } : r));
-          return;
+          updated = updated.map(r =>
+            r.groupId === targetRow.groupId && r.platform === 'Shopee'
+              ? { ...r, regularPrice: String(Math.round(regNum * 1.10)), fsPrice: String(Math.round(regNum * 1.05)) }
+              : r
+          );
         }
       }
-    }
 
-    // ── Shopee → TikTok: restore both saved prices ────────────────────────────
-    if (newPlatform === 'TikTok' && prevPlatform === 'Shopee') {
-      setRows(p => p.map(r => r.id === rowId ? {
-        ...r,
-        platform:            newPlatform,
-        regularPrice:        currentRow._tiktokRegularPrice ?? currentRow.regularPrice,
-        fsPrice:             currentRow._tiktokFsPrice       ?? currentRow.fsPrice,
-        _tiktokRegularPrice: null,
-        _tiktokFsPrice:      null,
-      } : r));
-      return;
-    }
-
-    updateCell(rowId, 'platform', newPlatform);
+      return updated;
+    });
   };
 
-  const addRow       = () => setRows(p => [...p, createRow()]);
-  const duplicateRow = (row) => setRows(p => [...p, { ...row, id: createRow().id }]);
-  const deleteRow    = (id) => setRows(p => p.length <= 1 ? [createRow()] : p.filter(r => r.id !== id));
-  const clearAll     = () => { if (window.confirm('Xóa toàn bộ bảng giá niêm yết?')) setRows([createRow()]); };
-  const clearFilter  = () => { setFilterText(''); setFilterBrand(''); setFilterPromotion(''); setFilterPlatform(''); setFilterBarcode(''); };
+  const addGroup       = () => setRows(p => [...p, ...createGroupPair()]);
+
+  const deleteGroup    = (groupId) => setRows(p => {
+    const filtered = p.filter(r => r.groupId !== groupId);
+    const hasGroups = filtered.some(r => r.groupId);
+    return hasGroups ? filtered : createGroupPair();
+  });
+
+  const duplicateGroup = (groupId) => setRows(p => {
+    const groupRows  = p.filter(r => r.groupId === groupId);
+    const newGroupId = newId();
+    const duped      = groupRows.map(r => ({ ...r, id: newId(), groupId: newGroupId }));
+    const lastIdx    = p.reduce((max, r, i) => r.groupId === groupId ? i : max, -1);
+    const result     = [...p];
+    result.splice(lastIdx + 1, 0, ...duped);
+    return result;
+  });
+
+  const clearAll = () => { if (window.confirm('Xóa toàn bộ bảng giá niêm yết?')) setRows(createGroupPair()); };
 
   const handleImportFile = (e) => {
     const file = e.target.files?.[0]; if (!file) return;
     importExcel(file, (newRows) => {
-      if (window.confirm(`Import ${newRows.length} dòng?\n\nOK = Ghi đè\nCancel = Thêm vào cuối`)) {
+      const productCount = new Set(newRows.map(r => r.groupId)).size;
+      if (window.confirm(`Import ${productCount} sản phẩm?\n\nOK = Ghi đè\nCancel = Thêm vào cuối`)) {
         setRows(newRows);
       } else {
-        setRows(p => [...p.filter(r => r.productName || r.barcode || r.brand), ...newRows]);
+        setRows(p => {
+          const existing = p.filter(r => r.productName || r.barcode || r.brand);
+          return [...existing, ...newRows];
+        });
       }
     });
     e.target.value = '';
   };
+
+  // ── Grouped products (for render) ─────────────────────────────────────────────
+  const groupedProducts = useMemo(() => {
+    // Build map groupId → [{row, index}]
+    const groupMap = new Map();
+    rows.forEach((row, index) => {
+      if (!row.groupId) return;
+      if (!groupMap.has(row.groupId)) groupMap.set(row.groupId, []);
+      groupMap.get(row.groupId).push({ row, index });
+    });
+
+    // Sort each group: TikTok first
+    groupMap.forEach(items => items.sort((a, b) => (a.row.platform === 'TikTok' ? -1 : 1)));
+
+    const allGroups = Array.from(groupMap.values());
+
+    // Apply filters (use TikTok row as representative for brand/barcode)
+    return allGroups.filter(groupItems => {
+      const rep = (groupItems.find(i => i.row.platform === 'TikTok') || groupItems[0]).row;
+      if (filterBrand    && rep.brand !== filterBrand) return false;
+      if (filterBarcode  && !String(rep.barcode || '').toLowerCase().includes(filterBarcode.toLowerCase())) return false;
+      if (filterPromotion && !groupItems.some(({ row }) => row.promotion === filterPromotion)) return false;
+      if (filterText && !groupItems.some(({ row }) =>
+        ALL_COLUMNS.some(c => String(row[c.key] || '').toLowerCase().includes(filterText.toLowerCase()))
+      )) return false;
+      return true;
+    });
+  }, [rows, filterBrand, filterPromotion, filterBarcode, filterText]);
+
+  const hasFilter  = filterBrand || filterPromotion || filterBarcode || filterText;
+  const clearFilter = () => { setFilterText(''); setFilterBrand(''); setFilterPromotion(''); setFilterBarcode(''); };
 
   // ── Styles ──
   const selectStyle = {
@@ -361,34 +401,31 @@ const ListedPriceTab = () => {
     color: active ? '#fff' : '#ea580c', fontWeight: 700, cursor: 'pointer', fontSize: 14,
   });
 
-  // ── Cell renderer ─────────────────────────────────────────────────────────
+  // ── Cell renderer (price + promotion + platform label) ────────────────────
   const renderCell = (col, row, index) => {
-    const rawValue   = row[col.key] || '';
-    const hasFormula = isFormula(rawValue);
-    const isEditing  = editingCell?.id === row.id && editingCell?.key === col.key;
-    const isDragSrc  = fillDrag?.fromIndex === index && fillDrag?.colKey === col.key;
+    const rawValue  = row[col.key] ?? '';
+    const isEditing = editingCell?.id === row.id && editingCell?.key === col.key;
+    const isDragSrc = fillDrag?.fromIndex === index && fillDrag?.colKey === col.key;
 
-    // Dropdown: brand
-    if (col.type === 'brand') return (
-      <td key={col.key} style={{ position: 'relative' }}>
-        <select value={rawValue} onChange={e => updateCell(row.id, col.key, e.target.value)} style={selectStyle}>
-          <option value="">— chọn brand —</option>
-          {brands.map(b => <option key={b} value={b}>{b}</option>)}
-        </select>
-        {rawValue && <FillHandle onMouseDown={e => startFill(e, index, col.key, rawValue)} active={isDragSrc} />}
-      </td>
-    );
-
-    // Dropdown: platform
-    if (col.type === 'platform') return (
-      <td key={col.key} style={{ position: 'relative' }}>
-        <select value={rawValue} onChange={e => handlePlatformChange(row.id, e.target.value, row)} style={selectStyle}>
-          <option value="">— chọn sàn —</option>
-          {platforms.map(p => <option key={p} value={p}>{p}</option>)}
-        </select>
-        {rawValue && <FillHandle onMouseDown={e => startFill(e, index, col.key, rawValue)} active={isDragSrc} />}
-      </td>
-    );
+    // Fixed platform label
+    if (col.key === 'platform') {
+      const isTikTok = row.platform === 'TikTok';
+      return (
+        <td key="platform" style={{
+          background:   isTikTok ? '#f0f4ff' : '#fff7ed',
+          fontWeight:   700,
+          color:        isTikTok ? '#4f46e5' : '#ea580c',
+          fontSize:     '0.75rem',
+          textAlign:    'center',
+          whiteSpace:   'nowrap',
+          borderRight:  `2px solid ${isTikTok ? '#c7d2fe' : '#fed7aa'}`,
+          letterSpacing: '0.2px',
+          userSelect:   'none',
+        }}>
+          {isTikTok ? '🎵 TikTok' : '🛒 Shopee'}
+        </td>
+      );
+    }
 
     // Dropdown: promotion
     if (col.type === 'promotion') return (
@@ -402,26 +439,15 @@ const ListedPriceTab = () => {
     );
 
     // Text / formula cell
-    const formulaResult = hasFormula
-      ? evaluateFormula(rawValue, row, index, rows, col.key)
-      : null;
-
-    // What to show in the input:
-    // - editing → raw formula / raw text
-    // - not editing + formula → computed result (formatted)
-    const displayValue = (!isEditing && hasFormula)
+    const hasFormula    = isFormula(rawValue);
+    const formulaResult = hasFormula ? evaluateFormula(rawValue, row, index, rows, col.key) : null;
+    const displayValue  = (!isEditing && hasFormula)
       ? (Number.isFinite(formulaResult) ? fmtResult(formulaResult) : 'Lỗi')
       : rawValue;
-
     const isError = hasFormula && !Number.isFinite(formulaResult);
 
     return (
-      <td key={col.key}
-        style={{
-          position: 'relative',
-          outline: isDragSrc ? '2px solid #ea580c' : undefined,
-        }}
-      >
+      <td key={col.key} style={{ position: 'relative', outline: isDragSrc ? '2px solid #ea580c' : undefined }}>
         <input
           type="text"
           value={displayValue}
@@ -429,34 +455,22 @@ const ListedPriceTab = () => {
           onChange={e => updateCell(row.id, col.key, e.target.value)}
           onFocus={() => setEditingCell({ id: row.id, key: col.key })}
           onBlur={() => setEditingCell(null)}
-          style={{
-            color: !isEditing && hasFormula && isError ? '#dc2626' : '#0f172a',
-            fontStyle: 'normal',
-          }}
+          style={{ color: !isEditing && hasFormula && isError ? '#dc2626' : '#0f172a' }}
         />
-        {/* Live preview while editing a formula */}
         {isEditing && hasFormula && (
-          <div style={{
-            fontSize: 10, color: Number.isFinite(formulaResult) ? '#16a34a' : '#dc2626',
-            paddingLeft: 6, paddingBottom: 2, lineHeight: 1.2,
-          }}>
+          <div style={{ fontSize: 10, color: Number.isFinite(formulaResult) ? '#16a34a' : '#dc2626', paddingLeft: 6, paddingBottom: 2, lineHeight: 1.2 }}>
             → {Number.isFinite(formulaResult) ? fmtResult(formulaResult) : 'Lỗi công thức'}
           </div>
         )}
-        {/* Fill handle */}
         {rawValue && <FillHandle onMouseDown={e => startFill(e, index, col.key, rawValue)} active={isDragSrc} />}
       </td>
     );
   };
 
-  // ── Fill handle helpers ──
   const startFill = (e, fromIndex, colKey, sourceValue) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation();
     setFillDrag({ fromIndex, colKey, sourceValue });
   };
-
-  // highlight range during drag
   const getFillHighlight = (index) => {
     if (!fillDrag || fillOver === null) return false;
     const lo = Math.min(fillDrag.fromIndex, fillOver);
@@ -473,11 +487,11 @@ const ListedPriceTab = () => {
         <div>
           <div className="listed-price-page__eyebrow">Ecom</div>
           <h1 className="page-header" style={{ margin: 0 }}>BẢNG GIÁ NIÊM YẾT</h1>
-          <p>Listing full giá niêm yết theo sản phẩm, brand và sàn.</p>
+          <p>Listing full giá niêm yết theo sản phẩm — mỗi sản phẩm có giá TikTok & Shopee.</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button onClick={clearAll} className="listed-price-page__button is-muted">Xóa bảng</button>
-          <button onClick={addRow}   className="listed-price-page__button is-primary">+ Thêm dòng</button>
+          <button onClick={addGroup} className="listed-price-page__button is-primary">+ Thêm sản phẩm</button>
           <input ref={importRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={handleImportFile} />
           <button onClick={() => importRef.current?.click()}
             style={{ padding: '8px 14px', borderRadius: 8, border: '1.5px solid #3b82f6', background: '#eff6ff', color: '#1d4ed8', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -492,17 +506,14 @@ const ListedPriceTab = () => {
 
       {/* ── Filter bar ── */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: 12, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '12px 14px' }}>
-        {/* Search */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: 8, padding: '6px 10px', flex: '1 1 180px', minWidth: 160 }}>
           <span style={{ color: '#94a3b8', fontSize: 15 }}>⌕</span>
           <input type="text" value={filterText} onChange={e => setFilterText(e.target.value)}
             placeholder="Tìm tên SP, barcode..."
             style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.82rem', width: '100%' }} />
         </div>
-        {/* Barcode */}
         <input type="text" value={filterBarcode} onChange={e => setFilterBarcode(e.target.value)}
           placeholder="Lọc Barcode..." style={{ ...filterSelectStyle, minWidth: 130 }} />
-        {/* Brand */}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', gap: 4 }}>
             <select value={filterBrand} onChange={e => setFilterBrand(e.target.value)} style={filterSelectStyle}>
@@ -513,18 +524,6 @@ const ListedPriceTab = () => {
           </div>
           {addingBrand && <AddOptionInline placeholder="Tên brand mới..." onAdd={addBrand} onClose={() => setAddingBrand(false)} />}
         </div>
-        {/* Sàn */}
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', gap: 4 }}>
-            <select value={filterPlatform} onChange={e => setFilterPlatform(e.target.value)} style={filterSelectStyle}>
-              <option value="">Tất cả sàn</option>
-              {platforms.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-            <button onClick={() => setAddingPlatform(v => !v)} style={addBtnStyle(addingPlatform)}>+</button>
-          </div>
-          {addingPlatform && <AddOptionInline placeholder="Tên sàn mới..." onAdd={addPlatform} onClose={() => setAddingPlatform(false)} />}
-        </div>
-        {/* Promotion */}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', gap: 4 }}>
             <select value={filterPromotion} onChange={e => setFilterPromotion(e.target.value)} style={filterSelectStyle}>
@@ -535,7 +534,6 @@ const ListedPriceTab = () => {
           </div>
           {addingPromotion && <AddOptionInline placeholder="Tên promotion mới..." onAdd={addPromotion} onClose={() => setAddingPromotion(false)} />}
         </div>
-        {/* Clear */}
         {hasFilter && (
           <button onClick={clearFilter}
             style={{ padding: '7px 12px', background: '#fee2e2', border: '1.5px solid #fca5a5', borderRadius: 8, color: '#dc2626', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}>
@@ -543,11 +541,9 @@ const ListedPriceTab = () => {
           </button>
         )}
         <div style={{ marginLeft: 'auto', fontSize: '0.78rem', color: '#94a3b8', alignSelf: 'center' }}>
-          Hiển thị <strong style={{ color: '#ea580c' }}>{filteredRows.length}</strong> / {rows.length} dòng
+          <strong style={{ color: '#ea580c' }}>{groupedProducts.length}</strong> / {Math.ceil(rows.filter(r => r.platform === 'TikTok').length)} sản phẩm
         </div>
       </div>
-
-      {/* Formula hint hidden */}
 
       {/* ── Table ── */}
       <div className="listed-price-table-card">
@@ -557,29 +553,91 @@ const ListedPriceTab = () => {
             <thead>
               <tr>
                 <th className="listed-price-table__index">#</th>
-                {columns.map((col, i) => (
+                {/* A B C — product columns */}
+                {PRODUCT_COLS_LIST.map((col, i) => (
                   <th key={col.key} style={{ minWidth: col.minWidth }}>
                     <span>{String.fromCharCode(65 + i)}</span>{col.label}
+                  </th>
+                ))}
+                {/* D — platform (fixed) */}
+                <th style={{ minWidth: 90 }}><span>D</span>Sàn</th>
+                {/* E–J — price columns */}
+                {PRICE_COLS.map((col, i) => (
+                  <th key={col.key} style={{ minWidth: col.minWidth }}>
+                    <span>{String.fromCharCode(69 + i)}</span>{col.label}
                   </th>
                 ))}
                 <th className="listed-price-table__actions">Thao tác</th>
               </tr>
             </thead>
             <tbody>
-              {filteredRows.map(({ row, index }) => {
-                const isHighlighted = getFillHighlight(index);
+              {groupedProducts.map((groupItems, groupIdx) => {
+                const tiktokItem = groupItems.find(i => i.row.platform === 'TikTok') || groupItems[0];
+                const shopeeItem = groupItems.find(i => i.row.platform === 'Shopee');
+                const { row: tRow, index: tIdx } = tiktokItem;
+                const rowSpan    = shopeeItem ? 2 : 1;
+                const groupId    = tRow.groupId;
+                const tikHL      = getFillHighlight(tIdx);
+                const shopHL     = shopeeItem ? getFillHighlight(shopeeItem.index) : false;
+
                 return (
-                  <tr key={row.id}
-                    onMouseEnter={() => { if (fillDrag) setFillOver(index); }}
-                    style={isHighlighted ? { background: '#fff7ed', outline: '1px dashed #ea580c' } : undefined}
-                  >
-                    <td className="listed-price-table__index">{index + 1}</td>
-                    {columns.map(col => renderCell(col, row, index))}
-                    <td className="listed-price-table__actions">
-                      <button type="button" title="Nhân bản" onClick={() => duplicateRow(row)}>⧉</button>
-                      <button type="button" title="Xóa dòng"  onClick={() => deleteRow(row.id)}>×</button>
-                    </td>
-                  </tr>
+                  <Fragment key={groupId}>
+                    {/* ── TikTok row ── */}
+                    <tr
+                      onMouseEnter={() => { if (fillDrag) setFillOver(tIdx); }}
+                      style={tikHL ? { background: '#fff7ed', outline: '1px dashed #ea580c' } : undefined}
+                    >
+                      {/* # (merged) */}
+                      <td className="listed-price-table__index" rowSpan={rowSpan}
+                        style={{ verticalAlign: 'middle', fontWeight: 700, color: '#6b7280', fontSize: '0.9rem' }}>
+                        {groupIdx + 1}
+                      </td>
+
+                      {/* Product name (merged) */}
+                      <td rowSpan={rowSpan} style={{ position: 'relative', verticalAlign: 'middle' }}>
+                        <input type="text" value={tRow.productName || ''} placeholder="Tên sản phẩm"
+                          onChange={e => updateCell(tRow.id, 'productName', e.target.value)}
+                          style={{ fontWeight: tRow.productName ? 700 : 400 }}
+                        />
+                      </td>
+
+                      {/* Barcode (merged) */}
+                      <td rowSpan={rowSpan} style={{ position: 'relative', verticalAlign: 'middle' }}>
+                        <input type="text" value={tRow.barcode || ''} placeholder="Barcode"
+                          onChange={e => updateCell(tRow.id, 'barcode', e.target.value)}
+                        />
+                      </td>
+
+                      {/* Brand (merged) */}
+                      <td rowSpan={rowSpan} style={{ position: 'relative', verticalAlign: 'middle' }}>
+                        <select value={tRow.brand || ''} onChange={e => updateCell(tRow.id, 'brand', e.target.value)} style={selectStyle}>
+                          <option value="">— chọn brand —</option>
+                          {brands.map(b => <option key={b} value={b}>{b}</option>)}
+                        </select>
+                      </td>
+
+                      {/* TikTok platform label + price cells */}
+                      {renderCell(PLATFORM_COL, tRow, tIdx)}
+                      {PRICE_COLS.map(col => renderCell(col, tRow, tIdx))}
+
+                      {/* Actions (merged) */}
+                      <td rowSpan={rowSpan} className="listed-price-table__actions" style={{ verticalAlign: 'middle' }}>
+                        <button type="button" title="Nhân bản" onClick={() => duplicateGroup(groupId)}>⧉</button>
+                        <button type="button" title="Xóa" onClick={() => deleteGroup(groupId)}>×</button>
+                      </td>
+                    </tr>
+
+                    {/* ── Shopee row ── */}
+                    {shopeeItem && (
+                      <tr
+                        onMouseEnter={() => { if (fillDrag) setFillOver(shopeeItem.index); }}
+                        style={shopHL ? { background: '#fff7ed', outline: '1px dashed #ea580c' } : undefined}
+                      >
+                        {renderCell(PLATFORM_COL, shopeeItem.row, shopeeItem.index)}
+                        {PRICE_COLS.map(col => renderCell(col, shopeeItem.row, shopeeItem.index))}
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>
