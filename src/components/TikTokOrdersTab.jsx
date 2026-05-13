@@ -152,7 +152,7 @@ const TikTokOrdersTab = () => {
   const fetchConnections = useCallback(async () => {
     const { data, error } = await supabase
       .from('tiktok_shop_connections')
-      .select('shop_id,seller_name,seller_base_region,access_token_expires_at,refresh_token_expires_at');
+      .select('shop_id,seller_name,seller_base_region,access_token_expires_at');
     if (error) { console.error('fetchConnections error:', error); return; }
     if (data) setConnections(data);
   }, []);
