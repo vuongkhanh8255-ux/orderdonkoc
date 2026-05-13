@@ -151,7 +151,7 @@ const TikTokOrdersTab = () => {
   // ── Fetch connections ─────────────────────────────────────────────────────
   const fetchConnections = useCallback(async () => {
     const { data, error } = await supabase
-      .from('tiktok_shop_connections')
+      .from('tiktok_shop_connections_public')
       .select('shop_id,seller_name,seller_base_region,access_token_expires_at');
     if (error) { console.error('fetchConnections error:', error); return; }
     if (data) setConnections(data);
