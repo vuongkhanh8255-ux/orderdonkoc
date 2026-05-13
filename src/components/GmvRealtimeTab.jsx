@@ -272,7 +272,7 @@ const GmvRealtimeTab = () => {
             {/* HEADER */}
             <div style={{ marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
                 <div>
-                    <h1 className="page-header">📊 GMV Realtime</h1>
+                    <h1 className="page-header">📊 GMV REALTIME</h1>
                     <p style={{ color: '#6B7280', marginTop: '8px', fontSize: '1.05rem', fontWeight: '500' }}>
                         Dữ liệu doanh thu real-time từ TikTok Shop & Shopee — Powered by Bluecore
                     </p>

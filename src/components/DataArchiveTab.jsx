@@ -536,7 +536,7 @@ const DataArchiveTab = () => {
 
     return (
         <div style={{ padding: '20px', maxWidth: '1600px', margin: '0 auto', fontFamily: 'Outfit, sans-serif' }}>
-            <h1 className="page-header">Lưu Trữ & Kiểm Tra Data</h1>
+            <h1 className="page-header">LƯU TRỮ & KIỂM TRA DATA</h1>
 
             {/* COMPONENT IMPORT */}
             <div style={{ ...cardStyle }}>

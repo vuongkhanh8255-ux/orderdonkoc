@@ -64,7 +64,7 @@ const ContractTab = () => {
 
     return (
         <div style={{ padding: '30px', maxWidth: '1400px', margin: '0 auto', fontFamily: "'Outfit', sans-serif" }}>
-            <h1 className="page-header">Quản Lý Hợp Đồng & Đối Soát</h1>
+            <h1 className="page-header">QUẢN LÝ HỢP ĐỒNG & ĐỐI SOÁT</h1>
 
             <main style={{ display: 'grid', gridTemplateColumns: isOutputVisible ? '1fr 1fr' : '1fr', gap: '2rem', transition: 'grid-template-columns 0.3s ease-in-out', marginBottom: '3rem' }}>
 

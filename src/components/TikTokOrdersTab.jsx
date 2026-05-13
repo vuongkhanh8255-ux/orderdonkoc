@@ -277,7 +277,7 @@ const TikTokOrdersTab = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#ea580c', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 }}>TikTok Shop</div>
-          <h1 style={{ margin: 0, fontSize: '1.55rem', fontWeight: 800 }}>Đơn hàng TikTok Shop</h1>
+          <h1 className="page-header" style={{ margin: 0 }}>ĐƠN HÀNG TIKTOK SHOP</h1>
           <p style={{ margin: '5px 0 0', color: '#64748b', fontSize: '0.88rem', lineHeight: 1.5 }}>
             Dữ liệu đơn hàng thực từ TikTok Shop Open API. Nhấn <strong>Sync</strong> để cập nhật mới nhất.
           </p>

@@ -432,9 +432,7 @@ const ExpenseEcomTab = () => {
             )}
 
             {/* HEADER */}
-            <h1 className="page-header">
-                Quản Lý Chi Phí & Ngân Sách
-            </h1>
+            <h1 className="page-header">QUẢN LÝ CHI PHÍ & NGÂN SÁCH</h1>
             {/* --- KHU VỰC THỐNG KÊ --- */}
             <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', alignItems: 'stretch' }}>
                 {/* Cột trái: Ngân sách + Thẻ thống kê */}

@@ -295,7 +295,7 @@ const OrderTab = () => {
             </button>
 
             <div style={{ position: 'relative', textAlign: 'center', marginBottom: '2rem' }}>
-                <h1 className="page-header">Quản Lý Đơn Hàng KOC</h1>
+                <h1 className="page-header">QUẢN LÝ ĐƠN HÀNG KOC</h1>
             </div>
 
             <div style={{ display: 'flex', gap: '2rem', marginBottom: '2rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
