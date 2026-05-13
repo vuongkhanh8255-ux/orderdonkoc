@@ -323,7 +323,7 @@ export default function CampRegistrationTab() {
             {/* Header */}
             <div style={{ textAlign: 'center', marginBottom: 28 }}>
                 <div style={{ fontSize: 48, marginBottom: 8 }}>🛒</div>
-                <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1a1a2e', margin: 0 }}>APP ĐĂNG KÍ CAMP TIKTOK</h1>
+                <h1 className="page-header" style={{ margin: 0 }}>APP ĐĂNG KÍ CAMP TIKTOK</h1>
                 <p style={{ color: '#888', marginTop: 6, fontSize: 14 }}>Tự động lọc & tạo file đăng kí chiến dịch</p>
             </div>
 

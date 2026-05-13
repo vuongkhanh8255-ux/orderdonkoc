@@ -244,8 +244,8 @@ export default function ReportCSTab() {
   // Brand selector screen
   if (!selectedBrand) {
     return (
-      <div style={{ fontFamily: "'Outfit', sans-serif" }}>
-        <h2 style={{ margin: '0 0 8px', fontSize: 22, fontWeight: 800, color: '#1a1a2e' }}>📝 REPORT CS</h2>
+      <div>
+        <h1 className="page-header" style={{ margin: '0 0 8px' }}>📝 REPORT CS</h1>
         <p style={{ margin: '0 0 24px', fontSize: 13, color: '#888' }}>Chọn brand để xem và tạo báo cáo CSKH</p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
           {BRANDS.map(brand => (

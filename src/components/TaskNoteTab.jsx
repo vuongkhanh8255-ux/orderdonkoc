@@ -303,7 +303,7 @@ export default function TaskNoteTab() {
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                 <div>
-                    <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 900, color: '#ea580c' }}>📝 Task & Notes</h1>
+                    <h1 className="page-header" style={{ margin: 0 }}>📝 TASK & NOTES</h1>
                     <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#9ca3af' }}>Quản lý công việc và ghi chú nội bộ</p>
                     <p style={{ margin: '4px 0 0', fontSize: '0.72rem', color: syncStatus.includes('lỗi') || syncStatus.includes('Chưa') ? '#dc2626' : '#16a34a', fontWeight: 700 }}>
                         {syncStatus}

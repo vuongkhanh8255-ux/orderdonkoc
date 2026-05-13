@@ -1768,8 +1768,8 @@ ${txtFormat}
     ];
 
     return (
-        <div style={{ padding: '20px', maxWidth: '1600px', margin: '0 auto', fontFamily: 'Outfit, sans-serif' }}>
-            <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#333', marginBottom: '20px' }}>📊 DASHBOARD HIỆU SUẤT BOOKING</h2>
+        <div style={{ padding: '20px', maxWidth: '1600px', margin: '0 auto' }}>
+            <h1 className="page-header">📊 DASHBOARD HIỆU SUẤT BOOKING</h1>
 
                     {/* NOTE: Import feature has been moved to the Data Archive Tab */}
 

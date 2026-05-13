@@ -313,10 +313,10 @@ export default function LivestreamTab() {
   if (error)   return <div style={{ textAlign:'center', padding: 60, color:'#ef4444' }}>Lỗi: {error}</div>;
 
   return (
-    <div style={{ fontFamily:"'Outfit',sans-serif", color:'#1f2937' }}>
+    <div style={{ color:'#1f2937' }}>
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
-        <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color:'#ea580c' }}>🎬 LIVESTREAM DASHBOARD</h2>
+        <h1 className="page-header" style={{ margin: 0 }}>🎬 LIVESTREAM DASHBOARD</h1>
         <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color:'#9ca3af' }}>
           Nguồn: Livestream Guideline — Video 2025 &amp; Performance Lives 2025
         </p>

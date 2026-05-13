@@ -181,9 +181,7 @@ function DanhGiaTab() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: '#1a1a2e' }}>
-            📋 QUẢN LÝ ĐÁNH GIÁ CSKH
-          </h2>
+          <h1 className="page-header" style={{ margin: 0 }}>📋 QUẢN LÝ ĐÁNH GIÁ CSKH</h1>
           <p style={{ margin: '4px 0 0', fontSize: 13, color: '#888' }}>
             Nguồn: CS Guideline 2026 — Sheet 11.1 ĐÁNH GIÁ 2026
           </p>

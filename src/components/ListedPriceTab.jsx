@@ -86,6 +86,7 @@ const evaluateFormula = (formula, row, rowIndex, allRows, currentKey) => {
   const run = (raw, _activeRow, activeIdx) => {
     let expr = String(raw || '').trim().replace(/^=/, '');
     expr = expr.replace(/(\d+(?:[.,]\d+)?)%/g, '($1/100)');
+    expr = expr.replace(/(\d+),(\d+)/g, '$1.$2');
     expr = expr.replace(/\b([A-Ja-j])(\d+)\b/g, (_, l, n) => {
       const k = columnLetters[l.toUpperCase()]; return k ? String(getValue(Number(n) - 1, k)) : '0';
     });
@@ -108,11 +109,28 @@ const shiftFormula = (formula, offset) => {
 };
 
 // ── Excel export ──────────────────────────────────────────────────────────────
+const normalizeFormulaDecimalForExcel = (formula) =>
+  String(formula || '').replace(/(\d+)\.(\d+)/g, '$1,$2');
+
+const toExcelFormulaText = (value) =>
+  isFormula(value) ? normalizeFormulaDecimalForExcel(shiftFormula(value, 1)) : value;
+
 const exportExcel = (rows) => {
   const headers = ['Tên sản phẩm','Barcode','Brand','Sàn','Giá Niêm yết','Promotion','Giá regular','Giá FS','Voucher','Giá final'];
   const data = [
     headers,
-    ...rows.map(r => [r.productName, r.barcode, r.brand, r.platform, r.listedPrice, r.promotion, r.regularPrice, r.fsPrice, r.voucher, r.finalPrice])
+    ...rows.map(r => [
+      r.productName,
+      r.barcode,
+      r.brand,
+      r.platform,
+      toExcelFormulaText(r.listedPrice),
+      r.promotion,
+      toExcelFormulaText(r.regularPrice),
+      toExcelFormulaText(r.fsPrice),
+      toExcelFormulaText(r.voucher),
+      toExcelFormulaText(r.finalPrice)
+    ])
   ];
   const ws = XLSX.utils.aoa_to_sheet(data);
   headers.forEach((_, ci) => {
@@ -199,6 +217,7 @@ const ListedPriceTab = () => {
   // Drag-to-fill state
   const [fillDrag, setFillDrag] = useState(null); // { fromIndex, colKey, sourceValue }
   const [fillOver, setFillOver] = useState(null); // rowIndex hovered during drag
+  const fillOverRef = useRef(null);               // ref giữ giá trị mới nhất tránh stale closure
 
   const importRef = useRef(null);
 
@@ -403,7 +422,7 @@ const ListedPriceTab = () => {
       <div className="listed-price-page__header">
         <div>
           <div className="listed-price-page__eyebrow">Ecom</div>
-          <h1>Bảng giá niêm yết</h1>
+          <h1 className="page-header" style={{ margin: 0 }}>BẢNG GIÁ NIÊM YẾT</h1>
           <p>Listing full giá niêm yết theo sản phẩm, brand và sàn.</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -480,7 +499,7 @@ const ListedPriceTab = () => {
 
       {/* ── Formula hint ── */}
       <div className="listed-price-formula-help">
-        Nhập công thức bằng dấu <strong>=</strong>. Ví dụ: <code>=E1-G1-I1</code>, <code>=regularPrice-voucher</code>, <code>=listedPrice*0.9</code>.
+        Nhập công thức bằng dấu <strong>=</strong>. Ví dụ: <code>=E1-G1-I1</code>, <code>=regularPrice-voucher</code>, <code>=listedPrice*0,9</code>.
         &nbsp;Cell hiển thị kết quả — click vào để xem/sửa công thức.
         &nbsp;<strong>Kéo ô cam</strong> ở góc phải để áp dụng công thức cho các dòng bên dưới.
       </div>
