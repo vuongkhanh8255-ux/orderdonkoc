@@ -282,9 +282,12 @@ const ListedPriceTab = () => {
   const handlePlatformChange = (rowId, newPlatform, currentRow) => {
     if (newPlatform === 'Shopee') {
       const regRaw = currentRow.regularPrice;
-      if (regRaw && !isFormula(regRaw)) {
-        const regNum = parseNumber(regRaw);
-        if (regNum > 0) {
+      if (regRaw) {
+        const rowIndex = rows.findIndex(r => r.id === rowId);
+        const regNum = isFormula(regRaw)
+          ? evaluateFormula(regRaw, currentRow, rowIndex, rows, 'regularPrice')
+          : parseNumber(regRaw);
+        if (Number.isFinite(regNum) && regNum > 0) {
           const shopeeReg = Math.round(regNum * 1.10);
           const shopeeFS  = Math.round(regNum * 1.05);
           setRows(p => p.map(r => r.id === rowId ? {
