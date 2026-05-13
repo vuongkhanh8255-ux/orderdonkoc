@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=Outfit:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 /* 🌌 STELLA KINETICS - Cosmic Premium Theme */
 @tailwind base;
@@ -58,7 +58,7 @@
 body {
     background: var(--bg-space-dark);
     color: var(--text-primary);
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Be Vietnam Pro', 'Be Vietnam Pro', 'Outfit', sans-serif;
     -webkit-font-smoothing: antialiased;
     min-height: 100vh;
     position: relative;
@@ -90,8 +90,7 @@ h3,
 h4,
 h5,
 h6 {
-    text-transform: uppercase;
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Be Vietnam Pro', 'Be Vietnam Pro', 'Outfit', sans-serif;
     letter-spacing: 0;
 }
 
@@ -102,7 +101,7 @@ h6 {
     text-align: left;
     margin-bottom: 1.5rem;
     letter-spacing: 0;
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Be Vietnam Pro', 'Be Vietnam Pro', 'Outfit', sans-serif;
     text-transform: none;
     background: none;
     -webkit-text-fill-color: currentColor;
@@ -117,7 +116,7 @@ h6 {
     margin-bottom: 12px;
     display: inline-block;
     text-transform: uppercase;
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Be Vietnam Pro', 'Outfit', sans-serif;
 }
 
 /* === FORM ELEMENTS === */
@@ -167,7 +166,7 @@ select option {
 
 /* === BUTTONS === */
 button {
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Be Vietnam Pro', 'Outfit', sans-serif;
     font-weight: 600;
     border-radius: var(--radius-md);
     transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
@@ -279,7 +278,7 @@ thead th {
     text-align: left;
     border-bottom: 1px solid var(--surface-border);
     letter-spacing: 0;
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Be Vietnam Pro', 'Outfit', sans-serif;
 }
 
 tbody tr {
@@ -354,7 +353,7 @@ tbody tr:last-child {
     font-size: 2rem;
     font-weight: 800;
     color: var(--primary-cyan);
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Be Vietnam Pro', 'Outfit', sans-serif;
 }
 
 .stat-card .stat-label {
