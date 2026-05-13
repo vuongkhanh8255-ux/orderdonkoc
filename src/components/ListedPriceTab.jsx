@@ -156,6 +156,52 @@ const exportExcel = (rows) => {
   XLSX.writeFile(wb, 'bang-gia-niem-yet.xlsx');
 };
 
+// ── Platform logos (inline SVG — no external files needed) ───────────────────
+const ShopeeLogo = ({ size = 20 }) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="sp-bg" x1="50" y1="0" x2="50" y2="100" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#FF6633"/>
+        <stop offset="1" stopColor="#EE4D2D"/>
+      </linearGradient>
+    </defs>
+    <rect width="100" height="100" rx="20" fill="url(#sp-bg)"/>
+    {/* bag body */}
+    <path d="M22 46 L78 46 L71 79 L29 79 Z" fill="white"/>
+    {/* bag handle */}
+    <path d="M33 46 C33 27 67 27 67 46" stroke="white" strokeWidth="8" strokeLinecap="round"/>
+    {/* S letter */}
+    <text x="50" y="71" textAnchor="middle" fill="#EE4D2D" fontSize="26" fontWeight="900" fontFamily="Arial Black,Arial,sans-serif">S</text>
+  </svg>
+);
+
+const TikTokLogo = ({ size = 20 }) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100" height="100" rx="20" fill="#010101"/>
+    {/* pink/red shadow — shifted right */}
+    <g fill="#FE2C55" transform="translate(2,0)">
+      <ellipse cx="33" cy="67" rx="13" ry="10"/>
+      <rect x="44" y="19" width="6" height="49"/>
+      <rect x="44" y="19" width="24" height="8" rx="3"/>
+      <rect x="62" y="19" width="6" height="22" rx="2"/>
+    </g>
+    {/* cyan shadow — shifted left */}
+    <g fill="#25F4EE" transform="translate(-4,0)">
+      <ellipse cx="33" cy="67" rx="13" ry="10"/>
+      <rect x="44" y="19" width="6" height="49"/>
+      <rect x="44" y="19" width="24" height="8" rx="3"/>
+      <rect x="62" y="19" width="6" height="22" rx="2"/>
+    </g>
+    {/* white main note */}
+    <g fill="white">
+      <ellipse cx="33" cy="67" rx="13" ry="10"/>
+      <rect x="44" y="19" width="6" height="49"/>
+      <rect x="44" y="19" width="24" height="8" rx="3"/>
+      <rect x="62" y="19" width="6" height="22" rx="2"/>
+    </g>
+  </svg>
+);
+
 // ── Excel import ──────────────────────────────────────────────────────────────
 const importExcel = (file, onSuccess) => {
   const reader = new FileReader();
@@ -407,22 +453,25 @@ const ListedPriceTab = () => {
     const isEditing = editingCell?.id === row.id && editingCell?.key === col.key;
     const isDragSrc = fillDrag?.fromIndex === index && fillDrag?.colKey === col.key;
 
-    // Fixed platform label
+    // Fixed platform label with actual logo
     if (col.key === 'platform') {
       const isTikTok = row.platform === 'TikTok';
       return (
         <td key="platform" style={{
-          background:   isTikTok ? '#f0f4ff' : '#fff7ed',
-          fontWeight:   700,
-          color:        isTikTok ? '#4f46e5' : '#ea580c',
-          fontSize:     '0.75rem',
-          textAlign:    'center',
-          whiteSpace:   'nowrap',
-          borderRight:  `2px solid ${isTikTok ? '#c7d2fe' : '#fed7aa'}`,
-          letterSpacing: '0.2px',
-          userSelect:   'none',
+          background:  isTikTok ? '#f0f4ff' : '#fff7ed',
+          borderRight: `2px solid ${isTikTok ? '#c7d2fe' : '#fed7aa'}`,
+          userSelect:  'none',
+          padding:     '4px 6px',
         }}>
-          {isTikTok ? '🎵 TikTok' : '🛒 Shopee'}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+            {isTikTok ? <TikTokLogo size={22} /> : <ShopeeLogo size={22} />}
+            <span style={{
+              fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.3px',
+              color: isTikTok ? '#4f46e5' : '#ea580c',
+            }}>
+              {isTikTok ? 'TikTok' : 'Shopee'}
+            </span>
+          </div>
         </td>
       );
     }
