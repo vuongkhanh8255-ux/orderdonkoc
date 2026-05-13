@@ -432,14 +432,8 @@ const ExpenseEcomTab = () => {
             )}
 
             {/* HEADER */}
-            <h1 className="page-header" style={{
-                marginBottom: '30px',
-                background: 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                fontFamily: "'Outfit', sans-serif"
-            }}>
-                QUẢN LÝ CHI PHÍ & NGÂN SÁCH
+            <h1 className="page-header">
+                Quản Lý Chi Phí & Ngân Sách
             </h1>
             {/* --- KHU VỰC THỐNG KÊ --- */}
             <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', alignItems: 'stretch' }}>

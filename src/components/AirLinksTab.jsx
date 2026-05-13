@@ -887,9 +887,7 @@ const AirLinksTab = () => {
             {/* HEADER */}
             <div style={{ marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                    <h1 className="page-header">
-                        QUẢN LÝ AIR LINKS
-                    </h1>
+                    <h1 className="page-header">Quản Lý Air Links</h1>
                     <p style={{ color: '#4B5563', marginTop: '8px', fontSize: '1.1rem', fontWeight: '500' }}>
                         Theo dõi hiệu suất và nhập liệu link air hàng ngày.
                     </p>

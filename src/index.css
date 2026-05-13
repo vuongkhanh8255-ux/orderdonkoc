@@ -96,17 +96,17 @@ h6 {
 }
 
 .page-header {
-    font-size: 1.75rem;
+    font-size: 1.6rem;
     font-weight: 800;
-    color: var(--text-primary);
+    color: #111827;
     text-align: left;
     margin-bottom: 1.5rem;
     letter-spacing: 0;
     font-family: 'Outfit', sans-serif;
-    text-transform: uppercase;
+    text-transform: none;
     background: none;
     -webkit-text-fill-color: currentColor;
-    color: #111827;
+    line-height: 1.25;
 }
 
 .section-title {
