@@ -10,7 +10,7 @@ const PROMOTIONS_KEY = 'stella_listed_price_promotions_v1';
 const VOUCHERS_KEY   = 'stella_listed_price_vouchers_v1';
 
 const DEFAULT_BRANDS     = ['Body Miss', 'Stella Kinetics'];
-const DEFAULT_PROMOTIONS = ['M1T1', 'M2G50%', 'M2G30%', 'BÁN LẺ'];
+const DEFAULT_PROMOTIONS = ['M1T1', 'M1T2', 'M1T3', 'M2G50%', 'M2G30%', 'BÁN LẺ'];
 const DEFAULT_VOUCHERS   = ['10%', '15%', '20%', '30%', '50.000đ', '100.000đ', '200.000đ'];
 
 // ── Columns ────────────────────────────────────────────────────────────────────
@@ -133,11 +133,18 @@ const shiftFormula = (formula, offset) => {
   );
 };
 
+// ── Helpers for M1Tx (mua 1 tặng x) ─────────────────────────────────────────
+const isM1Tx = (promo) => /^M1T\d+$/i.test(String(promo || '').trim());
+const getGiftCount = (promo) => {
+  const m = String(promo || '').toUpperCase().trim().match(/^M1T(\d+)$/);
+  return m ? parseInt(m[1]) : 0;
+};
+
 // ── Final price auto-calculator ───────────────────────────────────────────────
 const parsePromotion = (promo) => {
   if (!promo) return { base: 'single', rate: 0 };
   const p = String(promo).toUpperCase().trim();
-  if (p === 'M1T1' || p === 'BÁN LẺ' || p === 'BAN LE') return { base: 'single', rate: 0 }; // chỉ tính 1 sản phẩm, không nhân 2
+  if (isM1Tx(p) || p === 'BÁN LẺ' || p === 'BAN LE') return { base: 'single', rate: 0 }; // chỉ tính 1 sản phẩm
   // MxGy% → buy x items, discount y%
   const match = p.match(/M(\d+)G(\d+)%/);
   if (match) return { base: 'combo', count: parseInt(match[1]), rate: parseInt(match[2]) / 100 };
@@ -564,24 +571,29 @@ const ListedPriceTab = () => {
         }
       }
 
-      // 3. Auto-add/remove gift row khi promotion thay đổi
+      // 3. Auto-add/remove gift rows khi promotion thay đổi (M1T1 → 1 row, M1T2 → 2 rows…)
       if (key === 'promotion' && targetRow.groupId) {
-        const anyM1T1 = updated.some(r =>
-          r.groupId === targetRow.groupId && r.rowType !== 'gift' &&
-          String(r.promotion || '').toUpperCase().trim() === 'M1T1'
-        );
-        const hasGift = updated.some(r => r.groupId === targetRow.groupId && r.rowType === 'gift');
+        // Đếm số quà cần có: lấy max giftCount từ tất cả non-gift rows trong group
+        const maxGiftCount = updated
+          .filter(r => r.groupId === targetRow.groupId && r.rowType !== 'gift')
+          .reduce((max, r) => Math.max(max, getGiftCount(r.promotion)), 0);
 
-        if (anyM1T1 && !hasGift) {
-          // Tự thêm gift row
-          const gift = { ...createRow(), groupId: targetRow.groupId, platform: 'gift', rowType: 'gift' };
+        const existingGifts = updated.filter(r => r.groupId === targetRow.groupId && r.rowType === 'gift');
+        const diff = maxGiftCount - existingGifts.length;
+
+        if (diff > 0) {
+          // Thêm gift rows còn thiếu
           const lastIdx = updated.reduce((max, r, i) => r.groupId === targetRow.groupId ? i : max, -1);
+          const newGifts = Array.from({ length: diff }, () =>
+            ({ ...createRow(), groupId: targetRow.groupId, platform: 'gift', rowType: 'gift' })
+          );
           const next = [...updated];
-          next.splice(lastIdx + 1, 0, gift);
+          next.splice(lastIdx + 1, 0, ...newGifts);
           updated = next;
-        } else if (!anyM1T1 && hasGift) {
-          // Tự xóa gift row khi không còn M1T1 nào trong group
-          updated = updated.filter(r => !(r.groupId === targetRow.groupId && r.rowType === 'gift'));
+        } else if (diff < 0) {
+          // Xóa bớt gift rows thừa (giữ lại đúng maxGiftCount đầu tiên)
+          const toRemove = existingGifts.slice(maxGiftCount).map(r => r.id);
+          updated = updated.filter(r => !toRemove.includes(r.id));
         }
       }
 
@@ -595,12 +607,16 @@ const ListedPriceTab = () => {
   const updateGiftCell = (id, key, value) =>
     setRows(prev => prev.map(r => r.id === id ? { ...r, [key]: value } : r));
 
-  const addGiftRow = (groupId) => setRows(prev => {
-    if (prev.some(r => r.groupId === groupId && r.rowType === 'gift')) return prev;
-    const gift = { ...createRow(), groupId, platform: 'gift', rowType: 'gift' };
+  const addGiftRow = (groupId, count = 1) => setRows(prev => {
+    const existing = prev.filter(r => r.groupId === groupId && r.rowType === 'gift').length;
+    if (existing >= count) return prev;
+    const toAdd = count - existing;
+    const gifts = Array.from({ length: toAdd }, () =>
+      ({ ...createRow(), groupId, platform: 'gift', rowType: 'gift' })
+    );
     const lastIdx = prev.reduce((max, r, i) => r.groupId === groupId ? i : max, -1);
     const result = [...prev];
-    result.splice(lastIdx + 1, 0, gift);
+    result.splice(lastIdx + 1, 0, ...gifts);
     return result;
   });
 
@@ -945,15 +961,20 @@ const ListedPriceTab = () => {
               {groupedProducts.map((groupItems, groupIdx) => {
                 const tiktokItem = groupItems.find(i => i.row.platform === 'TikTok') || groupItems[0];
                 const shopeeItem = groupItems.find(i => i.row.platform === 'Shopee');
-                const giftItem   = groupItems.find(i => i.row.rowType === 'gift');
+                const giftItems  = groupItems.filter(i => i.row.rowType === 'gift'); // array!
                 const { row: tRow, index: tIdx } = tiktokItem;
                 const groupId    = tRow.groupId;
                 const tikHL      = getFillHighlight(tIdx);
                 const shopHL     = shopeeItem ? getFillHighlight(shopeeItem.index) : false;
-                const hasM1T1    = groupItems.some(i => String(i.row.promotion || '').toUpperCase().trim() === 'M1T1');
+                // hasMxGift: có bất kỳ M1Tx nào trong group
+                const hasMxGift  = groupItems.some(i => isM1Tx(i.row.promotion));
+                // Tổng số quà từ promotion (lấy max M1Tx trong group)
+                const totalGiftNeeded = groupItems
+                  .filter(i => i.row.rowType !== 'gift')
+                  .reduce((max, i) => Math.max(max, getGiftCount(i.row.promotion)), 0);
 
-                // # và Actions span toàn bộ rows trong group (TikTok + gift? + Shopee?)
-                const totalRowSpan = 1 + (giftItem ? 1 : 0) + (shopeeItem ? 1 : 0);
+                // # và Actions span toàn bộ rows trong group
+                const totalRowSpan = 1 + giftItems.length + (shopeeItem ? 1 : 0);
 
                 // Style cho product cells của Shopee (trống, chỉ giữ border)
                 const shopeeProductTd = {
@@ -1022,43 +1043,48 @@ const ListedPriceTab = () => {
 
                       {/* Actions spans TẤT CẢ rows */}
                       <td rowSpan={totalRowSpan} className="listed-price-table__actions" style={{ verticalAlign: 'middle' }}>
-                        {hasM1T1 && (
+                        {hasMxGift && (
                           <button
                             type="button"
-                            title={giftItem ? 'Ẩn SP quà tặng' : 'Hiện SP quà tặng'}
-                            onClick={() => giftItem ? removeGiftRow(groupId) : addGiftRow(groupId)}
+                            title={giftItems.length > 0 ? `Ẩn ${giftItems.length} SP quà tặng` : `Hiện ${totalGiftNeeded} SP quà tặng`}
+                            onClick={() => giftItems.length > 0
+                              ? removeGiftRow(groupId)
+                              : addGiftRow(groupId, totalGiftNeeded)
+                            }
                             style={{
                               background: 'none', border: 'none', cursor: 'pointer',
                               fontSize: '1rem', padding: '2px 3px',
-                              opacity: giftItem ? 1 : 0.35,
-                              filter: giftItem ? 'none' : 'grayscale(1)',
+                              opacity: giftItems.length > 0 ? 1 : 0.35,
+                              filter: giftItems.length > 0 ? 'none' : 'grayscale(1)',
                             }}
-                          >🎁</button>
+                          >🎁{totalGiftNeeded > 1 ? <sup style={{ fontSize: '0.6rem', fontWeight: 700, color: '#059669' }}>{totalGiftNeeded}</sup> : null}</button>
                         )}
                         <button type="button" title="Nhân bản" onClick={() => duplicateGroup(groupId)}>⧉</button>
                         <button type="button" title="Xóa" onClick={() => deleteGroup(groupId)}>×</button>
                       </td>
                     </tr>
 
-                    {/* ── Gift row (compact, ngay dưới TikTok, trước Shopee) ── */}
-                    {giftItem && (
-                      <tr className="is-gift-row">
+                    {/* ── Gift rows (compact, ngay dưới TikTok, trước Shopee) ── */}
+                    {giftItems.map((gi, giftIdx) => (
+                      <tr key={gi.row.id} className="is-gift-row">
                         {/* # không có (spanned từ TikTok) */}
-                        {/* Link — trống cho gift row */}
+                        {/* Link — trống */}
                         <td style={{ background: '#f0fdf4' }} />
                         {/* Gift product name */}
                         <td style={{ paddingLeft: 16, paddingTop: 3, paddingBottom: 3 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <span style={{ color: '#16a34a', fontSize: '0.65rem', fontWeight: 800, flexShrink: 0, letterSpacing: 0 }}>↳🎁</span>
-                            <input type="text" value={giftItem.row.productName || ''} placeholder="Tên SP quà tặng"
-                              onChange={e => updateGiftCell(giftItem.row.id, 'productName', e.target.value)}
+                            <span style={{ color: '#16a34a', fontSize: '0.65rem', fontWeight: 800, flexShrink: 0 }}>
+                              ↳🎁{giftItems.length > 1 ? <sub style={{ fontSize: '0.6rem' }}>{giftIdx + 1}</sub> : null}
+                            </span>
+                            <input type="text" value={gi.row.productName || ''} placeholder={`Quà ${giftIdx + 1}`}
+                              onChange={e => updateGiftCell(gi.row.id, 'productName', e.target.value)}
                               style={{ fontWeight: 600, color: '#059669', fontSize: '0.78rem', height: 28 }} />
                           </div>
                         </td>
                         {/* Gift barcode */}
                         <td style={{ paddingTop: 3, paddingBottom: 3 }}>
-                          <input type="text" value={giftItem.row.barcode || ''} placeholder="Barcode quà"
-                            onChange={e => updateGiftCell(giftItem.row.id, 'barcode', e.target.value)}
+                          <input type="text" value={gi.row.barcode || ''} placeholder="Barcode quà"
+                            onChange={e => updateGiftCell(gi.row.id, 'barcode', e.target.value)}
                             style={{ textAlign: 'center', color: '#059669', fontSize: '0.78rem', height: 28 }} />
                         </td>
                         {/* Brand — trống */}
@@ -1067,25 +1093,26 @@ const ListedPriceTab = () => {
                         <td style={{ background: '#dcfce7', borderRight: '2px solid #86efac', padding: '3px 4px', userSelect: 'none' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
                             <span style={{ fontSize: 13 }}>🎁</span>
-                            <span style={{ fontSize: '0.55rem', fontWeight: 700, color: '#059669' }}>Quà</span>
+                            {giftItems.length > 1 && (
+                              <span style={{ fontSize: '0.55rem', fontWeight: 800, color: '#059669' }}>{giftIdx + 1}/{giftItems.length}</span>
+                            )}
                           </div>
                         </td>
-                        {/* AFF % — trống cho gift */}
+                        {/* AFF %, ADS % — trống */}
                         <td style={{ background: '#f0fdf4' }} />
-                        {/* ADS % — trống cho gift */}
                         <td style={{ background: '#f0fdf4' }} />
                         {/* Listed price */}
                         <td style={{ paddingTop: 3, paddingBottom: 3 }}>
-                          <input type="text" value={giftItem.row.listedPrice || ''} placeholder="Giá niêm yết"
-                            onChange={e => updateGiftCell(giftItem.row.id, 'listedPrice', e.target.value)}
+                          <input type="text" value={gi.row.listedPrice || ''} placeholder="Giá niêm yết"
+                            onChange={e => updateGiftCell(gi.row.id, 'listedPrice', e.target.value)}
                             style={{ textAlign: 'center', color: '#059669', fontSize: '0.78rem', height: 28 }} />
                         </td>
                         {/* Promotion — trống */}
                         <td style={{ background: '#f0fdf4' }} />
                         {/* Regular price */}
                         <td style={{ paddingTop: 3, paddingBottom: 3 }}>
-                          <input type="text" value={giftItem.row.regularPrice || ''} placeholder="Giá regular"
-                            onChange={e => updateGiftCell(giftItem.row.id, 'regularPrice', e.target.value)}
+                          <input type="text" value={gi.row.regularPrice || ''} placeholder="Giá regular"
+                            onChange={e => updateGiftCell(gi.row.id, 'regularPrice', e.target.value)}
                             style={{ textAlign: 'center', color: '#059669', fontSize: '0.78rem', height: 28 }} />
                         </td>
                         {/* FS, Voucher, Final — trống */}
@@ -1094,7 +1121,7 @@ const ListedPriceTab = () => {
                         <td style={{ background: '#f0fdf4' }} />
                         {/* Actions không có (spanned từ TikTok) */}
                       </tr>
-                    )}
+                    ))}
 
                     {/* ── Shopee row ── */}
                     {shopeeItem && (
