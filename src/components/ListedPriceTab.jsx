@@ -151,75 +151,82 @@ const calcFinalPrice = (row) => {
   const fs = parseNumber(row.fsPrice);
   if (!fs || fs <= 0) return null;
 
-  const promo   = parsePromotion(row.promotion);
-  const voucher = parseVoucher(row.voucher);
+  const promo    = parsePromotion(row.promotion);
+  const voucher  = parseVoucher(row.voucher);
   const isTikTok = row.platform === 'TikTok';
 
   // Step 1: base after promotion
-  let base, originalTotal;
+  let base, originalTotal, unitCount;
   if (promo.base === 'combo') {
-    originalTotal = fs * promo.count;
-    base = originalTotal * (1 - promo.rate);
+    unitCount     = promo.count;
+    originalTotal = fs * unitCount;
+    base          = originalTotal * (1 - promo.rate);
   } else {
-    // M1T1 / BÁN LẺ / no promo — pay for 1 item
+    // M1T1 / BÁN LẺ / no promo — tính cho 1 sản phẩm
+    unitCount     = 1;
     originalTotal = fs;
-    base = fs;
+    base          = fs;
   }
 
-  // Step 2: apply voucher
-  let final;
-  if (voucher.type === 'none') {
-    final = base;
-  } else if (voucher.type === 'percent') {
-    if (isTikTok) {
-      // TikTok: trừ voucher % tính trên giá gốc (trước promotion)
-      final = base - originalTotal * voucher.value;
+  // Step 2: apply voucher — TikTok only (Shopee không trừ voucher)
+  let total;
+  if (isTikTok) {
+    if (voucher.type === 'none') {
+      total = base;
+    } else if (voucher.type === 'percent') {
+      total = base - originalTotal * voucher.value;
     } else {
-      // Shopee: nhân voucher % vào giá sau promotion
-      final = base * (1 - voucher.value);
+      // Fixed amount
+      total = base - voucher.value;
     }
   } else {
-    // Fixed amount: cả 2 sàn trừ thẳng
-    final = base - voucher.value;
+    // Shopee: chỉ tính giá sau promotion, không trừ voucher
+    total = base;
   }
+
+  // Step 3: chia cho số lượng để ra giá 1 unit
+  const final = total / unitCount;
 
   return Number.isFinite(final) && final >= 0 ? Math.round(final) : null;
 };
 
 // Sinh chuỗi công thức hiển thị để user đọc/hiểu
 const getFormulaHint = (row) => {
-  const promo   = parsePromotion(row.promotion);
-  const voucher = parseVoucher(row.voucher);
+  const promo    = parsePromotion(row.promotion);
+  const voucher  = parseVoucher(row.voucher);
   const isTikTok = row.platform === 'TikTok';
+  const isCombo  = promo.base === 'combo';
+  const count    = isCombo ? promo.count : 1;
 
   // Phần base (sau promotion)
   let baseStr;
-  if (promo.base === 'combo') {
+  if (isCombo) {
     const discPct = Math.round((1 - promo.rate) * 100);
-    baseStr = `(FS×${promo.count})×${discPct}%`;
+    baseStr = `(FS×${count})×${discPct}%`;
   } else {
     baseStr = 'FS';
   }
 
-  // Phần voucher
-  if (voucher.type === 'none') return baseStr;
-
-  if (voucher.type === 'percent') {
-    const vPct = Math.round(voucher.value * 100);
-    if (isTikTok) {
-      // TikTok: trừ voucher từ originalTotal
-      const totalStr = promo.base === 'combo' ? `FS×${promo.count}` : 'FS';
-      return `${baseStr} − ${totalStr}×${vPct}%`;
+  // Phần voucher — TikTok only
+  let totalStr = baseStr;
+  if (isTikTok && voucher.type !== 'none') {
+    if (voucher.type === 'percent') {
+      const vPct    = Math.round(voucher.value * 100);
+      const origStr = isCombo ? `FS×${count}` : 'FS';
+      totalStr = `${baseStr} − ${origStr}×${vPct}%`;
     } else {
-      return `${baseStr}×${100 - vPct}%`;
+      const fixedStr = voucher.value >= 1000
+        ? `${(voucher.value / 1000).toLocaleString('vi-VN')}k`
+        : String(voucher.value);
+      totalStr = `${baseStr} − ${fixedStr}`;
     }
   }
 
-  // Fixed amount
-  const fixedStr = voucher.value >= 1000
-    ? `${(voucher.value / 1000).toLocaleString('vi-VN')}k`
-    : String(voucher.value);
-  return `${baseStr} − ${fixedStr}`;
+  // Chia cho số lượng nếu combo → giá per unit
+  if (isCombo) {
+    return `(${totalStr}) ÷ ${count}`;
+  }
+  return totalStr;
 };
 
 // ── Excel export ──────────────────────────────────────────────────────────────
