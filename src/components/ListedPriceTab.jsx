@@ -941,6 +941,20 @@ const ListedPriceTab = () => {
 
                       {/* Actions (merged) */}
                       <td rowSpan={rowSpan} className="listed-price-table__actions" style={{ verticalAlign: 'middle' }}>
+                        {hasM1T1 && (
+                          <button
+                            type="button"
+                            title={giftItem ? 'Ẩn SP quà tặng' : 'Hiện SP quà tặng'}
+                            onClick={() => giftItem ? removeGiftRow(groupId) : addGiftRow(groupId)}
+                            style={{
+                              background: 'none', border: 'none', cursor: 'pointer',
+                              fontSize: '1rem', padding: '2px 3px',
+                              opacity: giftItem ? 1 : 0.35,
+                              filter: giftItem ? 'none' : 'grayscale(1)',
+                              title: giftItem ? 'Thu quà tặng' : 'Mở quà tặng',
+                            }}
+                          >🎁</button>
+                        )}
                         <button type="button" title="Nhân bản" onClick={() => duplicateGroup(groupId)}>⧉</button>
                         <button type="button" title="Xóa" onClick={() => deleteGroup(groupId)}>×</button>
                       </td>
