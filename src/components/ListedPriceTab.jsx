@@ -424,6 +424,14 @@ const ListedPriceTab = () => {
         }
       }
 
+      // 3. Auto-remove gift row khi promotion đổi khỏi M1T1
+      if (key === 'promotion' && targetRow.groupId) {
+        const isM1T1 = String(value || '').toUpperCase().trim() === 'M1T1';
+        if (!isM1T1) {
+          updated = updated.filter(r => !(r.groupId === targetRow.groupId && r.rowType === 'gift'));
+        }
+      }
+
       return updated;
     });
   };
@@ -795,17 +803,22 @@ const ListedPriceTab = () => {
                       {/* TikTok platform label + price cells */}
                       {renderCell(PLATFORM_COL, tRow, tIdx)}
                       {PRICE_COLS.map(col => renderCell(col, tRow, tIdx))}
+                      {/* 🎁 gift shortcut — shows after price cells when M1T1 and no gift row yet */}
+                      {hasM1T1 && !giftItem && (
+                        <td style={{ background: '#f0fdf4', padding: '4px 6px', borderLeft: '2px dashed #86efac', verticalAlign: 'middle' }}
+                          rowSpan={rowSpan}>
+                          <button type="button" title="Thêm SP quà tặng (M1T1)" onClick={() => addGiftRow(groupId)}
+                            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: '#dcfce7', color: '#16a34a', border: '1.5px solid #4ade80', borderRadius: 8, fontSize: 12, cursor: 'pointer', padding: '6px 8px', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: 18 }}>🎁</span>
+                            <span style={{ fontSize: '0.6rem' }}>Thêm quà</span>
+                          </button>
+                        </td>
+                      )}
 
                       {/* Actions (merged) */}
                       <td rowSpan={rowSpan} className="listed-price-table__actions" style={{ verticalAlign: 'middle' }}>
                         <button type="button" title="Nhân bản" onClick={() => duplicateGroup(groupId)}>⧉</button>
                         <button type="button" title="Xóa" onClick={() => deleteGroup(groupId)}>×</button>
-                        {hasM1T1 && !giftItem && (
-                          <button type="button" title="Thêm SP quà tặng M1T1" onClick={() => addGiftRow(groupId)}
-                            style={{ background: '#f0fdf4', color: '#059669', border: '1.5px solid #86efac', borderRadius: 6, fontSize: 14, cursor: 'pointer', padding: '2px 5px' }}>
-                            🎁
-                          </button>
-                        )}
                       </td>
                     </tr>
 
