@@ -6,9 +6,11 @@ import * as XLSX from 'xlsx-js-style';
 const STORAGE_KEY    = 'stella_listed_price_rows_v2';  // v2: grouped TikTok+Shopee pairs
 const BRANDS_KEY     = 'stella_listed_price_brands_v1';
 const PROMOTIONS_KEY = 'stella_listed_price_promotions_v1';
+const VOUCHERS_KEY   = 'stella_listed_price_vouchers_v1';
 
 const DEFAULT_BRANDS     = ['Body Miss', 'Stella Kinetics'];
 const DEFAULT_PROMOTIONS = ['M1T1', 'M2G50%', 'M2G30%', 'BÁN LẺ'];
+const DEFAULT_VOUCHERS   = ['10%', '15%', '20%', '30%', '50.000đ', '100.000đ', '200.000đ'];
 
 // ── Columns (A–J kept for formula engine) ─────────────────────────────────────
 // A=productName B=barcode C=brand D=platform(fixed) E=listedPrice F=promotion G=regularPrice H=fsPrice I=voucher J=finalPrice
@@ -21,7 +23,7 @@ const ALL_COLUMNS = [
   { key: 'promotion',    label: 'Promotion',     minWidth: 150, type: 'promotion' },
   { key: 'regularPrice', label: 'Giá regular',   minWidth: 150 },
   { key: 'fsPrice',      label: 'Giá FS',        minWidth: 130 },
-  { key: 'voucher',      label: 'Voucher',       minWidth: 130 },
+  { key: 'voucher',      label: 'Voucher',       minWidth: 130, type: 'voucher' },
   { key: 'finalPrice',   label: 'Giá final',     minWidth: 150 },
 ];
 
@@ -274,6 +276,7 @@ const ListedPriceTab = () => {
   const [rows, setRows]             = useState(loadRows);
   const [brands, setBrands]         = useState(() => loadArray(BRANDS_KEY, DEFAULT_BRANDS));
   const [promotions, setPromotions] = useState(() => loadArray(PROMOTIONS_KEY, DEFAULT_PROMOTIONS));
+  const [vouchers, setVouchers]     = useState(() => loadArray(VOUCHERS_KEY, DEFAULT_VOUCHERS));
 
   // Filter state
   const [filterText,      setFilterText]      = useState('');
@@ -284,6 +287,7 @@ const ListedPriceTab = () => {
   // Add-option toggles
   const [addingBrand,     setAddingBrand]     = useState(false);
   const [addingPromotion, setAddingPromotion] = useState(false);
+  const [addingVoucher,   setAddingVoucher]   = useState(false);
 
   // Cell edit + drag-to-fill
   const [editingCell, setEditingCell] = useState(null);
@@ -296,6 +300,7 @@ const ListedPriceTab = () => {
   useEffect(() => { localStorage.setItem(STORAGE_KEY,    JSON.stringify(rows));       }, [rows]);
   useEffect(() => { localStorage.setItem(BRANDS_KEY,     JSON.stringify(brands));     }, [brands]);
   useEffect(() => { localStorage.setItem(PROMOTIONS_KEY, JSON.stringify(promotions)); }, [promotions]);
+  useEffect(() => { localStorage.setItem(VOUCHERS_KEY,   JSON.stringify(vouchers));   }, [vouchers]);
 
   // Sync brands from Supabase
   useEffect(() => {
@@ -327,6 +332,7 @@ const ListedPriceTab = () => {
 
   const addBrand     = (v) => { if (!brands.includes(v))     setBrands(p     => [...p, v]); };
   const addPromotion = (v) => { if (!promotions.includes(v)) setPromotions(p => [...p, v]); };
+  const addVoucher   = (v) => { if (!vouchers.includes(v))   setVouchers(p   => [...p, v]); };
 
   // ── CRUD ─────────────────────────────────────────────────────────────────────
 
@@ -487,6 +493,17 @@ const ListedPriceTab = () => {
       </td>
     );
 
+    // Dropdown: voucher
+    if (col.type === 'voucher') return (
+      <td key={col.key} style={{ position: 'relative' }}>
+        <select value={rawValue} onChange={e => updateCell(row.id, col.key, e.target.value)} style={selectStyle}>
+          <option value="">— chọn —</option>
+          {vouchers.map(v => <option key={v} value={v}>{v}</option>)}
+        </select>
+        {rawValue && <FillHandle onMouseDown={e => startFill(e, index, col.key, rawValue)} active={isDragSrc} />}
+      </td>
+    );
+
     // Text / formula cell
     const hasFormula    = isFormula(rawValue);
     const formulaResult = hasFormula ? evaluateFormula(rawValue, row, index, rows, col.key) : null;
@@ -582,6 +599,13 @@ const ListedPriceTab = () => {
             <button onClick={() => setAddingPromotion(v => !v)} style={addBtnStyle(addingPromotion)}>+</button>
           </div>
           {addingPromotion && <AddOptionInline placeholder="Tên promotion mới..." onAdd={addPromotion} onClose={() => setAddingPromotion(false)} />}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>🏷️ Voucher</span>
+            <button onClick={() => setAddingVoucher(v => !v)} style={addBtnStyle(addingVoucher)}>+</button>
+          </div>
+          {addingVoucher && <AddOptionInline placeholder="VD: 10% hoặc 50.000đ..." onAdd={addVoucher} onClose={() => setAddingVoucher(false)} />}
         </div>
         {hasFilter && (
           <button onClick={clearFilter}
