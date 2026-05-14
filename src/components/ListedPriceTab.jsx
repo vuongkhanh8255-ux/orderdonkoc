@@ -130,7 +130,8 @@ const shiftFormula = (formula, offset) => {
 const parsePromotion = (promo) => {
   if (!promo) return { base: 'single', rate: 0 };
   const p = String(promo).toUpperCase().trim();
-  if (p === 'M1T1' || p === 'BÁN LẺ' || p === 'BAN LE') return { base: 'single', rate: 0 };
+  if (p === 'M1T1') return { base: 'combo', count: 2, rate: 0.5 }; // Mua 1 Tặng 1 = combo 2 items, 50% off → pay for 1; TikTok vẫn trừ voucher từ 2×fs
+  if (p === 'BÁN LẺ' || p === 'BAN LE') return { base: 'single', rate: 0 };
   // MxGy% → buy x items, discount y%
   const match = p.match(/M(\d+)G(\d+)%/);
   if (match) return { base: 'combo', count: parseInt(match[1]), rate: parseInt(match[2]) / 100 };
@@ -424,10 +425,23 @@ const ListedPriceTab = () => {
         }
       }
 
-      // 3. Auto-remove gift row khi promotion đổi khỏi M1T1
+      // 3. Auto-add/remove gift row khi promotion thay đổi
       if (key === 'promotion' && targetRow.groupId) {
-        const isM1T1 = String(value || '').toUpperCase().trim() === 'M1T1';
-        if (!isM1T1) {
+        const anyM1T1 = updated.some(r =>
+          r.groupId === targetRow.groupId && r.rowType !== 'gift' &&
+          String(r.promotion || '').toUpperCase().trim() === 'M1T1'
+        );
+        const hasGift = updated.some(r => r.groupId === targetRow.groupId && r.rowType === 'gift');
+
+        if (anyM1T1 && !hasGift) {
+          // Tự thêm gift row
+          const gift = { ...createRow(), groupId: targetRow.groupId, platform: 'gift', rowType: 'gift' };
+          const lastIdx = updated.reduce((max, r, i) => r.groupId === targetRow.groupId ? i : max, -1);
+          const next = [...updated];
+          next.splice(lastIdx + 1, 0, gift);
+          updated = next;
+        } else if (!anyM1T1 && hasGift) {
+          // Tự xóa gift row khi không còn M1T1 nào trong group
           updated = updated.filter(r => !(r.groupId === targetRow.groupId && r.rowType === 'gift'));
         }
       }
@@ -803,17 +817,6 @@ const ListedPriceTab = () => {
                       {/* TikTok platform label + price cells */}
                       {renderCell(PLATFORM_COL, tRow, tIdx)}
                       {PRICE_COLS.map(col => renderCell(col, tRow, tIdx))}
-                      {/* 🎁 gift shortcut — shows after price cells when M1T1 and no gift row yet */}
-                      {hasM1T1 && !giftItem && (
-                        <td style={{ background: '#f0fdf4', padding: '4px 6px', borderLeft: '2px dashed #86efac', verticalAlign: 'middle' }}
-                          rowSpan={rowSpan}>
-                          <button type="button" title="Thêm SP quà tặng (M1T1)" onClick={() => addGiftRow(groupId)}
-                            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: '#dcfce7', color: '#16a34a', border: '1.5px solid #4ade80', borderRadius: 8, fontSize: 12, cursor: 'pointer', padding: '6px 8px', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                            <span style={{ fontSize: 18 }}>🎁</span>
-                            <span style={{ fontSize: '0.6rem' }}>Thêm quà</span>
-                          </button>
-                        </td>
-                      )}
 
                       {/* Actions (merged) */}
                       <td rowSpan={rowSpan} className="listed-price-table__actions" style={{ verticalAlign: 'middle' }}>
