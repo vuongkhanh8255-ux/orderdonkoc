@@ -13,13 +13,17 @@ const DEFAULT_BRANDS     = ['Body Miss', 'Stella Kinetics'];
 const DEFAULT_PROMOTIONS = ['M1T1', 'M2G50%', 'M2G30%', 'BÁN LẺ'];
 const DEFAULT_VOUCHERS   = ['10%', '15%', '20%', '30%', '50.000đ', '100.000đ', '200.000đ'];
 
-// ── Columns (A–J kept for formula engine) ─────────────────────────────────────
-// A=productName B=barcode C=brand D=platform(fixed) E=listedPrice F=promotion G=regularPrice H=fsPrice I=voucher J=finalPrice
+// ── Columns ────────────────────────────────────────────────────────────────────
+// A=link B=productName C=barcode D=brand E=platform(fixed)
+// F=affPercent G=adsPercent H=listedPrice I=promotion J=regularPrice K=fsPrice L=voucher M=finalPrice
 const ALL_COLUMNS = [
+  { key: 'link',         label: 'Link SP',      minWidth: 110 },
   { key: 'productName',  label: 'Tên sản phẩm', minWidth: 240 },
   { key: 'barcode',      label: 'Barcode',       minWidth: 150 },
   { key: 'brand',        label: 'Brand',         minWidth: 150, type: 'brand' },
   { key: 'platform',     label: 'Sàn',           minWidth: 90  },
+  { key: 'affPercent',   label: 'AFF %',         minWidth: 90  },
+  { key: 'adsPercent',   label: 'ADS %',         minWidth: 90  },
   { key: 'listedPrice',  label: 'Giá Niêm yết',  minWidth: 150 },
   { key: 'promotion',    label: 'Promotion',     minWidth: 150, type: 'promotion' },
   { key: 'regularPrice', label: 'Giá regular',   minWidth: 150 },
@@ -29,12 +33,13 @@ const ALL_COLUMNS = [
 ];
 
 // Sub-sets used for rendering
-const PRODUCT_COLS_LIST = ALL_COLUMNS.slice(0, 3);          // A B C
-const PLATFORM_COL      = ALL_COLUMNS[3];                   // D
-const PRICE_COLS        = ALL_COLUMNS.slice(4);             // E–J
+const PRODUCT_COLS_LIST = ALL_COLUMNS.slice(0, 4);   // A B C D  (link, name, barcode, brand)
+const PLATFORM_COL      = ALL_COLUMNS[4];            // E        (platform)
+const PRICE_COLS        = ALL_COLUMNS.slice(5);      // F–M      (aff, ads, listedPrice…)
 
 // Column keys that are shared across the product group (sync both rows)
-const SHARED_KEYS = new Set(['productName', 'barcode', 'brand']);
+// link là shared — cùng 1 link cho group; aff/ads PER platform nên không shared
+const SHARED_KEYS = new Set(['link', 'productName', 'barcode', 'brand']);
 
 const columnLetters = ALL_COLUMNS.reduce((acc, col, i) => {
   acc[String.fromCharCode(65 + i)] = col.key;
@@ -54,7 +59,8 @@ const newId = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
 
 const createRow = () => ({
   id: newId(), groupId: null,
-  productName: '', barcode: '', brand: '', platform: '',
+  link: '', productName: '', barcode: '', brand: '', platform: '',
+  affPercent: '', adsPercent: '',
   listedPrice: '', promotion: '', regularPrice: '', fsPrice: '', voucher: '', finalPrice: '',
 });
 
@@ -370,18 +376,21 @@ const importExcel = (file, onSuccess) => {
 // ── Supabase sync helpers ─────────────────────────────────────────────────────
 const rowToDb = (row, idx) => ({
   id:            row.id,
-  group_id:      row.groupId   || '',
-  row_type:      row.rowType   || 'price',
-  platform:      row.platform  || '',
-  product_name:  row.productName  || '',
-  barcode:       row.barcode   || '',
-  brand:         row.brand     || '',
-  listed_price:  row.listedPrice  || '',
-  promotion:     row.promotion || '',
+  group_id:      row.groupId     || '',
+  row_type:      row.rowType     || 'price',
+  platform:      row.platform    || '',
+  link:          row.link        || '',
+  product_name:  row.productName || '',
+  barcode:       row.barcode     || '',
+  brand:         row.brand       || '',
+  aff_percent:   row.affPercent  || '',
+  ads_percent:   row.adsPercent  || '',
+  listed_price:  row.listedPrice || '',
+  promotion:     row.promotion   || '',
   regular_price: row.regularPrice || '',
-  fs_price:      row.fsPrice   || '',
-  voucher:       row.voucher   || '',
-  final_price:   row.finalPrice || '',
+  fs_price:      row.fsPrice     || '',
+  voucher:       row.voucher     || '',
+  final_price:   row.finalPrice  || '',
   sort_order:    idx,
 });
 
@@ -390,9 +399,12 @@ const dbToRow = (r) => ({
   groupId:      r.group_id,
   rowType:      r.row_type,
   platform:     r.platform,
+  link:         r.link        || '',
   productName:  r.product_name,
   barcode:      r.barcode,
   brand:        r.brand,
+  affPercent:   r.aff_percent  || '',
+  adsPercent:   r.ads_percent  || '',
   listedPrice:  r.listed_price,
   promotion:    r.promotion,
   regularPrice: r.regular_price,
@@ -912,18 +924,18 @@ const ListedPriceTab = () => {
             <thead>
               <tr>
                 <th className="listed-price-table__index">#</th>
-                {/* A B C — product columns */}
+                {/* A B C D — product columns (link, name, barcode, brand) */}
                 {PRODUCT_COLS_LIST.map((col, i) => (
                   <th key={col.key} style={{ minWidth: col.minWidth }}>
                     <span>{String.fromCharCode(65 + i)}</span>{col.label}
                   </th>
                 ))}
-                {/* D — platform (fixed) */}
-                <th style={{ minWidth: 90 }}><span>D</span>Sàn</th>
-                {/* E–J — price columns */}
+                {/* E — platform (fixed) */}
+                <th style={{ minWidth: 90 }}><span>E</span>Sàn</th>
+                {/* F–M — price columns (aff, ads, listedPrice…) */}
                 {PRICE_COLS.map((col, i) => (
                   <th key={col.key} style={{ minWidth: col.minWidth }}>
-                    <span>{String.fromCharCode(69 + i)}</span>{col.label}
+                    <span>{String.fromCharCode(70 + i)}</span>{col.label}
                   </th>
                 ))}
                 <th className="listed-price-table__actions">Thao tác</th>
@@ -961,6 +973,23 @@ const ListedPriceTab = () => {
                       <td className="listed-price-table__index" rowSpan={totalRowSpan}
                         style={{ verticalAlign: 'middle', fontWeight: 700, color: '#6b7280', fontSize: '0.9rem' }}>
                         {groupIdx + 1}
+                      </td>
+
+                      {/* Link — CHỈ ở TikTok row (shared, trước tên SP) */}
+                      <td style={{ position: 'relative', verticalAlign: 'middle' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <input type="text" value={tRow.link || ''} placeholder="Link SP"
+                            onChange={e => updateCell(tRow.id, 'link', e.target.value)}
+                            style={{ flex: 1, fontSize: '0.75rem', color: '#3b82f6' }}
+                          />
+                          {tRow.link ? (
+                            <a href={tRow.link} target="_blank" rel="noopener noreferrer"
+                              title="Mở link sản phẩm"
+                              style={{ color: '#3b82f6', fontSize: '1rem', textDecoration: 'none', flexShrink: 0, lineHeight: 1 }}>🔗</a>
+                          ) : (
+                            <span style={{ color: '#d1d5db', fontSize: '0.9rem', flexShrink: 0 }}>🔗</span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Product name — CHỈ ở TikTok row (không rowSpan) */}
@@ -1015,6 +1044,8 @@ const ListedPriceTab = () => {
                     {giftItem && (
                       <tr className="is-gift-row">
                         {/* # không có (spanned từ TikTok) */}
+                        {/* Link — trống cho gift row */}
+                        <td style={{ background: '#f0fdf4' }} />
                         {/* Gift product name */}
                         <td style={{ paddingLeft: 16, paddingTop: 3, paddingBottom: 3 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -1039,6 +1070,10 @@ const ListedPriceTab = () => {
                             <span style={{ fontSize: '0.55rem', fontWeight: 700, color: '#059669' }}>Quà</span>
                           </div>
                         </td>
+                        {/* AFF % — trống cho gift */}
+                        <td style={{ background: '#f0fdf4' }} />
+                        {/* ADS % — trống cho gift */}
+                        <td style={{ background: '#f0fdf4' }} />
                         {/* Listed price */}
                         <td style={{ paddingTop: 3, paddingBottom: 3 }}>
                           <input type="text" value={giftItem.row.listedPrice || ''} placeholder="Giá niêm yết"
@@ -1068,7 +1103,8 @@ const ListedPriceTab = () => {
                         style={shopHL ? { background: '#fff7ed', outline: '1px dashed #ea580c' } : undefined}
                       >
                         {/* # không có (spanned từ TikTok) */}
-                        {/* 3 ô trống cho product columns — giữ layout cân */}
+                        {/* 4 ô trống cho product columns (link, name, barcode, brand) */}
+                        <td style={shopeeProductTd} />
                         <td style={shopeeProductTd} />
                         <td style={shopeeProductTd} />
                         <td style={shopeeProductTd} />
