@@ -157,7 +157,8 @@ const calcFinalPrice = (row) => {
 
   // Step 1: base after promotion
   let base, originalTotal, unitCount;
-  if (promo.base === 'combo') {
+  const isCombo = promo.base === 'combo';
+  if (isCombo) {
     unitCount     = promo.count;
     originalTotal = fs * unitCount;
     base          = originalTotal * (1 - promo.rate);
@@ -168,20 +169,25 @@ const calcFinalPrice = (row) => {
     base          = fs;
   }
 
-  // Step 2: apply voucher — TikTok only (Shopee không trừ voucher)
+  // Step 2: apply voucher
+  // TikTok: luôn trừ voucher
+  // Shopee combo: không trừ voucher (chỉ chia)
+  // Shopee single (BÁN LẺ / M1T1): có trừ voucher
+  const applyVoucher = isTikTok || !isCombo;
   let total;
-  if (isTikTok) {
-    if (voucher.type === 'none') {
-      total = base;
-    } else if (voucher.type === 'percent') {
+  if (!applyVoucher || voucher.type === 'none') {
+    total = base;
+  } else if (voucher.type === 'percent') {
+    if (isTikTok) {
+      // TikTok: trừ voucher % tính trên giá gốc (trước promotion)
       total = base - originalTotal * voucher.value;
     } else {
-      // Fixed amount
-      total = base - voucher.value;
+      // Shopee single: trừ thẳng vào base
+      total = base * (1 - voucher.value);
     }
   } else {
-    // Shopee: chỉ tính giá sau promotion, không trừ voucher
-    total = base;
+    // Fixed amount
+    total = base - voucher.value;
   }
 
   // Step 3: chia cho số lượng để ra giá 1 unit
@@ -207,13 +213,19 @@ const getFormulaHint = (row) => {
     baseStr = 'FS';
   }
 
-  // Phần voucher — TikTok only
+  // Phần voucher: TikTok luôn trừ, Shopee chỉ trừ khi single (không phải combo)
+  const showVoucher = voucher.type !== 'none' && (isTikTok || !isCombo);
   let totalStr = baseStr;
-  if (isTikTok && voucher.type !== 'none') {
+  if (showVoucher) {
     if (voucher.type === 'percent') {
-      const vPct    = Math.round(voucher.value * 100);
-      const origStr = isCombo ? `FS×${count}` : 'FS';
-      totalStr = `${baseStr} − ${origStr}×${vPct}%`;
+      const vPct = Math.round(voucher.value * 100);
+      if (isTikTok) {
+        const origStr = isCombo ? `FS×${count}` : 'FS';
+        totalStr = `${baseStr} − ${origStr}×${vPct}%`;
+      } else {
+        // Shopee single: nhân trực tiếp
+        totalStr = `${baseStr}×${100 - vPct}%`;
+      }
     } else {
       const fixedStr = voucher.value >= 1000
         ? `${(voucher.value / 1000).toLocaleString('vi-VN')}k`
