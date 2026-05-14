@@ -790,11 +790,11 @@ const ListedPriceTab = () => {
         <div>
           <div className="listed-price-page__eyebrow">Ecom</div>
           <h1 className="page-header" style={{ margin: 0 }}>BẢNG GIÁ NIÊM YẾT</h1>
-          <p style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            Listing full giá niêm yết theo sản phẩm — mỗi sản phẩm có giá TikTok & Shopee.
+          <p style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+            Listing full giá niêm yết theo sản phẩm — mỗi sản phẩm có giá TikTok &amp; Shopee.
             {syncing
-              ? <span style={{ fontSize: '0.72rem', color: '#f59e0b', fontWeight: 600 }}>⟳ Đang lưu...</span>
-              : <span style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: 600 }}>✓ Đã lưu (cloud)</span>
+              ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.7rem', color: '#92400e', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 999, padding: '2px 10px', fontWeight: 700, flexShrink: 0 }}>⟳ Đang lưu...</span>
+              : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.7rem', color: '#166534', background: '#dcfce7', border: '1px solid #bbf7d0', borderRadius: 999, padding: '2px 10px', fontWeight: 700, flexShrink: 0 }}>✓ Đã lưu</span>
             }
           </p>
         </div>
@@ -814,15 +814,27 @@ const ListedPriceTab = () => {
       </div>
 
       {/* ── Filter bar ── */}
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: 12, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '12px 14px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: 8, padding: '6px 10px', flex: '1 1 180px', minWidth: 160 }}>
-          <span style={{ color: '#94a3b8', fontSize: 15 }}>⌕</span>
-          <input type="text" value={filterText} onChange={e => setFilterText(e.target.value)}
-            placeholder="Tìm tên SP, barcode..."
-            style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.82rem', width: '100%' }} />
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '10px 14px' }}>
+
+        {/* Search group: tên SP + barcode gộp chung */}
+        <div style={{ display: 'flex', background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: 9, overflow: 'hidden', flex: '1 1 280px', minWidth: 240 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', flex: 2, borderRight: '1px solid #e5e7eb' }}>
+            <span style={{ color: '#94a3b8', fontSize: 14, flexShrink: 0 }}>⌕</span>
+            <input type="text" value={filterText} onChange={e => setFilterText(e.target.value)}
+              placeholder="Tên SP, barcode..."
+              style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.82rem', width: '100%', padding: 0, boxShadow: 'none' }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', padding: '6px 10px', flex: 1 }}>
+            <input type="text" value={filterBarcode} onChange={e => setFilterBarcode(e.target.value)}
+              placeholder="Lọc barcode..."
+              style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.82rem', width: '100%', padding: 0, boxShadow: 'none' }} />
+          </div>
         </div>
-        <input type="text" value={filterBarcode} onChange={e => setFilterBarcode(e.target.value)}
-          placeholder="Lọc Barcode..." style={{ ...filterSelectStyle, minWidth: 130 }} />
+
+        {/* Divider */}
+        <div style={{ width: 1, height: 28, background: '#e5e7eb', flexShrink: 0 }} />
+
+        {/* Brand */}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', gap: 4 }}>
             <select value={filterBrand} onChange={e => setFilterBrand(e.target.value)} style={filterSelectStyle}>
@@ -833,6 +845,11 @@ const ListedPriceTab = () => {
           </div>
           {addingBrand && <AddOptionInline placeholder="Tên brand mới..." onAdd={addBrand} onClose={() => setAddingBrand(false)} />}
         </div>
+
+        {/* Divider */}
+        <div style={{ width: 1, height: 28, background: '#e5e7eb', flexShrink: 0 }} />
+
+        {/* Promotion */}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', gap: 4 }}>
             <select value={filterPromotion} onChange={e => setFilterPromotion(e.target.value)} style={filterSelectStyle}>
@@ -843,6 +860,11 @@ const ListedPriceTab = () => {
           </div>
           {addingPromotion && <AddOptionInline placeholder="Tên promotion mới..." onAdd={addPromotion} onClose={() => setAddingPromotion(false)} />}
         </div>
+
+        {/* Divider */}
+        <div style={{ width: 1, height: 28, background: '#e5e7eb', flexShrink: 0 }} />
+
+        {/* Voucher */}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
             <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>🏷️ Voucher</span>
@@ -850,13 +872,15 @@ const ListedPriceTab = () => {
           </div>
           {addingVoucher && <AddOptionInline placeholder="VD: 10% hoặc 50.000đ..." onAdd={addVoucher} onClose={() => setAddingVoucher(false)} />}
         </div>
+
         {hasFilter && (
           <button onClick={clearFilter}
-            style={{ padding: '7px 12px', background: '#fee2e2', border: '1.5px solid #fca5a5', borderRadius: 8, color: '#dc2626', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}>
+            style={{ padding: '6px 12px', background: '#fee2e2', border: '1.5px solid #fca5a5', borderRadius: 8, color: '#dc2626', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}>
             ✕ Xóa lọc
           </button>
         )}
-        <div style={{ marginLeft: 'auto', fontSize: '0.78rem', color: '#94a3b8', alignSelf: 'center' }}>
+
+        <div style={{ marginLeft: 'auto', fontSize: '0.78rem', color: '#94a3b8', whiteSpace: 'nowrap' }}>
           <strong style={{ color: '#ea580c' }}>{groupedProducts.length}</strong> / {Math.ceil(rows.filter(r => r.platform === 'TikTok').length)} sản phẩm
         </div>
       </div>

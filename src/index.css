@@ -1276,15 +1276,16 @@ tbody tr:last-child {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
-    margin-right: 6px;
+    width: 17px;
+    height: 17px;
+    margin-right: 5px;
     border-radius: 999px;
-    background: #fff;
-    border: 1px solid #fdba74;
-    color: #ea580c;
-    font-size: 0.68rem;
-    font-weight: 900;
+    background: transparent;
+    border: 1px solid #fed7aa;
+    color: #fb923c;
+    font-size: 0.6rem;
+    font-weight: 700;
+    opacity: 0.75;
 }
 
 .listed-price-table td {
@@ -1322,6 +1323,11 @@ tbody tr:last-child {
     font-weight: 650;
     font-family: inherit;
     outline: none;
+}
+
+.listed-price-table input::placeholder {
+    color: #d1d5db;
+    font-weight: 400;
 }
 
 .listed-price-table input:focus {
@@ -1385,8 +1391,11 @@ tbody tr:last-child {
 }
 
 .listed-price-table__actions button:hover {
-    border-color: #fb923c;
+    border-color: #ea580c;
     background: #fff7ed;
+    color: #ea580c;
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(234, 88, 12, 0.15);
 }
 
 /* ── Gift row (M1T1 quà tặng) ── */
