@@ -434,7 +434,7 @@ const ListedPriceTab = () => {
   const selectStyle = {
     width: '100%', padding: '5px 6px', border: 'none', background: 'transparent',
     fontSize: '0.82rem', outline: 'none', cursor: 'pointer',
-    color: '#0f172a', fontFamily: 'inherit',
+    color: '#0f172a', fontFamily: 'inherit', textAlign: 'center',
   };
   const filterSelectStyle = {
     padding: '7px 10px', borderRadius: 8, border: '1.5px solid #e5e7eb',
@@ -504,7 +504,7 @@ const ListedPriceTab = () => {
           onChange={e => updateCell(row.id, col.key, e.target.value)}
           onFocus={() => setEditingCell({ id: row.id, key: col.key })}
           onBlur={() => setEditingCell(null)}
-          style={{ color: !isEditing && hasFormula && isError ? '#dc2626' : '#0f172a' }}
+          style={{ color: !isEditing && hasFormula && isError ? '#dc2626' : '#0f172a', textAlign: 'center' }}
         />
         {isEditing && hasFormula && (
           <div style={{ fontSize: 10, color: Number.isFinite(formulaResult) ? '#16a34a' : '#dc2626', paddingLeft: 6, paddingBottom: 2, lineHeight: 1.2 }}>
@@ -654,6 +654,7 @@ const ListedPriceTab = () => {
                       <td rowSpan={rowSpan} style={{ position: 'relative', verticalAlign: 'middle' }}>
                         <input type="text" value={tRow.barcode || ''} placeholder="Barcode"
                           onChange={e => updateCell(tRow.id, 'barcode', e.target.value)}
+                          style={{ textAlign: 'center' }}
                         />
                       </td>
 

@@ -267,10 +267,6 @@ const KocIdentityOverview = ({ data = [], brandHeaders = [], formatNumber, staff
             };
         });
 
-        if (activeBrand === '__all' && activeBrands.every(item => !item.value && !item.assignment)) {
-            return <span className="koc-identity-overview__empty">Chưa có video air trong tháng này</span>;
-        }
-
         return (
             <div className="koc-identity-overview__brands">
                 {activeBrands.map(({ brandName, value, orders, videos, assignment }) => (
@@ -1675,12 +1671,16 @@ ${txtFormat}
             kocIdentityRows: identityRows,
             kocIdentityBrandHeaders: identityBrandHeaders,
             calculatedStats: { gmv: tGMV, gmvMonthAir: tGMVMonth, videoAirMonth: tVideo, orders: tOrders, castMonth: tCast, totalViews: tViews },
-            chartData: Object.values(staffMap).map(i => ({
-                name: i.name,
-                gmvMonth: i.gmvMonth,
-                gmvRest: i.gmvCum > i.gmvMonth ? i.gmvCum - i.gmvMonth : 0,
-                videoMonth: i.videoMonth
-            }))
+            chartData: Object.values(staffMap)
+                .filter(i => !['Ngọc Quỳnh', 'Anh Kiệt', 'Thiệu Huy'].some(
+                    hidden => String(i.name || '').toLowerCase().includes(hidden.toLowerCase())
+                ))
+                .map(i => ({
+                    name: i.name,
+                    gmvMonth: i.gmvMonth,
+                    gmvRest: i.gmvCum > i.gmvMonth ? i.gmvCum - i.gmvMonth : 0,
+                    videoMonth: i.videoMonth
+                }))
         };
     }, [processedAirLinks, importedData, month, year]);
 
