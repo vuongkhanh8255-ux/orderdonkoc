@@ -130,8 +130,7 @@ const shiftFormula = (formula, offset) => {
 const parsePromotion = (promo) => {
   if (!promo) return { base: 'single', rate: 0 };
   const p = String(promo).toUpperCase().trim();
-  if (p === 'M1T1') return { base: 'combo', count: 2, rate: 0.5 }; // Mua 1 Tặng 1 = combo 2 items, 50% off → pay for 1; TikTok vẫn trừ voucher từ 2×fs
-  if (p === 'BÁN LẺ' || p === 'BAN LE') return { base: 'single', rate: 0 };
+  if (p === 'M1T1' || p === 'BÁN LẺ' || p === 'BAN LE') return { base: 'single', rate: 0 }; // chỉ tính 1 sản phẩm, không nhân 2
   // MxGy% → buy x items, discount y%
   const match = p.match(/M(\d+)G(\d+)%/);
   if (match) return { base: 'combo', count: parseInt(match[1]), rate: parseInt(match[2]) / 100 };
@@ -184,6 +183,42 @@ const calcFinalPrice = (row) => {
   }
 
   return Number.isFinite(final) && final >= 0 ? Math.round(final) : null;
+};
+
+// Sinh chuỗi công thức hiển thị để user đọc/hiểu
+const getFormulaHint = (row) => {
+  const promo   = parsePromotion(row.promotion);
+  const voucher = parseVoucher(row.voucher);
+  const isTikTok = row.platform === 'TikTok';
+
+  // Phần base (sau promotion)
+  let baseStr;
+  if (promo.base === 'combo') {
+    const discPct = Math.round((1 - promo.rate) * 100);
+    baseStr = `(FS×${promo.count})×${discPct}%`;
+  } else {
+    baseStr = 'FS';
+  }
+
+  // Phần voucher
+  if (voucher.type === 'none') return baseStr;
+
+  if (voucher.type === 'percent') {
+    const vPct = Math.round(voucher.value * 100);
+    if (isTikTok) {
+      // TikTok: trừ voucher từ originalTotal
+      const totalStr = promo.base === 'combo' ? `FS×${promo.count}` : 'FS';
+      return `${baseStr} − ${totalStr}×${vPct}%`;
+    } else {
+      return `${baseStr}×${100 - vPct}%`;
+    }
+  }
+
+  // Fixed amount
+  const fixedStr = voucher.value >= 1000
+    ? `${(voucher.value / 1000).toLocaleString('vi-VN')}k`
+    : String(voucher.value);
+  return `${baseStr} − ${fixedStr}`;
 };
 
 // ── Excel export ──────────────────────────────────────────────────────────────
@@ -616,23 +651,30 @@ const ListedPriceTab = () => {
     // Auto-computed final price (shown when cell is empty and not editing)
     const autoFinal = (!isEditing && !rawValue && col.key === 'finalPrice')
       ? calcFinalPrice(row) : null;
+    const formulaHint = autoFinal !== null ? getFormulaHint(row) : null;
 
     return (
       <td key={col.key} style={{ position: 'relative', outline: isDragSrc ? '2px solid #ea580c' : undefined }}>
         {autoFinal !== null && !isEditing ? (
           <div
             onClick={() => setEditingCell({ id: row.id, key: col.key })}
-            title="Tự tính từ Giá FS + Promotion + Voucher — click để ghi đè"
+            title="Click để ghi đè bằng số hoặc công thức riêng"
             style={{
-              textAlign: 'center', padding: '0 10px', height: 34, display: 'flex',
-              alignItems: 'center', justifyContent: 'center', cursor: 'text',
-              color: '#059669', fontWeight: 700, fontSize: '0.82rem',
+              textAlign: 'center', padding: '2px 8px', minHeight: 34, display: 'flex',
+              flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              cursor: 'text',
               background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
-              borderRadius: 9, border: '1px dashed #86efac', gap: 4,
+              borderRadius: 9, border: '1px dashed #86efac', gap: 1,
             }}
           >
-            <span style={{ fontSize: 9, opacity: 0.7 }}>✦</span>
-            {fmtResult(autoFinal)}
+            <span style={{ color: '#059669', fontWeight: 700, fontSize: '0.82rem' }}>
+              +&nbsp;{fmtResult(autoFinal)}
+            </span>
+            {formulaHint && (
+              <span style={{ fontSize: '0.6rem', color: '#16a34a', opacity: 0.75, fontFamily: 'monospace', lineHeight: 1.2 }}>
+                {formulaHint}
+              </span>
+            )}
           </div>
         ) : (
           <input
