@@ -911,9 +911,15 @@ const ListedPriceTab = () => {
                             onChange={e => updateGiftCell(giftItem.row.id, 'listedPrice', e.target.value)}
                             style={{ textAlign: 'center', color: '#059669' }} />
                         </td>
-                        {/* Empty cells: promotion, regularPrice, fsPrice, voucher, finalPrice */}
+                        {/* Promotion — empty */}
                         <td />
-                        <td />
+                        {/* Regular price — editable */}
+                        <td>
+                          <input type="text" value={giftItem.row.regularPrice || ''} placeholder="Giá regular"
+                            onChange={e => updateGiftCell(giftItem.row.id, 'regularPrice', e.target.value)}
+                            style={{ textAlign: 'center', color: '#059669' }} />
+                        </td>
+                        {/* fsPrice, voucher, finalPrice — empty */}
                         <td />
                         <td />
                         <td />
