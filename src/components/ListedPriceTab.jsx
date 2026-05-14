@@ -126,6 +126,65 @@ const shiftFormula = (formula, offset) => {
   );
 };
 
+// ── Final price auto-calculator ───────────────────────────────────────────────
+const parsePromotion = (promo) => {
+  if (!promo) return { base: 'single', rate: 0 };
+  const p = String(promo).toUpperCase().trim();
+  if (p === 'M1T1' || p === 'BÁN LẺ' || p === 'BAN LE') return { base: 'single', rate: 0 };
+  // MxGy% → buy x items, discount y%
+  const match = p.match(/M(\d+)G(\d+)%/);
+  if (match) return { base: 'combo', count: parseInt(match[1]), rate: parseInt(match[2]) / 100 };
+  return { base: 'single', rate: 0 };
+};
+
+const parseVoucher = (voucher) => {
+  if (!voucher) return { type: 'none', value: 0 };
+  const v = String(voucher).trim();
+  if (v.endsWith('%')) return { type: 'percent', value: parseFloat(v) / 100 };
+  const num = parseNumber(v);
+  if (num > 0) return { type: 'fixed', value: num };
+  return { type: 'none', value: 0 };
+};
+
+const calcFinalPrice = (row) => {
+  const fs = parseNumber(row.fsPrice);
+  if (!fs || fs <= 0) return null;
+
+  const promo   = parsePromotion(row.promotion);
+  const voucher = parseVoucher(row.voucher);
+  const isTikTok = row.platform === 'TikTok';
+
+  // Step 1: base after promotion
+  let base, originalTotal;
+  if (promo.base === 'combo') {
+    originalTotal = fs * promo.count;
+    base = originalTotal * (1 - promo.rate);
+  } else {
+    // M1T1 / BÁN LẺ / no promo — pay for 1 item
+    originalTotal = fs;
+    base = fs;
+  }
+
+  // Step 2: apply voucher
+  let final;
+  if (voucher.type === 'none') {
+    final = base;
+  } else if (voucher.type === 'percent') {
+    if (isTikTok) {
+      // TikTok: trừ voucher % tính trên giá gốc (trước promotion)
+      final = base - originalTotal * voucher.value;
+    } else {
+      // Shopee: nhân voucher % vào giá sau promotion
+      final = base * (1 - voucher.value);
+    }
+  } else {
+    // Fixed amount: cả 2 sàn trừ thẳng
+    final = base - voucher.value;
+  }
+
+  return Number.isFinite(final) && final >= 0 ? Math.round(final) : null;
+};
+
 // ── Excel export ──────────────────────────────────────────────────────────────
 const toExcelFormulaText = (value) =>
   isFormula(value)
@@ -512,17 +571,38 @@ const ListedPriceTab = () => {
       : rawValue;
     const isError = hasFormula && !Number.isFinite(formulaResult);
 
+    // Auto-computed final price (shown when cell is empty and not editing)
+    const autoFinal = (!isEditing && !rawValue && col.key === 'finalPrice')
+      ? calcFinalPrice(row) : null;
+
     return (
       <td key={col.key} style={{ position: 'relative', outline: isDragSrc ? '2px solid #ea580c' : undefined }}>
-        <input
-          type="text"
-          value={displayValue}
-          placeholder={isEditing || !hasFormula ? col.label : ''}
-          onChange={e => updateCell(row.id, col.key, e.target.value)}
-          onFocus={() => setEditingCell({ id: row.id, key: col.key })}
-          onBlur={() => setEditingCell(null)}
-          style={{ color: !isEditing && hasFormula && isError ? '#dc2626' : '#0f172a', textAlign: 'center' }}
-        />
+        {autoFinal !== null && !isEditing ? (
+          <div
+            onClick={() => setEditingCell({ id: row.id, key: col.key })}
+            title="Tự tính từ Giá FS + Promotion + Voucher — click để ghi đè"
+            style={{
+              textAlign: 'center', padding: '0 10px', height: 34, display: 'flex',
+              alignItems: 'center', justifyContent: 'center', cursor: 'text',
+              color: '#059669', fontWeight: 700, fontSize: '0.82rem',
+              background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+              borderRadius: 9, border: '1px dashed #86efac', gap: 4,
+            }}
+          >
+            <span style={{ fontSize: 9, opacity: 0.7 }}>✦</span>
+            {fmtResult(autoFinal)}
+          </div>
+        ) : (
+          <input
+            type="text"
+            value={displayValue}
+            placeholder={isEditing || !hasFormula ? col.label : ''}
+            onChange={e => updateCell(row.id, col.key, e.target.value)}
+            onFocus={() => setEditingCell({ id: row.id, key: col.key })}
+            onBlur={() => setEditingCell(null)}
+            style={{ color: !isEditing && hasFormula && isError ? '#dc2626' : '#0f172a', textAlign: 'center' }}
+          />
+        )}
         {isEditing && hasFormula && (
           <div style={{ fontSize: 10, color: Number.isFinite(formulaResult) ? '#16a34a' : '#dc2626', paddingLeft: 6, paddingBottom: 2, lineHeight: 1.2 }}>
             → {Number.isFinite(formulaResult) ? fmtResult(formulaResult) : 'Lỗi công thức'}
