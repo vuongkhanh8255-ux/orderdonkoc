@@ -38,8 +38,8 @@ const PLATFORM_COL      = ALL_COLUMNS[4];            // E        (platform)
 const PRICE_COLS        = ALL_COLUMNS.slice(5);      // F–M      (aff, ads, listedPrice…)
 
 // Column keys that are shared across the product group (sync both rows)
-// link là shared — cùng 1 link cho group; aff/ads PER platform nên không shared
-const SHARED_KEYS = new Set(['link', 'productName', 'barcode', 'brand']);
+// link PER platform (TikTok link ≠ Shopee link); name/barcode/brand shared
+const SHARED_KEYS = new Set(['productName', 'barcode', 'brand']);
 
 const columnLetters = ALL_COLUMNS.reduce((acc, col, i) => {
   acc[String.fromCharCode(65 + i)] = col.key;
@@ -1103,8 +1103,23 @@ const ListedPriceTab = () => {
                         style={shopHL ? { background: '#fff7ed', outline: '1px dashed #ea580c' } : undefined}
                       >
                         {/* # không có (spanned từ TikTok) */}
-                        {/* 4 ô trống cho product columns (link, name, barcode, brand) */}
-                        <td style={shopeeProductTd} />
+                        {/* Link Shopee — editable riêng (platform-specific) */}
+                        <td style={{ ...shopeeProductTd, position: 'relative', verticalAlign: 'middle' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <input type="text" value={shopeeItem.row.link || ''} placeholder="Link Shopee"
+                              onChange={e => updateCell(shopeeItem.row.id, 'link', e.target.value)}
+                              style={{ flex: 1, fontSize: '0.75rem', color: '#ea580c' }}
+                            />
+                            {shopeeItem.row.link ? (
+                              <a href={shopeeItem.row.link} target="_blank" rel="noopener noreferrer"
+                                title="Mở link Shopee"
+                                style={{ color: '#ea580c', fontSize: '1rem', textDecoration: 'none', flexShrink: 0, lineHeight: 1 }}>🔗</a>
+                            ) : (
+                              <span style={{ color: '#d1d5db', fontSize: '0.9rem', flexShrink: 0 }}>🔗</span>
+                            )}
+                          </div>
+                        </td>
+                        {/* name, barcode, brand — trống (shared, hiện ở TikTok row) */}
                         <td style={shopeeProductTd} />
                         <td style={shopeeProductTd} />
                         <td style={shopeeProductTd} />
