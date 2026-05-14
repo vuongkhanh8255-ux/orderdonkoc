@@ -1,6 +1,7 @@
-import { Fragment, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppDataContext } from '../context/AppDataContext';
 import * as XLSX from 'xlsx-js-style';
+import { supabase } from '../supabaseClient';
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
 const STORAGE_KEY    = 'stella_listed_price_rows_v2';  // v2: grouped TikTok+Shopee pairs
@@ -347,6 +348,40 @@ const importExcel = (file, onSuccess) => {
   reader.readAsArrayBuffer(file);
 };
 
+// ── Supabase sync helpers ─────────────────────────────────────────────────────
+const rowToDb = (row, idx) => ({
+  id:            row.id,
+  group_id:      row.groupId   || '',
+  row_type:      row.rowType   || 'price',
+  platform:      row.platform  || '',
+  product_name:  row.productName  || '',
+  barcode:       row.barcode   || '',
+  brand:         row.brand     || '',
+  listed_price:  row.listedPrice  || '',
+  promotion:     row.promotion || '',
+  regular_price: row.regularPrice || '',
+  fs_price:      row.fsPrice   || '',
+  voucher:       row.voucher   || '',
+  final_price:   row.finalPrice || '',
+  sort_order:    idx,
+});
+
+const dbToRow = (r) => ({
+  id:           r.id,
+  groupId:      r.group_id,
+  rowType:      r.row_type,
+  platform:     r.platform,
+  productName:  r.product_name,
+  barcode:      r.barcode,
+  brand:        r.brand,
+  listedPrice:  r.listed_price,
+  promotion:    r.promotion,
+  regularPrice: r.regular_price,
+  fsPrice:      r.fs_price,
+  voucher:      r.voucher,
+  finalPrice:   r.final_price,
+});
+
 // ── Inline AddOption ──────────────────────────────────────────────────────────
 const AddOptionInline = ({ placeholder, onAdd, onClose }) => {
   const [val, setVal] = useState('');
@@ -372,6 +407,7 @@ const ListedPriceTab = () => {
   const [brands, setBrands]         = useState(() => loadArray(BRANDS_KEY, DEFAULT_BRANDS));
   const [promotions, setPromotions] = useState(() => loadArray(PROMOTIONS_KEY, DEFAULT_PROMOTIONS));
   const [vouchers, setVouchers]     = useState(() => loadArray(VOUCHERS_KEY, DEFAULT_VOUCHERS));
+  const [syncing, setSyncing]       = useState(false);
 
   // Filter state
   const [filterText,      setFilterText]      = useState('');
@@ -389,15 +425,52 @@ const ListedPriceTab = () => {
   const [fillDrag,    setFillDrag]    = useState(null);
   const [fillOver,    setFillOver]    = useState(null);
 
-  const importRef = useRef(null);
+  const importRef   = useRef(null);
+  const syncTimer   = useRef(null);
 
-  // ── Persist ──
+  // ── Load từ Supabase khi mount ──
+  useEffect(() => {
+    const load = async () => {
+      const { data, error } = await supabase
+        .from('listed_price_rows')
+        .select('*')
+        .order('sort_order', { ascending: true });
+      if (error || !data?.length) return; // fallback localStorage
+      const loaded = data.map(dbToRow);
+      setRows(loaded);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
+    };
+    load();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Persist localStorage ──
   useEffect(() => { localStorage.setItem(STORAGE_KEY,    JSON.stringify(rows));       }, [rows]);
   useEffect(() => { localStorage.setItem(BRANDS_KEY,     JSON.stringify(brands));     }, [brands]);
   useEffect(() => { localStorage.setItem(PROMOTIONS_KEY, JSON.stringify(promotions)); }, [promotions]);
   useEffect(() => { localStorage.setItem(VOUCHERS_KEY,   JSON.stringify(vouchers));   }, [vouchers]);
 
-  // Sync brands from Supabase
+  // ── Sync lên Supabase (debounce 1.5s) ──
+  const syncToSupabase = useCallback((nextRows) => {
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    syncTimer.current = setTimeout(async () => {
+      setSyncing(true);
+      try {
+        const dbRows = nextRows.map((r, i) => rowToDb(r, i));
+        // Upsert tất cả rows hiện tại
+        await supabase.from('listed_price_rows').upsert(dbRows, { onConflict: 'id' });
+        // Xóa rows cũ không còn trong danh sách
+        const ids = nextRows.map(r => r.id);
+        await supabase.from('listed_price_rows').delete().not('id', 'in', `(${ids.map(id => `"${id}"`).join(',')})`);
+      } finally {
+        setSyncing(false);
+      }
+    }, 1500);
+  }, []);
+
+  // Sync mỗi khi rows thay đổi
+  useEffect(() => { syncToSupabase(rows); }, [rows]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync brands from Supabase context
   useEffect(() => {
     if (!ctxBrands?.length) return;
     const ctxNames = ctxBrands.map(b => b.ten_brand).filter(Boolean);
@@ -717,7 +790,13 @@ const ListedPriceTab = () => {
         <div>
           <div className="listed-price-page__eyebrow">Ecom</div>
           <h1 className="page-header" style={{ margin: 0 }}>BẢNG GIÁ NIÊM YẾT</h1>
-          <p>Listing full giá niêm yết theo sản phẩm — mỗi sản phẩm có giá TikTok & Shopee.</p>
+          <p style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            Listing full giá niêm yết theo sản phẩm — mỗi sản phẩm có giá TikTok & Shopee.
+            {syncing
+              ? <span style={{ fontSize: '0.72rem', color: '#f59e0b', fontWeight: 600 }}>⟳ Đang lưu...</span>
+              : <span style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: 600 }}>✓ Đã lưu (cloud)</span>
+            }
+          </p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button onClick={clearAll} className="listed-price-page__button is-muted">Xóa bảng</button>
