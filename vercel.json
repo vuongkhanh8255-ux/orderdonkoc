@@ -13,5 +13,11 @@
     "api/tiktok-shop/sync-orders.js": {
       "maxDuration": 300
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/tiktok-shop/sync-orders",
+      "schedule": "0 21 * * *"
+    }
+  ]
 }
