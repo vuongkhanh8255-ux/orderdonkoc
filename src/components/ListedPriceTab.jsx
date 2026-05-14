@@ -822,7 +822,7 @@ const ListedPriceTab = () => {
 
                     {/* ── Gift row (M1T1) ── */}
                     {giftItem && (
-                      <tr style={{ background: '#f0fdf4', borderTop: '1.5px dashed #86efac' }}>
+                      <tr className="is-gift-row">
                         {/* # */}
                         <td className="listed-price-table__index"
                           style={{ color: '#059669', fontSize: '1rem', textAlign: 'center' }}>↳</td>
@@ -839,7 +839,7 @@ const ListedPriceTab = () => {
                             style={{ textAlign: 'center', color: '#059669' }} />
                         </td>
                         {/* Brand — empty */}
-                        <td style={{ background: '#f0fdf4' }} />
+                        <td />
                         {/* Platform: 🎁 badge */}
                         <td style={{ background: '#dcfce7', borderRight: '2px solid #86efac', padding: '4px 6px', userSelect: 'none' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
@@ -854,11 +854,11 @@ const ListedPriceTab = () => {
                             style={{ textAlign: 'center', color: '#059669' }} />
                         </td>
                         {/* Empty cells: promotion, regularPrice, fsPrice, voucher, finalPrice */}
-                        <td style={{ background: '#f0fdf4' }} />
-                        <td style={{ background: '#f0fdf4' }} />
-                        <td style={{ background: '#f0fdf4' }} />
-                        <td style={{ background: '#f0fdf4' }} />
-                        <td style={{ background: '#f0fdf4' }} />
+                        <td />
+                        <td />
+                        <td />
+                        <td />
+                        <td />
                         {/* Actions: remove gift row */}
                         <td className="listed-price-table__actions">
                           <button type="button" title="Xóa SP quà tặng" onClick={() => removeGiftRow(groupId)}>×</button>
