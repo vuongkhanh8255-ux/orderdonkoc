@@ -1398,10 +1398,13 @@ tbody tr:last-child {
     box-shadow: 0 2px 8px rgba(234, 88, 12, 0.15);
 }
 
-/* ── Gift row (M1T1 quà tặng) ── */
+/* ── Gift row (M1T1 quà tặng) — compact sub-row under TikTok ── */
 .listed-price-table tr.is-gift-row td {
     background: #f0fdf4 !important;
-    border-top: 2px solid #4ade80 !important;
+    border-top: 1px dashed #86efac !important;
+    border-bottom: 1px dashed #86efac !important;
+    padding-top: 3px !important;
+    padding-bottom: 3px !important;
 }
 .listed-price-table tr.is-gift-row td:first-child {
     border-left: 4px solid #16a34a;

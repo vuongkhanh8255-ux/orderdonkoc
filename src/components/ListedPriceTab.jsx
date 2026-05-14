@@ -935,11 +935,20 @@ const ListedPriceTab = () => {
                 const shopeeItem = groupItems.find(i => i.row.platform === 'Shopee');
                 const giftItem   = groupItems.find(i => i.row.rowType === 'gift');
                 const { row: tRow, index: tIdx } = tiktokItem;
-                const rowSpan    = shopeeItem ? 2 : 1;
                 const groupId    = tRow.groupId;
                 const tikHL      = getFillHighlight(tIdx);
                 const shopHL     = shopeeItem ? getFillHighlight(shopeeItem.index) : false;
                 const hasM1T1    = groupItems.some(i => String(i.row.promotion || '').toUpperCase().trim() === 'M1T1');
+
+                // # và Actions span toàn bộ rows trong group (TikTok + gift? + Shopee?)
+                const totalRowSpan = 1 + (giftItem ? 1 : 0) + (shopeeItem ? 1 : 0);
+
+                // Style cho product cells của Shopee (trống, chỉ giữ border)
+                const shopeeProductTd = {
+                  background: '#f8fafc',
+                  borderBottom: '1px solid #edf2f7',
+                  borderRight: '1px solid #f1f5f9',
+                };
 
                 return (
                   <Fragment key={groupId}>
@@ -948,42 +957,42 @@ const ListedPriceTab = () => {
                       onMouseEnter={() => { if (fillDrag) setFillOver(tIdx); }}
                       style={tikHL ? { background: '#fff7ed', outline: '1px dashed #ea580c' } : undefined}
                     >
-                      {/* # (merged) */}
-                      <td className="listed-price-table__index" rowSpan={rowSpan}
+                      {/* # spans TẤT CẢ rows của group */}
+                      <td className="listed-price-table__index" rowSpan={totalRowSpan}
                         style={{ verticalAlign: 'middle', fontWeight: 700, color: '#6b7280', fontSize: '0.9rem' }}>
                         {groupIdx + 1}
                       </td>
 
-                      {/* Product name (merged) */}
-                      <td rowSpan={rowSpan} style={{ position: 'relative', verticalAlign: 'middle' }}>
+                      {/* Product name — CHỈ ở TikTok row (không rowSpan) */}
+                      <td style={{ position: 'relative', verticalAlign: 'middle' }}>
                         <input type="text" value={tRow.productName || ''} placeholder="Tên sản phẩm"
                           onChange={e => updateCell(tRow.id, 'productName', e.target.value)}
                           style={{ fontWeight: tRow.productName ? 700 : 400 }}
                         />
                       </td>
 
-                      {/* Barcode (merged) */}
-                      <td rowSpan={rowSpan} style={{ position: 'relative', verticalAlign: 'middle' }}>
+                      {/* Barcode — CHỈ ở TikTok row */}
+                      <td style={{ position: 'relative', verticalAlign: 'middle' }}>
                         <input type="text" value={tRow.barcode || ''} placeholder="Barcode"
                           onChange={e => updateCell(tRow.id, 'barcode', e.target.value)}
                           style={{ textAlign: 'center' }}
                         />
                       </td>
 
-                      {/* Brand (merged) */}
-                      <td rowSpan={rowSpan} style={{ position: 'relative', verticalAlign: 'middle' }}>
+                      {/* Brand — CHỈ ở TikTok row */}
+                      <td style={{ position: 'relative', verticalAlign: 'middle' }}>
                         <select value={tRow.brand || ''} onChange={e => updateCell(tRow.id, 'brand', e.target.value)} style={selectStyle}>
                           <option value="">— chọn brand —</option>
                           {brands.map(b => <option key={b} value={b}>{b}</option>)}
                         </select>
                       </td>
 
-                      {/* TikTok platform label + price cells */}
+                      {/* TikTok platform + price cells */}
                       {renderCell(PLATFORM_COL, tRow, tIdx)}
                       {PRICE_COLS.map(col => renderCell(col, tRow, tIdx))}
 
-                      {/* Actions (merged) */}
-                      <td rowSpan={rowSpan} className="listed-price-table__actions" style={{ verticalAlign: 'middle' }}>
+                      {/* Actions spans TẤT CẢ rows */}
+                      <td rowSpan={totalRowSpan} className="listed-price-table__actions" style={{ verticalAlign: 'middle' }}>
                         {hasM1T1 && (
                           <button
                             type="button"
@@ -994,7 +1003,6 @@ const ListedPriceTab = () => {
                               fontSize: '1rem', padding: '2px 3px',
                               opacity: giftItem ? 1 : 0.35,
                               filter: giftItem ? 'none' : 'grayscale(1)',
-                              title: giftItem ? 'Thu quà tặng' : 'Mở quà tặng',
                             }}
                           >🎁</button>
                         )}
@@ -1003,66 +1011,71 @@ const ListedPriceTab = () => {
                       </td>
                     </tr>
 
+                    {/* ── Gift row (compact, ngay dưới TikTok, trước Shopee) ── */}
+                    {giftItem && (
+                      <tr className="is-gift-row">
+                        {/* # không có (spanned từ TikTok) */}
+                        {/* Gift product name */}
+                        <td style={{ paddingLeft: 16, paddingTop: 3, paddingBottom: 3 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <span style={{ color: '#16a34a', fontSize: '0.65rem', fontWeight: 800, flexShrink: 0, letterSpacing: 0 }}>↳🎁</span>
+                            <input type="text" value={giftItem.row.productName || ''} placeholder="Tên SP quà tặng"
+                              onChange={e => updateGiftCell(giftItem.row.id, 'productName', e.target.value)}
+                              style={{ fontWeight: 600, color: '#059669', fontSize: '0.78rem', height: 28 }} />
+                          </div>
+                        </td>
+                        {/* Gift barcode */}
+                        <td style={{ paddingTop: 3, paddingBottom: 3 }}>
+                          <input type="text" value={giftItem.row.barcode || ''} placeholder="Barcode quà"
+                            onChange={e => updateGiftCell(giftItem.row.id, 'barcode', e.target.value)}
+                            style={{ textAlign: 'center', color: '#059669', fontSize: '0.78rem', height: 28 }} />
+                        </td>
+                        {/* Brand — trống */}
+                        <td style={{ background: '#f0fdf4' }} />
+                        {/* Platform: 🎁 compact */}
+                        <td style={{ background: '#dcfce7', borderRight: '2px solid #86efac', padding: '3px 4px', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                            <span style={{ fontSize: 13 }}>🎁</span>
+                            <span style={{ fontSize: '0.55rem', fontWeight: 700, color: '#059669' }}>Quà</span>
+                          </div>
+                        </td>
+                        {/* Listed price */}
+                        <td style={{ paddingTop: 3, paddingBottom: 3 }}>
+                          <input type="text" value={giftItem.row.listedPrice || ''} placeholder="Giá niêm yết"
+                            onChange={e => updateGiftCell(giftItem.row.id, 'listedPrice', e.target.value)}
+                            style={{ textAlign: 'center', color: '#059669', fontSize: '0.78rem', height: 28 }} />
+                        </td>
+                        {/* Promotion — trống */}
+                        <td style={{ background: '#f0fdf4' }} />
+                        {/* Regular price */}
+                        <td style={{ paddingTop: 3, paddingBottom: 3 }}>
+                          <input type="text" value={giftItem.row.regularPrice || ''} placeholder="Giá regular"
+                            onChange={e => updateGiftCell(giftItem.row.id, 'regularPrice', e.target.value)}
+                            style={{ textAlign: 'center', color: '#059669', fontSize: '0.78rem', height: 28 }} />
+                        </td>
+                        {/* FS, Voucher, Final — trống */}
+                        <td style={{ background: '#f0fdf4' }} />
+                        <td style={{ background: '#f0fdf4' }} />
+                        <td style={{ background: '#f0fdf4' }} />
+                        {/* Actions không có (spanned từ TikTok) */}
+                      </tr>
+                    )}
+
                     {/* ── Shopee row ── */}
                     {shopeeItem && (
                       <tr
                         onMouseEnter={() => { if (fillDrag) setFillOver(shopeeItem.index); }}
                         style={shopHL ? { background: '#fff7ed', outline: '1px dashed #ea580c' } : undefined}
                       >
+                        {/* # không có (spanned từ TikTok) */}
+                        {/* 3 ô trống cho product columns — giữ layout cân */}
+                        <td style={shopeeProductTd} />
+                        <td style={shopeeProductTd} />
+                        <td style={shopeeProductTd} />
+                        {/* Shopee platform + price cells */}
                         {renderCell(PLATFORM_COL, shopeeItem.row, shopeeItem.index)}
                         {PRICE_COLS.map(col => renderCell(col, shopeeItem.row, shopeeItem.index))}
-                      </tr>
-                    )}
-
-                    {/* ── Gift row (M1T1) ── */}
-                    {giftItem && (
-                      <tr className="is-gift-row">
-                        {/* # */}
-                        <td className="listed-price-table__index"
-                          style={{ color: '#059669', fontSize: '1rem', textAlign: 'center' }}>↳</td>
-                        {/* Gift product name */}
-                        <td style={{ position: 'relative' }}>
-                          <input type="text" value={giftItem.row.productName || ''} placeholder="Tên SP quà tặng"
-                            onChange={e => updateGiftCell(giftItem.row.id, 'productName', e.target.value)}
-                            style={{ fontWeight: 600, color: '#059669' }} />
-                        </td>
-                        {/* Gift barcode */}
-                        <td>
-                          <input type="text" value={giftItem.row.barcode || ''} placeholder="Barcode quà"
-                            onChange={e => updateGiftCell(giftItem.row.id, 'barcode', e.target.value)}
-                            style={{ textAlign: 'center', color: '#059669' }} />
-                        </td>
-                        {/* Brand — empty */}
-                        <td />
-                        {/* Platform: 🎁 badge */}
-                        <td style={{ background: '#dcfce7', borderRight: '2px solid #86efac', padding: '4px 6px', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                            <span style={{ fontSize: 18 }}>🎁</span>
-                            <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#059669', letterSpacing: '0.3px' }}>Quà tặng</span>
-                          </div>
-                        </td>
-                        {/* Listed price */}
-                        <td>
-                          <input type="text" value={giftItem.row.listedPrice || ''} placeholder="Giá niêm yết"
-                            onChange={e => updateGiftCell(giftItem.row.id, 'listedPrice', e.target.value)}
-                            style={{ textAlign: 'center', color: '#059669' }} />
-                        </td>
-                        {/* Promotion — empty */}
-                        <td />
-                        {/* Regular price — editable */}
-                        <td>
-                          <input type="text" value={giftItem.row.regularPrice || ''} placeholder="Giá regular"
-                            onChange={e => updateGiftCell(giftItem.row.id, 'regularPrice', e.target.value)}
-                            style={{ textAlign: 'center', color: '#059669' }} />
-                        </td>
-                        {/* fsPrice, voucher, finalPrice — empty */}
-                        <td />
-                        <td />
-                        <td />
-                        {/* Actions: remove gift row */}
-                        <td className="listed-price-table__actions">
-                          <button type="button" title="Xóa SP quà tặng" onClick={() => removeGiftRow(groupId)}>×</button>
-                        </td>
+                        {/* Actions không có (spanned từ TikTok) */}
                       </tr>
                     )}
                   </Fragment>
