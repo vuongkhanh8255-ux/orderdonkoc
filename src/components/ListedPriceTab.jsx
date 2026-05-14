@@ -430,6 +430,22 @@ const ListedPriceTab = () => {
 
   const addGroup       = () => setRows(p => [...p, ...createGroupPair()]);
 
+  // Gift row (M1T1): direct update — không sync SHARED_KEYS
+  const updateGiftCell = (id, key, value) =>
+    setRows(prev => prev.map(r => r.id === id ? { ...r, [key]: value } : r));
+
+  const addGiftRow = (groupId) => setRows(prev => {
+    if (prev.some(r => r.groupId === groupId && r.rowType === 'gift')) return prev;
+    const gift = { ...createRow(), groupId, platform: 'gift', rowType: 'gift' };
+    const lastIdx = prev.reduce((max, r, i) => r.groupId === groupId ? i : max, -1);
+    const result = [...prev];
+    result.splice(lastIdx + 1, 0, gift);
+    return result;
+  });
+
+  const removeGiftRow = (groupId) =>
+    setRows(prev => prev.filter(r => !(r.groupId === groupId && r.rowType === 'gift')));
+
   const deleteGroup    = (groupId) => setRows(p => {
     const filtered = p.filter(r => r.groupId !== groupId);
     const hasGroups = filtered.some(r => r.groupId);
@@ -474,8 +490,12 @@ const ListedPriceTab = () => {
       groupMap.get(row.groupId).push({ row, index });
     });
 
-    // Sort each group: TikTok first
-    groupMap.forEach(items => items.sort((a, b) => (a.row.platform === 'TikTok' ? -1 : 1)));
+    // Sort each group: TikTok first, Shopee second, gift last
+    groupMap.forEach(items => items.sort((a, b) => {
+      if (a.row.rowType === 'gift') return 1;
+      if (b.row.rowType === 'gift') return -1;
+      return a.row.platform === 'TikTok' ? -1 : 1;
+    }));
 
     const allGroups = Array.from(groupMap.values());
 
@@ -727,11 +747,13 @@ const ListedPriceTab = () => {
               {groupedProducts.map((groupItems, groupIdx) => {
                 const tiktokItem = groupItems.find(i => i.row.platform === 'TikTok') || groupItems[0];
                 const shopeeItem = groupItems.find(i => i.row.platform === 'Shopee');
+                const giftItem   = groupItems.find(i => i.row.rowType === 'gift');
                 const { row: tRow, index: tIdx } = tiktokItem;
                 const rowSpan    = shopeeItem ? 2 : 1;
                 const groupId    = tRow.groupId;
                 const tikHL      = getFillHighlight(tIdx);
                 const shopHL     = shopeeItem ? getFillHighlight(shopeeItem.index) : false;
+                const hasM1T1    = groupItems.some(i => String(i.row.promotion || '').toUpperCase().trim() === 'M1T1');
 
                 return (
                   <Fragment key={groupId}>
@@ -778,6 +800,12 @@ const ListedPriceTab = () => {
                       <td rowSpan={rowSpan} className="listed-price-table__actions" style={{ verticalAlign: 'middle' }}>
                         <button type="button" title="Nhân bản" onClick={() => duplicateGroup(groupId)}>⧉</button>
                         <button type="button" title="Xóa" onClick={() => deleteGroup(groupId)}>×</button>
+                        {hasM1T1 && !giftItem && (
+                          <button type="button" title="Thêm SP quà tặng M1T1" onClick={() => addGiftRow(groupId)}
+                            style={{ background: '#f0fdf4', color: '#059669', border: '1.5px solid #86efac', borderRadius: 6, fontSize: 14, cursor: 'pointer', padding: '2px 5px' }}>
+                            🎁
+                          </button>
+                        )}
                       </td>
                     </tr>
 
@@ -789,6 +817,52 @@ const ListedPriceTab = () => {
                       >
                         {renderCell(PLATFORM_COL, shopeeItem.row, shopeeItem.index)}
                         {PRICE_COLS.map(col => renderCell(col, shopeeItem.row, shopeeItem.index))}
+                      </tr>
+                    )}
+
+                    {/* ── Gift row (M1T1) ── */}
+                    {giftItem && (
+                      <tr style={{ background: '#f0fdf4', borderTop: '1.5px dashed #86efac' }}>
+                        {/* # */}
+                        <td className="listed-price-table__index"
+                          style={{ color: '#059669', fontSize: '1rem', textAlign: 'center' }}>↳</td>
+                        {/* Gift product name */}
+                        <td style={{ position: 'relative' }}>
+                          <input type="text" value={giftItem.row.productName || ''} placeholder="Tên SP quà tặng"
+                            onChange={e => updateGiftCell(giftItem.row.id, 'productName', e.target.value)}
+                            style={{ fontWeight: 600, color: '#059669' }} />
+                        </td>
+                        {/* Gift barcode */}
+                        <td>
+                          <input type="text" value={giftItem.row.barcode || ''} placeholder="Barcode quà"
+                            onChange={e => updateGiftCell(giftItem.row.id, 'barcode', e.target.value)}
+                            style={{ textAlign: 'center', color: '#059669' }} />
+                        </td>
+                        {/* Brand — empty */}
+                        <td style={{ background: '#f0fdf4' }} />
+                        {/* Platform: 🎁 badge */}
+                        <td style={{ background: '#dcfce7', borderRight: '2px solid #86efac', padding: '4px 6px', userSelect: 'none' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                            <span style={{ fontSize: 18 }}>🎁</span>
+                            <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#059669', letterSpacing: '0.3px' }}>Quà tặng</span>
+                          </div>
+                        </td>
+                        {/* Listed price */}
+                        <td>
+                          <input type="text" value={giftItem.row.listedPrice || ''} placeholder="Giá niêm yết"
+                            onChange={e => updateGiftCell(giftItem.row.id, 'listedPrice', e.target.value)}
+                            style={{ textAlign: 'center', color: '#059669' }} />
+                        </td>
+                        {/* Empty cells: promotion, regularPrice, fsPrice, voucher, finalPrice */}
+                        <td style={{ background: '#f0fdf4' }} />
+                        <td style={{ background: '#f0fdf4' }} />
+                        <td style={{ background: '#f0fdf4' }} />
+                        <td style={{ background: '#f0fdf4' }} />
+                        <td style={{ background: '#f0fdf4' }} />
+                        {/* Actions: remove gift row */}
+                        <td className="listed-price-table__actions">
+                          <button type="button" title="Xóa SP quà tặng" onClick={() => removeGiftRow(groupId)}>×</button>
+                        </td>
                       </tr>
                     )}
                   </Fragment>
