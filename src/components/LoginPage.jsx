@@ -149,7 +149,7 @@ const LoginPage = ({ onLogin }) => {
 // ── ACCOUNTS ──────────────────────────────────────────────
 export const ACCOUNTS = [
     { username: 'admin',      password: 'Admin@SK2025',    role: 'admin',      name: 'Admin Tổng'  },
-    { username: 'booking',    password: 'booking8255',     role: 'booking',    name: 'Booking'     },
+    { username: 'booking',    password: 'Booking@SK2025',  role: 'booking',    name: 'Booking'     },
     { username: 'cs',         password: 'CS@SK2025',       role: 'cs',         name: 'CS'          },
     { username: 'livestream', password: 'Live@SK2025',     role: 'livestream', name: 'Livestream'  },
     // ── ECOM accounts (5 users, propose-only quyền cho phần Định danh KOC) ──
