@@ -1,5 +1,6 @@
 // src/components/LoginPage.jsx
 import { useState } from 'react';
+import { supabase } from '../supabaseClient';
 
 const LoginPage = ({ onLogin }) => {
     const [username, setUsername] = useState('');
@@ -9,21 +10,42 @@ const LoginPage = ({ onLogin }) => {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
         setError('');
-        setTimeout(() => {
-            const found = ACCOUNTS.find(
-                a => a.username === username.trim().toLowerCase() && a.password === password
-            );
-            if (found) {
-                onLogin(found, remember);
+        try {
+            const uname = username.trim().toLowerCase();
+
+            // Tìm account match trong danh sách hardcoded
+            let candidate = ACCOUNTS.find(a => a.username === uname);
+
+            // Với admin: lấy password động từ Supabase app_security (override hardcoded)
+            if (candidate && candidate.role === 'admin') {
+                try {
+                    const { data, error: dbErr } = await supabase
+                        .from('app_security')
+                        .select('value')
+                        .eq('key', 'admin_password')
+                        .maybeSingle();
+                    if (!dbErr && data?.value) {
+                        candidate = { ...candidate, password: data.value };
+                    }
+                } catch { /* fallback to hardcoded password */ }
+            }
+
+            if (candidate && candidate.password === password) {
+                // Lưu thêm login_at để check force-logout sau này
+                const sessionAccount = { ...candidate, login_at: new Date().toISOString() };
+                onLogin(sessionAccount, remember);
             } else {
                 setError('Sai tên đăng nhập hoặc mật khẩu!');
             }
+        } catch {
+            setError('Lỗi đăng nhập. Vui lòng thử lại.');
+        } finally {
             setLoading(false);
-        }, 400);
+        }
     };
 
     return (
@@ -130,6 +152,12 @@ export const ACCOUNTS = [
     { username: 'booking',    password: 'booking8255',     role: 'booking',    name: 'Booking'     },
     { username: 'cs',         password: 'CS@SK2025',       role: 'cs',         name: 'CS'          },
     { username: 'livestream', password: 'Live@SK2025',     role: 'livestream', name: 'Livestream'  },
+    // ── ECOM accounts (5 users, propose-only quyền cho phần Định danh KOC) ──
+    { username: 'ecom1',      password: 'Ecom@SK2025',     role: 'ecom',       name: 'Ecom 1'      },
+    { username: 'ecom2',      password: 'Ecom@SK2025',     role: 'ecom',       name: 'Ecom 2'      },
+    { username: 'ecom3',      password: 'Ecom@SK2025',     role: 'ecom',       name: 'Ecom 3'      },
+    { username: 'ecom4',      password: 'Ecom@SK2025',     role: 'ecom',       name: 'Ecom 4'      },
+    { username: 'ecom5',      password: 'Ecom@SK2025',     role: 'ecom',       name: 'Ecom 5'      },
 ];
 
 // ── ROLE PERMISSIONS ──────────────────────────────────────
@@ -138,6 +166,8 @@ export const ROLE_VIEWS = {
     booking:    ['dashboard','order','booking_performance','contract','airlinks','booking','expense','camp_registration','listed_price','tiktok_orders','task_notes'],
     cs:         ['order','airlinks','expense','task_notes'],
     livestream: ['stella_dashboard','livestream','expense','task_notes'],
+    // ECOM: xem dashboard ecom, bảng giá, đơn TikTok, camp, booking_performance (chỉ đề xuất)
+    ecom:       ['stella_dashboard','listed_price','tiktok_orders','camp_registration','booking_performance','task_notes'],
 };
 
 export default LoginPage;

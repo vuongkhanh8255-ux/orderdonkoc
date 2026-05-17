@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { AppDataProvider } from './context/AppDataContext';
+import { supabase } from './supabaseClient';
 import OrderTab from './components/OrderTab';
 import ContractTab from './components/ContractTab';
 import AirLinksTab from './components/AirLinksTab';
@@ -68,9 +69,40 @@ function AppMain({ user, onLogout, allowedViews }) {
   const [openGroups, setOpenGroups]     = useState({ ecom: true, cskh: true, livestream: true, booking: true, archive: true, camp: true, tools: true });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarHovered,   setSidebarHovered]   = useState(false);
+  const [pwModalOpen, setPwModalOpen]   = useState(false);
   const toggleGroup = (key) => setOpenGroups(prev => ({ ...prev, [key]: !prev[key] }));
 
   const canView = (v) => allowedViews.includes(v);
+
+  // ── Force-logout polling: Admin đổi password → bump force_logout_at → mọi user khác bị kick ──
+  useEffect(() => {
+    const loginAt = user?.login_at ? new Date(user.login_at).getTime() : 0;
+    if (!loginAt) return;
+
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('app_security')
+          .select('value')
+          .eq('key', 'force_logout_at')
+          .maybeSingle();
+        if (cancelled || error || !data?.value) return;
+        const forceAt = new Date(data.value).getTime();
+        if (Number.isFinite(forceAt) && forceAt > loginAt) {
+          // Admin đang đổi password → user khác phải logout (admin được miễn)
+          if (user.role !== 'admin') {
+            alert('⚠️ Phiên đăng nhập đã hết hạn (Admin đã đổi mật khẩu). Vui lòng đăng nhập lại.');
+            onLogout();
+          }
+        }
+      } catch { /* silent */ }
+    };
+    // Kiểm tra ngay khi mount + định kỳ 20s
+    check();
+    const id = setInterval(check, 20000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [user?.login_at, user?.role, onLogout]);
 
   const SIDEBAR_WIDTH   = '280px';
   const COLLAPSED_WIDTH = '64px';
@@ -267,12 +299,26 @@ function AppMain({ user, onLogout, allowedViews }) {
                   <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#ea580c' }}>👤 {user.name}</div>
                   <div style={{ fontSize: '0.68rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{user.role}</div>
                 </div>
-                <button onClick={onLogout} style={{ padding: '5px 10px', background: '#fff', border: '1px solid #fecaca', borderRadius: 7, color: '#dc2626', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>
-                  Đăng xuất
-                </button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {user.role === 'admin' && (
+                    <button onClick={() => setPwModalOpen(true)} title="Đổi mật khẩu (sẽ thu hồi phiên của các tài khoản khác)"
+                      style={{ padding: '5px 9px', background: '#fff', border: '1px solid #fed7aa', borderRadius: 7, color: '#c2410c', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>
+                      🔐
+                    </button>
+                  )}
+                  <button onClick={onLogout} style={{ padding: '5px 10px', background: '#fff', border: '1px solid #fecaca', borderRadius: 7, color: '#dc2626', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>
+                    Đăng xuất
+                  </button>
+                </div>
               </div>
             ) : (
-              <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                {user.role === 'admin' && (
+                  <button onClick={() => setPwModalOpen(true)} title="Đổi mật khẩu"
+                    style={{ width: 36, height: 36, borderRadius: 8, background: '#fff', border: '1px solid #fed7aa', color: '#c2410c', fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    🔐
+                  </button>
+                )}
                 <button onClick={onLogout} title="Đăng xuất" style={{ width: 36, height: 36, borderRadius: 8, background: '#fff', border: '1px solid #fecaca', color: '#dc2626', fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   ⏻
                 </button>
@@ -306,13 +352,128 @@ function AppMain({ user, onLogout, allowedViews }) {
               → state và data cache không mất khi đổi tab */}
           {canView('booking_performance') && (
             <div style={{ display: currentView === 'booking_performance' ? 'block' : 'none' }}>
-              <BookingPerformanceTab />
+              <BookingPerformanceTab currentUser={user} />
             </div>
           )}
 
         </div>
       </div>
+
+      {/* Admin Password Change Modal */}
+      {pwModalOpen && user.role === 'admin' && (
+        <AdminPasswordModal onClose={() => setPwModalOpen(false)} onLogout={onLogout} />
+      )}
     </AppDataProvider>
+  );
+}
+
+// ── Admin Password Change Modal ──────────────────────────────────────
+function AdminPasswordModal({ onClose, onLogout }) {
+  const [currentPw, setCurrentPw] = useState('');
+  const [newPw, setNewPw]         = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState('');
+  const [success, setSuccess]     = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(''); setSuccess('');
+    if (!currentPw || !newPw || !confirmPw) { setError('Vui lòng điền đầy đủ các trường.'); return; }
+    if (newPw !== confirmPw)                 { setError('Mật khẩu mới và xác nhận không khớp.'); return; }
+    if (newPw.length < 6)                    { setError('Mật khẩu mới phải có ít nhất 6 ký tự.'); return; }
+
+    setLoading(true);
+    try {
+      // Verify current password from Supabase
+      const { data: cur, error: e1 } = await supabase
+        .from('app_security')
+        .select('value')
+        .eq('key', 'admin_password')
+        .maybeSingle();
+      if (e1) throw e1;
+      const currentDbPw = cur?.value || 'Admin@SK2025';
+      if (currentDbPw !== currentPw) { setError('Mật khẩu hiện tại không đúng.'); setLoading(false); return; }
+
+      // Update password
+      const { error: e2 } = await supabase
+        .from('app_security')
+        .upsert({ key: 'admin_password', value: newPw, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+      if (e2) throw e2;
+
+      // Bump force_logout_at → kick all other sessions
+      const { error: e3 } = await supabase
+        .from('app_security')
+        .upsert({ key: 'force_logout_at', value: new Date().toISOString(), updated_at: new Date().toISOString() }, { onConflict: 'key' });
+      if (e3) throw e3;
+
+      setSuccess('✅ Đổi mật khẩu thành công! Tất cả phiên đăng nhập khác đã bị thu hồi. Bạn sẽ được đăng xuất sau 3 giây.');
+      setTimeout(() => { onLogout(); }, 3000);
+    } catch (err) {
+      console.error(err);
+      setError('Lỗi cập nhật mật khẩu: ' + (err.message || 'unknown'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)'
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: 'min(440px, 92vw)', background: '#fff', borderRadius: 16,
+        padding: '24px 26px', boxShadow: '0 30px 80px rgba(15,23,42,0.3)',
+        border: '1px solid #fee2e2', fontFamily: "'Outfit', sans-serif"
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 900, color: '#0f172a' }}>🔐 Đổi mật khẩu Admin</h3>
+          <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: '1.4rem', cursor: 'pointer', color: '#94a3b8' }}>×</button>
+        </div>
+        <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', padding: '10px 12px', borderRadius: 10, marginBottom: 16, fontSize: '0.78rem', color: '#9a3412' }}>
+          ⚠️ Sau khi đổi mật khẩu, <strong>toàn bộ phiên đăng nhập của các tài khoản khác sẽ bị thu hồi</strong> và bạn cũng sẽ phải đăng nhập lại.
+        </div>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {[
+            { label: 'Mật khẩu hiện tại', value: currentPw, setter: setCurrentPw },
+            { label: 'Mật khẩu mới',       value: newPw,     setter: setNewPw    },
+            { label: 'Xác nhận mật khẩu mới', value: confirmPw, setter: setConfirmPw },
+          ].map((f, i) => (
+            <div key={i}>
+              <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#374151', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                {f.label}
+              </label>
+              <input type="password" value={f.value} onChange={e => f.setter(e.target.value)}
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: 8, boxSizing: 'border-box',
+                  border: '2px solid #e5e7eb', fontSize: '0.88rem', outline: 'none',
+                  fontFamily: 'inherit', transition: 'border 0.2s',
+                }}
+                onFocus={e => e.target.style.border = '2px solid #ea580c'}
+                onBlur={e => e.target.style.border = '2px solid #e5e7eb'} />
+            </div>
+          ))}
+          {error && <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '8px 12px', color: '#dc2626', fontSize: '0.78rem', fontWeight: 600 }}>⚠️ {error}</div>}
+          {success && <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: '8px 12px', color: '#15803d', fontSize: '0.78rem', fontWeight: 600 }}>{success}</div>}
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <button type="button" onClick={onClose}
+              style={{ flex: 1, padding: '11px', borderRadius: 8, border: '1.5px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, fontSize: '0.86rem', cursor: 'pointer' }}>
+              Hủy
+            </button>
+            <button type="submit" disabled={loading || !!success}
+              style={{ flex: 1, padding: '11px', borderRadius: 8, border: 'none',
+                background: loading || success ? '#d1d5db' : '#ea580c',
+                color: '#fff', fontWeight: 800, fontSize: '0.86rem',
+                cursor: (loading || success) ? 'default' : 'pointer',
+                boxShadow: (loading || success) ? 'none' : '0 6px 14px rgba(234,88,12,0.22)' }}>
+              {loading ? '⏳ Đang xử lý...' : 'Lưu thay đổi'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 

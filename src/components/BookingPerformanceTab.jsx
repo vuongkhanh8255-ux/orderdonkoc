@@ -108,7 +108,14 @@ const KocIdentityCell = ({ value }) => {
     );
 };
 
-const KocIdentityOverview = ({ data = [], brandHeaders = [], formatNumber, staffOptions = [] }) => {
+const KocIdentityOverview = ({ data = [], brandHeaders = [], formatNumber, staffOptions = [], currentUser = null }) => {
+    const role = currentUser?.role || 'guest';
+    const username = currentUser?.username || '';
+    const isAdmin = role === 'admin';
+    const isEcom  = role === 'ecom';
+    // Chỉ admin và ecom được thấy nút + (booking/cs/livestream ko thấy)
+    const canInteract = isAdmin || isEcom;
+
     const [currentPage, setCurrentPage] = useState(1);
     const [search, setSearch] = useState('');
     const [activeBrand, setActiveBrand] = useState('__all');
@@ -124,7 +131,7 @@ const KocIdentityOverview = ({ data = [], brandHeaders = [], formatNumber, staff
 
         supabase
             .from(KOC_ASSIGNMENTS_TABLE)
-            .select('koc_id, brand_name, staff_name, assigned_at, updated_at')
+            .select('koc_id, brand_name, staff_name, assigned_at, updated_at, status, proposed_by, proposed_at, approved_by, approved_at')
             .then(async ({ data: rows, error }) => {
                 if (!isMounted) return;
                 if (error) {
@@ -205,6 +212,7 @@ const KocIdentityOverview = ({ data = [], brandHeaders = [], formatNumber, staff
     const paginatedData = filteredData.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
     const openAssignModal = (row, brandName) => {
+        if (!canInteract) return; // chỉ admin/ecom mới mở được
         const key = buildAssignmentKey(row.id, brandName);
         const currentAssignment = assignments[key];
         setAssignModal({ key, kocId: row.id, brandName, currentAssignment });
@@ -216,18 +224,40 @@ const KocIdentityOverview = ({ data = [], brandHeaders = [], formatNumber, staff
         saveLocalKocAssignments(nextAssignments);
     };
 
+    // Admin gán trực tiếp → status='approved' (đỏ)
+    // Ecom đề xuất → status='proposed' (vàng)
     const handleSaveAssignment = async () => {
         const staffName = selectedStaff.trim();
         if (!assignModal || !staffName) return;
 
-        const assignedAt = new Date().toISOString();
-        const record = {
-            koc_id: assignModal.kocId,
-            brand_name: assignModal.brandName,
-            staff_name: staffName,
-            assigned_at: assignedAt,
-            updated_at: assignedAt
-        };
+        const nowIso = new Date().toISOString();
+        const record = isAdmin
+            ? {
+                koc_id: assignModal.kocId,
+                brand_name: assignModal.brandName,
+                staff_name: staffName,
+                assigned_at: nowIso,
+                updated_at: nowIso,
+                status: 'approved',
+                approved_by: username,
+                approved_at: nowIso,
+                // giữ lại proposed_by/proposed_at nếu có
+                proposed_by: assignModal.currentAssignment?.proposed_by || null,
+                proposed_at: assignModal.currentAssignment?.proposed_at || null,
+              }
+            : {
+                koc_id: assignModal.kocId,
+                brand_name: assignModal.brandName,
+                staff_name: staffName,
+                assigned_at: nowIso,
+                updated_at: nowIso,
+                status: 'proposed',
+                proposed_by: username,
+                proposed_at: nowIso,
+                approved_by: null,
+                approved_at: null,
+              };
+
         const nextAssignments = { ...assignments, [assignModal.key]: record };
         persistAssignments(nextAssignments);
         setAssignModal(null);
@@ -238,8 +268,30 @@ const KocIdentityOverview = ({ data = [], brandHeaders = [], formatNumber, staff
         if (error) console.warn('Cannot sync KOC brand assignment to Supabase', error);
     };
 
+    // Admin duyệt đề xuất → chuyển proposed → approved (vàng → đỏ)
+    const handleApproveProposal = async () => {
+        if (!assignModal?.currentAssignment || !isAdmin) return;
+        const cur = assignModal.currentAssignment;
+        const nowIso = new Date().toISOString();
+        const record = {
+            ...cur,
+            status: 'approved',
+            approved_by: username,
+            approved_at: nowIso,
+            updated_at: nowIso,
+        };
+        const nextAssignments = { ...assignments, [assignModal.key]: record };
+        persistAssignments(nextAssignments);
+        setAssignModal(null);
+
+        const { error } = await supabase
+            .from(KOC_ASSIGNMENTS_TABLE)
+            .upsert(record, { onConflict: 'koc_id,brand_name' });
+        if (error) console.warn('Cannot approve proposal', error);
+    };
+
     const handleRemoveAssignment = async () => {
-        if (!assignModal) return;
+        if (!assignModal || !isAdmin) return; // chỉ admin xóa được
         const nextAssignments = { ...assignments };
         delete nextAssignments[assignModal.key];
         persistAssignments(nextAssignments);
@@ -269,46 +321,69 @@ const KocIdentityOverview = ({ data = [], brandHeaders = [], formatNumber, staff
 
         return (
             <div className="koc-identity-overview__brands">
-                {activeBrands.map(({ brandName, value, orders, videos, assignment }) => (
-                    <div key={brandName} className={`koc-identity-overview__brand ${!value ? 'is-empty' : ''} ${assignment ? 'is-assigned' : ''}`}>
-                        <div className="koc-identity-overview__brand-head">
-                            <div className="koc-identity-overview__brand-name">{brandName}</div>
-                            <div className="koc-identity-overview__brand-actions">
-                                <div className="koc-identity-overview__brand-stats">
-                                    <span>{formatNumber(orders)} đơn</span>
-                                    <span>{formatNumber(videos)} video</span>
+                {activeBrands.map(({ brandName, value, orders, videos, assignment }) => {
+                    const isProposed = assignment?.status === 'proposed';
+                    const isApproved = assignment && assignment.status !== 'proposed';
+                    // Ecom chỉ được tương tác với ô TRỐNG (chưa có assignment) hoặc ô MÌNH đề xuất
+                    const ecomCanInteract = isEcom && (
+                        !assignment || (isProposed && assignment.proposed_by === username)
+                    );
+                    const showPlusButton = isAdmin || ecomCanInteract;
+
+                    return (
+                        <div key={brandName} className={`koc-identity-overview__brand ${!value ? 'is-empty' : ''} ${isApproved ? 'is-assigned' : ''} ${isProposed ? 'is-proposed' : ''}`}>
+                            <div className="koc-identity-overview__brand-head">
+                                <div className="koc-identity-overview__brand-name">{brandName}</div>
+                                <div className="koc-identity-overview__brand-actions">
+                                    <div className="koc-identity-overview__brand-stats">
+                                        <span>{formatNumber(orders)} đơn</span>
+                                        <span>{formatNumber(videos)} video</span>
+                                    </div>
+                                    {showPlusButton && (
+                                        <button
+                                            type="button"
+                                            className="koc-identity-overview__assign-button"
+                                            onClick={() => openAssignModal(row, brandName)}
+                                            title={isAdmin
+                                                ? (assignment ? (isProposed ? 'Duyệt / sửa đề xuất' : 'Sửa gán nhân sự') : 'Gán nhân sự')
+                                                : (assignment ? 'Sửa đề xuất' : 'Đề xuất gán nhân sự')}
+                                            aria-label="Mở modal gán/đề xuất"
+                                        >
+                                            +
+                                        </button>
+                                    )}
                                 </div>
-                                <button
-                                    type="button"
-                                    className="koc-identity-overview__assign-button"
-                                    onClick={() => openAssignModal(row, brandName)}
-                                    title={assignment ? 'Sửa gán nhân sự booking' : 'Gán nhân sự booking'}
-                                    aria-label={assignment ? 'Sửa gán nhân sự booking' : 'Gán nhân sự booking'}
-                                >
-                                    +
-                                </button>
                             </div>
+                            {value ? (
+                                <KocIdentityCell value={value} />
+                            ) : assignment ? (
+                                <div className="koc-identity-cell">
+                                    <div className="koc-identity-cell__line">
+                                        <span className="koc-identity-cell__owner">
+                                            {isProposed && <span style={{ marginRight: 6, fontSize: '0.65rem', fontWeight: 800, color: '#a16207' }}>[ĐỀ XUẤT]</span>}
+                                            {assignment.staff_name}
+                                        </span>
+                                        <span className="koc-identity-cell__note">
+                                            {isProposed
+                                                ? `Đề xuất bởi ${assignment.proposed_by || '?'} từ ${formatAssignmentTime(assignment.proposed_at || assignment.assigned_at)}`
+                                                : `Gán booking từ ${formatAssignmentTime(assignment.approved_at || assignment.assigned_at)}`}
+                                        </span>
+                                    </div>
+                                </div>
+                            ) : (
+                                <span className="koc-identity-overview__empty">Trống</span>
+                            )}
+                            {assignment && value && (
+                                <div className="koc-identity-overview__assignment">
+                                    <span>
+                                        {isProposed ? 'Đề xuất' : 'Gán'}: {assignment.staff_name}
+                                    </span>
+                                    <small>{formatAssignmentTime(isProposed ? assignment.proposed_at : (assignment.approved_at || assignment.assigned_at))}</small>
+                                </div>
+                            )}
                         </div>
-                        {value ? (
-                            <KocIdentityCell value={value} />
-                        ) : assignment ? (
-                            <div className="koc-identity-cell">
-                                <div className="koc-identity-cell__line">
-                                    <span className="koc-identity-cell__owner">{assignment.staff_name}</span>
-                                    <span className="koc-identity-cell__note">Gán booking từ {formatAssignmentTime(assignment.assigned_at)}</span>
-                                </div>
-                            </div>
-                        ) : (
-                            <span className="koc-identity-overview__empty">Trống</span>
-                        )}
-                        {assignment && value && (
-                            <div className="koc-identity-overview__assignment">
-                                <span>Gán: {assignment.staff_name}</span>
-                                <small>{formatAssignmentTime(assignment.assigned_at)}</small>
-                            </div>
-                        )}
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         );
     };
@@ -363,37 +438,65 @@ const KocIdentityOverview = ({ data = [], brandHeaders = [], formatNumber, staff
                 </div>
             </div>
 
-            {assignModal && (
-                <div className="koc-identity-assign-modal" role="dialog" aria-modal="true">
-                    <div className="koc-identity-assign-modal__panel">
-                        <div className="koc-identity-assign-modal__header">
-                            <div>
-                                <div className="koc-identity-assign-modal__eyebrow">Phân bổ nhân sự booking</div>
-                                <h3>{assignModal.brandName}</h3>
-                                <p>KOC: {assignModal.kocId}</p>
+            {assignModal && (() => {
+                const cur = assignModal.currentAssignment;
+                const isProposedExisting = cur?.status === 'proposed';
+                const modalEyebrow = isAdmin
+                    ? (isProposedExisting ? 'Duyệt / sửa đề xuất' : 'Phân bổ nhân sự booking')
+                    : 'Đề xuất phân bổ nhân sự';
+                const saveLabel = isAdmin ? (isProposedExisting ? 'Lưu (chuyển thành đã duyệt)' : 'Lưu gán') : 'Gửi đề xuất';
+                return (
+                    <div className="koc-identity-assign-modal" role="dialog" aria-modal="true">
+                        <div className="koc-identity-assign-modal__panel">
+                            <div className="koc-identity-assign-modal__header">
+                                <div>
+                                    <div className="koc-identity-assign-modal__eyebrow">{modalEyebrow}</div>
+                                    <h3>{assignModal.brandName}</h3>
+                                    <p>KOC: {assignModal.kocId}</p>
+                                </div>
+                                <button type="button" onClick={() => setAssignModal(null)}>×</button>
                             </div>
-                            <button type="button" onClick={() => setAssignModal(null)}>×</button>
-                        </div>
-                        <label className="koc-identity-assign-modal__field">
-                            <span>Nhân sự phụ trách</span>
-                            <select value={selectedStaff} onChange={(event) => setSelectedStaff(event.target.value)}>
-                                {!staffNames.length && <option value="">Chưa có nhân sự</option>}
-                                {staffNames.map(name => <option key={name} value={name}>{name}</option>)}
-                            </select>
-                        </label>
-                        {assignModal.currentAssignment && (
-                            <div className="koc-identity-assign-modal__current">
-                                Đang gán cho <strong>{assignModal.currentAssignment.staff_name}</strong> từ {formatAssignmentTime(assignModal.currentAssignment.assigned_at)}
+                            <label className="koc-identity-assign-modal__field">
+                                <span>Nhân sự phụ trách</span>
+                                <select value={selectedStaff} onChange={(event) => setSelectedStaff(event.target.value)}>
+                                    {!staffNames.length && <option value="">Chưa có nhân sự</option>}
+                                    {staffNames.map(name => <option key={name} value={name}>{name}</option>)}
+                                </select>
+                            </label>
+                            {cur && (
+                                <div className="koc-identity-assign-modal__current" style={isProposedExisting ? { background: '#fffbeb', borderColor: '#fcd34d', color: '#92400e' } : undefined}>
+                                    {isProposedExisting ? (
+                                        <>
+                                            <strong>[ĐỀ XUẤT]</strong> {cur.staff_name} — đề xuất bởi <strong>{cur.proposed_by || '?'}</strong> lúc {formatAssignmentTime(cur.proposed_at || cur.assigned_at)}
+                                        </>
+                                    ) : (
+                                        <>
+                                            Đang gán cho <strong>{cur.staff_name}</strong> từ {formatAssignmentTime(cur.approved_at || cur.assigned_at)}
+                                            {cur.approved_by && <> — duyệt bởi {cur.approved_by}</>}
+                                        </>
+                                    )}
+                                </div>
+                            )}
+                            <div className="koc-identity-assign-modal__actions">
+                                {/* Bỏ gán: chỉ admin */}
+                                {cur && isAdmin && (
+                                    <button type="button" className="is-ghost" onClick={handleRemoveAssignment}>Bỏ gán</button>
+                                )}
+                                <button type="button" className="is-muted" onClick={() => setAssignModal(null)}>Hủy</button>
+                                {/* Admin: nếu đang là đề xuất → cho duyệt trực tiếp giữ nguyên staff */}
+                                {isAdmin && isProposedExisting && (
+                                    <button type="button" className="is-primary" onClick={handleApproveProposal} style={{ background: '#dc2626' }}>
+                                        Duyệt đề xuất
+                                    </button>
+                                )}
+                                <button type="button" className="is-primary" onClick={handleSaveAssignment} disabled={!selectedStaff}>
+                                    {saveLabel}
+                                </button>
                             </div>
-                        )}
-                        <div className="koc-identity-assign-modal__actions">
-                            {assignModal.currentAssignment && <button type="button" className="is-ghost" onClick={handleRemoveAssignment}>Bỏ gán</button>}
-                            <button type="button" className="is-muted" onClick={() => setAssignModal(null)}>Hủy</button>
-                            <button type="button" className="is-primary" onClick={handleSaveAssignment} disabled={!selectedStaff}>Lưu gán</button>
                         </div>
                     </div>
-                </div>
-            )}
+                );
+            })()}
         </div>
     );
 };
@@ -556,7 +659,7 @@ const DataTable = ({ columns, data = [], title }) => {
     );
 };
 
-const BookingPerformanceTab = () => {
+const BookingPerformanceTab = ({ currentUser = null }) => {
     const { brands, nhanSus, airLinks, loadAirLinks, setCastBudgetByNhanSu } = useAppData();
     const fileInputRef = useRef(null);
     const [savingBudget, setSavingBudget] = useState(false);
@@ -1901,7 +2004,7 @@ ${txtFormat}
 
                     {/* TABLES */}
                     <div style={{ opacity: isLoadingData ? 0.5 : 1, pointerEvents: isLoadingData ? 'none' : 'auto' }}>
-                        <KocIdentityOverview data={kocIdentityRows} brandHeaders={kocIdentityBrandHeaders} formatNumber={formatNumber} staffOptions={nhanSus} />
+                        <KocIdentityOverview data={kocIdentityRows} brandHeaders={kocIdentityBrandHeaders} formatNumber={formatNumber} staffOptions={nhanSus} currentUser={currentUser} />
                         <DataTable title="Performance theo Brand" columns={brandCols} data={brandStats} />
                         <DataTable title="Performance theo KOL/KOC" columns={kocCols} data={kocStats} />
                         <DataTable title="Performance theo Nhân sự" columns={staffCols} data={staffStats} />
