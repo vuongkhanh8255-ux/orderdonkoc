@@ -153,11 +153,11 @@ export const ACCOUNTS = [
     { username: 'cs',         password: 'CS@SK2025',       role: 'cs',         name: 'CS'          },
     { username: 'livestream', password: 'Live@SK2025',     role: 'livestream', name: 'Livestream'  },
     // ── ECOM accounts (5 users, propose-only quyền cho phần Định danh KOC) ──
-    { username: 'ecom1',      password: 'Ecom@SK2025',     role: 'ecom',       name: 'Ecom 1'      },
-    { username: 'ecom2',      password: 'Ecom@SK2025',     role: 'ecom',       name: 'Ecom 2'      },
-    { username: 'ecom3',      password: 'Ecom@SK2025',     role: 'ecom',       name: 'Ecom 3'      },
-    { username: 'ecom4',      password: 'Ecom@SK2025',     role: 'ecom',       name: 'Ecom 4'      },
-    { username: 'ecom5',      password: 'Ecom@SK2025',     role: 'ecom',       name: 'Ecom 5'      },
+    { username: 'ecom1',      password: 'Ecom1@SK2025',    role: 'ecom',       name: 'Ecom 1'      },
+    { username: 'ecom2',      password: 'Ecom2@SK2025',    role: 'ecom',       name: 'Ecom 2'      },
+    { username: 'ecom3',      password: 'Ecom3@SK2025',    role: 'ecom',       name: 'Ecom 3'      },
+    { username: 'ecom4',      password: 'Ecom4@SK2025',    role: 'ecom',       name: 'Ecom 4'      },
+    { username: 'ecom5',      password: 'Ecom5@SK2025',    role: 'ecom',       name: 'Ecom 5'      },
 ];
 
 // ── ROLE PERMISSIONS ──────────────────────────────────────
