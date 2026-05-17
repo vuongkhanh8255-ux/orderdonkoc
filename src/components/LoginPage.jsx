@@ -166,8 +166,16 @@ export const ROLE_VIEWS = {
     booking:    ['dashboard','order','booking_performance','contract','airlinks','booking','expense','camp_registration','listed_price','tiktok_orders','task_notes'],
     cs:         ['order','airlinks','expense','task_notes'],
     livestream: ['stella_dashboard','livestream','expense','task_notes'],
-    // ECOM: xem dashboard ecom, bảng giá, đơn TikTok, camp, booking_performance (chỉ đề xuất)
-    ecom:       ['stella_dashboard','listed_price','tiktok_orders','camp_registration','booking_performance','task_notes'],
+    // ECOM: full Ecom group + CSKH + Livestream + Booking group (trừ Hợp Đồng) + Ngân Sách Ecom
+    //       booking_performance chỉ được "đề xuất" (yellow), admin duyệt mới thành red
+    //       KHÔNG có: Hợp Đồng, Lưu Trữ Data, Task & Notes
+    ecom:       [
+        'stella_dashboard','listed_price','tiktok_orders','camp_registration', // Ecom group
+        'cskh',                                                                // CSKH
+        'livestream',                                                          // Livestream
+        'dashboard','order','booking_performance','airlinks',                  // Booking (no Hợp Đồng)
+        'expense',                                                             // Lưu trữ — Ngân Sách Ecom
+    ],
 };
 
 export default LoginPage;

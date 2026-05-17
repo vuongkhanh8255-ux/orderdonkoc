@@ -291,7 +291,7 @@ const KocIdentityOverview = ({ data = [], brandHeaders = [], formatNumber, staff
     };
 
     const handleRemoveAssignment = async () => {
-        if (!assignModal || !isAdmin) return; // chỉ admin xóa được
+        if (!assignModal || !isAdmin) return; // chỉ admin xóa được (cho cả approved + proposed)
         const nextAssignments = { ...assignments };
         delete nextAssignments[assignModal.key];
         persistAssignments(nextAssignments);
@@ -303,6 +303,25 @@ const KocIdentityOverview = ({ data = [], brandHeaders = [], formatNumber, staff
             .eq('koc_id', assignModal.kocId)
             .eq('brand_name', assignModal.brandName);
         if (error) console.warn('Cannot remove KOC brand assignment from Supabase', error);
+    };
+
+    // Ecom hủy đề xuất CỦA CHÍNH MÌNH (chưa được admin duyệt)
+    const handleCancelProposal = async () => {
+        if (!assignModal || !isEcom) return;
+        const cur = assignModal.currentAssignment;
+        if (!cur || cur.status !== 'proposed' || cur.proposed_by !== username) return;
+
+        const nextAssignments = { ...assignments };
+        delete nextAssignments[assignModal.key];
+        persistAssignments(nextAssignments);
+        setAssignModal(null);
+
+        const { error } = await supabase
+            .from(KOC_ASSIGNMENTS_TABLE)
+            .delete()
+            .eq('koc_id', assignModal.kocId)
+            .eq('brand_name', assignModal.brandName);
+        if (error) console.warn('Cannot cancel proposal', error);
     };
 
     const renderBrandSummary = (row) => {
@@ -478,9 +497,15 @@ const KocIdentityOverview = ({ data = [], brandHeaders = [], formatNumber, staff
                                 </div>
                             )}
                             <div className="koc-identity-assign-modal__actions">
-                                {/* Bỏ gán: chỉ admin */}
+                                {/* Bỏ gán: chỉ admin (cho mọi trạng thái) */}
                                 {cur && isAdmin && (
                                     <button type="button" className="is-ghost" onClick={handleRemoveAssignment}>Bỏ gán</button>
+                                )}
+                                {/* Hủy đề xuất: chỉ ecom, chỉ với đề xuất của chính mình (chưa duyệt) */}
+                                {cur && isEcom && isProposedExisting && cur.proposed_by === username && (
+                                    <button type="button" className="is-ghost" onClick={handleCancelProposal} style={{ color: '#b45309', borderColor: '#fcd34d' }}>
+                                        Hủy đề xuất
+                                    </button>
                                 )}
                                 <button type="button" className="is-muted" onClick={() => setAssignModal(null)}>Hủy</button>
                                 {/* Admin: nếu đang là đề xuất → cho duyệt trực tiếp giữ nguyên staff */}
