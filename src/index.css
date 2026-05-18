@@ -1425,19 +1425,36 @@ tbody tr:last-child {
     box-shadow: 0 2px 8px rgba(234, 88, 12, 0.15);
 }
 
-/* ── Gift row (M1T1 quà tặng) — compact sub-row under TikTok ── */
-.listed-price-table tr.is-gift-row td {
-    background: #f0fdf4 !important;
-    border-top: 1px dashed #86efac !important;
-    border-bottom: 1px dashed #86efac !important;
-    padding-top: 3px !important;
-    padding-bottom: 3px !important;
+/* ── Product accordion header row ── */
+.listed-price-table tr.listed-price-product-row td {
+    background: linear-gradient(90deg, #fafafa 0%, #f8f9fa 100%) !important;
+    border-top: 2px solid #e5e7eb !important;
+    border-bottom: 1px solid #e2e8f0 !important;
 }
-.listed-price-table tr.is-gift-row td:first-child {
-    border-left: 4px solid #16a34a;
+.listed-price-table tr.listed-price-product-row:first-child td {
+    border-top: none !important;
 }
-.listed-price-table tr.is-gift-row {
-    box-shadow: inset 0 2px 0 #4ade80;
+.listed-price-table tr.listed-price-product-row td:first-child {
+    border-left: 4px solid #ea580c;
+}
+.listed-price-table tr.listed-price-product-row:hover td {
+    background: linear-gradient(90deg, #fff7ed 0%, #fff8f4 100%) !important;
+}
+
+/* ── Variant child row ── */
+.listed-price-table tr.listed-price-variant-row td {
+    background: #ffffff;
+    border-bottom: 1px solid #f1f5f9;
+}
+.listed-price-table tr.listed-price-variant-row td:first-child {
+    border-left: 4px solid #e0e7ff;
+    background: #fafaff;
+}
+.listed-price-table tr.listed-price-variant-row:hover td {
+    background: #fffbf5 !important;
+}
+.listed-price-table tr.listed-price-variant-row:last-of-type td {
+    border-bottom: 2px solid #e5e7eb;
 }
 
 .koc-identity-overview__empty {

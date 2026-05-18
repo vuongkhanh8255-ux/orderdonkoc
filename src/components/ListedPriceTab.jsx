@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx-js-style';
 import { supabase } from '../supabaseClient';
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
-const STORAGE_KEY    = 'stella_listed_price_rows_v2';  // v2: grouped TikTok+Shopee pairs
+const STORAGE_KEY    = 'stella_listed_price_rows_v3'; // v3: accordion product+variant
 const BRANDS_KEY     = 'stella_listed_price_brands_v1';
 const PROMOTIONS_KEY = 'stella_listed_price_promotions_v1';
 const VOUCHERS_KEY   = 'stella_listed_price_vouchers_v1';
@@ -13,35 +13,25 @@ const DEFAULT_BRANDS     = ['Body Miss', 'Stella Kinetics'];
 const DEFAULT_PROMOTIONS = ['M1T1', 'M1T2', 'M1T3', 'M2G50%', 'M2G30%', 'BÁN LẺ'];
 const DEFAULT_VOUCHERS   = ['10%', '15%', '20%', '30%', '50.000đ', '100.000đ', '200.000đ'];
 
-// ── Columns ────────────────────────────────────────────────────────────────────
-// A=link B=productName C=barcode D=brand E=platform(fixed)
-// F=affPercent G=adsPercent H=listedPrice I=promotion J=regularPrice K=fsPrice L=voucher M=finalPrice
-const ALL_COLUMNS = [
-  { key: 'link',         label: 'Link SP',      minWidth: 110 },
-  { key: 'productName',  label: 'Tên sản phẩm', minWidth: 240 },
-  { key: 'barcode',      label: 'Barcode',       minWidth: 150 },
-  { key: 'brand',        label: 'Brand',         minWidth: 150, type: 'brand' },
-  { key: 'platform',     label: 'Sàn',           minWidth: 90  },
-  { key: 'affPercent',   label: 'AFF %',         minWidth: 90  },
-  { key: 'adsPercent',   label: 'ADS %',         minWidth: 90  },
-  { key: 'listedPrice',  label: 'Giá Niêm yết',  minWidth: 150 },
-  { key: 'promotion',    label: 'Promotion',     minWidth: 150, type: 'promotion' },
-  { key: 'regularPrice', label: 'Giá regular',   minWidth: 150 },
-  { key: 'fsPrice',      label: 'Giá FS',        minWidth: 130 },
-  { key: 'voucher',      label: 'Voucher',       minWidth: 130, type: 'voucher' },
-  { key: 'finalPrice',   label: 'Giá final',     minWidth: 150 },
+// ── Variant columns ───────────────────────────────────────────────────────────
+// productName field on variants = "phân loại" (classification)
+const VARIANT_COLS = [
+  { key: 'barcode',      label: 'Barcode',      minWidth: 140 },
+  { key: 'productName',  label: 'Phân loại',    minWidth: 200 },
+  { key: 'brand',        label: 'Brand',        minWidth: 130, type: 'brand' },
+  { key: 'platform',     label: 'Sàn',          minWidth: 90  },
+  { key: 'affPercent',   label: 'AFF %',        minWidth: 80  },
+  { key: 'adsPercent',   label: 'ADS %',        minWidth: 80  },
+  { key: 'listedPrice',  label: 'Giá Niêm yết', minWidth: 130 },
+  { key: 'promotion',    label: 'Promotion',    minWidth: 130, type: 'promotion' },
+  { key: 'regularPrice', label: 'Giá regular',  minWidth: 130 },
+  { key: 'fsPrice',      label: 'Giá FS',       minWidth: 110 },
+  { key: 'voucher',      label: 'Voucher',      minWidth: 110, type: 'voucher' },
+  { key: 'finalPrice',   label: 'Giá final',    minWidth: 140 },
 ];
 
-// Sub-sets used for rendering
-const PRODUCT_COLS_LIST = ALL_COLUMNS.slice(0, 4);   // A B C D  (link, name, barcode, brand)
-const PLATFORM_COL      = ALL_COLUMNS[4];            // E        (platform)
-const PRICE_COLS        = ALL_COLUMNS.slice(5);      // F–M      (aff, ads, listedPrice…)
-
-// Column keys that are shared across the product group (sync both rows)
-// link PER platform (TikTok link ≠ Shopee link); name/barcode/brand shared
-const SHARED_KEYS = new Set(['productName', 'barcode', 'brand']);
-
-const columnLetters = ALL_COLUMNS.reduce((acc, col, i) => {
+// Formula engine column letters: A=barcode … L=finalPrice
+const columnLetters = VARIANT_COLS.reduce((acc, col, i) => {
   acc[String.fromCharCode(65 + i)] = col.key;
   return acc;
 }, {});
@@ -57,33 +47,12 @@ const formulaAliases = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const newId = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
 
-const createRow = () => ({
-  id: newId(), groupId: null,
-  link: '', productName: '', barcode: '', brand: '', platform: '',
-  affPercent: '', adsPercent: '',
-  listedPrice: '', promotion: '', regularPrice: '', fsPrice: '', voucher: '', finalPrice: '',
-});
-
-const createGroupPair = () => {
-  const groupId = newId();
-  const shared  = { productName: '', barcode: '', brand: '' };
-  return [
-    { ...createRow(), groupId, platform: 'TikTok', ...shared },
-    { ...createRow(), groupId, platform: 'Shopee', ...shared },
-  ];
-};
-
 const loadArray = (key, def) => {
   try {
     const r = localStorage.getItem(key);
     const p = r ? JSON.parse(r) : null;
     return Array.isArray(p) && p.length ? p : def;
   } catch { return def; }
-};
-
-const loadRows = () => {
-  const rows = loadArray(STORAGE_KEY, null);
-  return rows?.length ? rows : createGroupPair();
 };
 
 const isFormula   = (v) => String(v || '').trim().startsWith('=');
@@ -113,7 +82,7 @@ const evaluateFormula = (formula, row, rowIndex, allRows, currentKey) => {
     let expr = String(raw || '').trim().replace(/^=/, '');
     expr = expr.replace(/(\d+(?:[.,]\d+)?)%/g, '($1/100)');
     expr = expr.replace(/(\d+),(\d+)/g, '$1.$2');
-    expr = expr.replace(/\b([A-Ja-j])(\d+)\b/g, (_, l, n) => {
+    expr = expr.replace(/\b([A-La-l])(\d+)\b/g, (_, l, n) => {
       const k = columnLetters[l.toUpperCase()]; return k ? String(getValue(Number(n) - 1, k)) : '0';
     });
     Object.entries(formulaAliases).forEach(([alias, key]) => {
@@ -128,29 +97,20 @@ const evaluateFormula = (formula, row, rowIndex, allRows, currentKey) => {
 
 const shiftFormula = (formula, offset) => {
   if (!offset) return formula;
-  return formula.replace(/\b([A-Ja-j])(\d+)\b/g, (_, col, rowNum) =>
+  return formula.replace(/\b([A-La-l])(\d+)\b/g, (_, col, rowNum) =>
     `${col.toUpperCase()}${parseInt(rowNum) + offset}`
   );
 };
 
-// ── Helpers for M1Tx (mua 1 tặng x) ─────────────────────────────────────────
-const isM1Tx = (promo) => /^M1T\d+$/i.test(String(promo || '').trim());
-const getGiftCount = (promo) => {
-  const m = String(promo || '').toUpperCase().trim().match(/^M1T(\d+)$/);
-  return m ? parseInt(m[1]) : 0;
-};
-
-// ── Final price auto-calculator ───────────────────────────────────────────────
+// ── Price auto-calculator ─────────────────────────────────────────────────────
 const parsePromotion = (promo) => {
   if (!promo) return { base: 'single', rate: 0 };
   const p = String(promo).toUpperCase().trim();
-  if (isM1Tx(p) || p === 'BÁN LẺ' || p === 'BAN LE') return { base: 'single', rate: 0 }; // chỉ tính 1 sản phẩm
-  // MxGy% → buy x items, discount y%
+  if (/^M1T\d+$/i.test(p) || p === 'BÁN LẺ' || p === 'BAN LE') return { base: 'single', rate: 0 };
   const match = p.match(/M(\d+)G(\d+)%/);
   if (match) return { base: 'combo', count: parseInt(match[1]), rate: parseInt(match[2]) / 100 };
   return { base: 'single', rate: 0 };
 };
-
 const parseVoucher = (voucher) => {
   if (!voucher) return { type: 'none', value: 0 };
   const v = String(voucher).trim();
@@ -159,245 +119,124 @@ const parseVoucher = (voucher) => {
   if (num > 0) return { type: 'fixed', value: num };
   return { type: 'none', value: 0 };
 };
-
 const calcFinalPrice = (row) => {
   const fs = parseNumber(row.fsPrice);
   if (!fs || fs <= 0) return null;
-
-  const promo    = parsePromotion(row.promotion);
-  const voucher  = parseVoucher(row.voucher);
+  const promo   = parsePromotion(row.promotion);
+  const voucher = parseVoucher(row.voucher);
   const isTikTok = row.platform === 'TikTok';
-
-  // Step 1: base after promotion
-  let base, originalTotal, unitCount;
-  const isCombo = promo.base === 'combo';
-  if (isCombo) {
-    unitCount     = promo.count;
-    originalTotal = fs * unitCount;
-    base          = originalTotal * (1 - promo.rate);
-  } else {
-    // M1T1 / BÁN LẺ / no promo — tính cho 1 sản phẩm
-    unitCount     = 1;
-    originalTotal = fs;
-    base          = fs;
-  }
-
-  // Step 2: apply voucher
-  // TikTok: luôn trừ voucher
-  // Shopee combo: không trừ voucher (chỉ chia)
-  // Shopee single (BÁN LẺ / M1T1): có trừ voucher
-  const applyVoucher = isTikTok || !isCombo;
+  const isCombo  = promo.base === 'combo';
+  const unitCount     = isCombo ? promo.count : 1;
+  const originalTotal = fs * unitCount;
+  const base          = isCombo ? originalTotal * (1 - promo.rate) : fs;
+  const applyVoucher  = isTikTok || !isCombo;
   let total;
   if (!applyVoucher || voucher.type === 'none') {
     total = base;
   } else if (voucher.type === 'percent') {
-    if (isTikTok) {
-      // TikTok: trừ voucher % tính trên giá gốc (trước promotion)
-      total = base - originalTotal * voucher.value;
-    } else {
-      // Shopee single: trừ thẳng vào base
-      total = base * (1 - voucher.value);
-    }
+    total = isTikTok ? base - originalTotal * voucher.value : base * (1 - voucher.value);
   } else {
-    // Fixed amount
     total = base - voucher.value;
   }
-
-  // Step 3: chia cho số lượng để ra giá 1 unit
   const final = total / unitCount;
-
   return Number.isFinite(final) && final >= 0 ? Math.round(final) : null;
 };
-
-// Sinh chuỗi công thức hiển thị để user đọc/hiểu
 const getFormulaHint = (row) => {
-  const promo    = parsePromotion(row.promotion);
-  const voucher  = parseVoucher(row.voucher);
+  const promo   = parsePromotion(row.promotion);
+  const voucher = parseVoucher(row.voucher);
   const isTikTok = row.platform === 'TikTok';
   const isCombo  = promo.base === 'combo';
   const count    = isCombo ? promo.count : 1;
-
-  // Phần base (sau promotion)
-  let baseStr;
-  if (isCombo) {
-    const discPct = Math.round((1 - promo.rate) * 100);
-    baseStr = `(FS×${count})×${discPct}%`;
-  } else {
-    baseStr = 'FS';
-  }
-
-  // Phần voucher: TikTok luôn trừ, Shopee chỉ trừ khi single (không phải combo)
+  let baseStr = isCombo ? `(FS×${count})×${Math.round((1 - promo.rate) * 100)}%` : 'FS';
   const showVoucher = voucher.type !== 'none' && (isTikTok || !isCombo);
   let totalStr = baseStr;
   if (showVoucher) {
     if (voucher.type === 'percent') {
       const vPct = Math.round(voucher.value * 100);
       if (isTikTok) {
-        const origStr = isCombo ? `FS×${count}` : 'FS';
-        totalStr = `${baseStr} − ${origStr}×${vPct}%`;
+        totalStr = `${baseStr} − ${isCombo ? `FS×${count}` : 'FS'}×${vPct}%`;
       } else {
-        // Shopee single: nhân trực tiếp
         totalStr = `${baseStr}×${100 - vPct}%`;
       }
     } else {
-      const fixedStr = voucher.value >= 1000
-        ? `${(voucher.value / 1000).toLocaleString('vi-VN')}k`
-        : String(voucher.value);
+      const fixedStr = voucher.value >= 1000 ? `${(voucher.value / 1000).toLocaleString('vi-VN')}k` : String(voucher.value);
       totalStr = `${baseStr} − ${fixedStr}`;
     }
   }
-
-  // Chia cho số lượng nếu combo → giá per unit
-  if (isCombo) {
-    return `(${totalStr}) ÷ ${count}`;
-  }
-  return totalStr;
+  return isCombo ? `(${totalStr}) ÷ ${count}` : totalStr;
 };
 
-// ── Excel export ──────────────────────────────────────────────────────────────
-const toExcelFormulaText = (value) =>
-  isFormula(value)
-    ? String(value || '').replace(/(\d+)\.(\d+)/g, '$1,$2').replace(/\b([A-Ja-j])(\d+)\b/g, (_, c, n) => `${c.toUpperCase()}${parseInt(n) + 1}`)
-    : value;
+// ── Data model ────────────────────────────────────────────────────────────────
+const emptyRow = () => ({
+  link: '', productName: '', barcode: '', brand: '', platform: '',
+  affPercent: '', adsPercent: '',
+  listedPrice: '', promotion: '', regularPrice: '', fsPrice: '', voucher: '', finalPrice: '',
+});
 
-const exportExcel = (rows) => {
-  const headers = ['Tên sản phẩm','Barcode','Brand','Sàn','Giá Niêm yết','Promotion','Giá regular','Giá FS','Voucher','Giá final'];
-  const data = [
-    headers,
-    ...rows.map(r => [
-      r.productName, r.barcode, r.brand, r.platform,
-      toExcelFormulaText(r.listedPrice), r.promotion,
-      toExcelFormulaText(r.regularPrice), toExcelFormulaText(r.fsPrice),
-      toExcelFormulaText(r.voucher),      toExcelFormulaText(r.finalPrice),
-    ])
-  ];
-  const ws = XLSX.utils.aoa_to_sheet(data);
-  headers.forEach((_, ci) => {
-    const cellRef = XLSX.utils.encode_cell({ r: 0, c: ci });
-    if (ws[cellRef]) ws[cellRef].s = {
-      font: { bold: true, color: { rgb: 'FFFFFF' } },
-      fill: { patternType: 'solid', fgColor: { rgb: 'EA580C' } },
-      alignment: { horizontal: 'center' },
-    };
+const createProduct = () => {
+  const id = newId();
+  return { ...emptyRow(), id, groupId: id, rowType: 'product' };
+};
+
+const createVariant = (productId) => ({
+  ...emptyRow(), id: newId(), groupId: productId, rowType: 'variant', platform: 'TikTok',
+});
+
+const createProductWithVariant = () => {
+  const p = createProduct();
+  return [p, createVariant(p.id)];
+};
+
+// Migrate from old TikTok+Shopee pair format (v1/v2)
+const migrateRows = (rows) => {
+  if (!rows?.length) return createProductWithVariant();
+  if (rows.some(r => r.rowType === 'product')) return rows;
+
+  const groups = new Map();
+  rows.forEach(r => {
+    if (!r.groupId) return;
+    if (!groups.has(r.groupId)) groups.set(r.groupId, []);
+    groups.get(r.groupId).push(r);
   });
-  ws['!cols'] = [{ wch: 40 }, { wch: 20 }, { wch: 20 }, { wch: 12 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 18 }];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Bang Gia Niem Yet');
-  XLSX.writeFile(wb, 'bang-gia-niem-yet.xlsx');
+
+  const result = [];
+  groups.forEach(groupRows => {
+    const rep = groupRows.find(r => r.platform === 'TikTok') || groupRows[0];
+    const p = createProduct();
+    p.link = rep.link || '';
+    p.productName = rep.productName || '';
+    result.push(p);
+    groupRows
+      .filter(r => r.rowType !== 'gift')
+      .forEach(r => result.push({
+        ...r, id: newId(), groupId: p.id, rowType: 'variant',
+        productName: r.productName || r.platform || '',
+        link: '',
+      }));
+  });
+  return result.length ? result : createProductWithVariant();
 };
 
-// ── Platform logos (inline SVG — no external files needed) ───────────────────
-const ShopeeLogo = ({ size = 20 }) => (
-  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="sp-bg" x1="50" y1="0" x2="50" y2="100" gradientUnits="userSpaceOnUse">
-        <stop stopColor="#FF6633"/>
-        <stop offset="1" stopColor="#EE4D2D"/>
-      </linearGradient>
-    </defs>
-    <rect width="100" height="100" rx="20" fill="url(#sp-bg)"/>
-    {/* bag body */}
-    <path d="M22 46 L78 46 L71 79 L29 79 Z" fill="white"/>
-    {/* bag handle */}
-    <path d="M33 46 C33 27 67 27 67 46" stroke="white" strokeWidth="8" strokeLinecap="round"/>
-    {/* S letter */}
-    <text x="50" y="71" textAnchor="middle" fill="#EE4D2D" fontSize="26" fontWeight="900" fontFamily="Arial Black,Arial,sans-serif">S</text>
-  </svg>
-);
+const loadRows = () => migrateRows(loadArray(STORAGE_KEY, null));
 
-const TikTokLogo = ({ size = 20 }) => (
-  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <rect width="100" height="100" rx="20" fill="#010101"/>
-    {/* pink/red shadow — shifted right */}
-    <g fill="#FE2C55" transform="translate(2,0)">
-      <ellipse cx="33" cy="67" rx="13" ry="10"/>
-      <rect x="44" y="19" width="6" height="49"/>
-      <rect x="44" y="19" width="24" height="8" rx="3"/>
-      <rect x="62" y="19" width="6" height="22" rx="2"/>
-    </g>
-    {/* cyan shadow — shifted left */}
-    <g fill="#25F4EE" transform="translate(-4,0)">
-      <ellipse cx="33" cy="67" rx="13" ry="10"/>
-      <rect x="44" y="19" width="6" height="49"/>
-      <rect x="44" y="19" width="24" height="8" rx="3"/>
-      <rect x="62" y="19" width="6" height="22" rx="2"/>
-    </g>
-    {/* white main note */}
-    <g fill="white">
-      <ellipse cx="33" cy="67" rx="13" ry="10"/>
-      <rect x="44" y="19" width="6" height="49"/>
-      <rect x="44" y="19" width="24" height="8" rx="3"/>
-      <rect x="62" y="19" width="6" height="22" rx="2"/>
-    </g>
-  </svg>
-);
-
-// ── Excel import ──────────────────────────────────────────────────────────────
-const importExcel = (file, onSuccess) => {
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-    const firstRow = raw[0] || [];
-    const isHeader = String(firstRow[0] || '').toLowerCase().includes('tên') ||
-                     String(firstRow[0] || '').toLowerCase().includes('product');
-    const start = isHeader ? 1 : 0;
-    const flatRows = raw.slice(start)
-      .map(r => ({ ...createRow(),
-        productName: String(r[0] || ''), barcode: String(r[1] || ''),
-        brand: String(r[2] || ''), platform: String(r[3] || '') || 'TikTok',
-        listedPrice: String(r[4] || ''), promotion: String(r[5] || ''),
-        regularPrice: String(r[6] || ''), fsPrice: String(r[7] || ''),
-        voucher: String(r[8] || ''), finalPrice: String(r[9] || ''),
-      }))
-      .filter(r => r.productName || r.barcode || r.brand);
-
-    // Pair consecutive TikTok+Shopee rows with same product into groups
-    const paired = [];
-    for (let i = 0; i < flatRows.length; i++) {
-      const row = flatRows[i];
-      const next = flatRows[i + 1];
-      const isAlreadyPaired = next && next.platform === 'Shopee' &&
-        next.productName === row.productName && next.barcode === row.barcode;
-      const groupId = newId();
-      if (row.platform === 'TikTok' && isAlreadyPaired) {
-        paired.push({ ...row, groupId }, { ...next, groupId });
-        i++;
-      } else if (row.platform !== 'Shopee') {
-        const shopeeRow = { ...createRow(), groupId, platform: 'Shopee',
-          productName: row.productName, barcode: row.barcode, brand: row.brand,
-          regularPrice: row.regularPrice ? String(Math.round(parseNumber(row.regularPrice) * 1.10)) : '',
-          fsPrice:      row.regularPrice ? String(Math.round(parseNumber(row.regularPrice) * 1.05)) : '',
-        };
-        paired.push({ ...row, groupId }, shopeeRow);
-      } else {
-        paired.push({ ...row, groupId });
-      }
-    }
-    onSuccess(paired.length ? paired : createGroupPair());
-  };
-  reader.readAsArrayBuffer(file);
-};
-
-// ── Supabase sync helpers ─────────────────────────────────────────────────────
+// ── Supabase helpers ──────────────────────────────────────────────────────────
 const rowToDb = (row, idx) => ({
   id:            row.id,
-  group_id:      row.groupId     || '',
-  row_type:      row.rowType     || 'price',
-  platform:      row.platform    || '',
-  link:          row.link        || '',
-  product_name:  row.productName || '',
-  barcode:       row.barcode     || '',
-  brand:         row.brand       || '',
-  aff_percent:   row.affPercent  || '',
-  ads_percent:   row.adsPercent  || '',
-  listed_price:  row.listedPrice || '',
-  promotion:     row.promotion   || '',
+  group_id:      row.groupId      || '',
+  row_type:      row.rowType      || 'variant',
+  platform:      row.platform     || '',
+  link:          row.link         || '',
+  product_name:  row.productName  || '',
+  barcode:       row.barcode      || '',
+  brand:         row.brand        || '',
+  aff_percent:   row.affPercent   || '',
+  ads_percent:   row.adsPercent   || '',
+  listed_price:  row.listedPrice  || '',
+  promotion:     row.promotion    || '',
   regular_price: row.regularPrice || '',
-  fs_price:      row.fsPrice     || '',
-  voucher:       row.voucher     || '',
-  final_price:   row.finalPrice  || '',
+  fs_price:      row.fsPrice      || '',
+  voucher:       row.voucher      || '',
+  final_price:   row.finalPrice   || '',
   sort_order:    idx,
 });
 
@@ -407,20 +246,127 @@ const dbToRow = (r) => ({
   rowType:      r.row_type,
   platform:     r.platform,
   link:         r.link        || '',
-  productName:  r.product_name,
-  barcode:      r.barcode,
-  brand:        r.brand,
+  productName:  r.product_name || '',
+  barcode:      r.barcode      || '',
+  brand:        r.brand        || '',
   affPercent:   r.aff_percent  || '',
   adsPercent:   r.ads_percent  || '',
-  listedPrice:  r.listed_price,
-  promotion:    r.promotion,
-  regularPrice: r.regular_price,
-  fsPrice:      r.fs_price,
-  voucher:      r.voucher,
-  finalPrice:   r.final_price,
+  listedPrice:  r.listed_price || '',
+  promotion:    r.promotion    || '',
+  regularPrice: r.regular_price || '',
+  fsPrice:      r.fs_price     || '',
+  voucher:      r.voucher      || '',
+  finalPrice:   r.final_price  || '',
 });
 
-// ── Inline AddOption ──────────────────────────────────────────────────────────
+// ── Excel helpers ─────────────────────────────────────────────────────────────
+const toExcelFormulaText = (value) =>
+  isFormula(value)
+    ? String(value || '').replace(/(\d+)\.(\d+)/g, '$1,$2').replace(/\b([A-La-l])(\d+)\b/g, (_, c, n) => `${c.toUpperCase()}${parseInt(n) + 1}`)
+    : value;
+
+const exportExcel = (rows) => {
+  const products = rows.filter(r => r.rowType === 'product');
+  const variants  = rows.filter(r => r.rowType === 'variant');
+  const headers   = ['Tên sản phẩm', 'Link', 'Barcode', 'Phân loại', 'Brand', 'Sàn', 'AFF%', 'ADS%', 'Giá Niêm yết', 'Promotion', 'Giá regular', 'Giá FS', 'Voucher', 'Giá final'];
+  const data      = [headers];
+  products.forEach(p => {
+    variants.filter(v => v.groupId === p.id).forEach(v => {
+      data.push([
+        p.productName, p.link, v.barcode, v.productName, v.brand, v.platform,
+        v.affPercent, v.adsPercent,
+        toExcelFormulaText(v.listedPrice), v.promotion,
+        toExcelFormulaText(v.regularPrice), toExcelFormulaText(v.fsPrice),
+        toExcelFormulaText(v.voucher), toExcelFormulaText(v.finalPrice),
+      ]);
+    });
+  });
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  headers.forEach((_, ci) => {
+    const cellRef = XLSX.utils.encode_cell({ r: 0, c: ci });
+    if (ws[cellRef]) ws[cellRef].s = {
+      font: { bold: true, color: { rgb: 'FFFFFF' } },
+      fill: { patternType: 'solid', fgColor: { rgb: 'EA580C' } },
+      alignment: { horizontal: 'center' },
+    };
+  });
+  ws['!cols'] = [{ wch: 40 }, { wch: 30 }, { wch: 20 }, { wch: 30 }, { wch: 20 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 18 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Bang Gia Niem Yet');
+  XLSX.writeFile(wb, 'bang-gia-niem-yet.xlsx');
+};
+
+const importExcel = (file, onSuccess) => {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const wb  = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+    const ws  = wb.Sheets[wb.SheetNames[0]];
+    const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    const firstRow = raw[0] || [];
+    const isHeader = String(firstRow[0] || '').toLowerCase().includes('tên') || String(firstRow[0] || '').toLowerCase().includes('product');
+    const start    = isHeader ? 1 : 0;
+    const dataRows = raw.slice(start).filter(r => r.some(c => String(c || '').trim()));
+
+    // Group by product name (col0) + link (col1)
+    const productMap = new Map(); // key = productName|link
+    dataRows.forEach(r => {
+      const pName = String(r[0] || '').trim();
+      const pLink = String(r[1] || '').trim();
+      const key   = `${pName}||${pLink}`;
+      if (!productMap.has(key)) productMap.set(key, { pName, pLink, variants: [] });
+      productMap.get(key).variants.push(r);
+    });
+
+    const result = [];
+    productMap.forEach(({ pName, pLink, variants: variantDataRows }) => {
+      const p = createProduct();
+      p.productName = pName;
+      p.link        = pLink;
+      result.push(p);
+      variantDataRows.forEach(r => {
+        result.push({
+          ...createVariant(p.id),
+          barcode:      String(r[2] || ''),
+          productName:  String(r[3] || ''),
+          brand:        String(r[4] || ''),
+          platform:     String(r[5] || '') || 'TikTok',
+          affPercent:   String(r[6] || ''),
+          adsPercent:   String(r[7] || ''),
+          listedPrice:  String(r[8] || ''),
+          promotion:    String(r[9] || ''),
+          regularPrice: String(r[10] || ''),
+          fsPrice:      String(r[11] || ''),
+          voucher:      String(r[12] || ''),
+          finalPrice:   String(r[13] || ''),
+        });
+      });
+    });
+    onSuccess(result.length ? result : createProductWithVariant());
+  };
+  reader.readAsArrayBuffer(file);
+};
+
+// ── Platform logos ────────────────────────────────────────────────────────────
+const ShopeeLogo = ({ size = 20 }) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs><linearGradient id="sp-bg" x1="50" y1="0" x2="50" y2="100" gradientUnits="userSpaceOnUse"><stop stopColor="#FF6633"/><stop offset="1" stopColor="#EE4D2D"/></linearGradient></defs>
+    <rect width="100" height="100" rx="20" fill="url(#sp-bg)"/>
+    <path d="M22 46 L78 46 L71 79 L29 79 Z" fill="white"/>
+    <path d="M33 46 C33 27 67 27 67 46" stroke="white" strokeWidth="8" strokeLinecap="round"/>
+    <text x="50" y="71" textAnchor="middle" fill="#EE4D2D" fontSize="26" fontWeight="900" fontFamily="Arial Black,Arial,sans-serif">S</text>
+  </svg>
+);
+
+const TikTokLogo = ({ size = 20 }) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100" height="100" rx="20" fill="#010101"/>
+    <g fill="#FE2C55" transform="translate(2,0)"><ellipse cx="33" cy="67" rx="13" ry="10"/><rect x="44" y="19" width="6" height="49"/><rect x="44" y="19" width="24" height="8" rx="3"/><rect x="62" y="19" width="6" height="22" rx="2"/></g>
+    <g fill="#25F4EE" transform="translate(-4,0)"><ellipse cx="33" cy="67" rx="13" ry="10"/><rect x="44" y="19" width="6" height="49"/><rect x="44" y="19" width="24" height="8" rx="3"/><rect x="62" y="19" width="6" height="22" rx="2"/></g>
+    <g fill="white"><ellipse cx="33" cy="67" rx="13" ry="10"/><rect x="44" y="19" width="6" height="49"/><rect x="44" y="19" width="24" height="8" rx="3"/><rect x="62" y="19" width="6" height="22" rx="2"/></g>
+  </svg>
+);
+
+// ── AddOptionInline ───────────────────────────────────────────────────────────
 const AddOptionInline = ({ placeholder, onAdd, onClose }) => {
   const [val, setVal] = useState('');
   return (
@@ -437,6 +383,19 @@ const AddOptionInline = ({ placeholder, onAdd, onClose }) => {
   );
 };
 
+// ── FillHandle ────────────────────────────────────────────────────────────────
+const FillHandle = ({ onMouseDown, active }) => (
+  <div onMouseDown={onMouseDown} title="Kéo xuống để áp dụng"
+    style={{
+      position: 'absolute', bottom: 1, right: 1, width: 9, height: 9,
+      background: active ? '#c2410c' : '#ea580c', border: '1.5px solid #fff',
+      borderRadius: 2, cursor: 'crosshair', zIndex: 10, opacity: 0.85,
+    }}
+    onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'scale(1.3)'; }}
+    onMouseLeave={e => { e.currentTarget.style.opacity = '0.85'; e.currentTarget.style.transform = 'scale(1)'; }}
+  />
+);
+
 // ── Main Component ────────────────────────────────────────────────────────────
 const ListedPriceTab = () => {
   const { brands: ctxBrands = [] } = useContext(AppDataContext) || {};
@@ -446,76 +405,64 @@ const ListedPriceTab = () => {
   const [promotions, setPromotions] = useState(() => loadArray(PROMOTIONS_KEY, DEFAULT_PROMOTIONS));
   const [vouchers, setVouchers]     = useState(() => loadArray(VOUCHERS_KEY, DEFAULT_VOUCHERS));
   const [syncing, setSyncing]       = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState(() => new Set());
 
-  // Filter state
   const [filterText,      setFilterText]      = useState('');
   const [filterBrand,     setFilterBrand]     = useState('');
   const [filterPromotion, setFilterPromotion] = useState('');
   const [filterBarcode,   setFilterBarcode]   = useState('');
 
-  // Add-option toggles
   const [addingBrand,     setAddingBrand]     = useState(false);
   const [addingPromotion, setAddingPromotion] = useState(false);
   const [addingVoucher,   setAddingVoucher]   = useState(false);
 
-  // Cell edit + drag-to-fill
   const [editingCell, setEditingCell] = useState(null);
   const [fillDrag,    setFillDrag]    = useState(null);
   const [fillOver,    setFillOver]    = useState(null);
 
-  const importRef   = useRef(null);
-  const syncTimer   = useRef(null);
+  const importRef = useRef(null);
+  const syncTimer = useRef(null);
 
-  // ── Load từ Supabase khi mount ──
+  // Load from Supabase
   useEffect(() => {
     const load = async () => {
       const { data, error } = await supabase
-        .from('listed_price_rows')
-        .select('*')
-        .order('sort_order', { ascending: true });
-      if (error || !data?.length) return; // fallback localStorage
-      const loaded = data.map(dbToRow);
+        .from('listed_price_rows').select('*').order('sort_order', { ascending: true });
+      if (error || !data?.length) return;
+      const loaded = migrateRows(data.map(dbToRow));
       setRows(loaded);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
     };
     load();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Persist localStorage ──
   useEffect(() => { localStorage.setItem(STORAGE_KEY,    JSON.stringify(rows));       }, [rows]);
   useEffect(() => { localStorage.setItem(BRANDS_KEY,     JSON.stringify(brands));     }, [brands]);
   useEffect(() => { localStorage.setItem(PROMOTIONS_KEY, JSON.stringify(promotions)); }, [promotions]);
   useEffect(() => { localStorage.setItem(VOUCHERS_KEY,   JSON.stringify(vouchers));   }, [vouchers]);
 
-  // ── Sync lên Supabase (debounce 1.5s) ──
   const syncToSupabase = useCallback((nextRows) => {
     if (syncTimer.current) clearTimeout(syncTimer.current);
     syncTimer.current = setTimeout(async () => {
       setSyncing(true);
       try {
         const dbRows = nextRows.map((r, i) => rowToDb(r, i));
-        // Upsert tất cả rows hiện tại
         await supabase.from('listed_price_rows').upsert(dbRows, { onConflict: 'id' });
-        // Xóa rows cũ không còn trong danh sách
         const ids = nextRows.map(r => r.id);
         await supabase.from('listed_price_rows').delete().not('id', 'in', `(${ids.map(id => `"${id}"`).join(',')})`);
-      } finally {
-        setSyncing(false);
-      }
+      } finally { setSyncing(false); }
     }, 1500);
   }, []);
 
-  // Sync mỗi khi rows thay đổi
   useEffect(() => { syncToSupabase(rows); }, [rows]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sync brands from Supabase context
   useEffect(() => {
     if (!ctxBrands?.length) return;
     const ctxNames = ctxBrands.map(b => b.ten_brand).filter(Boolean);
     setBrands(prev => [...new Set([...ctxNames, ...prev])]);
   }, [ctxBrands]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Global mouseup: finish drag-to-fill ──
+  // Fill drag
   useEffect(() => {
     if (!fillDrag) return;
     const handleMouseUp = () => {
@@ -524,175 +471,111 @@ const ListedPriceTab = () => {
         const lo = Math.min(fromIndex, fillOver);
         const hi = Math.max(fromIndex, fillOver);
         setRows(prev => prev.map((r, i) => {
-          if (i === fromIndex || i < lo || i > hi) return r;
+          if (i === fromIndex || i < lo || i > hi || r.rowType !== 'variant') return r;
           const newVal = isFormula(sourceValue) ? shiftFormula(sourceValue, i - fromIndex) : sourceValue;
           return { ...r, [colKey]: newVal };
         }));
       }
-      setFillDrag(null);
-      setFillOver(null);
+      setFillDrag(null); setFillOver(null);
     };
     window.addEventListener('mouseup', handleMouseUp);
     return () => window.removeEventListener('mouseup', handleMouseUp);
   }, [fillDrag, fillOver]);
 
-  const addBrand     = (v) => { if (!brands.includes(v))     setBrands(p     => [...p, v]); };
+  const addBrand     = (v) => { if (!brands.includes(v))     setBrands(p => [...p, v]); };
   const addPromotion = (v) => { if (!promotions.includes(v)) setPromotions(p => [...p, v]); };
-  const addVoucher   = (v) => { if (!vouchers.includes(v))   setVouchers(p   => [...p, v]); };
+  const addVoucher   = (v) => { if (!vouchers.includes(v))   setVouchers(p => [...p, v]); };
 
-  // ── CRUD ─────────────────────────────────────────────────────────────────────
+  // ── CRUD ──────────────────────────────────────────────────────────────────
+  const addProduct = () => setRows(p => [...p, ...createProductWithVariant()]);
 
-  // updateCell: sync shared keys (name/barcode/brand) across group + auto-calc Shopee prices
-  const updateCell = (id, key, value) => {
-    setRows(prev => {
-      const targetRow = prev.find(r => r.id === id);
-      if (!targetRow) return prev;
+  const addVariant = (productId) => setRows(prev => {
+    const lastIdx = prev.reduce((max, r, i) => r.groupId === productId ? i : max, -1);
+    const result  = [...prev];
+    result.splice(lastIdx + 1, 0, createVariant(productId));
+    return result;
+  });
 
-      // 1. Update target row + sync shared columns across the group
-      let updated = prev.map(r => {
-        if (r.id === id) return { ...r, [key]: value };
-        if (targetRow.groupId && SHARED_KEYS.has(key) && r.groupId === targetRow.groupId)
-          return { ...r, [key]: value };
-        return r;
-      });
-
-      // 2. Auto-calc Shopee prices when TikTok regularPrice changes
-      if (key === 'regularPrice' && targetRow.platform === 'TikTok' && targetRow.groupId) {
-        const rowIdx = prev.findIndex(r => r.id === id);
-        const regNum = isFormula(value)
-          ? evaluateFormula(value, { ...targetRow, regularPrice: value }, rowIdx, prev, 'regularPrice')
-          : parseNumber(value);
-        if (Number.isFinite(regNum) && regNum > 0) {
-          updated = updated.map(r =>
-            r.groupId === targetRow.groupId && r.platform === 'Shopee'
-              ? { ...r, regularPrice: String(Math.round(regNum * 1.10)), fsPrice: String(Math.round(regNum * 1.05)) }
-              : r
-          );
-        }
-      }
-
-      // 3. Auto-add/remove gift rows khi promotion thay đổi (M1T1 → 1 row, M1T2 → 2 rows…)
-      if (key === 'promotion' && targetRow.groupId) {
-        // Đếm số quà cần có: lấy max giftCount từ tất cả non-gift rows trong group
-        const maxGiftCount = updated
-          .filter(r => r.groupId === targetRow.groupId && r.rowType !== 'gift')
-          .reduce((max, r) => Math.max(max, getGiftCount(r.promotion)), 0);
-
-        const existingGifts = updated.filter(r => r.groupId === targetRow.groupId && r.rowType === 'gift');
-        const diff = maxGiftCount - existingGifts.length;
-
-        if (diff > 0) {
-          // Thêm gift rows còn thiếu
-          const lastIdx = updated.reduce((max, r, i) => r.groupId === targetRow.groupId ? i : max, -1);
-          const newGifts = Array.from({ length: diff }, () =>
-            ({ ...createRow(), groupId: targetRow.groupId, platform: 'gift', rowType: 'gift' })
-          );
-          const next = [...updated];
-          next.splice(lastIdx + 1, 0, ...newGifts);
-          updated = next;
-        } else if (diff < 0) {
-          // Xóa bớt gift rows thừa (giữ lại đúng maxGiftCount đầu tiên)
-          const toRemove = existingGifts.slice(maxGiftCount).map(r => r.id);
-          updated = updated.filter(r => !toRemove.includes(r.id));
-        }
-      }
-
-      return updated;
-    });
-  };
-
-  const addGroup       = () => setRows(p => [...p, ...createGroupPair()]);
-
-  // Gift row (M1T1): direct update — không sync SHARED_KEYS
-  const updateGiftCell = (id, key, value) =>
+  const updateProductCell = (id, key, value) =>
     setRows(prev => prev.map(r => r.id === id ? { ...r, [key]: value } : r));
 
-  const addGiftRow = (groupId, count = 1) => setRows(prev => {
-    const existing = prev.filter(r => r.groupId === groupId && r.rowType === 'gift').length;
-    if (existing >= count) return prev;
-    const toAdd = count - existing;
-    const gifts = Array.from({ length: toAdd }, () =>
-      ({ ...createRow(), groupId, platform: 'gift', rowType: 'gift' })
-    );
-    const lastIdx = prev.reduce((max, r, i) => r.groupId === groupId ? i : max, -1);
-    const result = [...prev];
-    result.splice(lastIdx + 1, 0, ...gifts);
+  const updateVariantCell = (id, key, value) =>
+    setRows(prev => prev.map(r => r.id === id ? { ...r, [key]: value } : r));
+
+  const deleteProduct = (productId) => setRows(prev => {
+    const filtered = prev.filter(r => r.id !== productId && r.groupId !== productId);
+    return filtered.some(r => r.rowType === 'product') ? filtered : createProductWithVariant();
+  });
+
+  const deleteVariant = (id) => setRows(prev => prev.filter(r => r.id !== id));
+
+  const duplicateProduct = (productId) => setRows(prev => {
+    const productRow  = prev.find(r => r.id === productId);
+    if (!productRow) return prev;
+    const variantRows = prev.filter(r => r.rowType === 'variant' && r.groupId === productId);
+    const newPId      = newId();
+    const newProduct  = { ...productRow, id: newPId, groupId: newPId };
+    const newVariants = variantRows.map(v => ({ ...v, id: newId(), groupId: newPId }));
+    const lastIdx     = prev.reduce((max, r, i) => (r.id === productId || r.groupId === productId) ? i : max, -1);
+    const result      = [...prev];
+    result.splice(lastIdx + 1, 0, newProduct, ...newVariants);
     return result;
   });
 
-  const removeGiftRow = (groupId) =>
-    setRows(prev => prev.filter(r => !(r.groupId === groupId && r.rowType === 'gift')));
-
-  const deleteGroup    = (groupId) => setRows(p => {
-    const filtered = p.filter(r => r.groupId !== groupId);
-    const hasGroups = filtered.some(r => r.groupId);
-    return hasGroups ? filtered : createGroupPair();
+  const toggleExpand = (productId) => setExpandedGroups(prev => {
+    const next = new Set(prev);
+    next.has(productId) ? next.delete(productId) : next.add(productId);
+    return next;
   });
 
-  const duplicateGroup = (groupId) => setRows(p => {
-    const groupRows  = p.filter(r => r.groupId === groupId);
-    const newGroupId = newId();
-    const duped      = groupRows.map(r => ({ ...r, id: newId(), groupId: newGroupId }));
-    const lastIdx    = p.reduce((max, r, i) => r.groupId === groupId ? i : max, -1);
-    const result     = [...p];
-    result.splice(lastIdx + 1, 0, ...duped);
-    return result;
-  });
+  const expandAll  = () => setExpandedGroups(new Set(rows.filter(r => r.rowType === 'product').map(r => r.id)));
+  const collapseAll = () => setExpandedGroups(new Set());
 
-  const clearAll = () => { if (window.confirm('Xóa toàn bộ bảng giá niêm yết?')) setRows(createGroupPair()); };
+  const clearAll = () => {
+    if (window.confirm('Xóa toàn bộ bảng giá niêm yết?')) {
+      setRows(createProductWithVariant());
+      setExpandedGroups(new Set());
+    }
+  };
 
   const handleImportFile = (e) => {
     const file = e.target.files?.[0]; if (!file) return;
     importExcel(file, (newRows) => {
-      const productCount = new Set(newRows.map(r => r.groupId)).size;
+      const productCount = newRows.filter(r => r.rowType === 'product').length;
       if (window.confirm(`Import ${productCount} sản phẩm?\n\nOK = Ghi đè\nCancel = Thêm vào cuối`)) {
-        setRows(newRows);
+        setRows(newRows); setExpandedGroups(new Set());
       } else {
-        setRows(p => {
-          const existing = p.filter(r => r.productName || r.barcode || r.brand);
-          return [...existing, ...newRows];
-        });
+        setRows(p => [...p, ...newRows]);
       }
     });
     e.target.value = '';
   };
 
-  // ── Grouped products (for render) ─────────────────────────────────────────────
+  // ── Grouped products ───────────────────────────────────────────────────────
   const groupedProducts = useMemo(() => {
-    // Build map groupId → [{row, index}]
-    const groupMap = new Map();
-    rows.forEach((row, index) => {
-      if (!row.groupId) return;
-      if (!groupMap.has(row.groupId)) groupMap.set(row.groupId, []);
-      groupMap.get(row.groupId).push({ row, index });
-    });
+    const allGroups = rows
+      .filter(r => r.rowType === 'product')
+      .map(product => ({
+        product,
+        variants: rows.filter(r => r.rowType === 'variant' && r.groupId === product.id),
+      }));
 
-    // Sort each group: TikTok first, Shopee second, gift last
-    groupMap.forEach(items => items.sort((a, b) => {
-      if (a.row.rowType === 'gift') return 1;
-      if (b.row.rowType === 'gift') return -1;
-      return a.row.platform === 'TikTok' ? -1 : 1;
-    }));
-
-    const allGroups = Array.from(groupMap.values());
-
-    // Apply filters (use TikTok row as representative for brand/barcode)
-    return allGroups.filter(groupItems => {
-      const rep = (groupItems.find(i => i.row.platform === 'TikTok') || groupItems[0]).row;
-      if (filterBrand    && rep.brand !== filterBrand) return false;
-      if (filterBarcode  && !String(rep.barcode || '').toLowerCase().includes(filterBarcode.toLowerCase())) return false;
-      if (filterPromotion && !groupItems.some(({ row }) => row.promotion === filterPromotion)) return false;
-      if (filterText && !groupItems.some(({ row }) =>
-        ALL_COLUMNS.some(c => String(row[c.key] || '').toLowerCase().includes(filterText.toLowerCase()))
-      )) return false;
+    return allGroups.filter(({ product, variants }) => {
+      if (filterBrand && !variants.some(v => v.brand === filterBrand)) return false;
+      if (filterPromotion && !variants.some(v => v.promotion === filterPromotion)) return false;
+      if (filterBarcode && !variants.some(v => String(v.barcode || '').toLowerCase().includes(filterBarcode.toLowerCase()))) return false;
+      if (filterText) {
+        const combined = [product.productName, product.link, ...variants.flatMap(v => [v.barcode, v.productName, v.brand])].join(' ').toLowerCase();
+        if (!combined.includes(filterText.toLowerCase())) return false;
+      }
       return true;
     });
   }, [rows, filterBrand, filterPromotion, filterBarcode, filterText]);
 
-  const hasFilter  = filterBrand || filterPromotion || filterBarcode || filterText;
+  const hasFilter   = filterBrand || filterPromotion || filterBarcode || filterText;
   const clearFilter = () => { setFilterText(''); setFilterBrand(''); setFilterPromotion(''); setFilterBarcode(''); };
 
-  // ── Styles ──
+  // ── Styles ─────────────────────────────────────────────────────────────────
   const selectStyle = {
     width: '100%', padding: '5px 6px', border: 'none', background: 'transparent',
     fontSize: '0.82rem', outline: 'none', cursor: 'pointer',
@@ -709,28 +592,34 @@ const ListedPriceTab = () => {
     color: active ? '#fff' : '#ea580c', fontWeight: 700, cursor: 'pointer', fontSize: 14,
   });
 
-  // ── Cell renderer (price + promotion + platform label) ────────────────────
-  const renderCell = (col, row, index) => {
+  // ── Fill drag helpers ──────────────────────────────────────────────────────
+  const startFill = (e, fromIndex, colKey, sourceValue) => {
+    e.preventDefault(); e.stopPropagation();
+    setFillDrag({ fromIndex, colKey, sourceValue });
+  };
+  const getFillHighlight = (index) => {
+    if (!fillDrag || fillOver === null) return false;
+    const lo = Math.min(fillDrag.fromIndex, fillOver);
+    const hi = Math.max(fillDrag.fromIndex, fillOver);
+    return index > lo && index <= hi && index !== fillDrag.fromIndex;
+  };
+
+  // ── Variant cell renderer ─────────────────────────────────────────────────
+  const renderVariantCell = (col, row, index) => {
     const rawValue  = row[col.key] ?? '';
     const isEditing = editingCell?.id === row.id && editingCell?.key === col.key;
     const isDragSrc = fillDrag?.fromIndex === index && fillDrag?.colKey === col.key;
 
-    // Fixed platform label with actual logo
+    // Platform: click to toggle
     if (col.key === 'platform') {
-      const isTikTok = row.platform === 'TikTok';
+      const isTikTok = (row.platform || 'TikTok') === 'TikTok';
       return (
-        <td key="platform" style={{
-          background:  isTikTok ? '#f0f4ff' : '#fff7ed',
-          borderRight: `2px solid ${isTikTok ? '#c7d2fe' : '#fed7aa'}`,
-          userSelect:  'none',
-          padding:     '4px 6px',
-        }}>
+        <td key="platform"
+          onClick={() => updateVariantCell(row.id, 'platform', isTikTok ? 'Shopee' : 'TikTok')}
+          style={{ cursor: 'pointer', background: isTikTok ? '#f0f4ff' : '#fff7ed', borderRight: `2px solid ${isTikTok ? '#c7d2fe' : '#fed7aa'}` }}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-            {isTikTok ? <TikTokLogo size={22} /> : <ShopeeLogo size={22} />}
-            <span style={{
-              fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.3px',
-              color: isTikTok ? '#4f46e5' : '#ea580c',
-            }}>
+            {isTikTok ? <TikTokLogo size={20} /> : <ShopeeLogo size={20} />}
+            <span style={{ fontSize: '0.6rem', fontWeight: 700, color: isTikTok ? '#4f46e5' : '#ea580c' }}>
               {isTikTok ? 'TikTok' : 'Shopee'}
             </span>
           </div>
@@ -738,10 +627,20 @@ const ListedPriceTab = () => {
       );
     }
 
-    // Dropdown: promotion
+    // Brand dropdown
+    if (col.type === 'brand') return (
+      <td key={col.key}>
+        <select value={rawValue} onChange={e => updateVariantCell(row.id, col.key, e.target.value)} style={selectStyle}>
+          <option value="">— chọn brand —</option>
+          {brands.map(b => <option key={b} value={b}>{b}</option>)}
+        </select>
+      </td>
+    );
+
+    // Promotion dropdown
     if (col.type === 'promotion') return (
       <td key={col.key} style={{ position: 'relative' }}>
-        <select value={rawValue} onChange={e => updateCell(row.id, col.key, e.target.value)} style={selectStyle}>
+        <select value={rawValue} onChange={e => updateVariantCell(row.id, col.key, e.target.value)} style={selectStyle}>
           <option value="">— chọn —</option>
           {promotions.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
@@ -749,10 +648,10 @@ const ListedPriceTab = () => {
       </td>
     );
 
-    // Dropdown: voucher
+    // Voucher dropdown
     if (col.type === 'voucher') return (
       <td key={col.key} style={{ position: 'relative' }}>
-        <select value={rawValue} onChange={e => updateCell(row.id, col.key, e.target.value)} style={selectStyle}>
+        <select value={rawValue} onChange={e => updateVariantCell(row.id, col.key, e.target.value)} style={selectStyle}>
           <option value="">— chọn —</option>
           {vouchers.map(v => <option key={v} value={v}>{v}</option>)}
         </select>
@@ -768,48 +667,30 @@ const ListedPriceTab = () => {
       : rawValue;
     const isError = hasFormula && !Number.isFinite(formulaResult);
 
-    // Auto-computed final price (shown when cell is empty and not editing)
-    const autoFinal = (!isEditing && !rawValue && col.key === 'finalPrice')
-      ? calcFinalPrice(row) : null;
+    const autoFinal   = (!isEditing && !rawValue && col.key === 'finalPrice') ? calcFinalPrice(row) : null;
     const formulaHint = autoFinal !== null ? getFormulaHint(row) : null;
 
     return (
-      <td key={col.key} style={{ position: 'relative', outline: isDragSrc ? '2px solid #ea580c' : undefined }}>
+      <td key={col.key} style={{ position: 'relative', outline: isDragSrc ? '2px solid #ea580c' : undefined }}
+        onMouseEnter={() => { if (fillDrag) setFillOver(index); }}>
         {autoFinal !== null && !isEditing ? (
-          <div
-            onClick={() => setEditingCell({ id: row.id, key: col.key })}
-            title="Click để ghi đè bằng số hoặc công thức riêng"
-            style={{
-              textAlign: 'center', padding: '2px 8px', minHeight: 34, display: 'flex',
-              flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              cursor: 'text',
-              background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
-              borderRadius: 9, border: '1px dashed #86efac', gap: 1,
-            }}
-          >
-            <span style={{ color: '#059669', fontWeight: 700, fontSize: '0.82rem' }}>
-              +&nbsp;{fmtResult(autoFinal)}
-            </span>
-            {formulaHint && (
-              <span style={{ fontSize: '0.6rem', color: '#16a34a', opacity: 0.75, fontFamily: 'monospace', lineHeight: 1.2 }}>
-                {formulaHint}
-              </span>
-            )}
+          <div onClick={() => setEditingCell({ id: row.id, key: col.key })} title="Click để ghi đè"
+            style={{ textAlign: 'center', padding: '2px 8px', minHeight: 34, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'text', background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', borderRadius: 9, border: '1px dashed #86efac', gap: 1 }}>
+            <span style={{ color: '#059669', fontWeight: 700, fontSize: '0.82rem' }}>+ {fmtResult(autoFinal)}</span>
+            {formulaHint && <span style={{ fontSize: '0.6rem', color: '#16a34a', opacity: 0.75, fontFamily: 'monospace', lineHeight: 1.2 }}>{formulaHint}</span>}
           </div>
         ) : (
-          <input
-            type="text"
-            value={displayValue}
+          <input type="text" value={displayValue}
             placeholder={isEditing || !hasFormula ? col.label : ''}
-            onChange={e => updateCell(row.id, col.key, e.target.value)}
+            onChange={e => updateVariantCell(row.id, col.key, e.target.value)}
             onFocus={() => setEditingCell({ id: row.id, key: col.key })}
             onBlur={() => setEditingCell(null)}
-            style={{ color: !isEditing && hasFormula && isError ? '#dc2626' : '#0f172a', textAlign: 'center' }}
+            style={{ color: !isEditing && hasFormula && isError ? '#dc2626' : '#0f172a', textAlign: col.key === 'productName' ? 'left' : 'center' }}
           />
         )}
         {isEditing && hasFormula && (
-          <div style={{ fontSize: 10, color: Number.isFinite(formulaResult) ? '#16a34a' : '#dc2626', paddingLeft: 6, paddingBottom: 2, lineHeight: 1.2 }}>
-            → {Number.isFinite(formulaResult) ? fmtResult(formulaResult) : 'Lỗi công thức'}
+          <div style={{ fontSize: 10, color: Number.isFinite(formulaResult) ? '#16a34a' : '#dc2626', paddingLeft: 6, paddingBottom: 2 }}>
+            → {Number.isFinite(formulaResult) ? fmtResult(formulaResult) : 'Lỗi'}
           </div>
         )}
         {rawValue && <FillHandle onMouseDown={e => startFill(e, index, col.key, rawValue)} active={isDragSrc} />}
@@ -817,28 +698,19 @@ const ListedPriceTab = () => {
     );
   };
 
-  const startFill = (e, fromIndex, colKey, sourceValue) => {
-    e.preventDefault(); e.stopPropagation();
-    setFillDrag({ fromIndex, colKey, sourceValue });
-  };
-  const getFillHighlight = (index) => {
-    if (!fillDrag || fillOver === null) return false;
-    const lo = Math.min(fillDrag.fromIndex, fillOver);
-    const hi = Math.max(fillDrag.fromIndex, fillOver);
-    return index > lo && index <= hi && index !== fillDrag.fromIndex;
-  };
+  // ── Render ─────────────────────────────────────────────────────────────────
+  const totalVariants = rows.filter(r => r.rowType === 'variant').length;
 
-  // ── Render ──
   return (
     <div className="listed-price-page" style={fillDrag ? { userSelect: 'none', cursor: 'crosshair' } : {}}>
 
-      {/* ── Header ── */}
+      {/* Header */}
       <div className="listed-price-page__header">
         <div>
           <div className="listed-price-page__eyebrow">Ecom</div>
           <h1 className="page-header" style={{ margin: 0 }}>BẢNG GIÁ NIÊM YẾT</h1>
           <p style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
-            Listing full giá niêm yết theo sản phẩm — mỗi sản phẩm có giá TikTok &amp; Shopee.
+            Listing full giá niêm yết — mỗi link sản phẩm chứa nhiều phân loại.
             {syncing
               ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.7rem', color: '#92400e', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 999, padding: '2px 10px', fontWeight: 700, flexShrink: 0 }}>⟳ Đang lưu...</span>
               : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.7rem', color: '#166534', background: '#dcfce7', border: '1px solid #bbf7d0', borderRadius: 999, padding: '2px 10px', fontWeight: 700, flexShrink: 0 }}>✓ Đã lưu</span>
@@ -847,7 +719,7 @@ const ListedPriceTab = () => {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button onClick={clearAll} className="listed-price-page__button is-muted">Xóa bảng</button>
-          <button onClick={addGroup} className="listed-price-page__button is-primary">+ Thêm sản phẩm</button>
+          <button onClick={addProduct} className="listed-price-page__button is-primary">+ Thêm sản phẩm</button>
           <input ref={importRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={handleImportFile} />
           <button onClick={() => importRef.current?.click()}
             style={{ padding: '8px 14px', borderRadius: 8, border: '1.5px solid #3b82f6', background: '#eff6ff', color: '#1d4ed8', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -860,28 +732,22 @@ const ListedPriceTab = () => {
         </div>
       </div>
 
-      {/* ── Filter bar ── */}
+      {/* Filter bar */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '10px 14px' }}>
-
-        {/* Search group: tên SP + barcode gộp chung */}
         <div style={{ display: 'flex', background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: 9, overflow: 'hidden', flex: '1 1 280px', minWidth: 240 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', flex: 2, borderRight: '1px solid #e5e7eb' }}>
             <span style={{ color: '#94a3b8', fontSize: 14, flexShrink: 0 }}>⌕</span>
-            <input type="text" value={filterText} onChange={e => setFilterText(e.target.value)}
-              placeholder="Tên SP, barcode..."
-              style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.82rem', width: '100%', padding: 0, boxShadow: 'none' }} />
+            <input type="text" value={filterText} onChange={e => setFilterText(e.target.value)} placeholder="Tên SP, link, phân loại..."
+              style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.82rem', width: '100%', padding: 0 }} />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', padding: '6px 10px', flex: 1 }}>
-            <input type="text" value={filterBarcode} onChange={e => setFilterBarcode(e.target.value)}
-              placeholder="Lọc barcode..."
-              style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.82rem', width: '100%', padding: 0, boxShadow: 'none' }} />
+            <input type="text" value={filterBarcode} onChange={e => setFilterBarcode(e.target.value)} placeholder="Lọc barcode..."
+              style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.82rem', width: '100%', padding: 0 }} />
           </div>
         </div>
 
-        {/* Divider */}
         <div style={{ width: 1, height: 28, background: '#e5e7eb', flexShrink: 0 }} />
 
-        {/* Brand */}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', gap: 4 }}>
             <select value={filterBrand} onChange={e => setFilterBrand(e.target.value)} style={filterSelectStyle}>
@@ -893,10 +759,8 @@ const ListedPriceTab = () => {
           {addingBrand && <AddOptionInline placeholder="Tên brand mới..." onAdd={addBrand} onClose={() => setAddingBrand(false)} />}
         </div>
 
-        {/* Divider */}
         <div style={{ width: 1, height: 28, background: '#e5e7eb', flexShrink: 0 }} />
 
-        {/* Promotion */}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', gap: 4 }}>
             <select value={filterPromotion} onChange={e => setFilterPromotion(e.target.value)} style={filterSelectStyle}>
@@ -908,16 +772,26 @@ const ListedPriceTab = () => {
           {addingPromotion && <AddOptionInline placeholder="Tên promotion mới..." onAdd={addPromotion} onClose={() => setAddingPromotion(false)} />}
         </div>
 
-        {/* Divider */}
         <div style={{ width: 1, height: 28, background: '#e5e7eb', flexShrink: 0 }} />
 
-        {/* Voucher */}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
             <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>🏷️ Voucher</span>
             <button onClick={() => setAddingVoucher(v => !v)} style={addBtnStyle(addingVoucher)}>+</button>
           </div>
           {addingVoucher && <AddOptionInline placeholder="VD: 10% hoặc 50.000đ..." onAdd={addVoucher} onClose={() => setAddingVoucher(false)} />}
+        </div>
+
+        {/* Expand / collapse all */}
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button onClick={expandAll}
+            style={{ padding: '6px 10px', background: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: 8, color: '#15803d', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}>
+            ▼ Mở hết
+          </button>
+          <button onClick={collapseAll}
+            style={{ padding: '6px 10px', background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: 8, color: '#64748b', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}>
+            ▶ Thu hết
+          </button>
         </div>
 
         {hasFilter && (
@@ -928,237 +802,136 @@ const ListedPriceTab = () => {
         )}
 
         <div style={{ marginLeft: 'auto', fontSize: '0.78rem', color: '#94a3b8', whiteSpace: 'nowrap' }}>
-          <strong style={{ color: '#ea580c' }}>{groupedProducts.length}</strong> / {Math.ceil(rows.filter(r => r.platform === 'TikTok').length)} sản phẩm
+          <strong style={{ color: '#ea580c' }}>{groupedProducts.length}</strong> sản phẩm &middot; <strong style={{ color: '#6366f1' }}>{totalVariants}</strong> phân loại
         </div>
       </div>
 
-      {/* ── Table ── */}
+      {/* Table */}
       <div className="listed-price-table-card">
         <div className="listed-price-table-wrap">
-          <table className="listed-price-table"
-            onMouseLeave={() => { if (fillDrag) setFillOver(null); }}>
+          <table className="listed-price-table" onMouseLeave={() => { if (fillDrag) setFillOver(null); }}>
             <thead>
               <tr>
                 <th className="listed-price-table__index">#</th>
-                {/* A B C D — product columns (link, name, barcode, brand) */}
-                {PRODUCT_COLS_LIST.map((col, i) => (
+                {VARIANT_COLS.map((col, i) => (
                   <th key={col.key} style={{ minWidth: col.minWidth }}>
                     <span>{String.fromCharCode(65 + i)}</span>{col.label}
-                  </th>
-                ))}
-                {/* E — platform (fixed) */}
-                <th style={{ minWidth: 90 }}><span>E</span>Sàn</th>
-                {/* F–M — price columns (aff, ads, listedPrice…) */}
-                {PRICE_COLS.map((col, i) => (
-                  <th key={col.key} style={{ minWidth: col.minWidth }}>
-                    <span>{String.fromCharCode(70 + i)}</span>{col.label}
                   </th>
                 ))}
                 <th className="listed-price-table__actions">Thao tác</th>
               </tr>
             </thead>
             <tbody>
-              {groupedProducts.map((groupItems, groupIdx) => {
-                const tiktokItem = groupItems.find(i => i.row.platform === 'TikTok') || groupItems[0];
-                const shopeeItem = groupItems.find(i => i.row.platform === 'Shopee');
-                const giftItems  = groupItems.filter(i => i.row.rowType === 'gift'); // array!
-                const { row: tRow, index: tIdx } = tiktokItem;
-                const groupId    = tRow.groupId;
-                const tikHL      = getFillHighlight(tIdx);
-                const shopHL     = shopeeItem ? getFillHighlight(shopeeItem.index) : false;
-                // hasMxGift: có bất kỳ M1Tx nào trong group
-                const hasMxGift  = groupItems.some(i => isM1Tx(i.row.promotion));
-                // Tổng số quà từ promotion (lấy max M1Tx trong group)
-                const totalGiftNeeded = groupItems
-                  .filter(i => i.row.rowType !== 'gift')
-                  .reduce((max, i) => Math.max(max, getGiftCount(i.row.promotion)), 0);
-
-                // # và Actions span toàn bộ rows trong group
-                const totalRowSpan = 1 + giftItems.length + (shopeeItem ? 1 : 0);
-
-                // Style cho product cells của Shopee (trống, chỉ giữ border)
-                const shopeeProductTd = {
-                  background: '#f8fafc',
-                  borderBottom: '1px solid #edf2f7',
-                  borderRight: '1px solid #f1f5f9',
-                };
+              {groupedProducts.map((g, groupIdx) => {
+                const { product, variants } = g;
+                const isExpanded = expandedGroups.has(product.id);
+                const variantCount = variants.length;
 
                 return (
-                  <Fragment key={groupId}>
-                    {/* ── TikTok row ── */}
-                    <tr
-                      onMouseEnter={() => { if (fillDrag) setFillOver(tIdx); }}
-                      style={tikHL ? { background: '#fff7ed', outline: '1px dashed #ea580c' } : undefined}
-                    >
-                      {/* # spans TẤT CẢ rows của group */}
-                      <td className="listed-price-table__index" rowSpan={totalRowSpan}
-                        style={{ verticalAlign: 'middle', fontWeight: 700, color: '#6b7280', fontSize: '0.9rem' }}>
-                        {groupIdx + 1}
-                      </td>
-
-                      {/* Link — CHỈ ở TikTok row (shared, trước tên SP) */}
-                      <td style={{ position: 'relative', verticalAlign: 'middle' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <input type="text" value={tRow.link || ''} placeholder="Link SP"
-                            onChange={e => updateCell(tRow.id, 'link', e.target.value)}
-                            style={{ flex: 1, fontSize: '0.75rem', color: '#3b82f6' }}
-                          />
-                          {tRow.link ? (
-                            <a href={tRow.link} target="_blank" rel="noopener noreferrer"
-                              title="Mở link sản phẩm"
-                              style={{ color: '#3b82f6', fontSize: '1rem', textDecoration: 'none', flexShrink: 0, lineHeight: 1 }}>🔗</a>
-                          ) : (
-                            <span style={{ color: '#d1d5db', fontSize: '0.9rem', flexShrink: 0 }}>🔗</span>
-                          )}
+                  <Fragment key={product.id}>
+                    {/* ── Product accordion header ── */}
+                    <tr className="listed-price-product-row">
+                      {/* Toggle + # */}
+                      <td className="listed-price-table__index"
+                        onClick={() => toggleExpand(product.id)}
+                        style={{ cursor: 'pointer', verticalAlign: 'middle', userSelect: 'none' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                          <span style={{ fontSize: '0.65rem', color: '#ea580c', fontWeight: 900 }}>
+                            {isExpanded ? '▼' : '▶'}
+                          </span>
+                          <span style={{ fontWeight: 800, color: '#374151' }}>{groupIdx + 1}</span>
                         </div>
                       </td>
 
-                      {/* Product name — CHỈ ở TikTok row (không rowSpan) */}
-                      <td style={{ position: 'relative', verticalAlign: 'middle' }}>
-                        <input type="text" value={tRow.productName || ''} placeholder="Tên sản phẩm"
-                          onChange={e => updateCell(tRow.id, 'productName', e.target.value)}
-                          style={{ fontWeight: tRow.productName ? 700 : 400 }}
-                        />
-                      </td>
-
-                      {/* Barcode — CHỈ ở TikTok row */}
-                      <td style={{ position: 'relative', verticalAlign: 'middle' }}>
-                        <input type="text" value={tRow.barcode || ''} placeholder="Barcode"
-                          onChange={e => updateCell(tRow.id, 'barcode', e.target.value)}
-                          style={{ textAlign: 'center' }}
-                        />
-                      </td>
-
-                      {/* Brand — CHỈ ở TikTok row */}
-                      <td style={{ position: 'relative', verticalAlign: 'middle' }}>
-                        <select value={tRow.brand || ''} onChange={e => updateCell(tRow.id, 'brand', e.target.value)} style={selectStyle}>
-                          <option value="">— chọn brand —</option>
-                          {brands.map(b => <option key={b} value={b}>{b}</option>)}
-                        </select>
-                      </td>
-
-                      {/* TikTok platform + price cells */}
-                      {renderCell(PLATFORM_COL, tRow, tIdx)}
-                      {PRICE_COLS.map(col => renderCell(col, tRow, tIdx))}
-
-                      {/* Actions spans TẤT CẢ rows */}
-                      <td rowSpan={totalRowSpan} className="listed-price-table__actions" style={{ verticalAlign: 'middle' }}>
-                        {hasMxGift && (
-                          <button
-                            type="button"
-                            title={giftItems.length > 0 ? `Ẩn ${giftItems.length} SP quà tặng` : `Hiện ${totalGiftNeeded} SP quà tặng`}
-                            onClick={() => giftItems.length > 0
-                              ? removeGiftRow(groupId)
-                              : addGiftRow(groupId, totalGiftNeeded)
-                            }
-                            style={{
-                              background: 'none', border: 'none', cursor: 'pointer',
-                              fontSize: '1rem', padding: '2px 3px',
-                              opacity: giftItems.length > 0 ? 1 : 0.35,
-                              filter: giftItems.length > 0 ? 'none' : 'grayscale(1)',
-                            }}
-                          >🎁{totalGiftNeeded > 1 ? <sup style={{ fontSize: '0.6rem', fontWeight: 700, color: '#059669' }}>{totalGiftNeeded}</sup> : null}</button>
-                        )}
-                        <button type="button" title="Nhân bản" onClick={() => duplicateGroup(groupId)}>⧉</button>
-                        <button type="button" title="Xóa" onClick={() => deleteGroup(groupId)}>×</button>
-                      </td>
-                    </tr>
-
-                    {/* ── Gift rows (compact, ngay dưới TikTok, trước Shopee) ── */}
-                    {giftItems.map((gi, giftIdx) => (
-                      <tr key={gi.row.id} className="is-gift-row">
-                        {/* # không có (spanned từ TikTok) */}
-                        {/* Link — trống */}
-                        <td style={{ background: '#f0fdf4' }} />
-                        {/* Gift product name */}
-                        <td style={{ paddingLeft: 16, paddingTop: 3, paddingBottom: 3 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <span style={{ color: '#16a34a', fontSize: '0.65rem', fontWeight: 800, flexShrink: 0 }}>
-                              ↳🎁{giftItems.length > 1 ? <sub style={{ fontSize: '0.6rem' }}>{giftIdx + 1}</sub> : null}
-                            </span>
-                            <input type="text" value={gi.row.productName || ''} placeholder={`Quà ${giftIdx + 1}`}
-                              onChange={e => updateGiftCell(gi.row.id, 'productName', e.target.value)}
-                              style={{ fontWeight: 600, color: '#059669', fontSize: '0.78rem', height: 28 }} />
-                          </div>
-                        </td>
-                        {/* Gift barcode */}
-                        <td style={{ paddingTop: 3, paddingBottom: 3 }}>
-                          <input type="text" value={gi.row.barcode || ''} placeholder="Barcode quà"
-                            onChange={e => updateGiftCell(gi.row.id, 'barcode', e.target.value)}
-                            style={{ textAlign: 'center', color: '#059669', fontSize: '0.78rem', height: 28 }} />
-                        </td>
-                        {/* Brand — trống */}
-                        <td style={{ background: '#f0fdf4' }} />
-                        {/* Platform: 🎁 compact */}
-                        <td style={{ background: '#dcfce7', borderRight: '2px solid #86efac', padding: '3px 4px', userSelect: 'none' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-                            <span style={{ fontSize: 13 }}>🎁</span>
-                            {giftItems.length > 1 && (
-                              <span style={{ fontSize: '0.55rem', fontWeight: 800, color: '#059669' }}>{giftIdx + 1}/{giftItems.length}</span>
-                            )}
-                          </div>
-                        </td>
-                        {/* AFF %, ADS % — trống */}
-                        <td style={{ background: '#f0fdf4' }} />
-                        <td style={{ background: '#f0fdf4' }} />
-                        {/* Listed price */}
-                        <td style={{ paddingTop: 3, paddingBottom: 3 }}>
-                          <input type="text" value={gi.row.listedPrice || ''} placeholder="Giá niêm yết"
-                            onChange={e => updateGiftCell(gi.row.id, 'listedPrice', e.target.value)}
-                            style={{ textAlign: 'center', color: '#059669', fontSize: '0.78rem', height: 28 }} />
-                        </td>
-                        {/* Promotion — trống */}
-                        <td style={{ background: '#f0fdf4' }} />
-                        {/* Regular price */}
-                        <td style={{ paddingTop: 3, paddingBottom: 3 }}>
-                          <input type="text" value={gi.row.regularPrice || ''} placeholder="Giá regular"
-                            onChange={e => updateGiftCell(gi.row.id, 'regularPrice', e.target.value)}
-                            style={{ textAlign: 'center', color: '#059669', fontSize: '0.78rem', height: 28 }} />
-                        </td>
-                        {/* FS, Voucher, Final — trống */}
-                        <td style={{ background: '#f0fdf4' }} />
-                        <td style={{ background: '#f0fdf4' }} />
-                        <td style={{ background: '#f0fdf4' }} />
-                        {/* Actions không có (spanned từ TikTok) */}
-                      </tr>
-                    ))}
-
-                    {/* ── Shopee row ── */}
-                    {shopeeItem && (
-                      <tr
-                        onMouseEnter={() => { if (fillDrag) setFillOver(shopeeItem.index); }}
-                        style={shopHL ? { background: '#fff7ed', outline: '1px dashed #ea580c' } : undefined}
-                      >
-                        {/* # không có (spanned từ TikTok) */}
-                        {/* Link Shopee — editable riêng (platform-specific) */}
-                        <td style={{ ...shopeeProductTd, position: 'relative', verticalAlign: 'middle' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <input type="text" value={shopeeItem.row.link || ''} placeholder="Link Shopee"
-                              onChange={e => updateCell(shopeeItem.row.id, 'link', e.target.value)}
-                              style={{ flex: 1, fontSize: '0.75rem', color: '#ea580c' }}
+                      {/* Link + Product name + count — spans all variant cols */}
+                      <td colSpan={VARIANT_COLS.length} style={{ verticalAlign: 'middle', padding: '8px 10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          {/* Link input */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: '0 0 220px', minWidth: 0 }}>
+                            <input
+                              type="text"
+                              value={product.link || ''}
+                              placeholder="Link sản phẩm..."
+                              onChange={e => updateProductCell(product.id, 'link', e.target.value)}
+                              style={{ flex: 1, fontSize: '0.75rem', color: '#3b82f6', minWidth: 0, height: 30, padding: '0 6px', borderRadius: 7, border: '1px solid #e5e7eb', background: '#f8fafc', fontFamily: 'inherit', outline: 'none' }}
+                              onFocus={e => { e.target.style.borderColor = '#3b82f6'; e.target.style.background = '#fff'; }}
+                              onBlur={e => { e.target.style.borderColor = '#e5e7eb'; e.target.style.background = '#f8fafc'; }}
                             />
-                            {shopeeItem.row.link ? (
-                              <a href={shopeeItem.row.link} target="_blank" rel="noopener noreferrer"
-                                title="Mở link Shopee"
-                                style={{ color: '#ea580c', fontSize: '1rem', textDecoration: 'none', flexShrink: 0, lineHeight: 1 }}>🔗</a>
+                            {product.link ? (
+                              <a href={product.link} target="_blank" rel="noopener noreferrer"
+                                title="Mở link" style={{ color: '#3b82f6', fontSize: '1rem', textDecoration: 'none', flexShrink: 0 }}>🔗</a>
                             ) : (
                               <span style={{ color: '#d1d5db', fontSize: '0.9rem', flexShrink: 0 }}>🔗</span>
                             )}
                           </div>
-                        </td>
-                        {/* name, barcode, brand — trống (shared, hiện ở TikTok row) */}
-                        <td style={shopeeProductTd} />
-                        <td style={shopeeProductTd} />
-                        <td style={shopeeProductTd} />
-                        {/* Shopee platform + price cells */}
-                        {renderCell(PLATFORM_COL, shopeeItem.row, shopeeItem.index)}
-                        {PRICE_COLS.map(col => renderCell(col, shopeeItem.row, shopeeItem.index))}
-                        {/* Actions không có (spanned từ TikTok) */}
-                      </tr>
-                    )}
+
+                          {/* Product name */}
+                          <input
+                            type="text"
+                            value={product.productName || ''}
+                            placeholder="Tên sản phẩm..."
+                            onChange={e => updateProductCell(product.id, 'productName', e.target.value)}
+                            style={{ flex: 1, minWidth: 0, height: 30, padding: '0 8px', borderRadius: 7, border: '1px solid transparent', background: 'transparent', fontFamily: 'inherit', fontSize: '0.88rem', fontWeight: 700, color: '#0f172a', outline: 'none' }}
+                            onFocus={e => { e.target.style.borderColor = '#ea580c'; e.target.style.background = '#fff'; }}
+                            onBlur={e => { e.target.style.borderColor = 'transparent'; e.target.style.background = 'transparent'; }}
+                          />
+
+                          {/* Variant count badge */}
+                          <span
+                            onClick={() => toggleExpand(product.id)}
+                            style={{ background: isExpanded ? '#ede9fe' : '#eff6ff', color: isExpanded ? '#7c3aed' : '#3b82f6', borderRadius: 999, padding: '3px 10px', fontSize: '0.72rem', fontWeight: 800, flexShrink: 0, cursor: 'pointer', border: `1px solid ${isExpanded ? '#ddd6fe' : '#bfdbfe'}` }}>
+                            {variantCount} phân loại
+                          </span>
+
+                          {/* Add variant button */}
+                          <button
+                            type="button"
+                            onClick={() => { addVariant(product.id); setExpandedGroups(s => { const n = new Set(s); n.add(product.id); return n; }); }}
+                            style={{ padding: '4px 10px', background: '#fff7ed', border: '1.5px solid #fed7aa', borderRadius: 7, color: '#ea580c', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                            + Thêm phân loại
+                          </button>
+                        </div>
+                      </td>
+
+                      {/* Product actions */}
+                      <td className="listed-price-table__actions" style={{ verticalAlign: 'middle' }}>
+                        <button type="button" title="Nhân bản" onClick={() => duplicateProduct(product.id)}>⧉</button>
+                        <button type="button" title="Xóa sản phẩm" onClick={() => deleteProduct(product.id)}>×</button>
+                      </td>
+                    </tr>
+
+                    {/* ── Variant rows (when expanded) ── */}
+                    {isExpanded && variants.map((variant, vi) => {
+                      const variantIdx = rows.indexOf(variant);
+                      const hlBg = getFillHighlight(variantIdx);
+                      return (
+                        <tr key={variant.id} className="listed-price-variant-row"
+                          style={hlBg ? { background: '#fff7ed', outline: '1px dashed #ea580c' } : undefined}
+                          onMouseEnter={() => { if (fillDrag) setFillOver(variantIdx); }}>
+                          {/* Variant # */}
+                          <td className="listed-price-table__index" style={{ paddingLeft: 18, color: '#a78bfa', fontSize: '0.75rem' }}>
+                            {vi + 1}
+                          </td>
+                          {/* Variant cells */}
+                          {VARIANT_COLS.map(col => renderVariantCell(col, variant, variantIdx))}
+                          {/* Delete variant */}
+                          <td className="listed-price-table__actions" style={{ verticalAlign: 'middle' }}>
+                            <button type="button" title="Xóa phân loại" onClick={() => deleteVariant(variant.id)}>×</button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </Fragment>
                 );
               })}
+
+              {groupedProducts.length === 0 && (
+                <tr>
+                  <td colSpan={VARIANT_COLS.length + 2} style={{ textAlign: 'center', padding: '40px 20px', color: '#9ca3af', fontSize: '0.9rem' }}>
+                    {hasFilter ? 'Không tìm thấy sản phẩm nào.' : 'Chưa có sản phẩm. Bấm "+ Thêm sản phẩm" để bắt đầu.'}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -1166,26 +939,5 @@ const ListedPriceTab = () => {
     </div>
   );
 };
-
-// ── Fill Handle widget ────────────────────────────────────────────────────────
-const FillHandle = ({ onMouseDown, active }) => (
-  <div
-    onMouseDown={onMouseDown}
-    title="Kéo xuống để áp dụng"
-    style={{
-      position: 'absolute', bottom: 1, right: 1,
-      width: 9, height: 9,
-      background: active ? '#c2410c' : '#ea580c',
-      border: '1.5px solid #fff',
-      borderRadius: 2,
-      cursor: 'crosshair',
-      zIndex: 10,
-      opacity: 0.85,
-      transition: 'opacity 0.1s',
-    }}
-    onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'scale(1.3)'; }}
-    onMouseLeave={e => { e.currentTarget.style.opacity = '0.85'; e.currentTarget.style.transform = 'scale(1)'; }}
-  />
-);
 
 export default ListedPriceTab;
