@@ -165,7 +165,7 @@ export const ROLE_VIEWS = {
     admin:      ['stella_dashboard','listed_price','tiktok_orders','cskh','livestream','dashboard','order','booking_performance','contract','airlinks','booking','data_archive','expense','landing_orders','camp_registration','task_notes'],
     // BOOKING: chỉ Booking group + Ngân Sách Ecom. KHÔNG Ecom group, KHÔNG Task & Notes.
     booking:    ['dashboard','order','booking_performance','contract','airlinks','booking','expense'],
-    cs:         ['order','airlinks','expense','task_notes'],
+    cs:         ['cskh','order','airlinks','expense','task_notes'],
     livestream: ['stella_dashboard','livestream','expense','task_notes'],
     // ECOM: full Ecom group + CSKH + Livestream + Booking group (trừ Hợp Đồng) + Ngân Sách Ecom
     //       booking_performance chỉ được "đề xuất" (yellow), admin duyệt mới thành red
