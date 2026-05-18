@@ -16,18 +16,13 @@ const DEFAULT_VOUCHERS   = ['10%', '15%', '20%', '30%', '50.000đ', '100.000đ',
 // ── Variant columns ───────────────────────────────────────────────────────────
 // productName field on variants = "phân loại" (classification)
 const VARIANT_COLS = [
-  { key: 'barcode',      label: 'Barcode',      minWidth: 140 },
-  { key: 'productName',  label: 'Phân loại',    minWidth: 200 },
-  { key: 'brand',        label: 'Brand',        minWidth: 130, type: 'brand' },
-  { key: 'platform',     label: 'Sàn',          minWidth: 90  },
-  { key: 'affPercent',   label: 'AFF %',        minWidth: 80  },
-  { key: 'adsPercent',   label: 'ADS %',        minWidth: 80  },
+  { key: 'barcode',      label: 'Barcode',      minWidth: 160 },
+  { key: 'productName',  label: 'Phân loại',    minWidth: 220 },
   { key: 'listedPrice',  label: 'Giá Niêm yết', minWidth: 130 },
-  { key: 'promotion',    label: 'Promotion',    minWidth: 130, type: 'promotion' },
   { key: 'regularPrice', label: 'Giá regular',  minWidth: 130 },
   { key: 'fsPrice',      label: 'Giá FS',       minWidth: 110 },
   { key: 'voucher',      label: 'Voucher',      minWidth: 110, type: 'voucher' },
-  { key: 'finalPrice',   label: 'Giá final',    minWidth: 140 },
+  { key: 'finalPrice',   label: 'Giá final',    minWidth: 150 },
 ];
 
 // Formula engine column letters: A=barcode … L=finalPrice
@@ -119,10 +114,10 @@ const parseVoucher = (voucher) => {
   if (num > 0) return { type: 'fixed', value: num };
   return { type: 'none', value: 0 };
 };
-const calcFinalPrice = (row) => {
+const calcFinalPrice = (row, promoStr) => {
   const fs = parseNumber(row.fsPrice);
   if (!fs || fs <= 0) return null;
-  const promo   = parsePromotion(row.promotion);
+  const promo   = parsePromotion(promoStr !== undefined ? promoStr : row.promotion);
   const voucher = parseVoucher(row.voucher);
   const isTikTok = row.platform === 'TikTok';
   const isCombo  = promo.base === 'combo';
@@ -138,11 +133,15 @@ const calcFinalPrice = (row) => {
   } else {
     total = base - voucher.value;
   }
-  const final = total / unitCount;
+  const aff = parseFloat(row.affPercent) || 0;
+  const ads = parseFloat(row.adsPercent) || 0;
+  const affDeduction = fs * aff / 100;
+  const adsDeduction = fs * ads / 100;
+  const final = total / unitCount - affDeduction - adsDeduction;
   return Number.isFinite(final) && final >= 0 ? Math.round(final) : null;
 };
-const getFormulaHint = (row) => {
-  const promo   = parsePromotion(row.promotion);
+const getFormulaHint = (row, promoStr) => {
+  const promo   = parsePromotion(promoStr !== undefined ? promoStr : row.promotion);
   const voucher = parseVoucher(row.voucher);
   const isTikTok = row.platform === 'TikTok';
   const isCombo  = promo.base === 'combo';
@@ -163,7 +162,13 @@ const getFormulaHint = (row) => {
       totalStr = `${baseStr} − ${fixedStr}`;
     }
   }
-  return isCombo ? `(${totalStr}) ÷ ${count}` : totalStr;
+  const perUnit = isCombo ? `(${totalStr}) ÷ ${count}` : totalStr;
+  const aff = parseFloat(row.affPercent) || 0;
+  const ads = parseFloat(row.adsPercent) || 0;
+  const parts = [perUnit];
+  if (aff) parts.push(`FS×${aff}%`);
+  if (ads) parts.push(`FS×${ads}%`);
+  return parts.length > 1 ? `${parts[0]} − ${parts.slice(1).join(' − ')}` : parts[0];
 };
 
 // ── Data model ────────────────────────────────────────────────────────────────
@@ -237,6 +242,8 @@ const rowToDb = (row, idx) => ({
   fs_price:      row.fsPrice      || '',
   voucher:       row.voucher      || '',
   final_price:   row.finalPrice   || '',
+  gift_barcode:  JSON.stringify((row.gifts || []).map(g => g.barcode || '')),
+  gift_name:     JSON.stringify((row.gifts || []).map(g => g.name || '')),
   sort_order:    idx,
 });
 
@@ -257,6 +264,14 @@ const dbToRow = (r) => ({
   fsPrice:      r.fs_price     || '',
   voucher:      r.voucher      || '',
   finalPrice:   r.final_price  || '',
+  gifts: (() => {
+    try {
+      const barcodes = JSON.parse(r.gift_barcode || '[]');
+      const names    = JSON.parse(r.gift_name    || '[]');
+      if (!Array.isArray(barcodes)) return [];
+      return barcodes.map((b, i) => ({ barcode: b || '', name: names[i] || '' }));
+    } catch { return []; }
+  })(),
 });
 
 // ── Excel helpers ─────────────────────────────────────────────────────────────
@@ -265,7 +280,7 @@ const toExcelFormulaText = (value) =>
     ? String(value || '').replace(/(\d+)\.(\d+)/g, '$1,$2').replace(/\b([A-La-l])(\d+)\b/g, (_, c, n) => `${c.toUpperCase()}${parseInt(n) + 1}`)
     : value;
 
-const exportExcel = (rows) => {
+const exportExcel = (rows, promotions = []) => {
   const products = rows.filter(r => r.rowType === 'product');
   const variants  = rows.filter(r => r.rowType === 'variant');
   const headers   = ['Tên sản phẩm', 'Link', 'Barcode', 'Phân loại', 'Brand', 'Sàn', 'AFF%', 'ADS%', 'Giá Niêm yết', 'Promotion', 'Giá regular', 'Giá FS', 'Voucher', 'Giá final'];
@@ -273,9 +288,9 @@ const exportExcel = (rows) => {
   products.forEach(p => {
     variants.filter(v => v.groupId === p.id).forEach(v => {
       data.push([
-        p.productName, p.link, v.barcode, v.productName, v.brand, v.platform,
-        v.affPercent, v.adsPercent,
-        toExcelFormulaText(v.listedPrice), v.promotion,
+        p.productName, p.link, v.barcode, v.productName, p.brand, p.platform || 'TikTok',
+        p.affPercent, p.adsPercent,
+        toExcelFormulaText(v.listedPrice), p.promotion,
         toExcelFormulaText(v.regularPrice), toExcelFormulaText(v.fsPrice),
         toExcelFormulaText(v.voucher), toExcelFormulaText(v.finalPrice),
       ]);
@@ -291,6 +306,17 @@ const exportExcel = (rows) => {
     };
   });
   ws['!cols'] = [{ wch: 40 }, { wch: 30 }, { wch: 20 }, { wch: 30 }, { wch: 20 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 18 }];
+  // Data validation dropdown cho cột Promotion (cột J = index 9)
+  if (promotions.length) {
+    const totalRows = data.length;
+    ws['!dataValidations'] = [{
+      type: 'list',
+      allowBlank: true,
+      showDropDown: false,
+      sqref: `J2:J${Math.max(totalRows, 1000)}`,
+      formula1: `"${promotions.join(',')}"`,
+    }];
+  }
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Bang Gia Niem Yet');
   XLSX.writeFile(wb, 'bang-gia-niem-yet.xlsx');
@@ -499,6 +525,47 @@ const ListedPriceTab = () => {
   const updateProductCell = (id, key, value) =>
     setRows(prev => prev.map(r => r.id === id ? { ...r, [key]: value } : r));
 
+  const switchPlatform = (productId, currentPlatform) => {
+    const newPlatform = (currentPlatform || 'TikTok') === 'Shopee' ? 'TikTok' : 'Shopee';
+    setRows(prev => prev.map(r => {
+      if (r.id === productId) return { ...r, platform: newPlatform };
+      if (r.groupId === productId && r.rowType === 'variant') {
+        if (newPlatform === 'Shopee') {
+          // Luôn tính từ giá TikTok gốc (đã lưu hoặc là giá hiện tại)
+          const baseReg = parseNumber(r._tiktokRegular ?? r.regularPrice);
+          const baseFs  = parseNumber(r._tiktokFs  ?? r.fsPrice);
+          if (!baseReg) return r;
+          return {
+            ...r,
+            _tiktokRegular: r._tiktokRegular ?? r.regularPrice,
+            _tiktokFs:      r._tiktokFs      ?? r.fsPrice,
+            regularPrice: String(Math.round(baseReg * 1.10)),
+            fsPrice:      String(Math.round(baseReg * 1.05)),
+          };
+        } else {
+          // Restore giá TikTok gốc
+          return {
+            ...r,
+            regularPrice: r._tiktokRegular ?? r.regularPrice,
+            fsPrice:      r._tiktokFs      ?? r.fsPrice,
+            _tiktokRegular: undefined,
+            _tiktokFs:      undefined,
+          };
+        }
+      }
+      return r;
+    }));
+  };
+
+  const updateGift = (productId, idx, field, value) =>
+    setRows(prev => prev.map(r => {
+      if (r.id !== productId) return r;
+      const gifts = [...(r.gifts || [])];
+      while (gifts.length <= idx) gifts.push({ barcode: '', name: '' });
+      gifts[idx] = { ...gifts[idx], [field]: value };
+      return { ...r, gifts };
+    }));
+
   const updateVariantCell = (id, key, value) =>
     setRows(prev => prev.map(r => r.id === id ? { ...r, [key]: value } : r));
 
@@ -605,48 +672,10 @@ const ListedPriceTab = () => {
   };
 
   // ── Variant cell renderer ─────────────────────────────────────────────────
-  const renderVariantCell = (col, row, index) => {
+  const renderVariantCell = (col, row, index, product) => {
     const rawValue  = row[col.key] ?? '';
     const isEditing = editingCell?.id === row.id && editingCell?.key === col.key;
     const isDragSrc = fillDrag?.fromIndex === index && fillDrag?.colKey === col.key;
-
-    // Platform: click to toggle
-    if (col.key === 'platform') {
-      const isTikTok = (row.platform || 'TikTok') === 'TikTok';
-      return (
-        <td key="platform"
-          onClick={() => updateVariantCell(row.id, 'platform', isTikTok ? 'Shopee' : 'TikTok')}
-          style={{ cursor: 'pointer', background: isTikTok ? '#f0f4ff' : '#fff7ed', borderRight: `2px solid ${isTikTok ? '#c7d2fe' : '#fed7aa'}` }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-            {isTikTok ? <TikTokLogo size={20} /> : <ShopeeLogo size={20} />}
-            <span style={{ fontSize: '0.6rem', fontWeight: 700, color: isTikTok ? '#4f46e5' : '#ea580c' }}>
-              {isTikTok ? 'TikTok' : 'Shopee'}
-            </span>
-          </div>
-        </td>
-      );
-    }
-
-    // Brand dropdown
-    if (col.type === 'brand') return (
-      <td key={col.key}>
-        <select value={rawValue} onChange={e => updateVariantCell(row.id, col.key, e.target.value)} style={selectStyle}>
-          <option value="">— chọn brand —</option>
-          {brands.map(b => <option key={b} value={b}>{b}</option>)}
-        </select>
-      </td>
-    );
-
-    // Promotion dropdown
-    if (col.type === 'promotion') return (
-      <td key={col.key} style={{ position: 'relative' }}>
-        <select value={rawValue} onChange={e => updateVariantCell(row.id, col.key, e.target.value)} style={selectStyle}>
-          <option value="">— chọn —</option>
-          {promotions.map(p => <option key={p} value={p}>{p}</option>)}
-        </select>
-        {rawValue && <FillHandle onMouseDown={e => startFill(e, index, col.key, rawValue)} active={isDragSrc} />}
-      </td>
-    );
 
     // Voucher dropdown
     if (col.type === 'voucher') return (
@@ -667,8 +696,9 @@ const ListedPriceTab = () => {
       : rawValue;
     const isError = hasFormula && !Number.isFinite(formulaResult);
 
-    const autoFinal   = (!isEditing && !rawValue && col.key === 'finalPrice') ? calcFinalPrice(row) : null;
-    const formulaHint = autoFinal !== null ? getFormulaHint(row) : null;
+    const effectiveRow = product ? { ...row, platform: product.platform || 'TikTok', affPercent: product.affPercent || '', adsPercent: product.adsPercent || '' } : row;
+    const autoFinal   = (!isEditing && !rawValue && col.key === 'finalPrice') ? calcFinalPrice(effectiveRow, product?.promotion) : null;
+    const formulaHint = autoFinal !== null ? getFormulaHint(effectiveRow, product?.promotion) : null;
 
     return (
       <td key={col.key} style={{ position: 'relative', outline: isDragSrc ? '2px solid #ea580c' : undefined }}
@@ -725,7 +755,7 @@ const ListedPriceTab = () => {
             style={{ padding: '8px 14px', borderRadius: 8, border: '1.5px solid #3b82f6', background: '#eff6ff', color: '#1d4ed8', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
             📥 Import Excel
           </button>
-          <button onClick={() => exportExcel(rows)}
+          <button onClick={() => exportExcel(rows, promotions)}
             style={{ padding: '8px 14px', borderRadius: 8, border: '1.5px solid #16a34a', background: '#f0fdf4', color: '#15803d', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
             📤 Export Excel
           </button>
@@ -844,51 +874,78 @@ const ListedPriceTab = () => {
                       </td>
 
                       {/* Link + Product name + count — spans all variant cols */}
-                      <td colSpan={VARIANT_COLS.length} style={{ verticalAlign: 'middle', padding: '8px 10px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <td colSpan={VARIANT_COLS.length} style={{ verticalAlign: 'middle', padding: '6px 8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {/* Platform badge */}
+                          <button type="button"
+                            title={(product.platform || 'TikTok') === 'Shopee' ? 'Shopee — click để đổi' : 'TikTok — click để đổi'}
+                            onClick={() => switchPlatform(product.id, product.platform)}
+                            style={{ flexShrink: 0, width: 26, height: 26, borderRadius: 6, border: 'none', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', background: (product.platform || 'TikTok') === 'Shopee' ? '#fff7ed' : '#f0f4ff' }}>
+                            {(product.platform || 'TikTok') === 'Shopee' ? <ShopeeLogo size={20} /> : <TikTokLogo size={20} />}
+                          </button>
+
                           {/* Link input */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: '0 0 220px', minWidth: 0 }}>
-                            <input
-                              type="text"
-                              value={product.link || ''}
-                              placeholder="Link sản phẩm..."
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 3, flex: '0 0 140px' }}>
+                            <input type="text" value={product.link || ''} placeholder="Link SP..."
                               onChange={e => updateProductCell(product.id, 'link', e.target.value)}
-                              style={{ flex: 1, fontSize: '0.75rem', color: '#3b82f6', minWidth: 0, height: 30, padding: '0 6px', borderRadius: 7, border: '1px solid #e5e7eb', background: '#f8fafc', fontFamily: 'inherit', outline: 'none' }}
+                              style={{ flex: 1, fontSize: '0.72rem', color: '#3b82f6', minWidth: 0, height: 30, padding: '0 5px', borderRadius: 7, border: '1px solid #e5e7eb', background: '#f8fafc', fontFamily: 'inherit', outline: 'none' }}
                               onFocus={e => { e.target.style.borderColor = '#3b82f6'; e.target.style.background = '#fff'; }}
                               onBlur={e => { e.target.style.borderColor = '#e5e7eb'; e.target.style.background = '#f8fafc'; }}
                             />
-                            {product.link ? (
-                              <a href={product.link} target="_blank" rel="noopener noreferrer"
-                                title="Mở link" style={{ color: '#3b82f6', fontSize: '1rem', textDecoration: 'none', flexShrink: 0 }}>🔗</a>
-                            ) : (
-                              <span style={{ color: '#d1d5db', fontSize: '0.9rem', flexShrink: 0 }}>🔗</span>
-                            )}
+                            {product.link
+                              ? <a href={product.link} target="_blank" rel="noopener noreferrer" title="Mở link" style={{ color: '#3b82f6', fontSize: '0.9rem', textDecoration: 'none', flexShrink: 0 }}>🔗</a>
+                              : <span style={{ color: '#d1d5db', fontSize: '0.85rem', flexShrink: 0 }}>🔗</span>}
                           </div>
 
-                          {/* Product name */}
-                          <input
-                            type="text"
-                            value={product.productName || ''}
-                            placeholder="Tên sản phẩm..."
+                          {/* Product name — chiếm phần lớn chỗ còn lại */}
+                          <input type="text" value={product.productName || ''} placeholder="Tên sản phẩm..."
                             onChange={e => updateProductCell(product.id, 'productName', e.target.value)}
-                            style={{ flex: 1, minWidth: 0, height: 30, padding: '0 8px', borderRadius: 7, border: '1px solid transparent', background: 'transparent', fontFamily: 'inherit', fontSize: '0.88rem', fontWeight: 700, color: '#0f172a', outline: 'none' }}
+                            style={{ flex: '3 1 0', minWidth: 100, height: 30, padding: '0 8px', borderRadius: 7, border: '1px solid #e5e7eb', background: '#f8fafc', fontFamily: 'inherit', fontSize: '0.85rem', fontWeight: 700, color: '#0f172a', outline: 'none' }}
                             onFocus={e => { e.target.style.borderColor = '#ea580c'; e.target.style.background = '#fff'; }}
-                            onBlur={e => { e.target.style.borderColor = 'transparent'; e.target.style.background = 'transparent'; }}
+                            onBlur={e => { e.target.style.borderColor = '#e5e7eb'; e.target.style.background = '#f8fafc'; }}
                           />
 
+                          {/* Brand */}
+                          <select value={product.brand || ''} onChange={e => updateProductCell(product.id, 'brand', e.target.value)}
+                            style={{ flex: '1.2 1 0', minWidth: 80, height: 30, borderRadius: 7, border: '1px solid #e5e7eb', background: '#f8fafc', fontSize: '0.78rem', padding: '0 4px', outline: 'none', cursor: 'pointer', color: product.brand ? '#0f172a' : '#9ca3af' }}>
+                            <option value="">— Brand —</option>
+                            {brands.map(b => <option key={b} value={b}>{b}</option>)}
+                          </select>
+
+                          {/* AFF% */}
+                          <input type="text" inputMode="numeric" value={product.affPercent || ''} placeholder="AFF%"
+                            onChange={e => updateProductCell(product.id, 'affPercent', e.target.value)}
+                            style={{ flex: '0.6 1 0', minWidth: 44, height: 30, padding: '0 4px', borderRadius: 7, border: '1px solid #e5e7eb', background: '#f8fafc', fontSize: '0.78rem', outline: 'none', fontFamily: 'inherit', textAlign: 'center' }}
+                            onFocus={e => { e.target.style.borderColor = '#6366f1'; e.target.style.background = '#fff'; }}
+                            onBlur={e => { e.target.style.borderColor = '#e5e7eb'; e.target.style.background = '#f8fafc'; }}
+                          />
+
+                          {/* ADS% */}
+                          <input type="text" inputMode="numeric" value={product.adsPercent || ''} placeholder="ADS%"
+                            onChange={e => updateProductCell(product.id, 'adsPercent', e.target.value)}
+                            style={{ flex: '0.6 1 0', minWidth: 44, height: 30, padding: '0 4px', borderRadius: 7, border: '1px solid #e5e7eb', background: '#f8fafc', fontSize: '0.78rem', outline: 'none', fontFamily: 'inherit', textAlign: 'center' }}
+                            onFocus={e => { e.target.style.borderColor = '#6366f1'; e.target.style.background = '#fff'; }}
+                            onBlur={e => { e.target.style.borderColor = '#e5e7eb'; e.target.style.background = '#f8fafc'; }}
+                          />
+
+                          {/* Promotion */}
+                          <select value={product.promotion || ''} onChange={e => updateProductCell(product.id, 'promotion', e.target.value)}
+                            style={{ flex: '1 1 0', minWidth: 80, height: 30, borderRadius: 7, border: '1px solid #e5e7eb', background: product.promotion ? '#fef3c7' : '#f8fafc', fontSize: '0.78rem', padding: '0 4px', outline: 'none', cursor: 'pointer', color: product.promotion ? '#92400e' : '#9ca3af', fontWeight: product.promotion ? 700 : 400 }}>
+                            <option value="">— Promo —</option>
+                            {promotions.map(p => <option key={p} value={p}>{p}</option>)}
+                          </select>
+
                           {/* Variant count badge */}
-                          <span
-                            onClick={() => toggleExpand(product.id)}
-                            style={{ background: isExpanded ? '#ede9fe' : '#eff6ff', color: isExpanded ? '#7c3aed' : '#3b82f6', borderRadius: 999, padding: '3px 10px', fontSize: '0.72rem', fontWeight: 800, flexShrink: 0, cursor: 'pointer', border: `1px solid ${isExpanded ? '#ddd6fe' : '#bfdbfe'}` }}>
-                            {variantCount} phân loại
+                          <span onClick={() => toggleExpand(product.id)}
+                            style={{ background: isExpanded ? '#ede9fe' : '#eff6ff', color: isExpanded ? '#7c3aed' : '#3b82f6', borderRadius: 999, padding: '3px 8px', fontSize: '0.7rem', fontWeight: 800, flexShrink: 0, cursor: 'pointer', border: `1px solid ${isExpanded ? '#ddd6fe' : '#bfdbfe'}`, whiteSpace: 'nowrap' }}>
+                            {variantCount} PL
                           </span>
 
                           {/* Add variant button */}
-                          <button
-                            type="button"
+                          <button type="button"
                             onClick={() => { addVariant(product.id); setExpandedGroups(s => { const n = new Set(s); n.add(product.id); return n; }); }}
-                            style={{ padding: '4px 10px', background: '#fff7ed', border: '1.5px solid #fed7aa', borderRadius: 7, color: '#ea580c', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                            + Thêm phân loại
+                            style={{ padding: '4px 8px', background: '#fff7ed', border: '1.5px solid #fed7aa', borderRadius: 7, color: '#ea580c', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                            + Phân loại
                           </button>
                         </div>
                       </td>
@@ -913,7 +970,7 @@ const ListedPriceTab = () => {
                             {vi + 1}
                           </td>
                           {/* Variant cells */}
-                          {VARIANT_COLS.map(col => renderVariantCell(col, variant, variantIdx))}
+                          {VARIANT_COLS.map(col => renderVariantCell(col, variant, variantIdx, product))}
                           {/* Delete variant */}
                           <td className="listed-price-table__actions" style={{ verticalAlign: 'middle' }}>
                             <button type="button" title="Xóa phân loại" onClick={() => deleteVariant(variant.id)}>×</button>
@@ -921,6 +978,43 @@ const ListedPriceTab = () => {
                         </tr>
                       );
                     })}
+
+                    {/* ── Gift rows (shown when promotion is M1T{N}, N rows) ── */}
+                    {isExpanded && (() => {
+                      const m = (product.promotion || '').match(/M1T(\d+)/i);
+                      if (!m) return null;
+                      const giftCount = parseInt(m[1]);
+                      return Array.from({ length: giftCount }, (_, i) => {
+                        const gift = (product.gifts || [])[i] || { barcode: '', name: '' };
+                        return (
+                          <tr key={`gift-${i}`} className="listed-price-variant-row" style={{ background: '#fffbeb' }}>
+                            <td className="listed-price-table__index" style={{ paddingLeft: 14, color: '#d97706', fontSize: '1rem' }}>🎁</td>
+                            <td colSpan={VARIANT_COLS.length} style={{ padding: '6px 10px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#92400e', flexShrink: 0 }}>
+                                  {giftCount > 1 ? `Quà ${i + 1}:` : 'Quà tặng:'}
+                                </span>
+                                <input
+                                  type="text"
+                                  value={gift.barcode}
+                                  placeholder="Barcode quà..."
+                                  onChange={e => updateGift(product.id, i, 'barcode', e.target.value)}
+                                  style={{ width: 140, height: 28, padding: '0 6px', borderRadius: 6, border: '1px solid #fcd34d', background: '#fffbeb', fontSize: '0.78rem', outline: 'none', fontFamily: 'inherit' }}
+                                />
+                                <input
+                                  type="text"
+                                  value={gift.name}
+                                  placeholder="Tên quà tặng..."
+                                  onChange={e => updateGift(product.id, i, 'name', e.target.value)}
+                                  style={{ flex: 1, height: 28, padding: '0 6px', borderRadius: 6, border: '1px solid #fcd34d', background: '#fffbeb', fontSize: '0.78rem', outline: 'none', fontFamily: 'inherit' }}
+                                />
+                              </div>
+                            </td>
+                            <td className="listed-price-table__actions" style={{ verticalAlign: 'middle' }} />
+                          </tr>
+                        );
+                      });
+                    })()}
                   </Fragment>
                 );
               })}

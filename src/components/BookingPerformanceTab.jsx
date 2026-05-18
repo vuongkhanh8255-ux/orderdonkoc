@@ -169,10 +169,11 @@ const KocIdentityOverview = ({ data = [], brandHeaders = [], formatNumber, staff
         return () => { isMounted = false; };
     }, []);
 
+    const HIDDEN_STAFF = ['Anh Kiệt', 'Thiệu Huy'];
     const staffNames = useMemo(() => {
         const names = (staffOptions || [])
             .map(item => item?.ten_nhansu || item?.name || item?.id || '')
-            .filter(Boolean);
+            .filter(n => n && !HIDDEN_STAFF.includes(n));
         return [...new Set(names)].sort((a, b) => a.localeCompare(b, 'vi'));
     }, [staffOptions]);
 
