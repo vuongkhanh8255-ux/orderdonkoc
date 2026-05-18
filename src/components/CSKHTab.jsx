@@ -42,7 +42,7 @@ function DanhGiaTab() {
     fetch(`${PROXY_URL}?sheetId=${CS_SHEET_ID}&sheet=${encodeURIComponent('11.1 ĐÁNH GIÁ 2026')}`)
       .then(r => r.json())
       .then(j => {
-        const cleaned = (j.data || []).filter(r => r['STT'] && r['BRAND']);
+        const cleaned = (j.data || []).filter(r => r['BRAND'] || r['SẢN PHẨM']);
         setRawData(cleaned);
         setLoading(false);
       })
@@ -415,7 +415,7 @@ function DanhGiaTab() {
                   onMouseEnter={e => e.currentTarget.style.background = '#fffbeb'}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                 >
-                  <td style={{ padding: '10px', color: '#888', fontSize: 12 }}>{r['STT']}</td>
+                  <td style={{ padding: '10px', color: '#888', fontSize: 12 }}>{(page - 1) * perPage + i + 1}</td>
                   <td style={{ padding: '10px', whiteSpace: 'nowrap', fontSize: 12 }}>{formatDate(r['NGÀY'])}</td>
                   <td style={{ padding: '10px' }}>
                     <span style={{ padding: '3px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: (BRAND_COLORS[normalizeBrand(r['BRAND'])] || '#6b7280') + '18', color: BRAND_COLORS[normalizeBrand(r['BRAND'])] || '#6b7280' }}>
