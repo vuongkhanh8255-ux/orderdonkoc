@@ -1,5 +1,5 @@
 // src/components/StellaDashboardTab.jsx
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import DateRangePicker from './DateRangePicker';
 import {
@@ -202,10 +202,10 @@ const StellaDashboardTab = () => {
   // TikTok Shop GMV (Supabase)
   const [tiktokGmvRows, setTiktokGmvRows] = useState([]);
   const [tiktokLoading, setTiktokLoading] = useState(false);
-  const [tiktokMonth, setTiktokMonth] = useState(() => {
-    const n = new Date();
-    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
-  });
+  const [tiktokPeriod, setTiktokPeriod] = useState('30'); // '1'|'7'|'30'|'range'
+  const [tiktokRange, setTiktokRange] = useState({ start: null, end: null });
+  const [tiktokShowPicker, setTiktokShowPicker] = useState(false);
+  const tiktokPickerRef = useRef(null);
 
   // Date filters
   const [periodMode, setPeriodMode] = useState('all'); // 'all' | '1' | '7' | '30' | 'range'
@@ -281,12 +281,31 @@ const StellaDashboardTab = () => {
   useEffect(() => { fetchAll(); }, []);
 
   // ─── TIKTOK SHOP GMV (Supabase) ─────────────────────────────────────────────
-  const fetchTiktokGmv = async (month) => {
+  const VN_OFFSET = 7 * 3600; // UTC+7 in seconds
+
+  // Tính bounds UTC timestamp theo Vietnam timezone
+  const getTiktokBounds = useCallback(() => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    // Midnight VN = floor((now_utc + 7h) / 86400) * 86400 - 7h
+    const todayVn  = Math.floor((nowSec + VN_OFFSET) / 86400) * 86400 - VN_OFFSET;
+    const todayEnd = todayVn + 86400;
+    if (tiktokPeriod === '1')  return { start: todayVn, end: todayEnd };
+    if (tiktokPeriod === '7')  return { start: todayVn - 6 * 86400, end: todayEnd };
+    if (tiktokPeriod === '30') return { start: todayVn - 29 * 86400, end: todayEnd };
+    if (tiktokPeriod === 'range' && tiktokRange.start) {
+      const s = tiktokRange.start;
+      const e = tiktokRange.end || tiktokRange.start;
+      // midnight VN for picked dates (Date.UTC gives UTC midnight, subtract VN offset)
+      const start = Math.floor(Date.UTC(s.getFullYear(), s.getMonth(), s.getDate()) / 1000) - VN_OFFSET;
+      const end   = Math.floor(Date.UTC(e.getFullYear(), e.getMonth(), e.getDate() + 1) / 1000) - VN_OFFSET;
+      return { start, end };
+    }
+    return null;
+  }, [tiktokPeriod, tiktokRange]);
+
+  const fetchTiktokGmv = async (startTs, endTs) => {
     setTiktokLoading(true);
     try {
-      const [y, m] = month.split('-').map(Number);
-      const startTs = Math.floor(new Date(y, m - 1, 1).getTime() / 1000);
-      const endTs   = Math.floor(new Date(y, m, 1).getTime() / 1000);
       let all = [];
       let from = 0;
       const PAGE = 1000;
@@ -309,7 +328,20 @@ const StellaDashboardTab = () => {
     setTiktokLoading(false);
   };
 
-  useEffect(() => { fetchTiktokGmv(tiktokMonth); }, [tiktokMonth]);
+  useEffect(() => {
+    const bounds = getTiktokBounds();
+    if (bounds) fetchTiktokGmv(bounds.start, bounds.end);
+  }, [getTiktokBounds]);
+
+  // Close tiktok picker on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (tiktokPickerRef.current && !tiktokPickerRef.current.contains(e.target))
+        setTiktokShowPicker(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   // ─── DERIVED DATA ───────────────────────────────────────────────────────────
   const allBrands = useMemo(() => {
@@ -798,19 +830,6 @@ const StellaDashboardTab = () => {
   const tiktokNetOrders      = tiktokTotalOrders - tiktokCancelledCount;
   const tiktokAvgGmvDay      = tiktokDailyStats.length > 0 ? tiktokTotalGmv / tiktokDailyStats.length : 0;
 
-  // Available months from April 2026 to current
-  const tiktokMonthOptions = useMemo(() => {
-    const opts = [];
-    const start = new Date(2026, 3, 1); // April 2026
-    const now   = new Date();
-    for (let d = new Date(start); d <= now; d.setMonth(d.getMonth() + 1)) {
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      opts.push({ value: `${y}-${m}`, label: `Tháng ${d.getMonth() + 1}/${y}` });
-    }
-    return opts.reverse();
-  }, []);
-
   // ─── RENDER ─────────────────────────────────────────────────────────────────
   const toggleMetric = (m, setter) => setter(prev => prev[0] === m ? prev : [m, prev[0]]);
   const s2DailyStats = dailyStats.filter(d => d.adsCost > 0 || d.adsOrders > 0);
@@ -1263,30 +1282,48 @@ const StellaDashboardTab = () => {
       ══════════════════════════════════════════════════════════════════════ */}
       <SectionHeader title="TikTok Shop GMV" subtitle="Doanh thu thực từ đơn hoàn thành (API sync)" />
 
-      {/* Month selector */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-        <label style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94a3b8' }}>Tháng</label>
-        <select
-          value={tiktokMonth}
-          onChange={e => setTiktokMonth(e.target.value)}
-          style={{
-            padding: '8px 32px 8px 12px', borderRadius: 8, border: '1px solid #e2e8f0',
-            fontSize: '0.82rem', fontWeight: 600, background: '#f8fafc', cursor: 'pointer',
-            color: '#0f172a', outline: 'none', appearance: 'none',
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E")`,
-            backgroundPosition: 'right 8px center', backgroundRepeat: 'no-repeat', backgroundSize: '16px',
-          }}
-        >
-          {tiktokMonthOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-        {tiktokLoading && <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Đang tải...</span>}
+      {/* Period filter */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
+        {[['1','Hôm nay'], ['7','7 Ngày'], ['30','30 Ngày']].map(([v, l]) => (
+          <button key={v} onClick={() => { setTiktokPeriod(v); setTiktokShowPicker(false); }}
+            style={{
+              padding: '8px 16px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: '0.82rem',
+              fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+              background: tiktokPeriod === v ? '#ea580c' : '#f8fafc',
+              color: tiktokPeriod === v ? '#fff' : '#475569',
+              boxShadow: tiktokPeriod === v ? '0 2px 8px rgba(234,88,12,0.25)' : 'none',
+            }}>{l}</button>
+        ))}
+        <div ref={tiktokPickerRef} style={{ position: 'relative' }}>
+          <button onClick={() => { setTiktokPeriod('range'); setTiktokShowPicker(v => !v); }}
+            style={{
+              padding: '8px 16px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: '0.82rem',
+              fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+              background: tiktokPeriod === 'range' ? '#ea580c' : '#f8fafc',
+              color: tiktokPeriod === 'range' ? '#fff' : '#475569',
+              boxShadow: tiktokPeriod === 'range' ? '0 2px 8px rgba(234,88,12,0.25)' : 'none',
+            }}>
+            {tiktokPeriod === 'range' && tiktokRange.start
+              ? `${tiktokRange.start.toLocaleDateString('vi-VN')}${tiktokRange.end ? ' – ' + tiktokRange.end.toLocaleDateString('vi-VN') : ''}`
+              : '📅 Tuỳ chọn'}
+          </button>
+          {tiktokShowPicker && (
+            <div style={{ position: 'absolute', top: '110%', left: 0, zIndex: 100 }}>
+              <DateRangePicker
+                value={tiktokRange}
+                onChange={(r) => { setTiktokRange(r); if (r.start && r.end) setTiktokShowPicker(false); }}
+              />
+            </div>
+          )}
+        </div>
+        {tiktokLoading && <span style={{ fontSize: '0.8rem', color: '#94a3b8', marginLeft: 4 }}>Đang tải...</span>}
       </div>
 
       {/* KPI cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
-        <StatCard icon="💰" label="GMV tháng" color="#ea580c"
+        <StatCard icon="💰" label={tiktokPeriod === '1' ? 'GMV hôm nay' : tiktokPeriod === '7' ? 'GMV 7 ngày' : tiktokPeriod === '30' ? 'GMV 30 ngày' : 'GMV kỳ chọn'} color="#ea580c"
           value={tiktokLoading ? '...' : fmt(tiktokTotalGmv)}
-          sub="Tất cả trừ hủy" loading={tiktokLoading} />
+          sub="Gross (kể cả hủy)" loading={tiktokLoading} />
         <StatCard icon="📦" label="Tổng đơn" color="#f59e0b"
           value={tiktokLoading ? '...' : tiktokTotalOrders.toLocaleString('vi-VN')}
           sub={tiktokLoading ? '' : `${tiktokNetOrders.toLocaleString('vi-VN')} net · ${tiktokCancelledCount.toLocaleString('vi-VN')} hủy`}
