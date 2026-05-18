@@ -784,22 +784,19 @@ const StellaDashboardTab = () => {
       const gmv = parseFloat(r.total_amount) || 0;
       const day = new Date(r.create_time * 1000).toISOString().slice(0, 10);
       if (!map[day]) map[day] = { date: day.slice(5), fullDate: day, gmv: 0, orders: 0 };
-      if (r.order_status !== 'CANCELLED') {
-        map[day].gmv    += gmv;
-        map[day].orders += 1;
-      }
+      map[day].gmv    += gmv;
+      map[day].orders += 1;
     });
     return Object.values(map).sort((a, b) => a.fullDate.localeCompare(b.fullDate));
   }, [tiktokGmvRows]);
 
-  // Gross GMV (all orders, matching TikTok Seller Center) = exclude CANCELLED
-  const tiktokNonCancelled  = tiktokGmvRows.filter(r => r.order_status !== 'CANCELLED');
-  const tiktokCancelled     = tiktokGmvRows.filter(r => r.order_status === 'CANCELLED');
-  const tiktokTotalGmv      = tiktokNonCancelled.reduce((s, r) => s + (parseFloat(r.total_amount) || 0), 0);
-  const tiktokTotalOrders   = tiktokGmvRows.length;          // tổng tất cả
-  const tiktokNetOrders     = tiktokNonCancelled.length;     // trừ cancel
+  // GMV = tất cả đơn kể cả CANCELLED (i chang TikTok Seller Center gross GMV)
+  const tiktokCancelled      = tiktokGmvRows.filter(r => r.order_status === 'CANCELLED');
+  const tiktokTotalGmv       = tiktokGmvRows.reduce((s, r) => s + (parseFloat(r.total_amount) || 0), 0);
+  const tiktokTotalOrders    = tiktokGmvRows.length;
   const tiktokCancelledCount = tiktokCancelled.length;
-  const tiktokAvgGmvDay     = tiktokDailyStats.length > 0 ? tiktokTotalGmv / tiktokDailyStats.length : 0;
+  const tiktokNetOrders      = tiktokTotalOrders - tiktokCancelledCount;
+  const tiktokAvgGmvDay      = tiktokDailyStats.length > 0 ? tiktokTotalGmv / tiktokDailyStats.length : 0;
 
   // Available months from April 2026 to current
   const tiktokMonthOptions = useMemo(() => {
