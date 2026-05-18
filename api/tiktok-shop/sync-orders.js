@@ -256,10 +256,8 @@ export default async function handler(req, res) {
 
       const allOrders = [];
       let firstWindowDebug = null;
-      // Hard cap tổng đơn để tránh timeout Vercel 300s:
-      //   ~250ms/call × 50 đơn/call → 50,000 đơn ≈ 250s (incremental)
-      //   Full resync dùng window-based nên không cần cap này
-      const MAX_TOTAL_ORDERS = syncMode === 'incremental' ? 50_000 : Infinity;
+      // Dừng fetch khi còn 50s để upsert kịp trước khi Vercel timeout (800s)
+      const FETCH_DEADLINE_MS = Date.now() + 750_000;
       let totalFetched = 0;
 
       outer:
@@ -267,7 +265,7 @@ export default async function handler(req, res) {
         let pageToken = undefined;
 
         while (true) {
-          if (totalFetched >= MAX_TOTAL_ORDERS) break outer;
+          if (Date.now() >= FETCH_DEADLINE_MS) break outer;
 
           const resp = await searchOrders({
             appKey, appSecret,
