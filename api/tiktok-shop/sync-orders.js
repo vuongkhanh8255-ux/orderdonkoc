@@ -256,16 +256,19 @@ export default async function handler(req, res) {
 
       const allOrders = [];
       let firstWindowDebug = null;
-      // incremental: 100 pages × 50 = 5000 orders (đủ cho 1 tuần ~3500 đơn)
-      // full: 340 pages × 50 orders × 3 windows = 51,000 orders capacity
-      //       340 × 3 windows × ~250ms/call ≈ 255s → fits in 300s timeout
-      const MAX_PAGES_PER_WINDOW = syncMode === 'incremental' ? 100 : 340;
+      // Hard cap tổng đơn để tránh timeout Vercel 300s:
+      //   ~250ms/call × 50 đơn/call → 50,000 đơn ≈ 250s (incremental)
+      //   Full resync dùng window-based nên không cần cap này
+      const MAX_TOTAL_ORDERS = syncMode === 'incremental' ? 50_000 : Infinity;
+      let totalFetched = 0;
 
+      outer:
       for (const { createTimeGe, createTimeLt } of timeWindows) {
         let pageToken = undefined;
-        let page = 0;
 
-        while (page < MAX_PAGES_PER_WINDOW) {
+        while (true) {
+          if (totalFetched >= MAX_TOTAL_ORDERS) break outer;
+
           const resp = await searchOrders({
             appKey, appSecret,
             accessToken: conn.access_token,
@@ -288,11 +291,11 @@ export default async function handler(req, res) {
 
           const orders = resp?.data?.orders || [];
           allOrders.push(...orders);
+          totalFetched += orders.length;
 
           const nextToken = resp?.data?.next_page_token;
-          if (!nextToken || orders.length === 0) break; // no more pages
+          if (!nextToken || orders.length === 0) break;
           pageToken = nextToken;
-          page++;
         }
       }
 
