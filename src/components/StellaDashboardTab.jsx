@@ -810,7 +810,7 @@ const StellaDashboardTab = () => {
     const map = {};
     tiktokGmvRows.forEach(r => {
       const gmv = parseFloat(r.total_amount) || 0;
-      const day = new Date(r.create_time * 1000).toISOString().slice(0, 10);
+      const day = new Date(r.create_time * 1000 + 7 * 3600 * 1000).toISOString().slice(0, 10);
       if (!map[day]) map[day] = { date: day.slice(5), fullDate: day, gmv: 0, orders: 0 };
       map[day].gmv    += gmv;
       map[day].orders += 1;
