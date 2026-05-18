@@ -1,5 +1,6 @@
 // src/components/StellaDashboardTab.jsx
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { supabase } from '../supabaseClient';
 import DateRangePicker from './DateRangePicker';
 import {
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -198,6 +199,14 @@ const StellaDashboardTab = () => {
   const [s2Metrics, setS2Metrics] = useState(['adsCost', 'adsRevenue']); // Section 2 dual-chart
   const [s3Metrics, setS3Metrics] = useState(['totalSpend', 'avgSpend']); // Section 3 dual-chart
 
+  // TikTok Shop GMV (Supabase)
+  const [tiktokGmvRows, setTiktokGmvRows] = useState([]);
+  const [tiktokLoading, setTiktokLoading] = useState(false);
+  const [tiktokMonth, setTiktokMonth] = useState(() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
+  });
+
   // Date filters
   const [periodMode, setPeriodMode] = useState('all'); // 'all' | '1' | '7' | '30' | 'range'
   const [dateRange, setDateRange]   = useState({ start: null, end: null });
@@ -270,6 +279,38 @@ const StellaDashboardTab = () => {
   };
 
   useEffect(() => { fetchAll(); }, []);
+
+  // ─── TIKTOK SHOP GMV (Supabase) ─────────────────────────────────────────────
+  const fetchTiktokGmv = async (month) => {
+    setTiktokLoading(true);
+    try {
+      const [y, m] = month.split('-').map(Number);
+      const startTs = Math.floor(new Date(y, m - 1, 1).getTime() / 1000);
+      const endTs   = Math.floor(new Date(y, m, 1).getTime() / 1000);
+      let all = [];
+      let from = 0;
+      const PAGE = 1000;
+      while (true) {
+        const { data, error } = await supabase
+          .from('tiktok_shop_orders')
+          .select('create_time,total_amount,order_status')
+          .in('order_status', ['COMPLETED', 'DELIVERED'])
+          .gte('create_time', startTs)
+          .lt('create_time', endTs)
+          .range(from, from + PAGE - 1);
+        if (error || !data?.length) break;
+        all = [...all, ...data];
+        if (data.length < PAGE) break;
+        from += PAGE;
+      }
+      setTiktokGmvRows(all);
+    } catch (e) {
+      console.error('TikTok GMV fetch error:', e);
+    }
+    setTiktokLoading(false);
+  };
+
+  useEffect(() => { fetchTiktokGmv(tiktokMonth); }, [tiktokMonth]);
 
   // ─── DERIVED DATA ───────────────────────────────────────────────────────────
   const allBrands = useMemo(() => {
@@ -737,6 +778,36 @@ const StellaDashboardTab = () => {
     });
   }, [filtered, filteredAds, filteredTraffic, selectedMetric]);
 
+  // ─── TIKTOK SHOP GMV DERIVED ─────────────────────────────────────────────────
+  const tiktokDailyStats = useMemo(() => {
+    const map = {};
+    tiktokGmvRows.forEach(r => {
+      const gmv = parseFloat(r.total_amount) || 0;
+      const day = new Date((r.create_time) * 1000).toISOString().slice(0, 10);
+      if (!map[day]) map[day] = { date: day.slice(5), fullDate: day, gmv: 0, orders: 0 };
+      map[day].gmv    += gmv;
+      map[day].orders += 1;
+    });
+    return Object.values(map).sort((a, b) => a.fullDate.localeCompare(b.fullDate));
+  }, [tiktokGmvRows]);
+
+  const tiktokTotalGmv    = tiktokGmvRows.reduce((s, r) => s + (parseFloat(r.total_amount) || 0), 0);
+  const tiktokTotalOrders = tiktokGmvRows.length;
+  const tiktokAvgGmvDay   = tiktokDailyStats.length > 0 ? tiktokTotalGmv / tiktokDailyStats.length : 0;
+
+  // Available months from April 2026 to current
+  const tiktokMonthOptions = useMemo(() => {
+    const opts = [];
+    const start = new Date(2026, 3, 1); // April 2026
+    const now   = new Date();
+    for (let d = new Date(start); d <= now; d.setMonth(d.getMonth() + 1)) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      opts.push({ value: `${y}-${m}`, label: `Tháng ${d.getMonth() + 1}/${y}` });
+    }
+    return opts.reverse();
+  }, []);
+
   // ─── RENDER ─────────────────────────────────────────────────────────────────
   const toggleMetric = (m, setter) => setter(prev => prev[0] === m ? prev : [m, prev[0]]);
   const s2DailyStats = dailyStats.filter(d => d.adsCost > 0 || d.adsOrders > 0);
@@ -1182,6 +1253,69 @@ const StellaDashboardTab = () => {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          SECTION 4 — TIKTOK SHOP GMV (Supabase sync)
+      ══════════════════════════════════════════════════════════════════════ */}
+      <SectionHeader title="TikTok Shop GMV" subtitle="Doanh thu thực từ đơn hoàn thành (API sync)" />
+
+      {/* Month selector */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+        <label style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#94a3b8' }}>Tháng</label>
+        <select
+          value={tiktokMonth}
+          onChange={e => setTiktokMonth(e.target.value)}
+          style={{
+            padding: '8px 32px 8px 12px', borderRadius: 8, border: '1px solid #e2e8f0',
+            fontSize: '0.82rem', fontWeight: 600, background: '#f8fafc', cursor: 'pointer',
+            color: '#0f172a', outline: 'none', appearance: 'none',
+            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E")`,
+            backgroundPosition: 'right 8px center', backgroundRepeat: 'no-repeat', backgroundSize: '16px',
+          }}
+        >
+          {tiktokMonthOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        {tiktokLoading && <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Đang tải...</span>}
+      </div>
+
+      {/* KPI cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
+        <StatCard icon="💰" label="Tổng GMV tháng" color="#ea580c"
+          value={tiktokLoading ? '...' : fmt(tiktokTotalGmv)}
+          sub="COMPLETED + DELIVERED" loading={tiktokLoading} />
+        <StatCard icon="📦" label="Số đơn hoàn thành" color="#f59e0b"
+          value={tiktokLoading ? '...' : tiktokTotalOrders.toLocaleString('vi-VN')}
+          sub="TikTok Shop" loading={tiktokLoading} />
+        <StatCard icon="📅" label="GMV trung bình / ngày" color="#10b981"
+          value={tiktokLoading ? '...' : fmt(tiktokAvgGmvDay)}
+          sub={`${tiktokDailyStats.length} ngày có đơn`} loading={tiktokLoading} />
+      </div>
+
+      {/* Daily GMV bar chart */}
+      <div style={{ background: '#fff', borderRadius: 14, padding: '20px 24px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', marginBottom: 36 }}>
+        <div style={{ fontWeight: 800, fontSize: '0.82rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 16 }}>
+          GMV theo ngày
+        </div>
+        {tiktokLoading ? (
+          <div style={{ height: 240, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: '0.85rem' }}>Đang tải...</div>
+        ) : tiktokDailyStats.length === 0 ? (
+          <div style={{ height: 240, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: '0.85rem' }}>Không có đơn hoàn thành trong tháng này</div>
+        ) : (
+          <ResponsiveContainer width="100%" height={240}>
+            <ComposedChart data={tiktokDailyStats} margin={{ top: 10, right: 16, left: 0, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+              <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#9ca3af' }} tickLine={false} axisLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: '#ea580c' }} tickLine={false} axisLine={false} tickFormatter={v => fmt(v)} width={68} />
+              <Tooltip
+                contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', fontFamily: "'Outfit',sans-serif" }}
+                labelFormatter={(l, p) => p?.[0]?.payload?.fullDate || l}
+                formatter={(v, name) => name === 'gmv' ? [fmtFull(v), 'GMV'] : [v.toLocaleString('vi-VN'), 'Đơn']}
+              />
+              <Bar dataKey="gmv" fill="#ea580c" radius={[4, 4, 0, 0]} opacity={0.85} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        )}
       </div>
 
       </div>
