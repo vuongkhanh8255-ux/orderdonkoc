@@ -281,13 +281,10 @@ const StellaDashboardTab = () => {
   useEffect(() => { fetchAll(); }, []);
 
   // ─── TIKTOK SHOP GMV (Supabase) ─────────────────────────────────────────────
-  const VN_OFFSET = 7 * 3600; // UTC+7 in seconds
-
-  // Tính bounds UTC timestamp theo Vietnam timezone
+  const VN_OFFSET = 7 * 3600;
   const getTiktokBounds = useCallback(() => {
-    const nowSec = Math.floor(Date.now() / 1000);
-    // Midnight VN = floor((now_utc + 7h) / 86400) * 86400 - 7h
-    const todayVn  = Math.floor((nowSec + VN_OFFSET) / 86400) * 86400 - VN_OFFSET;
+    const nowSec  = Math.floor(Date.now() / 1000);
+    const todayVn = Math.floor((nowSec + VN_OFFSET) / 86400) * 86400 - VN_OFFSET;
     const todayEnd = todayVn + 86400;
     if (tiktokPeriod === '1')  return { start: todayVn, end: todayEnd };
     if (tiktokPeriod === '7')  return { start: todayVn - 6 * 86400, end: todayEnd };
@@ -295,7 +292,6 @@ const StellaDashboardTab = () => {
     if (tiktokPeriod === 'range' && tiktokRange.start) {
       const s = tiktokRange.start;
       const e = tiktokRange.end || tiktokRange.start;
-      // midnight VN for picked dates (Date.UTC gives UTC midnight, subtract VN offset)
       const start = Math.floor(Date.UTC(s.getFullYear(), s.getMonth(), s.getDate()) / 1000) - VN_OFFSET;
       const end   = Math.floor(Date.UTC(e.getFullYear(), e.getMonth(), e.getDate() + 1) / 1000) - VN_OFFSET;
       return { start, end };
