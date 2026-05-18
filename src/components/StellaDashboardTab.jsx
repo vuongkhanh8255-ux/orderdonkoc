@@ -294,7 +294,6 @@ const StellaDashboardTab = () => {
         const { data, error } = await supabase
           .from('tiktok_shop_orders')
           .select('create_time,total_amount,order_status')
-          .in('order_status', ['COMPLETED', 'DELIVERED'])
           .gte('create_time', startTs)
           .lt('create_time', endTs)
           .range(from, from + PAGE - 1);
@@ -783,17 +782,24 @@ const StellaDashboardTab = () => {
     const map = {};
     tiktokGmvRows.forEach(r => {
       const gmv = parseFloat(r.total_amount) || 0;
-      const day = new Date((r.create_time) * 1000).toISOString().slice(0, 10);
+      const day = new Date(r.create_time * 1000).toISOString().slice(0, 10);
       if (!map[day]) map[day] = { date: day.slice(5), fullDate: day, gmv: 0, orders: 0 };
-      map[day].gmv    += gmv;
-      map[day].orders += 1;
+      if (r.order_status !== 'CANCELLED') {
+        map[day].gmv    += gmv;
+        map[day].orders += 1;
+      }
     });
     return Object.values(map).sort((a, b) => a.fullDate.localeCompare(b.fullDate));
   }, [tiktokGmvRows]);
 
-  const tiktokTotalGmv    = tiktokGmvRows.reduce((s, r) => s + (parseFloat(r.total_amount) || 0), 0);
-  const tiktokTotalOrders = tiktokGmvRows.length;
-  const tiktokAvgGmvDay   = tiktokDailyStats.length > 0 ? tiktokTotalGmv / tiktokDailyStats.length : 0;
+  // Gross GMV (all orders, matching TikTok Seller Center) = exclude CANCELLED
+  const tiktokNonCancelled  = tiktokGmvRows.filter(r => r.order_status !== 'CANCELLED');
+  const tiktokCancelled     = tiktokGmvRows.filter(r => r.order_status === 'CANCELLED');
+  const tiktokTotalGmv      = tiktokNonCancelled.reduce((s, r) => s + (parseFloat(r.total_amount) || 0), 0);
+  const tiktokTotalOrders   = tiktokGmvRows.length;          // tổng tất cả
+  const tiktokNetOrders     = tiktokNonCancelled.length;     // trừ cancel
+  const tiktokCancelledCount = tiktokCancelled.length;
+  const tiktokAvgGmvDay     = tiktokDailyStats.length > 0 ? tiktokTotalGmv / tiktokDailyStats.length : 0;
 
   // Available months from April 2026 to current
   const tiktokMonthOptions = useMemo(() => {
@@ -1280,16 +1286,21 @@ const StellaDashboardTab = () => {
       </div>
 
       {/* KPI cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
-        <StatCard icon="💰" label="Tổng GMV tháng" color="#ea580c"
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+        <StatCard icon="💰" label="GMV tháng" color="#ea580c"
           value={tiktokLoading ? '...' : fmt(tiktokTotalGmv)}
-          sub="COMPLETED + DELIVERED" loading={tiktokLoading} />
-        <StatCard icon="📦" label="Số đơn hoàn thành" color="#f59e0b"
+          sub="Tất cả trừ hủy" loading={tiktokLoading} />
+        <StatCard icon="📦" label="Tổng đơn" color="#f59e0b"
           value={tiktokLoading ? '...' : tiktokTotalOrders.toLocaleString('vi-VN')}
-          sub="TikTok Shop" loading={tiktokLoading} />
-        <StatCard icon="📅" label="GMV trung bình / ngày" color="#10b981"
+          sub={tiktokLoading ? '' : `${tiktokNetOrders.toLocaleString('vi-VN')} net · ${tiktokCancelledCount.toLocaleString('vi-VN')} hủy`}
+          loading={tiktokLoading} />
+        <StatCard icon="📅" label="GMV TB / ngày" color="#10b981"
           value={tiktokLoading ? '...' : fmt(tiktokAvgGmvDay)}
           sub={`${tiktokDailyStats.length} ngày có đơn`} loading={tiktokLoading} />
+        <StatCard icon="🔄" label="Tỉ lệ hủy" color="#f43f5e"
+          value={tiktokLoading ? '...' : (tiktokTotalOrders > 0 ? (tiktokCancelledCount / tiktokTotalOrders * 100).toFixed(1) + '%' : '—')}
+          sub={tiktokLoading ? '' : `${tiktokCancelledCount.toLocaleString('vi-VN')} đơn hủy`}
+          loading={tiktokLoading} />
       </div>
 
       {/* Daily GMV bar chart */}
