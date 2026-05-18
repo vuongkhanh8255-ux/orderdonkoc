@@ -182,7 +182,7 @@ export default async function handler(req, res) {
 
   const now = Math.floor(Date.now() / 1000);
   const WINDOW_SEC   = 15 * 24 * 3600;
-  const BUFFER_SEC   =  2 * 24 * 3600; // 2 ngày overlap
+  const BUFFER_SEC   = 12 * 3600;      // 12h overlap (tránh bỏ sót đơn API delay)
   const FULL_WINDOWS = 4;              // 4 × 15 ngày = 60 ngày
 
   const results = [];
@@ -256,10 +256,10 @@ export default async function handler(req, res) {
 
       const allOrders = [];
       let firstWindowDebug = null;
-      // incremental: 20 pages (vài trăm đơn mới/ngày)
+      // incremental: 100 pages × 50 = 5000 orders (đủ cho 1 tuần ~3500 đơn)
       // full: 340 pages × 50 orders × 3 windows = 51,000 orders capacity
       //       340 × 3 windows × ~250ms/call ≈ 255s → fits in 300s timeout
-      const MAX_PAGES_PER_WINDOW = syncMode === 'incremental' ? 20 : 340;
+      const MAX_PAGES_PER_WINDOW = syncMode === 'incremental' ? 100 : 340;
 
       for (const { createTimeGe, createTimeLt } of timeWindows) {
         let pageToken = undefined;
