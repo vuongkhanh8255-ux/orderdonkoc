@@ -17,7 +17,7 @@ const OrderTab = () => {
         loaiShip, setLoaiShip, donHangs, selectedOrders, currentPage, setCurrentPage,
         totalOrderCount, filterIdKenh, setFilterIdKenh, filterSdt, setFilterSdt,
         filterBrand, setFilterBrand, filterSanPham, setFilterSanPham, filterNhanSu, setFilterNhanSu,
-        filterNgay, setFilterNgay, filterLoaiShip, setFilterLoaiShip, filterEditedStatus, setFilterEditedStatus,
+        filterNgayStart, setFilterNgayStart, filterNgayEnd, setFilterNgayEnd, filterLoaiShip, setFilterLoaiShip, filterEditedStatus, setFilterEditedStatus,
         productSearchTerm, setProductSearchTerm, summaryDate, setSummaryDate, productSummary,
         rawSummaryData, isSummarizing,
         reportMonth, setReportMonth, reportYear, setReportYear,
@@ -576,7 +576,15 @@ const OrderTab = () => {
                     <select value={filterNhanSu} onChange={e => setFilterNhanSu(e.target.value)} style={{ flex: '1 1 180px' }}><option value="">Tất cả nhân sự</option>{nhanSus.map(ns => <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>)}</select>
                     <select value={filterLoaiShip} onChange={e => setFilterLoaiShip(e.target.value)} style={{ flex: '1 1 150px' }}><option value="">Tất cả loại ship</option><option value="Ship thường">Ship thường</option><option value="Hỏa tốc">Hỏa tốc</option></select>
                     <select value={filterEditedStatus} onChange={e => setFilterEditedStatus(e.target.value)} style={{ flex: '1 1 150px' }}><option value="all">Tất cả</option><option value="edited">Đơn đã sửa</option><option value="unedited">Đơn chưa sửa</option></select>
-                    <input type="date" value={filterNgay} onChange={e => setFilterNgay(e.target.value)} style={{ flex: '1 1 150px' }} />
+                    <div style={{ display:'flex', alignItems:'center', gap:4, flex:'1 1 280px' }}>
+                      <input type="date" value={filterNgayStart} onChange={e => setFilterNgayStart(e.target.value)}
+                        placeholder="Từ ngày"
+                        style={{ flex:1, padding:'8px 10px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:'0.85rem', fontFamily:"'Outfit',sans-serif" }} />
+                      <span style={{ color:'#9ca3af', fontWeight:600 }}>→</span>
+                      <input type="date" value={filterNgayEnd} onChange={e => setFilterNgayEnd(e.target.value)}
+                        placeholder="Đến ngày"
+                        style={{ flex:1, padding:'8px 10px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:'0.85rem', fontFamily:"'Outfit',sans-serif" }} />
+                    </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #eee', paddingTop: '15px', flexWrap: 'wrap' }}>
                     <button onClick={clearFilters} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><i className="fa fa-filter"></i> Xóa Lọc</button>

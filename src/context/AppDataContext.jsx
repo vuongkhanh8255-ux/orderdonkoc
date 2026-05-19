@@ -120,7 +120,8 @@ export const AppDataProvider = ({ children }) => {
   const [filterBrand, setFilterBrand] = useState('');
   const [filterSanPham, setFilterSanPham] = useState('');
   const [filterNhanSu, setFilterNhanSu] = useState('');
-  const [filterNgay, setFilterNgay] = useState('');
+  const [filterNgayStart, setFilterNgayStart] = useState('');
+  const [filterNgayEnd,   setFilterNgayEnd]   = useState('');
   const [filterLoaiShip, setFilterLoaiShip] = useState('');
   const [filterEditedStatus, setFilterEditedStatus] = useState('all');
 
@@ -248,11 +249,8 @@ export const AppDataProvider = ({ children }) => {
     if (filterSdt) idQuery = idQuery.ilike('koc_sdt', `%${filterSdt.trim()}%`);
     if (filterNhanSu) idQuery = idQuery.eq('nhansu_id', filterNhanSu);
     if (filterLoaiShip) idQuery = idQuery.eq('loai_ship', filterLoaiShip);
-    if (filterNgay) {
-      const startDate = `${filterNgay}T00:00:00.000Z`;
-      const endDate = `${filterNgay}T23:59:59.999Z`;
-      idQuery = idQuery.gte('ngay_gui', startDate).lte('ngay_gui', endDate);
-    }
+    if (filterNgayStart) idQuery = idQuery.gte('ngay_gui', `${filterNgayStart}T00:00:00.000Z`);
+    if (filterNgayEnd)   idQuery = idQuery.lte('ngay_gui', `${filterNgayEnd}T23:59:59.999Z`);
     if (filterEditedStatus !== 'all') {
       const isEdited = filterEditedStatus === 'edited';
       idQuery = idQuery.eq('da_sua', isEdited);
@@ -364,7 +362,7 @@ export const AppDataProvider = ({ children }) => {
       setHoTen(data.ho_ten); setSdt(data.sdt); setDiaChi(data.dia_chi); setCccd(data.cccd);
     }
   };
-  const clearFilters = () => { setFilterIdKenh(''); setFilterSdt(''); setFilterBrand(''); setFilterSanPham(''); setFilterNhanSu(''); setFilterNgay(''); setFilterLoaiShip(''); setFilterEditedStatus('all'); };
+  const clearFilters = () => { setFilterIdKenh(''); setFilterSdt(''); setFilterBrand(''); setFilterSanPham(''); setFilterNhanSu(''); setFilterNgayStart(''); setFilterNgayEnd(''); setFilterLoaiShip(''); setFilterEditedStatus('all'); };
 
   // =========================================================================
   // --- HÀM TỔNG HỢP ---
@@ -506,10 +504,9 @@ export const AppDataProvider = ({ children }) => {
       'chitiettonguis!chitiettonguis_dongui_id_fkey_final!inner' : 'chitiettonguis!chitiettonguis_dongui_id_fkey_final'; const spRelation = hasProductFilter ? 'sanphams!inner' : 'sanphams';
     let query = supabase.from('donguis').select(`id, ngay_gui, da_sua, loai_ship, original_loai_ship, trang_thai, original_trang_thai, koc_ho_ten, original_koc_ho_ten, koc_id_kenh, original_koc_id_kenh, original_koc_id_kenh, koc_sdt, original_koc_sdt, koc_dia_chi, original_koc_dia_chi, koc_cccd, original_koc_cccd, nhansu ( id, ten_nhansu ), ${ctRelation} ( id, so_luong, ${spRelation} ( id, ten_sanpham, barcode, gia_tien, brands ( id, ten_brand ) ) )`).order('ngay_gui', { ascending: false });
     if (filterIdKenh) query = query.ilike('koc_id_kenh', `%${filterIdKenh.trim()}%`); if (filterSdt) query = query.ilike('koc_sdt', `%${filterSdt.trim()}%`); if (filterNhanSu) query = query.eq('nhansu_id', filterNhanSu);
-    if (filterLoaiShip) query = query.eq('loai_ship', filterLoaiShip); if (filterNgay) {
-      const startDate = `${filterNgay}T00:00:00.000Z`; const endDate = `${filterNgay}T23:59:59.999Z`;
-      query = query.gte('ngay_gui', startDate).lte('ngay_gui', endDate);
-    } if (filterEditedStatus !== 'all') {
+    if (filterLoaiShip) query = query.eq('loai_ship', filterLoaiShip);
+    if (filterNgayStart) query = query.gte('ngay_gui', `${filterNgayStart}T00:00:00.000Z`);
+    if (filterNgayEnd)   query = query.lte('ngay_gui', `${filterNgayEnd}T23:59:59.999Z`); if (filterEditedStatus !== 'all') {
       const isEdited = filterEditedStatus === 'edited';
       query = query.eq('da_sua', isEdited);
     } if (filterBrand) query = query.eq('chitiettonguis.sanphams.brand_id', filterBrand); if (filterSanPham) query = query.eq('chitiettonguis.sanphams.id', filterSanPham);
@@ -1058,8 +1055,8 @@ export const AppDataProvider = ({ children }) => {
         setCastBudgetByNhanSu(map);
       });
   }, [airReportMonth, airReportYear]);
-  useEffect(() => { loadInitialData(); }, [currentPage, filterIdKenh, filterSdt, filterNhanSu, filterNgay, filterLoaiShip, filterEditedStatus, filterBrand, filterSanPham]);
-  useEffect(() => { if (currentPage !== 1) { setCurrentPage(1); } }, [filterIdKenh, filterSdt, filterNhanSu, filterNgay, filterLoaiShip, filterEditedStatus, filterBrand, filterSanPham]);
+  useEffect(() => { loadInitialData(); }, [currentPage, filterIdKenh, filterSdt, filterNhanSu, filterNgayStart, filterNgayEnd, filterLoaiShip, filterEditedStatus, filterBrand, filterSanPham]);
+  useEffect(() => { if (currentPage !== 1) { setCurrentPage(1); } }, [filterIdKenh, filterSdt, filterNhanSu, filterNgayStart, filterNgayEnd, filterLoaiShip, filterEditedStatus, filterBrand, filterSanPham]);
   useEffect(() => { loadSanPhamsByBrand(selectedBrand); setProductSearchTerm(''); }, [selectedBrand]);
   // [MODIFIED] Removed airLinksCurrentPage dependency. Page change handled client-side now.
   useEffect(() => { loadAirLinks(); }, [filterAlKenh, filterAlBrand, filterAlNhanSu, filterAlMonth, filterAlLinkAir]);
@@ -1179,7 +1176,8 @@ export const AppDataProvider = ({ children }) => {
     filterBrand, setFilterBrand,
     filterSanPham, setFilterSanPham,
     filterNhanSu, setFilterNhanSu,
-    filterNgay, setFilterNgay,
+    filterNgayStart, setFilterNgayStart,
+    filterNgayEnd,   setFilterNgayEnd,
     filterLoaiShip, setFilterLoaiShip,
     filterEditedStatus, setFilterEditedStatus,
     productSearchTerm, setProductSearchTerm,
