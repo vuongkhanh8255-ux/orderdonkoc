@@ -130,7 +130,7 @@ const normalizeOrder = (order, conn) => {
     create_time: order.create_time || null,
     update_time: order.update_time || null,
     buyer_uid: order.buyer_uid || order.user_id || null,
-    total_amount: String(order.payment?.total_amount || order.total_amount || ''),
+    total_amount: String(order.payment?.total_amount ?? order.payment?.sub_total ?? order.total_amount ?? ''),
     currency: order.currency || items[0]?.currency || null,
     line_items: items.map(item => ({
       item_id: item.item_id || item.id,

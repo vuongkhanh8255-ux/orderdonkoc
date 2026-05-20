@@ -10,7 +10,11 @@ export default defineConfig({
         target: 'https://admin-apis.bluecore.vn',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/bluecore-api/, ''),
-      }
+      },
+      '/api': {
+        target: 'https://koc-tool.vercel.app',
+        changeOrigin: true,
+      },
     }
   }
 })
