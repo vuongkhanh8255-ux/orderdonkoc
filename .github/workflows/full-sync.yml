@@ -33,7 +33,7 @@ jobs:
           SKIP_EHERB_VN: ${{ github.event.inputs.skip_eherb_vn || 'yes' }}
         run: |
           set +e   # đừng chết khi có lỗi từng bước
-          BASE_URL="https://koc-tool.vercel.app/api/tiktok-shop/sync-orders"
+          BASE_URL="https://stellakinetics.space/api/tiktok-shop/sync-orders"
 
           # ── Danh sách shop (hardcoded từ Supabase) ──────────────────
           # Format: "shop_id|Tên shop"
@@ -80,12 +80,15 @@ jobs:
 
               printf "  %-18s " "$shop_name"
 
-              resp=$(curl -s -m 60 -X POST \
+              http_out=$(curl -s -m 90 -X POST \
                 "${BASE_URL}?full=true&from_ts=${t}&to_ts=${lt}&shop_id=${shop_id}" \
-                -H "Content-Type: application/json" 2>/dev/null) || resp=""
+                -H "Content-Type: application/json" \
+                -w "\nHTTP_CODE:%{http_code}" 2>/dev/null) || http_out=""
+              http_code=$(echo "$http_out" | grep "HTTP_CODE:" | tail -1 | cut -d: -f2)
+              resp=$(echo "$http_out" | grep -v "HTTP_CODE:")
 
               if [ -z "$resp" ]; then
-                echo "❌ no response (curl timeout/error)"
+                echo "❌ no response (curl timeout/error, HTTP=$http_code)"
                 total_errors=$(( total_errors + 1 ))
               elif echo "$resp" | grep -q '"success":true'; then
                 synced=$(echo "$resp" | grep -o '"totalSynced":[0-9]*' | head -1 | grep -o '[0-9]*')
@@ -94,7 +97,7 @@ jobs:
                 total_synced=$(( total_synced + synced ))
               else
                 err=$(echo "$resp" | grep -o '"error":"[^"]*"' | head -1)
-                echo "❌ $err  |  $(echo "$resp" | cut -c1-120)"
+                echo "❌ HTTP=$http_code $err  |  $(echo "$resp" | cut -c1-120)"
                 total_errors=$(( total_errors + 1 ))
               fi
             done
