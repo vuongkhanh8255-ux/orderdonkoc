@@ -68,7 +68,7 @@ jobs:
                 shop_id=$(echo "$shop_id" | xargs)
                 [ -z "$shop_id" ] && continue
                 echo -n "  shop $shop_id ... "
-                resp=$(curl -s -m 90 -X POST \
+                resp=$(curl -s -m 280 -X POST \
                   "${BASE_URL}?${PARAMS}&shop_id=${shop_id}" \
                   -H "Content-Type: application/json")
                 echo "raw: $(echo "$resp" | cut -c1-300)"
@@ -84,7 +84,7 @@ jobs:
               done
             else
               echo -n "  tất cả shops ... "
-              resp=$(curl -s -m 90 -X POST \
+              resp=$(curl -s -m 280 -X POST \
                 "${BASE_URL}?${PARAMS}" \
                 -H "Content-Type: application/json")
               echo "raw: $(echo "$resp" | cut -c1-400)"

@@ -112,14 +112,25 @@ const searchOrders = async ({ appKey, appSecret, accessToken, shopCipher, create
   const qs = new URLSearchParams({ ...urlParams, sign });
   const url = `${TIKTOK_BASE}${path}?${qs.toString()}`;
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'x-tts-access-token': accessToken,
-      'content-type': 'application/json',
-    },
-    body: bodyStr,
-  });
+  const ctrl = new AbortController();
+  const tid  = setTimeout(() => ctrl.abort(), 25_000); // 25s per TikTok call
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'x-tts-access-token': accessToken,
+        'content-type': 'application/json',
+      },
+      body: bodyStr,
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    clearTimeout(tid);
+    console.warn(`[sync-orders] TikTok API timeout: ${e.message}`);
+    return { code: -1, message: 'tiktok_api_timeout' };
+  }
+  clearTimeout(tid);
   const text = await res.text();
   try { return JSON.parse(text); } catch { return { _raw: text }; }
 };
