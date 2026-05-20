@@ -1,7 +1,6 @@
 name: TikTok Full Resync
 
 on:
-  # Bấm nút chạy thủ công trên GitHub → Actions tab
   workflow_dispatch:
     inputs:
       shop_ids:
@@ -17,7 +16,6 @@ on:
         required: false
         default: '3'
 
-  # Tự động chạy lúc 2:00 AM UTC = 9:00 sáng giờ VN mỗi ngày
   schedule:
     - cron: '0 2 * * *'
 
@@ -25,7 +23,7 @@ jobs:
   resync:
     name: Sync TikTok Orders
     runs-on: ubuntu-latest
-    timeout-minutes: 360   # tối đa 6 tiếng
+    timeout-minutes: 360
 
     steps:
       - name: Run full resync
@@ -36,15 +34,14 @@ jobs:
         run: |
           BASE_URL="https://koc-tool.vercel.app/api/tiktok-shop/sync-orders"
 
-          # Tính FROM_TS từ ngày nhập vào
           FROM_TS=$(date -d "$FROM_DATE" +%s 2>/dev/null || date -j -f "%Y-%m-%d" "$FROM_DATE" +%s)
           NOW=$(date +%s)
-          WINDOW_SEC=$(( WINDOW_DAYS * 24 * 3600 ))
+          WINDOW_SEC=$(( ${WINDOW_DAYS:-3} * 24 * 3600 ))
 
           echo "============================================"
           echo "FROM : $FROM_DATE ($FROM_TS)"
-          echo "NOW  : $(date -d @$NOW -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -r $NOW -u +%Y-%m-%dT%H:%M:%SZ)"
-          echo "CHUNK: ${WINDOW_DAYS} ngày"
+          echo "NOW  : $(date -u -d @$NOW +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r $NOW +%Y-%m-%dT%H:%M:%SZ)"
+          echo "CHUNK: ${WINDOW_DAYS:-3} ngày"
           echo "SHOPS: ${SHOP_IDS:-tất cả}"
           echo "============================================"
 
@@ -52,63 +49,63 @@ jobs:
           total_errors=0
           chunk=0
 
+          call_chunk() {
+            local url="$1"
+            local label="$2"
+            echo -n "  $label ... "
+            resp=$(curl -s -m 60 -X POST "$url" -H "Content-Type: application/json" 2>/dev/null)
+            if echo "$resp" | grep -q '"success":true'; then
+              synced=$(echo "$resp" | grep -o '"totalSynced":[0-9]*' | head -1 | grep -o '[0-9]*')
+              synced=${synced:-0}
+              echo "✅ ${synced} đơn"
+              echo "$synced"   # return value
+            else
+              echo "❌ lỗi"
+              echo "$resp" | cut -c1-200
+              echo "-1"   # signal error
+            fi
+          }
+
           t=$FROM_TS
           while [ "$t" -lt "$NOW" ]; do
             lt=$(( t + WINDOW_SEC ))
             [ "$lt" -gt "$NOW" ] && lt=$NOW
 
-            from_fmt=$(date -d @$t -u +%d/%m 2>/dev/null || date -r $t -u +%d/%m)
-            lt_fmt=$(date -d @$lt -u +%d/%m 2>/dev/null || date -r $lt -u +%d/%m)
+            from_fmt=$(date -u -d @$t +%d/%m 2>/dev/null || date -u -r $t +%d/%m)
+            lt_fmt=$(date -u -d @$lt +%d/%m 2>/dev/null || date -u -r $lt +%d/%m)
             chunk=$(( chunk + 1 ))
             echo ""
             echo "── Chunk $chunk: $from_fmt → $lt_fmt ──"
 
-            # Build URL params
             PARAMS="full=true&from_ts=${t}&to_ts=${lt}"
+
             if [ -n "$SHOP_IDS" ]; then
-              # Gọi tuần tự từng shop
               IFS=',' read -ra SHOPS <<< "$SHOP_IDS"
               for shop_id in "${SHOPS[@]}"; do
-                shop_id=$(echo "$shop_id" | xargs)  # trim spaces
+                shop_id=$(echo "$shop_id" | xargs)
                 [ -z "$shop_id" ] && continue
-
-                echo -n "  shop $shop_id ... "
-                resp=$(curl -s -m 60 -X POST \
-                  "${BASE_URL}?${PARAMS}&shop_id=${shop_id}" \
-                  -H "Content-Type: application/json" 2>/dev/null) || resp=""
-
-                synced=$(echo "$resp" | grep -o '"totalSynced":[0-9]*' | grep -o '[0-9]*' || echo 0)
-                ok=$(echo "$resp" | grep -c '"success":true' || echo 0)
-                if [ "$ok" -gt 0 ]; then
-                  echo "✅ ${synced:-0} đơn"
-                  total_synced=$(( total_synced + ${synced:-0} ))
-                else
-                  echo "❌ lỗi"
-                  echo "     response: $(echo "$resp" | head -c 200)"
+                result=$(call_chunk "${BASE_URL}?${PARAMS}&shop_id=${shop_id}" "shop $shop_id")
+                last_line=$(echo "$result" | tail -1)
+                if [ "$last_line" = "-1" ]; then
                   total_errors=$(( total_errors + 1 ))
+                else
+                  num=$(echo "$last_line" | tr -cd '0-9')
+                  total_synced=$(( total_synced + ${num:-0} ))
                 fi
               done
             else
-              # Gọi 1 lần — backend xử lý tất cả shops cùng lúc
-              echo -n "  tất cả shops ... "
-              resp=$(curl -s -m 60 -X POST \
-                "${BASE_URL}?${PARAMS}" \
-                -H "Content-Type: application/json" 2>/dev/null) || resp=""
-
-              synced=$(echo "$resp" | grep -o '"totalSynced":[0-9]*' | grep -o '[0-9]*' || echo 0)
-              ok=$(echo "$resp" | grep -c '"success":true' || echo 0)
-              if [ "$ok" -gt 0 ]; then
-                echo "✅ ${synced:-0} đơn"
-                total_synced=$(( total_synced + ${synced:-0} ))
-              else
-                echo "❌ lỗi"
-                echo "   response: $(echo "$resp" | head -c 300)"
+              result=$(call_chunk "${BASE_URL}?${PARAMS}" "tất cả shops")
+              last_line=$(echo "$result" | tail -1)
+              if [ "$last_line" = "-1" ]; then
                 total_errors=$(( total_errors + 1 ))
+              else
+                num=$(echo "$last_line" | tr -cd '0-9')
+                total_synced=$(( total_synced + ${num:-0} ))
               fi
             fi
 
             t=$lt
-            sleep 1   # nghỉ 1s giữa các chunk
+            sleep 1
           done
 
           echo ""
