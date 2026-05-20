@@ -40,7 +40,7 @@ jobs:
 
           echo "============================================"
           echo "FROM : $FROM_DATE ($FROM_TS)"
-          echo "NOW  : $(date -u -d @$NOW +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r $NOW +%Y-%m-%dT%H:%M:%SZ)"
+          echo "NOW  : $(date -u -d @$NOW +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"
           echo "CHUNK: ${WINDOW_DAYS:-3} ngày"
           echo "SHOPS: ${SHOP_IDS:-tất cả}"
           echo "============================================"
@@ -49,30 +49,13 @@ jobs:
           total_errors=0
           chunk=0
 
-          call_chunk() {
-            local url="$1"
-            local label="$2"
-            echo -n "  $label ... "
-            resp=$(curl -s -m 60 -X POST "$url" -H "Content-Type: application/json" 2>/dev/null)
-            if echo "$resp" | grep -q '"success":true'; then
-              synced=$(echo "$resp" | grep -o '"totalSynced":[0-9]*' | head -1 | grep -o '[0-9]*')
-              synced=${synced:-0}
-              echo "✅ ${synced} đơn"
-              echo "$synced"   # return value
-            else
-              echo "❌ lỗi"
-              echo "$resp" | cut -c1-200
-              echo "-1"   # signal error
-            fi
-          }
-
           t=$FROM_TS
           while [ "$t" -lt "$NOW" ]; do
             lt=$(( t + WINDOW_SEC ))
             [ "$lt" -gt "$NOW" ] && lt=$NOW
 
-            from_fmt=$(date -u -d @$t +%d/%m 2>/dev/null || date -u -r $t +%d/%m)
-            lt_fmt=$(date -u -d @$lt +%d/%m 2>/dev/null || date -u -r $lt +%d/%m)
+            from_fmt=$(date -u -d @$t +%d/%m)
+            lt_fmt=$(date -u -d @$lt +%d/%m)
             chunk=$(( chunk + 1 ))
             echo ""
             echo "── Chunk $chunk: $from_fmt → $lt_fmt ──"
@@ -84,23 +67,35 @@ jobs:
               for shop_id in "${SHOPS[@]}"; do
                 shop_id=$(echo "$shop_id" | xargs)
                 [ -z "$shop_id" ] && continue
-                result=$(call_chunk "${BASE_URL}?${PARAMS}&shop_id=${shop_id}" "shop $shop_id")
-                last_line=$(echo "$result" | tail -1)
-                if [ "$last_line" = "-1" ]; then
-                  total_errors=$(( total_errors + 1 ))
+                echo -n "  shop $shop_id ... "
+                resp=$(curl -s -m 90 -X POST \
+                  "${BASE_URL}?${PARAMS}&shop_id=${shop_id}" \
+                  -H "Content-Type: application/json")
+                echo "raw: $(echo "$resp" | cut -c1-300)"
+                if echo "$resp" | grep -q '"success":true'; then
+                  synced=$(echo "$resp" | grep -o '"totalSynced":[0-9]*' | head -1 | grep -o '[0-9]*')
+                  synced=${synced:-0}
+                  echo "  ✅ $synced đơn"
+                  total_synced=$(( total_synced + synced ))
                 else
-                  num=$(echo "$last_line" | tr -cd '0-9')
-                  total_synced=$(( total_synced + ${num:-0} ))
+                  echo "  ❌ lỗi"
+                  total_errors=$(( total_errors + 1 ))
                 fi
               done
             else
-              result=$(call_chunk "${BASE_URL}?${PARAMS}" "tất cả shops")
-              last_line=$(echo "$result" | tail -1)
-              if [ "$last_line" = "-1" ]; then
-                total_errors=$(( total_errors + 1 ))
+              echo -n "  tất cả shops ... "
+              resp=$(curl -s -m 90 -X POST \
+                "${BASE_URL}?${PARAMS}" \
+                -H "Content-Type: application/json")
+              echo "raw: $(echo "$resp" | cut -c1-400)"
+              if echo "$resp" | grep -q '"success":true'; then
+                synced=$(echo "$resp" | grep -o '"totalSynced":[0-9]*' | head -1 | grep -o '[0-9]*')
+                synced=${synced:-0}
+                echo "  ✅ $synced đơn"
+                total_synced=$(( total_synced + synced ))
               else
-                num=$(echo "$last_line" | tr -cd '0-9')
-                total_synced=$(( total_synced + ${num:-0} ))
+                echo "  ❌ lỗi"
+                total_errors=$(( total_errors + 1 ))
               fi
             fi
 
