@@ -141,6 +141,8 @@ const TikTokOrdersTab = () => {
   const [dashLoading,   setDashLoading]   = useState(false);
 
   const searchDebounce  = useRef(null);
+  const syncAbortRef    = useRef(false);
+  const [resyncShops,   setResyncShops]   = useState(null); // null = all
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
   useEffect(() => {
@@ -307,7 +309,7 @@ const TikTokOrdersTab = () => {
   };
 
   const fullResync = async () => {
-    setSyncing(true); setSyncResult(null);
+    setSyncing(true); setSyncResult(null); syncAbortRef.current = false;
     const FROM_TS    = 1775001600; // 01/04/2026
     const WINDOW_SEC = 3 * 24 * 3600; // 3 ngày/chunk — nhỏ nhất có thể
     const nowSec     = Math.floor(Date.now() / 1000);
@@ -320,10 +322,11 @@ const TikTokOrdersTab = () => {
 
     let totalSynced = 0, allResults = [], lastSyncedAt = null, errorCount = 0;
 
-    // Flatten tất cả (window × shop) thành 1 task array
+    // Shop trước, window sau — xong hẳn 1 shop rồi mới sang shop tiếp
+    const activeConns = resyncShops ? connections.filter(c => resyncShops.has(String(c.shop_id))) : connections;
     const tasks = [];
-    for (const { ge, lt } of windows) {
-      for (const conn of connections) {
+    for (const conn of activeConns) {
+      for (const { ge, lt } of windows) {
         tasks.push({ ge, lt, conn });
       }
     }
@@ -332,10 +335,14 @@ const TikTokOrdersTab = () => {
     let done = 0;
 
     for (let i = 0; i < tasks.length; i += CONCURRENCY) {
+      if (syncAbortRef.current) break;
       const batch = tasks.slice(i, i + CONCURRENCY);
+      const cur = tasks[i];
+      const shopName = cur?.conn?.seller_name || cur?.conn?.shop_id || '';
+      const winIdx   = windows.findIndex(w => w.ge === cur?.ge);
       setSyncResult({
         _progress: true,
-        message: `⏳ ${done}/${tasks.length} chunks · batch ${Math.floor(i/CONCURRENCY)+1}/${Math.ceil(tasks.length/CONCURRENCY)}${errorCount>0?` · ${errorCount} lỗi`:''}`,
+        message: `⏳ ${shopName} · ${fmtDay(cur?.ge)}→${fmtDay(cur?.lt)} (window ${winIdx+1}/${windows.length}) · ${done}/${tasks.length}${errorCount>0?` · ${errorCount} lỗi`:''}`,
       });
 
       const settled = await Promise.allSettled(
@@ -357,10 +364,14 @@ const TikTokOrdersTab = () => {
       }
     }
 
-    setSyncResult({
-      success: true, totalSynced, results: allResults, syncedAt: lastSyncedAt,
-      ...(errorCount > 0 ? { _warn: `${errorCount} chunk bị lỗi/timeout, dữ liệu có thể thiếu.` } : {}),
-    });
+    if (syncAbortRef.current) {
+      setSyncResult({ error: `⏹ Đã dừng — đã sync ${totalSynced.toLocaleString('vi-VN')} đơn (${done}/${tasks.length} chunk). Chạy lại để tiếp tục.` });
+    } else {
+      setSyncResult({
+        success: true, totalSynced, results: allResults, syncedAt: lastSyncedAt,
+        ...(errorCount > 0 ? { _warn: `${errorCount} chunk bị lỗi/timeout, dữ liệu có thể thiếu.` } : {}),
+      });
+    }
     fetchStats(); fetchOrders(1, debouncedSearch, statusFilter, shopFilter); setPage(1);
     fetchDashboard(dashRange, dashShop, connections);
     setSyncing(false);
@@ -381,19 +392,56 @@ const TikTokOrdersTab = () => {
             Dữ liệu đơn hàng thực từ TikTok Shop Open API. Nhấn <strong>Sync</strong> để cập nhật.
           </p>
         </div>
-        <div style={{ display:'flex', gap:10, flexShrink:0, flexWrap:'wrap' }}>
-          <button onClick={reloadAll} disabled={loading}
-            style={{ padding:'9px 16px', borderRadius:8, border:'1px solid #e5e7eb', background:'#fff', color:'#64748b', fontWeight:600, cursor:'pointer', fontSize:'0.85rem' }}>
-            {loading ? '⏳' : '↺'} Tải lại
-          </button>
-          <button onClick={fullResync} disabled={syncing} title="Kéo lại toàn bộ từ 01/04/2026"
-            style={{ padding:'9px 18px', borderRadius:8, border:'1.5px solid #ea580c', background:'#fff7ed', color:'#ea580c', fontWeight:700, fontSize:'0.88rem', cursor:syncing?'not-allowed':'pointer', opacity:syncing?0.6:1 }}>
-            {syncing ? '⏳' : '📦'} Full Resync (60 ngày)
-          </button>
-          <button onClick={doSync} disabled={syncing}
-            style={{ padding:'9px 20px', borderRadius:8, border:'none', background:syncing?'#d1d5db':'#ea580c', color:'#fff', fontWeight:700, cursor:syncing?'default':'pointer', fontSize:'0.85rem', boxShadow:syncing?'none':'0 4px 14px rgba(234,88,12,0.25)' }}>
-            {syncing ? '⏳ Đang sync...' : '🔄 Sync Orders'}
-          </button>
+        <div style={{ display:'flex', flexDirection:'column', gap:8, alignItems:'flex-end', flexShrink:0 }}>
+          {/* Shop selector cho Full Resync */}
+          {connections.length > 0 && !syncing && (
+            <div style={{ display:'flex', gap:6, flexWrap:'wrap', justifyContent:'flex-end' }}>
+              <span style={{ fontSize:'0.75rem', color:'#64748b', alignSelf:'center', fontWeight:600 }}>Resync:</span>
+              {connections.map(conn => {
+                const id = String(conn.shop_id);
+                const active = !resyncShops || resyncShops.has(id);
+                return (
+                  <button key={id} onClick={() => {
+                    setResyncShops(prev => {
+                      const base = prev ?? new Set(connections.map(c => String(c.shop_id)));
+                      const next = new Set(base);
+                      if (next.has(id)) { next.delete(id); } else { next.add(id); }
+                      // nếu tất cả được chọn → reset về null (all)
+                      if (next.size === connections.length) return null;
+                      if (next.size === 0) return base; // không cho bỏ hết
+                      return next;
+                    });
+                  }}
+                    style={{ padding:'3px 10px', borderRadius:20, fontSize:'0.75rem', fontWeight:600, cursor:'pointer',
+                      border:`1.5px solid ${active?'#ea580c':'#d1d5db'}`,
+                      background: active?'#fff7ed':'#f8fafc',
+                      color: active?'#ea580c':'#9ca3af' }}>
+                    {conn.seller_name?.replace(/Việt Nam/gi,'VN').replace(/Hồ Chí Minh/gi,'HCM').slice(0,18) || conn.shop_id}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <div style={{ display:'flex', gap:10, flexWrap:'wrap', justifyContent:'flex-end' }}>
+            <button onClick={reloadAll} disabled={loading}
+              style={{ padding:'9px 16px', borderRadius:8, border:'1px solid #e5e7eb', background:'#fff', color:'#64748b', fontWeight:600, cursor:'pointer', fontSize:'0.85rem' }}>
+              {loading ? '⏳' : '↺'} Tải lại
+            </button>
+            <button onClick={fullResync} disabled={syncing} title="Kéo lại toàn bộ từ 01/04/2026"
+              style={{ padding:'9px 18px', borderRadius:8, border:'1.5px solid #ea580c', background:'#fff7ed', color:'#ea580c', fontWeight:700, fontSize:'0.88rem', cursor:syncing?'not-allowed':'pointer', opacity:syncing?0.6:1 }}>
+              {syncing ? '⏳' : '📦'} Full Resync {resyncShops ? `(${resyncShops.size} shop)` : '(tất cả)'}
+            </button>
+            {syncing && (
+              <button onClick={() => { syncAbortRef.current = true; }}
+                style={{ padding:'9px 16px', borderRadius:8, border:'1.5px solid #dc2626', background:'#fef2f2', color:'#dc2626', fontWeight:700, fontSize:'0.88rem', cursor:'pointer' }}>
+                ⏹ Dừng
+              </button>
+            )}
+            <button onClick={doSync} disabled={syncing}
+              style={{ padding:'9px 20px', borderRadius:8, border:'none', background:syncing?'#d1d5db':'#ea580c', color:'#fff', fontWeight:700, cursor:syncing?'default':'pointer', fontSize:'0.85rem', boxShadow:syncing?'none':'0 4px 14px rgba(234,88,12,0.25)' }}>
+              {syncing ? '⏳ Đang sync...' : '🔄 Sync Orders'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -427,7 +475,8 @@ const TikTokOrdersTab = () => {
         <div style={{ marginBottom:14, padding:'12px 16px', borderRadius:10,
           background:syncResult._progress?'#eff6ff':syncResult.error?'#fef2f2':'#f0fdf4',
           border:`1px solid ${syncResult._progress?'#bfdbfe':syncResult.error?'#fca5a5':'#bbf7d0'}`,
-          color:syncResult._progress?'#1d4ed8':syncResult.error?'#dc2626':'#166534', fontSize:'0.85rem' }}>
+          color:syncResult._progress?'#1d4ed8':syncResult.error?'#dc2626':'#166534', fontSize:'0.85rem',
+          ...(syncResult._progress ? { position:'fixed', bottom:16, left:'50%', transform:'translateX(-50%)', width:'min(620px,90vw)', zIndex:9999, boxShadow:'0 8px 32px rgba(30,64,175,0.25)', borderRadius:12 } : {}) }}>
           <div style={{ fontWeight:700 }}>
             {syncResult._progress ? syncResult.message
               : syncResult.error ? `❌ ${syncResult.error}`
