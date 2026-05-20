@@ -308,30 +308,61 @@ const TikTokOrdersTab = () => {
 
   const fullResync = async () => {
     setSyncing(true); setSyncResult(null);
-    const FROM_TS = 1775001600;
-    const WINDOW_SEC = 15*24*3600;
-    const nowSec = Math.floor(Date.now()/1000);
-    const numWindows = Math.ceil((nowSec-FROM_TS)/WINDOW_SEC);
-    let totalSynced = 0, allResults = [], lastSyncedAt = null, hadError = false;
-    for (let i = 0; i < numWindows; i++) {
-      setSyncResult({ _progress:true, message:`⏳ Đang kéo cửa sổ ${i+1} / ${numWindows}...` });
-      try {
-        const res  = await fetch(`/api/tiktok-shop/sync-orders?full=true&window_index=${i}`, { method:'POST' });
-        const text = await res.text();
-        let data;
-        try { data = JSON.parse(text); }
-        catch { data = res.status===504||text.includes('timeout') ? { error:`⏱ Timeout ở cửa sổ ${i+1}/${numWindows}` } : { error:`Server lỗi (${res.status})` }; }
-        if (data.error) { setSyncResult({ error: data.error }); hadError=true; break; }
-        totalSynced += data.totalSynced||0;
-        if (data.results) allResults.push(...data.results);
-        if (data.syncedAt) lastSyncedAt = data.syncedAt;
-      } catch (err) { setSyncResult({ error: err.message }); hadError=true; break; }
+    const FROM_TS    = 1775001600; // 01/04/2026
+    const WINDOW_SEC = 3 * 24 * 3600; // 3 ngày/chunk — nhỏ nhất có thể
+    const nowSec     = Math.floor(Date.now() / 1000);
+
+    // Tạo danh sách windows 3 ngày từ 01/04 đến nay
+    const windows = [];
+    for (let t = FROM_TS; t < nowSec; t += WINDOW_SEC) {
+      windows.push({ ge: t, lt: Math.min(t + WINDOW_SEC, nowSec) });
     }
-    if (!hadError) {
-      setSyncResult({ success:true, totalSynced, results:allResults, syncedAt:lastSyncedAt });
-      fetchStats(); fetchOrders(1, debouncedSearch, statusFilter, shopFilter); setPage(1);
-      fetchDashboard(dashRange, dashShop, connections);
+
+    let totalSynced = 0, allResults = [], lastSyncedAt = null, errorCount = 0;
+
+    // Flatten tất cả (window × shop) thành 1 task array
+    const tasks = [];
+    for (const { ge, lt } of windows) {
+      for (const conn of connections) {
+        tasks.push({ ge, lt, conn });
+      }
     }
+
+    const CONCURRENCY = 5; // 5 request song song — tránh TikTok rate limit
+    let done = 0;
+
+    for (let i = 0; i < tasks.length; i += CONCURRENCY) {
+      const batch = tasks.slice(i, i + CONCURRENCY);
+      setSyncResult({
+        _progress: true,
+        message: `⏳ ${done}/${tasks.length} chunks · batch ${Math.floor(i/CONCURRENCY)+1}/${Math.ceil(tasks.length/CONCURRENCY)}${errorCount>0?` · ${errorCount} lỗi`:''}`,
+      });
+
+      const settled = await Promise.allSettled(
+        batch.map(async ({ ge, lt, conn }) => {
+          const url = `/api/tiktok-shop/sync-orders?full=true&from_ts=${ge}&to_ts=${lt}&shop_id=${conn.shop_id}`;
+          const res  = await fetch(url, { method: 'POST' });
+          const text = await res.text();
+          try { return JSON.parse(text); }
+          catch { return { error: `parse ${res.status}` }; }
+        })
+      );
+
+      done += batch.length;
+      for (const r of settled) {
+        if (r.status === 'rejected' || r.value?.error) { errorCount++; continue; }
+        totalSynced += r.value?.totalSynced || 0;
+        if (r.value?.results) allResults.push(...r.value.results);
+        if (r.value?.syncedAt) lastSyncedAt = r.value.syncedAt;
+      }
+    }
+
+    setSyncResult({
+      success: true, totalSynced, results: allResults, syncedAt: lastSyncedAt,
+      ...(errorCount > 0 ? { _warn: `${errorCount} chunk bị lỗi/timeout, dữ liệu có thể thiếu.` } : {}),
+    });
+    fetchStats(); fetchOrders(1, debouncedSearch, statusFilter, shopFilter); setPage(1);
+    fetchDashboard(dashRange, dashShop, connections);
     setSyncing(false);
   };
 
@@ -400,8 +431,9 @@ const TikTokOrdersTab = () => {
           <div style={{ fontWeight:700 }}>
             {syncResult._progress ? syncResult.message
               : syncResult.error ? `❌ ${syncResult.error}`
-              : `✅ Sync thành công — ${syncResult.totalSynced} đơn hàng được cập nhật`}
+              : `✅ Sync thành công — ${syncResult.totalSynced?.toLocaleString('vi-VN')} đơn hàng được cập nhật`}
           </div>
+          {syncResult._warn && <div style={{ marginTop:4, fontSize:'0.78rem', color:'#92400e' }}>⚠️ {syncResult._warn}</div>}
           {syncResult.results && (
             <div style={{ marginTop:8, display:'flex', flexDirection:'column', gap:3 }}>
               {syncResult.results.map((r,i) => (

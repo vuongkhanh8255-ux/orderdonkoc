@@ -180,6 +180,11 @@ export default async function handler(req, res) {
   // ?full=true → bỏ qua incremental, kéo toàn bộ 60 ngày
   const forceFullSync = req.query?.full === 'true' || req.body?.full === true;
 
+  // Direct window params: from_ts / to_ts / shop_id (per-shop per-window từ frontend)
+  const directFromTs  = req.query?.from_ts ? parseInt(req.query.from_ts) : null;
+  const directToTs    = req.query?.to_ts   ? parseInt(req.query.to_ts)   : null;
+  const shopIdFilter  = (req.query?.shop_id || '').trim() || null;
+
   const now = Math.floor(Date.now() / 1000);
   const WINDOW_SEC   = 15 * 24 * 3600;
   const BUFFER_SEC   = 12 * 3600;      // 12h overlap (tránh bỏ sót đơn API delay)
@@ -188,7 +193,12 @@ export default async function handler(req, res) {
   const results = [];
   let totalSynced = 0;
 
-  for (const conn of connections) {
+  // Lọc theo shop_id nếu có (per-shop sync)
+  const connsToProcess = shopIdFilter
+    ? connections.filter(c => String(c.shop_id) === String(shopIdFilter))
+    : connections;
+
+  for (const conn of connsToProcess) {
     const shopLabel = conn.seller_name || conn.shop_id || '(unknown)';
     try {
       // ── Auto-refresh token nếu còn < 7 ngày hết hạn ──
@@ -202,7 +212,11 @@ export default async function handler(req, res) {
       let timeWindows;
       let syncMode;
 
-      if (forceFullSync) {
+      if (directFromTs && directToTs) {
+        // Per-window call từ frontend: 1 shop × 1 khoảng thời gian cụ thể
+        syncMode = 'direct-window';
+        timeWindows = [{ createTimeGe: directFromTs, createTimeLt: directToTs }];
+      } else if (forceFullSync) {
         // ── Full resync: từ 01/04/2026 đến nay ──
         syncMode = 'full';
         const FROM_TS = 1775001600; // 01/04/2026 00:00:00 UTC
