@@ -206,12 +206,14 @@ export default async function handler(req, res) {
   for (const conn of connsToProcess) {
     const shopLabel = conn.seller_name || conn.shop_id || '(unknown)';
     try {
-      // ── Auto-refresh token nếu còn < 7 ngày hết hạn ──
-      const REFRESH_THRESHOLD_MS = 7 * 24 * 3600 * 1000;
-      const expiresAt = conn.access_token_expires_at ? new Date(conn.access_token_expires_at) : null;
-      const shouldRefresh = !expiresAt || (expiresAt - Date.now()) < REFRESH_THRESHOLD_MS;
-      if (shouldRefresh) {
-        await tryRefreshToken({ appKey, appSecret, conn, supabase });
+      // ── Auto-refresh token — skip khi đang per-window sync (tránh hang) ──
+      if (!directFromTs && !directToTs) {
+        const REFRESH_THRESHOLD_MS = 7 * 24 * 3600 * 1000;
+        const expiresAt = conn.access_token_expires_at ? new Date(conn.access_token_expires_at) : null;
+        const shouldRefresh = !expiresAt || (expiresAt - Date.now()) < REFRESH_THRESHOLD_MS;
+        if (shouldRefresh) {
+          await tryRefreshToken({ appKey, appSecret, conn, supabase });
+        }
       }
 
       let timeWindows;

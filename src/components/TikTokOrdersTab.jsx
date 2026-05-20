@@ -328,7 +328,7 @@ const TikTokOrdersTab = () => {
       }
     }
 
-    const CONCURRENCY = 5; // 5 request song song — tránh TikTok rate limit
+    const CONCURRENCY = 1; // tuần tự 1 request — an toàn nhất, không timeout
     let done = 0;
 
     for (let i = 0; i < tasks.length; i += CONCURRENCY) {
