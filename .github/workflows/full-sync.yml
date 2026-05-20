@@ -3,10 +3,6 @@ name: TikTok Full Resync
 on:
   workflow_dispatch:
     inputs:
-      shop_ids:
-        description: 'Shop IDs cách nhau dấu phẩy (để trống = tất cả shop)'
-        required: false
-        default: ''
       from_date:
         description: 'Từ ngày (YYYY-MM-DD, mặc định 2026-04-01)'
         required: false
@@ -15,6 +11,10 @@ on:
         description: 'Kích thước mỗi chunk (ngày, mặc định 3)'
         required: false
         default: '3'
+      skip_eherb_vn:
+        description: 'Bỏ qua eHerb VN (token lỗi)? yes/no'
+        required: false
+        default: 'yes'
 
   schedule:
     - cron: '0 2 * * *'
@@ -28,11 +28,25 @@ jobs:
     steps:
       - name: Run full resync
         env:
-          SHOP_IDS:    ${{ github.event.inputs.shop_ids }}
-          FROM_DATE:   ${{ github.event.inputs.from_date || '2026-04-01' }}
-          WINDOW_DAYS: ${{ github.event.inputs.window_days || '3' }}
+          FROM_DATE:      ${{ github.event.inputs.from_date || '2026-04-01' }}
+          WINDOW_DAYS:    ${{ github.event.inputs.window_days || '3' }}
+          SKIP_EHERB_VN: ${{ github.event.inputs.skip_eherb_vn || 'yes' }}
         run: |
+          set +e   # đừng chết khi có lỗi từng bước
           BASE_URL="https://koc-tool.vercel.app/api/tiktok-shop/sync-orders"
+
+          # ── Danh sách shop (hardcoded từ Supabase) ──────────────────
+          # Format: "shop_id|Tên shop"
+          SHOPS=(
+            "7495107349171898427|Body Miss"
+            "7495838925500090511|eHerb HCM"
+            "7494813818973817115|Milaganics VN"
+            "7495831977917385095|Moaw Moaws VN"
+          )
+          # eHerb VN token đang lỗi — thêm lại khi đã fix
+          if [ "$SKIP_EHERB_VN" != "yes" ]; then
+            SHOPS+=("7494529979361168222|eHerb VN")
+          fi
 
           FROM_TS=$(date -d "$FROM_DATE" +%s 2>/dev/null || date -j -f "%Y-%m-%d" "$FROM_DATE" +%s)
           NOW=$(date +%s)
@@ -42,7 +56,7 @@ jobs:
           echo "FROM : $FROM_DATE ($FROM_TS)"
           echo "NOW  : $(date -u -d @$NOW +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"
           echo "CHUNK: ${WINDOW_DAYS:-3} ngày"
-          echo "SHOPS: ${SHOP_IDS:-tất cả}"
+          echo "SHOPS: ${#SHOPS[@]} shop(s)"
           echo "============================================"
 
           total_synced=0
@@ -60,44 +74,30 @@ jobs:
             echo ""
             echo "── Chunk $chunk: $from_fmt → $lt_fmt ──"
 
-            PARAMS="full=true&from_ts=${t}&to_ts=${lt}"
+            for entry in "${SHOPS[@]}"; do
+              shop_id="${entry%%|*}"
+              shop_name="${entry##*|}"
 
-            if [ -n "$SHOP_IDS" ]; then
-              IFS=',' read -ra SHOPS <<< "$SHOP_IDS"
-              for shop_id in "${SHOPS[@]}"; do
-                shop_id=$(echo "$shop_id" | xargs)
-                [ -z "$shop_id" ] && continue
-                echo -n "  shop $shop_id ... "
-                resp=$(curl -s -m 280 -X POST \
-                  "${BASE_URL}?${PARAMS}&shop_id=${shop_id}" \
-                  -H "Content-Type: application/json")
-                echo "raw: $(echo "$resp" | cut -c1-300)"
-                if echo "$resp" | grep -q '"success":true'; then
-                  synced=$(echo "$resp" | grep -o '"totalSynced":[0-9]*' | head -1 | grep -o '[0-9]*')
-                  synced=${synced:-0}
-                  echo "  ✅ $synced đơn"
-                  total_synced=$(( total_synced + synced ))
-                else
-                  echo "  ❌ lỗi"
-                  total_errors=$(( total_errors + 1 ))
-                fi
-              done
-            else
-              echo -n "  tất cả shops ... "
-              resp=$(curl -s -m 280 -X POST \
-                "${BASE_URL}?${PARAMS}" \
-                -H "Content-Type: application/json")
-              echo "raw: $(echo "$resp" | cut -c1-400)"
-              if echo "$resp" | grep -q '"success":true'; then
+              printf "  %-18s " "$shop_name"
+
+              resp=$(curl -s -m 60 -X POST \
+                "${BASE_URL}?full=true&from_ts=${t}&to_ts=${lt}&shop_id=${shop_id}" \
+                -H "Content-Type: application/json" 2>/dev/null) || resp=""
+
+              if [ -z "$resp" ]; then
+                echo "❌ no response (curl timeout/error)"
+                total_errors=$(( total_errors + 1 ))
+              elif echo "$resp" | grep -q '"success":true'; then
                 synced=$(echo "$resp" | grep -o '"totalSynced":[0-9]*' | head -1 | grep -o '[0-9]*')
                 synced=${synced:-0}
-                echo "  ✅ $synced đơn"
+                echo "✅ $synced đơn"
                 total_synced=$(( total_synced + synced ))
               else
-                echo "  ❌ lỗi"
+                err=$(echo "$resp" | grep -o '"error":"[^"]*"' | head -1)
+                echo "❌ $err  |  $(echo "$resp" | cut -c1-120)"
                 total_errors=$(( total_errors + 1 ))
               fi
-            fi
+            done
 
             t=$lt
             sleep 1
