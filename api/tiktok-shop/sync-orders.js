@@ -33,7 +33,12 @@ const tryRefreshToken = async ({ appKey, appSecret, conn, supabase }) => {
     url.searchParams.set('refresh_token', conn.refresh_token);
     url.searchParams.set('grant_type',    'refresh_token');
 
-    const res  = await fetch(url.toString());
+    const ctrl = new AbortController();
+    const tid  = setTimeout(() => ctrl.abort(), 6000); // timeout 6s
+    let res;
+    try { res = await fetch(url.toString(), { signal: ctrl.signal }); }
+    catch (e) { clearTimeout(tid); console.warn('[sync-orders] token refresh timeout/abort'); return false; }
+    clearTimeout(tid);
     const text = await res.text();
     let payload;
     try { payload = JSON.parse(text); } catch { return false; }
