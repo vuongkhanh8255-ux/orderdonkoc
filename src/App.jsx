@@ -23,6 +23,9 @@ import TaskNoteTab from './components/TaskNoteTab';
 import TikTokShopCallback from './components/TikTokShopCallback';
 import ListedPriceTab from './components/ListedPriceTab';
 import TikTokOrdersTab from './components/TikTokOrdersTab';
+import CostingTab from './components/CostingTab';
+import CrmTab from './components/CrmTab';
+import ShopAnalyticsTab from './components/ShopAnalyticsTab';
 
 const SESSION_KEY = 'sk_session';
 
@@ -66,7 +69,7 @@ function App() {
 function AppMain({ user, onLogout, allowedViews }) {
   const defaultView = allowedViews[0] || 'dashboard';
   const [currentView, setCurrentView]   = useState(defaultView);
-  const [openGroups, setOpenGroups]     = useState({ ecom: true, cskh: true, livestream: true, booking: true, archive: true, camp: true, tools: true });
+  const [openGroups, setOpenGroups]     = useState({ ecom: true, crm: true, cskh: true, livestream: true, booking: true, archive: true, camp: true, tools: true });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarHovered,   setSidebarHovered]   = useState(false);
   const [pwModalOpen, setPwModalOpen]   = useState(false);
@@ -208,8 +211,13 @@ function AppMain({ user, onLogout, allowedViews }) {
               { key: 'ecom', label: '🛍️ Ecom', emoji: '🛍️', items: [
                 { view: 'stella_dashboard',  icon: '📊', name: 'Stella Dashboard' },
                 { view: 'listed_price',      icon: '🏷️', name: 'Bảng giá niêm yết' },
+                { view: 'costing',           icon: '💰', name: 'Giá Cost' },
                 { view: 'tiktok_orders',     icon: '🛒', name: 'TikTok Shop Orders' },
+                { view: 'shop_analytics',    icon: '📈', name: 'TikTok Analytics' },
                 { view: 'camp_registration', icon: '🎪', name: 'Đăng Kí Camp' },
+              ]},
+              { key: 'crm', label: '👥 CRM', emoji: '👥', items: [
+                { view: 'crm', icon: '👥', name: 'CRM' },
               ]},
               { key: 'cskh', label: '📋 CSKH', emoji: '📋', items: [
                 { view: 'cskh', icon: '📋', name: 'CSKH' },
@@ -340,13 +348,16 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'data_archive' && <DataArchiveTab />}
           {currentView === 'gmv_realtime' && <GmvRealtimeTab />}
           {currentView === 'stella_dashboard' && <StellaDashboardTab />}
-          {currentView === 'listed_price' && <ListedPriceTab />}
+          {currentView === 'listed_price' && <ListedPriceTab user={user} />}
+          {currentView === 'costing' && <CostingTab />}
           {currentView === 'tiktok_orders' && <TikTokOrdersTab />}
           {currentView === 'cskh' && <CSKHTab />}
           {currentView === 'livestream' && <LivestreamTab />}
           {currentView === 'landing_orders' && <LandingOrders />}
           {currentView === 'camp_registration' && <CampRegistrationTab />}
           {currentView === 'task_notes' && <TaskNoteTab />}
+          {currentView === 'crm' && <CrmTab />}
+          {currentView === 'shop_analytics' && <ShopAnalyticsTab />}
 
           {/* BookingPerformanceTab luôn mounted, chỉ ẩn/hiện bằng display
               → state và data cache không mất khi đổi tab */}

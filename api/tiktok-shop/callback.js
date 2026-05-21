@@ -107,30 +107,61 @@ export default async function handler(req, res) {
     return res.status(200).send(html({ title: 'TikTok Shop Callback', status: 'Callback URL hoạt động, chưa có authorization code.', details: Array.from(reqUrl.searchParams.entries()) }));
   }
 
-  const appKey      = process.env.TIKTOK_SHOP_APP_KEY?.trim();
-  const appSecret   = process.env.TIKTOK_SHOP_APP_SECRET?.trim();
+  // ── Multi-app support: Orders + Analytics ────────────────────────────────
+  const apps = [
+    { key: process.env.TIKTOK_SHOP_APP_KEY?.trim(),      secret: process.env.TIKTOK_SHOP_APP_SECRET?.trim(),      type: 'orders',    table: 'tiktok_shop_connections' },
+    { key: process.env.TIKTOK_ANALYTICS_APP_KEY?.trim(),  secret: process.env.TIKTOK_ANALYTICS_APP_SECRET?.trim(), type: 'analytics', table: 'tiktok_analytics_connections' },
+  ].filter(a => a.key && a.secret);
+
   const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL)?.trim();
   const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY)?.trim();
 
-  if (!appKey || !appSecret || !supabaseUrl || !supabaseKey) {
+  if (apps.length === 0 || !supabaseUrl || !supabaseKey) {
     return res.status(500).send(html({
       title: 'Thiếu cấu hình', tone: 'error',
-      status: 'Cần set TIKTOK_SHOP_APP_KEY, TIKTOK_SHOP_APP_SECRET và Supabase env trên Vercel.',
+      status: 'Cần set TIKTOK_SHOP_APP_KEY/SECRET hoặc TIKTOK_ANALYTICS_APP_KEY/SECRET + Supabase env trên Vercel.',
       details: [
-        ['TIKTOK_SHOP_APP_KEY',    appKey      ? '✅' : '❌ Missing'],
-        ['TIKTOK_SHOP_APP_SECRET', appSecret   ? '✅' : '❌ Missing'],
-        ['SUPABASE_URL',           supabaseUrl ? '✅' : '❌ Missing'],
-        ['SUPABASE key',           supabaseKey ? '✅' : '❌ Missing'],
+        ['TIKTOK_SHOP_APP_KEY',      process.env.TIKTOK_SHOP_APP_KEY      ? '✅' : '⚠️ Missing'],
+        ['TIKTOK_ANALYTICS_APP_KEY', process.env.TIKTOK_ANALYTICS_APP_KEY ? '✅' : '⚠️ Missing'],
+        ['SUPABASE_URL',             supabaseUrl ? '✅' : '❌ Missing'],
+        ['SUPABASE key',             supabaseKey ? '✅' : '❌ Missing'],
       ]
     }));
   }
 
   try {
-    // ── 1. Token exchange ───────────────────────────────────────────────────
-    const { httpStatus, payload } = await exchangeToken(appKey, appSecret, authCode);
+    // ── 1. Token exchange — try each app key until one succeeds ─────────────
+    let matchedApp = null;
+    let payload    = null;
+    let httpStatus = 0;
+
+    for (const app of apps) {
+      const result = await exchangeToken(app.key, app.secret, authCode);
+      const code   = result.payload?.code !== undefined ? Number(result.payload.code) : null;
+      // 36004003 = invalid client_key → wrong app, try next
+      if (code === 36004003) continue;
+      matchedApp = app;
+      payload    = result.payload;
+      httpStatus = result.httpStatus;
+      break;
+    }
+
+    if (!matchedApp) {
+      return res.status(502).send(html({
+        title: 'Không khớp app key', tone: 'error',
+        status: 'Auth code không khớp với bất kỳ app nào (Orders / Analytics). Kiểm tra lại env vars trên Vercel.',
+        details: apps.map(a => [a.type, `key=${a.key?.slice(0,8)}... ❌`]),
+      }));
+    }
+
+    const appKey    = matchedApp.key;
+    const appSecret = matchedApp.secret;
+    const appType   = matchedApp.type;
+    const saveTable = matchedApp.table;
     const d        = payload?.data || payload;
     const apiCode  = payload?.code !== undefined ? Number(payload.code) : null;
     const ok       = httpStatus >= 200 && httpStatus < 300 && (apiCode === null || apiCode === 0) && !!d?.access_token;
+    console.log(`[callback] matched app: ${appType} (${appKey?.slice(0,8)}...)`);
 
     if (!ok) {
       return res.status(502).send(html({
@@ -169,7 +200,7 @@ export default async function handler(req, res) {
     });
 
     const record = {
-      connection_type:          'shop',
+      connection_type:          appType,
       open_id:                  d.open_id        || null,
       shop_id:                  shopId,
       shop_cipher:              shopCipher,
@@ -188,19 +219,20 @@ export default async function handler(req, res) {
 
     const conflictKey = record.open_id ? 'open_id' : record.shop_id ? 'shop_id' : undefined;
     const { error: saveError } = conflictKey
-      ? await supabase.from('tiktok_shop_connections').upsert(record, { onConflict: conflictKey })
-      : await supabase.from('tiktok_shop_connections').insert(record);
+      ? await supabase.from(saveTable).upsert(record, { onConflict: conflictKey })
+      : await supabase.from(saveTable).insert(record);
 
     if (saveError) throw saveError;
 
     return res.status(200).send(html({
       title: 'TikTok Shop đã kết nối ✅',
-      status: 'Đã đổi token thành công và lưu vào Supabase. Bạn có thể đóng trang này.',
+      status: `Đã đổi token thành công (${appType}) và lưu vào Supabase. Bạn có thể đóng trang này.`,
       details: [
+        ['app_type',               appType],
         ['seller_name',            record.seller_name          || '-'],
         ['open_id',                record.open_id              || '-'],
         ['shop_id',                record.shop_id              || '-'],
-        ['shop_cipher',            record.shop_cipher ? '✅ Có' : '⚠️ Không có (sẽ sync order bị lỗi)'],
+        ['shop_cipher',            record.shop_cipher ? '✅ Có' : '⚠️ Không có'],
         ['access_token_expires_at', record.access_token_expires_at || '-'],
         ['seller_base_region',     record.seller_base_region   || '-'],
       ]
