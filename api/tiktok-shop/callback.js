@@ -135,22 +135,36 @@ export default async function handler(req, res) {
     let payload    = null;
     let httpStatus = 0;
 
+    let lastError = null;
     for (const app of apps) {
       const result = await exchangeToken(app.key, app.secret, authCode);
       const code   = result.payload?.code !== undefined ? Number(result.payload.code) : null;
-      // 36004003 = invalid client_key → wrong app, try next
-      if (code === 36004003) continue;
-      matchedApp = app;
-      payload    = result.payload;
-      httpStatus = result.httpStatus;
-      break;
+      const d      = result.payload?.data || result.payload;
+      const ok     = result.httpStatus >= 200 && result.httpStatus < 300
+                     && (code === null || code === 0) && !!d?.access_token;
+
+      if (ok) {
+        matchedApp = app;
+        payload    = result.payload;
+        httpStatus = result.httpStatus;
+        break;
+      }
+      // Wrong app key or auth code not for this app → try next
+      lastError = result;
+      console.log(`[callback] ${app.type} failed: code=${code} msg=${result.payload?.message}`);
     }
 
     if (!matchedApp) {
+      const lastPayload = lastError?.payload;
       return res.status(502).send(html({
-        title: 'Không khớp app key', tone: 'error',
-        status: 'Auth code không khớp với bất kỳ app nào (Orders / Analytics). Kiểm tra lại env vars trên Vercel.',
-        details: apps.map(a => [a.type, `key=${a.key?.slice(0,8)}... ❌`]),
+        title: 'Không đổi được TikTok token', tone: 'error',
+        status: `Auth code không thành công với app nào. ${lastPayload?.message || ''}`,
+        details: [
+          ...apps.map(a => [a.type, `key=${a.key?.slice(0,8)}...`]),
+          ['last_error_code',    lastPayload?.code ?? '-'],
+          ['last_error_message', lastPayload?.message ?? '-'],
+          ['tip', 'Auth code có thể đã hết hạn. Thử uỷ quyền lại.'],
+        ],
       }));
     }
 
@@ -159,22 +173,7 @@ export default async function handler(req, res) {
     const appType   = matchedApp.type;
     const saveTable = matchedApp.table;
     const d        = payload?.data || payload;
-    const apiCode  = payload?.code !== undefined ? Number(payload.code) : null;
-    const ok       = httpStatus >= 200 && httpStatus < 300 && (apiCode === null || apiCode === 0) && !!d?.access_token;
     console.log(`[callback] matched app: ${appType} (${appKey?.slice(0,8)}...)`);
-
-    if (!ok) {
-      return res.status(502).send(html({
-        title: 'Không đổi được TikTok token', tone: 'error',
-        status: payload?.message || `HTTP ${httpStatus}`,
-        details: [
-          ['http_status',  httpStatus],
-          ['api_code',     apiCode ?? '-'],
-          ['api_message',  payload?.message || '-'],
-          ['raw_response', JSON.stringify(payload)],
-        ]
-      }));
-    }
 
     const accessToken = d.access_token;
 
