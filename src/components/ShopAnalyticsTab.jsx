@@ -152,6 +152,8 @@ const ShopAnalyticsTab = () => {
   const [dailyData, setDailyData]   = useState([]);
   const [prevData, setPrevData]     = useState([]);
   const [lastSync, setLastSync]     = useState(null);
+  const [tablePage, setTablePage]   = useState(0);
+  const TABLE_PAGE_SIZE = 10;
 
   const [dateRange, setDateRange] = useState(() => {
     const end = new Date();
@@ -163,6 +165,7 @@ const ShopAnalyticsTab = () => {
     const end = new Date();
     const start = new Date(); start.setDate(start.getDate() - days);
     setDateRange({ start: toYmd(start), end: toYmd(end) });
+    setTablePage(0);
   };
 
   const periodLabel = useMemo(() => {
@@ -594,11 +597,21 @@ const ShopAnalyticsTab = () => {
             </div>
           </div>
 
-          {/* ── Bảng thống kê chi tiết ───────────────────────────────────────── */}
-          {computed.dailyTable.length > 0 && (
+          {/* ── Bảng thống kê chi tiết (paginated) ────────────────────────────── */}
+          {computed.dailyTable.length > 0 && (() => {
+            const totalPages = Math.ceil(computed.dailyTable.length / TABLE_PAGE_SIZE);
+            const pageRows = computed.dailyTable.slice(tablePage * TABLE_PAGE_SIZE, (tablePage + 1) * TABLE_PAGE_SIZE);
+            const pgBtn = (pg, label, disabled) => (
+              <button key={label} onClick={() => !disabled && setTablePage(pg)} disabled={disabled}
+                style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #e5e7eb', background: pg === tablePage && typeof label === 'number' ? '#ea580c' : '#fff', color: pg === tablePage && typeof label === 'number' ? '#fff' : disabled ? '#cbd5e1' : '#374151', fontSize: '0.76rem', fontWeight: 600, cursor: disabled ? 'default' : 'pointer', minWidth: 32 }}>
+                {typeof label === 'number' ? label + 1 : label}
+              </button>
+            );
+            return (
             <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 16, overflow: 'hidden', marginBottom: 24, boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
-              <div style={{ padding: '16px 22px', borderBottom: '1px solid #f1f5f9' }}>
+              <div style={{ padding: '16px 22px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 800 }}>📋 Thống kê chi tiết theo ngày</h3>
+                <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>{computed.dailyTable.length} ngày · Trang {tablePage + 1}/{totalPages}</span>
               </div>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -617,7 +630,7 @@ const ShopAnalyticsTab = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {computed.dailyTable.map((row, i) => (
+                    {pageRows.map((row, i) => (
                       <tr key={i} style={{ borderBottom: '1px solid #f8fafc' }}
                         onMouseEnter={e => e.currentTarget.style.background = '#fafbfc'}
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
@@ -664,8 +677,25 @@ const ShopAnalyticsTab = () => {
                   </tfoot>
                 </table>
               </div>
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div style={{ padding: '12px 22px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4 }}>
+                  {pgBtn(tablePage - 1, '‹', tablePage === 0)}
+                  {Array.from({ length: totalPages }, (_, i) => i).map(pg => {
+                    // Show first, last, and pages around current
+                    if (pg === 0 || pg === totalPages - 1 || Math.abs(pg - tablePage) <= 1) {
+                      return pgBtn(pg, pg, false);
+                    }
+                    if (pg === 1 && tablePage > 3) return <span key={`d${pg}`} style={{ padding: '0 4px', color: '#94a3b8', fontSize: '0.76rem' }}>…</span>;
+                    if (pg === totalPages - 2 && tablePage < totalPages - 4) return <span key={`d${pg}`} style={{ padding: '0 4px', color: '#94a3b8', fontSize: '0.76rem' }}>…</span>;
+                    return null;
+                  })}
+                  {pgBtn(tablePage + 1, '›', tablePage >= totalPages - 1)}
+                </div>
+              )}
             </div>
-          )}
+            );
+          })()}
 
           {/* ── Hiệu suất theo Shop ──────────────────────────────────────────── */}
           {computed.shopList.length > 0 && (
