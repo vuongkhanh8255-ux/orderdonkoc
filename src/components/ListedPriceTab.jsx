@@ -135,9 +135,11 @@ const calcFinalPrice = (row, promoStr) => {
   }
   const aff = parseFloat(row.affPercent) || 0;
   const ads = parseFloat(row.adsPercent) || 0;
-  const affDeduction = fs * aff / 100;
-  const adsDeduction = fs * ads / 100;
-  const final = total / unitCount - affDeduction - adsDeduction;
+  const platformRate = row.platform === 'Shopee' ? 0.285 : 0.28;
+  const affDeduction      = fs * aff / 100;
+  const adsDeduction      = fs * ads / 100;
+  const platformDeduction = fs * platformRate;
+  const final = total / unitCount - affDeduction - adsDeduction - platformDeduction;
   return Number.isFinite(final) && final >= 0 ? Math.round(final) : null;
 };
 const getFormulaHint = (row, promoStr) => {
@@ -165,9 +167,11 @@ const getFormulaHint = (row, promoStr) => {
   const perUnit = isCombo ? `(${totalStr}) ÷ ${count}` : totalStr;
   const aff = parseFloat(row.affPercent) || 0;
   const ads = parseFloat(row.adsPercent) || 0;
+  const platformPct = isTikTok ? 28 : 28.5;
   const parts = [perUnit];
   if (aff) parts.push(`FS×${aff}%`);
   if (ads) parts.push(`FS×${ads}%`);
+  parts.push(`FS×${platformPct}%`);
   return parts.length > 1 ? `${parts[0]} − ${parts.slice(1).join(' − ')}` : parts[0];
 };
 
@@ -423,8 +427,27 @@ const FillHandle = ({ onMouseDown, active }) => (
 );
 
 // ── Main Component ────────────────────────────────────────────────────────────
-const ListedPriceTab = () => {
+const ListedPriceTab = ({ user }) => {
   const { brands: ctxBrands = [] } = useContext(AppDataContext) || {};
+  const isAdmin = user?.role === 'admin';
+
+  // ── Cost map: barcode → giá gốc (chỉ admin) ────────────────────────────────
+  const costMap = useMemo(() => {
+    if (!isAdmin) return {};
+    try {
+      const stored = JSON.parse(localStorage.getItem('costing_data_v1'));
+      if (!stored?.rows || !stored?.headers) return {};
+      const maKey   = stored.headers.find(h => /^mã$/i.test(h.trim())) || stored.headers.find(h => /^mã hàng$/i.test(h.trim())) || '';
+      const costKey = stored.headers.find(h => /COSTING T3\.2026 AMIS V2/i.test(h)) || stored.headers.find(h => /COSTING.*AMIS V2/i.test(h)) || '';
+      if (!maKey || !costKey) return {};
+      const map = {};
+      for (const row of stored.rows) {
+        const bc = String(row[maKey] ?? '').replace(/\./g, '').trim();
+        if (bc) map[bc] = row[costKey];
+      }
+      return map;
+    } catch { return {}; }
+  }, [isAdmin]);
 
   const [rows, setRows]             = useState(loadRows);
   const [brands, setBrands]         = useState(() => loadArray(BRANDS_KEY, DEFAULT_BRANDS));
@@ -437,6 +460,7 @@ const ListedPriceTab = () => {
   const [filterBrand,     setFilterBrand]     = useState('');
   const [filterPromotion, setFilterPromotion] = useState('');
   const [filterBarcode,   setFilterBarcode]   = useState('');
+  const [sortBrand,       setSortBrand]       = useState('none'); // 'none' | 'asc' | 'desc'
 
   const [addingBrand,     setAddingBrand]     = useState(false);
   const [addingPromotion, setAddingPromotion] = useState(false);
@@ -627,9 +651,9 @@ const ListedPriceTab = () => {
         variants: rows.filter(r => r.rowType === 'variant' && r.groupId === product.id),
       }));
 
-    return allGroups.filter(({ product, variants }) => {
-      if (filterBrand && !variants.some(v => v.brand === filterBrand)) return false;
-      if (filterPromotion && !variants.some(v => v.promotion === filterPromotion)) return false;
+    const filtered = allGroups.filter(({ product, variants }) => {
+      if (filterBrand && !variants.some(v => v.brand === filterBrand) && product.brand !== filterBrand) return false;
+      if (filterPromotion && !variants.some(v => v.promotion === filterPromotion) && product.promotion !== filterPromotion) return false;
       if (filterBarcode && !variants.some(v => String(v.barcode || '').toLowerCase().includes(filterBarcode.toLowerCase()))) return false;
       if (filterText) {
         const combined = [product.productName, product.link, ...variants.flatMap(v => [v.barcode, v.productName, v.brand])].join(' ').toLowerCase();
@@ -637,7 +661,21 @@ const ListedPriceTab = () => {
       }
       return true;
     });
-  }, [rows, filterBrand, filterPromotion, filterBarcode, filterText]);
+
+    if (sortBrand !== 'none') {
+      filtered.sort((a, b) => {
+        const ba = (a.product.brand || '').toLowerCase();
+        const bb = (b.product.brand || '').toLowerCase();
+        const brandCmp = sortBrand === 'asc' ? ba.localeCompare(bb, 'vi') : bb.localeCompare(ba, 'vi');
+        if (brandCmp !== 0) return brandCmp;
+        // Same brand: TikTok trước, Shopee sau
+        const pa = (a.product.platform || 'TikTok') === 'Shopee' ? 1 : 0;
+        const pb = (b.product.platform || 'TikTok') === 'Shopee' ? 1 : 0;
+        return pa - pb;
+      });
+    }
+    return filtered;
+  }, [rows, filterBrand, filterPromotion, filterBarcode, filterText, sortBrand]);
 
   const hasFilter   = filterBrand || filterPromotion || filterBarcode || filterText;
   const clearFilter = () => { setFilterText(''); setFilterBrand(''); setFilterPromotion(''); setFilterBarcode(''); };
@@ -700,14 +738,24 @@ const ListedPriceTab = () => {
     const autoFinal   = (!isEditing && !rawValue && col.key === 'finalPrice') ? calcFinalPrice(effectiveRow, product?.promotion) : null;
     const formulaHint = autoFinal !== null ? getFormulaHint(effectiveRow, product?.promotion) : null;
 
+    // Admin: subtract cost (Giá gốc) from finalPrice display
+    const adminCostNum = (isAdmin && col.key === 'finalPrice' && autoFinal !== null) ? (() => {
+      const bc = String(row.barcode || '').replace(/\./g, '').trim();
+      const cv = costMap[bc];
+      if (cv === undefined || cv === '') return NaN;
+      const n = parseFloat(String(cv).replace(/,/g, ''));
+      return isNaN(n) ? NaN : n;
+    })() : NaN;
+    const displayFinal = (autoFinal !== null && !isNaN(adminCostNum)) ? Math.round(autoFinal - adminCostNum) : autoFinal;
+
     return (
       <td key={col.key} style={{ position: 'relative', outline: isDragSrc ? '2px solid #ea580c' : undefined }}
         onMouseEnter={() => { if (fillDrag) setFillOver(index); }}>
         {autoFinal !== null && !isEditing ? (
           <div onClick={() => setEditingCell({ id: row.id, key: col.key })} title="Click để ghi đè"
             style={{ textAlign: 'center', padding: '2px 8px', minHeight: 34, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'text', background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', borderRadius: 9, border: '1px dashed #86efac', gap: 1 }}>
-            <span style={{ color: '#059669', fontWeight: 700, fontSize: '0.82rem' }}>+ {fmtResult(autoFinal)}</span>
-            {formulaHint && <span style={{ fontSize: '0.6rem', color: '#16a34a', opacity: 0.75, fontFamily: 'monospace', lineHeight: 1.2 }}>{formulaHint}</span>}
+            <span style={{ color: '#059669', fontWeight: 700, fontSize: '0.82rem' }}>+ {fmtResult(displayFinal)}</span>
+            {formulaHint && <span style={{ fontSize: '0.6rem', color: '#16a34a', opacity: 0.75, fontFamily: 'monospace', lineHeight: 1.2 }}>{formulaHint}{!isNaN(adminCostNum) ? ` − ${adminCostNum.toLocaleString('vi-VN')}` : ''}</span>}
           </div>
         ) : (
           <input type="text" value={displayValue}
@@ -784,6 +832,12 @@ const ListedPriceTab = () => {
               <option value="">Tất cả brand</option>
               {brands.map(b => <option key={b} value={b}>{b}</option>)}
             </select>
+            <button
+              onClick={() => setSortBrand(s => s === 'none' ? 'asc' : s === 'asc' ? 'desc' : 'none')}
+              title={sortBrand === 'none' ? 'Sắp xếp theo brand A→Z' : sortBrand === 'asc' ? 'Đang A→Z, click để Z→A' : 'Đang Z→A, click để tắt'}
+              style={{ padding: '7px 9px', borderRadius: 8, border: `1.5px solid ${sortBrand !== 'none' ? '#fed7aa' : '#e5e7eb'}`, background: sortBrand !== 'none' ? '#fff7ed' : '#fff', color: sortBrand !== 'none' ? '#ea580c' : '#94a3b8', fontWeight: 900, cursor: 'pointer', fontSize: 13, lineHeight: 1 }}>
+              {sortBrand === 'none' ? '↕' : sortBrand === 'asc' ? '↑' : '↓'}
+            </button>
             <button onClick={() => setAddingBrand(v => !v)} style={addBtnStyle(addingBrand)}>+</button>
           </div>
           {addingBrand && <AddOptionInline placeholder="Tên brand mới..." onAdd={addBrand} onClose={() => setAddingBrand(false)} />}
@@ -843,11 +897,29 @@ const ListedPriceTab = () => {
             <thead>
               <tr>
                 <th className="listed-price-table__index">#</th>
-                {VARIANT_COLS.map((col, i) => (
-                  <th key={col.key} style={{ minWidth: col.minWidth }}>
-                    <span>{String.fromCharCode(65 + i)}</span>{col.label}
-                  </th>
-                ))}
+                {VARIANT_COLS.flatMap((col, i) => {
+                  const NUMERIC_KEYS = ['listedPrice', 'regularPrice', 'fsPrice', 'voucher', 'finalPrice'];
+                  const mainTh = (
+                    <th key={col.key} style={{ minWidth: col.minWidth, textAlign: NUMERIC_KEYS.includes(col.key) ? 'center' : 'left' }}>
+                      <span>{String.fromCharCode(65 + i)}</span>{col.label}
+                    </th>
+                  );
+                  if (col.key === 'finalPrice') {
+                    const result = [
+                      <th key="phi-san" style={{ minWidth: 90, textAlign: 'center', background: 'linear-gradient(180deg,#f0f9ff 0%,#e0f2fe 100%)', color: '#0369a1', borderBottom: '2px solid #bae6fd', borderRight: '1px solid #7dd3fc', fontSize: '0.68rem', fontWeight: 900, textTransform: 'uppercase', padding: '10px 8px', position: 'sticky', top: 0, zIndex: 20, whiteSpace: 'nowrap' }}>
+                        🏪 Phí sàn
+                      </th>
+                    ];
+                    if (isAdmin) result.push(
+                      <th key="gia-goc" style={{ minWidth: 110, textAlign: 'center', background: 'linear-gradient(180deg,#fdf2f8 0%,#fce7f3 100%)', color: '#9d174d', borderBottom: '2px solid #fbcfe8', borderRight: '1px solid #f9a8d4', fontSize: '0.68rem', fontWeight: 900, textTransform: 'uppercase', padding: '10px 8px', position: 'sticky', top: 0, zIndex: 20, whiteSpace: 'nowrap' }}>
+                        🔒 Giá gốc
+                      </th>
+                    );
+                    result.push(mainTh);
+                    return result;
+                  }
+                  return [mainTh];
+                })}
                 <th className="listed-price-table__actions">Thao tác</th>
               </tr>
             </thead>
@@ -856,9 +928,18 @@ const ListedPriceTab = () => {
                 const { product, variants } = g;
                 const isExpanded = expandedGroups.has(product.id);
                 const variantCount = variants.length;
+                const showBrandSep = sortBrand !== 'none' &&
+                  (groupIdx === 0 || groupedProducts[groupIdx - 1].product.brand !== product.brand);
 
                 return (
                   <Fragment key={product.id}>
+                    {showBrandSep && (
+                      <tr className="listed-price-brand-sep-row">
+                        <td colSpan={VARIANT_COLS.length + 3 + (isAdmin ? 1 : 0)}>
+                          <span>{product.brand || '— Chưa chọn brand —'}</span>
+                        </td>
+                      </tr>
+                    )}
                     {/* ── Product accordion header ── */}
                     <tr className="listed-price-product-row">
                       {/* Toggle + # */}
@@ -874,7 +955,7 @@ const ListedPriceTab = () => {
                       </td>
 
                       {/* Link + Product name + count — spans all variant cols */}
-                      <td colSpan={VARIANT_COLS.length} style={{ verticalAlign: 'middle', padding: '6px 8px' }}>
+                      <td colSpan={VARIANT_COLS.length + 1 + (isAdmin ? 1 : 0)} style={{ verticalAlign: 'middle', padding: '6px 8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           {/* Platform badge */}
                           <button type="button"
@@ -969,8 +1050,38 @@ const ListedPriceTab = () => {
                           <td className="listed-price-table__index" style={{ paddingLeft: 18, color: '#a78bfa', fontSize: '0.75rem' }}>
                             {vi + 1}
                           </td>
-                          {/* Variant cells */}
-                          {VARIANT_COLS.map(col => renderVariantCell(col, variant, variantIdx, product))}
+                          {/* Variant cells — Phí sàn + Giá gốc (admin) injected before Giá final */}
+                          {VARIANT_COLS.flatMap(col => {
+                            const mainTd = renderVariantCell(col, variant, variantIdx, product);
+                            if (col.key === 'finalPrice') {
+                              const platform = product?.platform || 'TikTok';
+                              const platformRate = platform === 'Shopee' ? 28.5 : 28;
+                              const fs = parseNumber(variant.fsPrice);
+                              const feeAmt = fs && fs > 0 ? Math.round(fs * platformRate / 100) : null;
+                              const result = [
+                                <td key="phi-san" style={{ padding: '5px 8px', borderBottom: '1px solid #e5e7eb', borderRight: '1px solid #e5e7eb', textAlign: 'center', whiteSpace: 'nowrap', background: '#f0f9ff' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                                    <span style={{ background: '#0369a1', color: '#fff', borderRadius: 6, padding: '1px 7px', fontSize: '0.72rem', fontWeight: 800 }}>{platformRate}%</span>
+                                    {feeAmt !== null && <span style={{ fontSize: '0.65rem', color: '#0369a1', fontWeight: 600 }}>{feeAmt.toLocaleString('vi-VN')}</span>}
+                                  </div>
+                                </td>
+                              ];
+                              if (isAdmin) {
+                                const bc = String(variant.barcode || '').replace(/\./g, '').trim();
+                                const cost = costMap[bc];
+                                result.push(
+                                  <td key="gia-goc" style={{ padding: '7px 8px', borderBottom: '1px solid #e5e7eb', borderRight: '1px solid #e5e7eb', textAlign: 'right', whiteSpace: 'nowrap', background: '#fdf2f8', color: '#9d174d', fontWeight: 600, fontSize: '0.78rem' }}>
+                                    {cost !== undefined && cost !== '' && !isNaN(parseFloat(String(cost).replace(/,/g, '')))
+                                      ? parseFloat(String(cost).replace(/,/g, '')).toLocaleString('vi-VN')
+                                      : '-'}
+                                  </td>
+                                );
+                              }
+                              result.push(mainTd);
+                              return result;
+                            }
+                            return [mainTd];
+                          })}
                           {/* Delete variant */}
                           <td className="listed-price-table__actions" style={{ verticalAlign: 'middle' }}>
                             <button type="button" title="Xóa phân loại" onClick={() => deleteVariant(variant.id)}>×</button>
@@ -989,7 +1100,7 @@ const ListedPriceTab = () => {
                         return (
                           <tr key={`gift-${i}`} className="listed-price-variant-row" style={{ background: '#fffbeb' }}>
                             <td className="listed-price-table__index" style={{ paddingLeft: 14, color: '#d97706', fontSize: '1rem' }}>🎁</td>
-                            <td colSpan={VARIANT_COLS.length} style={{ padding: '6px 10px' }}>
+                            <td colSpan={VARIANT_COLS.length + 1 + (isAdmin ? 1 : 0)} style={{ padding: '6px 10px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                 <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#92400e', flexShrink: 0 }}>
                                   {giftCount > 1 ? `Quà ${i + 1}:` : 'Quà tặng:'}
@@ -1021,7 +1132,7 @@ const ListedPriceTab = () => {
 
               {groupedProducts.length === 0 && (
                 <tr>
-                  <td colSpan={VARIANT_COLS.length + 2} style={{ textAlign: 'center', padding: '40px 20px', color: '#9ca3af', fontSize: '0.9rem' }}>
+                  <td colSpan={VARIANT_COLS.length + 2 + (isAdmin ? 1 : 0)} style={{ textAlign: 'center', padding: '40px 20px', color: '#9ca3af', fontSize: '0.9rem' }}>
                     {hasFilter ? 'Không tìm thấy sản phẩm nào.' : 'Chưa có sản phẩm. Bấm "+ Thêm sản phẩm" để bắt đầu.'}
                   </td>
                 </tr>

@@ -19,7 +19,7 @@ const SHOPEE_METRICS = [
     { key: 'sp_so_cuoc_tro_chuyen', label: 'Số cuộc trò chuyện 1 tháng', target: '' },
   ]},
   { group: 'QUẢN LÝ\nĐƠN HÀNG', items: [
-    { key: 'sp_danh_gia_tieu_cuc', label: 'Tỷ lệ đánh giá tiêu cực', target: '<30.00%' },
+    { key: 'sp_danh_gia_tieu_cuc', label: 'Tỷ lệ sản phẩm bật kênh hỏa tốc', target: '≥ 90%' },
     { key: 'sp_don_hang_khong_tc', label: 'Tỷ lệ đơn hàng không thành công', target: '<3.00%' },
     { key: 'sp_huy_don', label: 'Tỷ lệ hủy đơn', target: '<5.00%' },
     { key: 'sp_tra_hang_hoan_tien', label: 'Tỷ lệ Trả hàng/Hoàn tiền', target: '<5.00%' },

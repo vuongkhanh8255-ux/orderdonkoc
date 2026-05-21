@@ -1287,12 +1287,12 @@ tbody tr:last-child {
 .listed-price-table th {
     position: sticky;
     top: 0;
-    z-index: 2;
+    z-index: 20;
     padding: 12px 10px;
     background: linear-gradient(180deg, #fff7ed 0%, #ffedd5 100%);
     color: #c2410c;
     border-bottom: 1px solid #fed7aa;
-    border-right: 1px solid #ffedd5;
+    border-right: 1px solid #fdba74;
     font-size: 0.75rem;
     font-weight: 900;
     text-align: left;
@@ -1317,8 +1317,8 @@ tbody tr:last-child {
 
 .listed-price-table td {
     padding: 8px;
-    border-bottom: 1px solid #edf2f7;
-    border-right: 1px solid #f1f5f9;
+    border-bottom: 1px solid #cbd5e1;
+    border-right: 1px solid #cbd5e1;
     background: #fff;
 }
 
@@ -1428,7 +1428,7 @@ tbody tr:last-child {
 /* ── Product accordion header row ── */
 .listed-price-table tr.listed-price-product-row td {
     background: linear-gradient(90deg, #fafafa 0%, #f8f9fa 100%) !important;
-    border-top: 2px solid #e5e7eb !important;
+    border-top: 2px solid #cbd5e1 !important;
     border-bottom: 1px solid #e2e8f0 !important;
 }
 .listed-price-table tr.listed-price-product-row:first-child td {
@@ -1441,10 +1441,27 @@ tbody tr:last-child {
     background: linear-gradient(90deg, #fff7ed 0%, #fff8f4 100%) !important;
 }
 
+/* ── Brand separator row ── */
+.listed-price-table tr.listed-price-brand-sep-row td {
+    background: linear-gradient(90deg, #fff7ed 0%, #fef3c7 100%) !important;
+    border-top: 2px solid #fed7aa;
+    border-bottom: 2px solid #fed7aa;
+    padding: 5px 12px;
+    font-weight: 800;
+    font-size: 0.8rem;
+    color: #ea580c;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.listed-price-table tr.listed-price-brand-sep-row td span::before {
+    content: '▸ ';
+    opacity: 0.7;
+}
+
 /* ── Variant child row ── */
 .listed-price-table tr.listed-price-variant-row td {
     background: #ffffff;
-    border-bottom: 1px solid #f1f5f9;
+    border-bottom: 1px solid #cbd5e1;
 }
 .listed-price-table tr.listed-price-variant-row td:first-child {
     border-left: 4px solid #e0e7ff;

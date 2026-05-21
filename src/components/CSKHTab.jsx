@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import ReportCSTab from './ReportCSTab';
+import { supabase } from '../supabaseClient';
 
 const PROXY_URL  = 'https://xkyhvcmnkrxdtmwtghln.supabase.co/functions/v1/sheets-proxy';
 const CS_SHEET_ID = '1w9Y10K-eSasVbL1_jpT1_o1EkqCJq068OAwRg-ZPYcE';
@@ -478,10 +479,274 @@ function DanhGiaTab() {
   );
 }
 
+// ── TikTok Account Health Tab ─────────────────────────────────────────────────
+const SHOPS = ['BODYMISS', 'MILAGANICS', 'MOAW MOAWS', 'EHERB HCM'];
+
+const METRICS = [
+  // { key, label, target, unit, good: 'gte'|'lte', targetVal }
+  { section: 'CHĂM SÓC KHÁCH HÀNG', metrics: [
+    { key: 'reply_rate_12h',               label: 'Tỷ lệ trả lời 12 giờ',           target: '≥85%',    unit: '%',   good: 'gte', targetVal: 85 },
+    { key: 'satisfaction_rate',            label: 'Tỷ lệ hài lòng',                  target: '≥70%',    unit: '%',   good: 'gte', targetVal: 70 },
+    { key: 'monthly_conversations',        label: 'Số cuộc trò chuyện 1 tháng',      target: '',        unit: '',    good: null,  targetVal: null },
+    { key: 'negative_review_rate',         label: 'Tỷ lệ đánh giá tiêu cực',        target: '≤0.50%',  unit: '%',   good: 'lte', targetVal: 0.50 },
+    { key: 'negative_service_review_rate', label: 'Tỷ lệ đánh giá tiêu cực dịch vụ',target: '≤0.50%', unit: '%',   good: 'lte', targetVal: 0.50 },
+  ]},
+  { section: 'HIỆU SUẤT CỬA HÀNG', metrics: [
+    { key: 'return_refund_rate',   label: 'Tỷ lệ trả hàng/hoàn tiền',       target: '≤1.50%',  unit: '%',   good: 'lte', targetVal: 1.50 },
+    { key: 'seller_cancel_rate',   label: 'Tỷ lệ hủy do lỗi của người bán', target: '≤2.50%',  unit: '%',   good: 'lte', targetVal: 2.50 },
+    { key: 'late_shipping_rate',   label: 'Tỷ lệ gửi hàng muộn',            target: '≤4.00%',  unit: '%',   good: 'lte', targetVal: 4.00 },
+    { key: 'fast_shipping_rate',   label: 'Tỷ lệ gửi hàng nhanh',           target: '≥98%',    unit: '%',   good: 'gte', targetVal: 98 },
+    { key: 'shop_rating',          label: 'Đánh giá Shop',                   target: '≥4.00/5', unit: '/5',  good: 'gte', targetVal: 4.00 },
+  ]},
+];
+
+const EMPTY_HEALTH = {
+  report_date: new Date().toISOString().slice(0,10),
+  shop_name: SHOPS[0],
+  reply_rate_12h: '', satisfaction_rate: '', monthly_conversations: '',
+  negative_review_rate: '', negative_service_review_rate: '',
+  return_refund_rate: '', seller_cancel_rate: '', late_shipping_rate: '',
+  fast_shipping_rate: '', shop_rating: '',
+};
+
+function getStatus(metric, val) {
+  if (val === null || val === undefined || val === '') return 'none';
+  const n = Number(val);
+  if (isNaN(n)) return 'none';
+  if (metric.good === 'gte') return n >= metric.targetVal ? 'good' : 'bad';
+  if (metric.good === 'lte') return n <= metric.targetVal ? 'good' : 'bad';
+  return 'none';
+}
+
+function formatVal(metric, val) {
+  if (val === null || val === undefined || val === '') return '—';
+  if (metric.unit === '%') return `${val}%`;
+  if (metric.unit === '/5') return `${val}/5`;
+  return String(val);
+}
+
+function TikTokHealthTab() {
+  const [records, setRecords]     = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [showForm, setShowForm]   = useState(false);
+  const [saving, setSaving]       = useState(false);
+  const [form, setForm]           = useState(EMPTY_HEALTH);
+  const [selectedDate, setSelectedDate] = useState('');
+  const [deleteId, setDeleteId]   = useState(null);
+
+  const fetchData = async () => {
+    setLoading(true);
+    const { data } = await supabase.from('tiktok_account_health').select('*').order('report_date', { ascending: false });
+    setRecords(data || []);
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  // Danh sách tháng có dữ liệu
+  const availableDates = [...new Set((records || []).map(r => r.report_date))].sort().reverse();
+
+  // Chọn tháng mới nhất mặc định
+  useEffect(() => {
+    if (!selectedDate && availableDates.length > 0) setSelectedDate(availableDates[0]);
+  }, [availableDates, selectedDate]);
+
+  // Lọc theo tháng đang xem
+  const filtered = records.filter(r => !selectedDate || r.report_date === selectedDate);
+
+  const handleSave = async () => {
+    setSaving(true);
+    const payload = { ...form };
+    // Chuyển empty string → null
+    Object.keys(payload).forEach(k => { if (payload[k] === '') payload[k] = null; });
+    const { error } = await supabase.from('tiktok_account_health').insert([payload]);
+    if (!error) { await fetchData(); setShowForm(false); setForm(EMPTY_HEALTH); }
+    else alert('Lỗi lưu: ' + error.message);
+    setSaving(false);
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Xóa bản ghi này?')) return;
+    await supabase.from('tiktok_account_health').delete().eq('id', id);
+    await fetchData();
+    setDeleteId(null);
+  };
+
+  const card = { background: '#fff', borderRadius: 12, border: '1px solid #f3f4f6', boxShadow: '0 1px 3px rgba(0,0,0,0.07)' };
+
+  return (
+    <div style={{ fontFamily: "'Outfit', sans-serif" }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 900, color: '#0f172a' }}>🔴 Điểm tình trạng tài khoản TikTok</h1>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#888' }}>Theo dõi chỉ số CSKH & Hiệu suất cửa hàng theo từng kỳ báo cáo</p>
+        </div>
+        <button onClick={() => { setForm(EMPTY_HEALTH); setShowForm(true); }}
+          style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #f97316, #ef4444)', color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer', boxShadow: '0 4px 12px rgba(249,115,22,0.3)' }}>
+          + Nhập kỳ mới
+        </button>
+      </div>
+
+      {/* Chọn kỳ báo cáo */}
+      {availableDates.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+          {availableDates.map(d => (
+            <button key={d} onClick={() => setSelectedDate(d)}
+              style={{ padding: '8px 18px', borderRadius: 20, border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer',
+                background: selectedDate === d ? '#0f172a' : '#f3f4f6',
+                color: selectedDate === d ? '#fff' : '#555', transition: 'all 0.18s' }}>
+              {new Date(d + 'T00:00:00').toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric' })}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {loading && <div style={{ textAlign: 'center', padding: 60, color: '#888' }}>⏳ Đang tải...</div>}
+
+      {!loading && filtered.length === 0 && (
+        <div style={{ ...card, padding: 60, textAlign: 'center', color: '#aaa' }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>📊</div>
+          <div style={{ fontSize: 15, fontWeight: 600 }}>Chưa có dữ liệu</div>
+          <div style={{ fontSize: 13, marginTop: 6 }}>Bấm "+ Nhập kỳ mới" để thêm số liệu</div>
+        </div>
+      )}
+
+      {/* Bảng chỉ số theo từng shop */}
+      {!loading && filtered.length > 0 && METRICS.map(({ section, metrics: mList }) => (
+        <div key={section} style={{ ...card, marginBottom: 20, overflow: 'hidden' }}>
+          <div style={{ padding: '14px 20px', background: '#1e293b', color: '#fff' }}>
+            <span style={{ fontWeight: 800, fontSize: '0.9rem', letterSpacing: '0.5px' }}>{section}</span>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#f8fafc' }}>
+                  <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 700, color: '#64748b', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '2px solid #e5e7eb', minWidth: 220 }}>Chỉ số</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 700, color: '#64748b', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '2px solid #e5e7eb', minWidth: 90 }}>Chỉ tiêu</th>
+                  {SHOPS.map(shop => {
+                    const rec = filtered.find(r => r.shop_name === shop);
+                    return (
+                      <th key={shop} style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 800, color: '#0f172a', fontSize: 12, borderBottom: '2px solid #e5e7eb', minWidth: 130, background: rec ? '#fffbeb' : '#f8fafc' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                          TIKTOK {shop}
+                          {rec && (
+                            <button onClick={() => handleDelete(rec.id)} title="Xóa" style={{ padding: '1px 5px', borderRadius: 4, border: 'none', background: '#fee2e2', color: '#ef4444', fontSize: 10, cursor: 'pointer', fontWeight: 700, lineHeight: 1.4 }}>✕</button>
+                          )}
+                        </div>
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {mList.map((m, i) => (
+                  <tr key={m.key} style={{ borderBottom: '1px solid #f1f5f9', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                    <td style={{ padding: '11px 16px', fontWeight: 500, color: '#334155' }}>{m.label}</td>
+                    <td style={{ padding: '11px 16px', textAlign: 'center', color: '#64748b', fontSize: 12 }}>{m.target || '—'}</td>
+                    {SHOPS.map(shop => {
+                      const rec = filtered.find(r => r.shop_name === shop);
+                      const val = rec ? rec[m.key] : null;
+                      const status = getStatus(m, val);
+                      const bg = status === 'good' ? '#f0fdf4' : status === 'bad' ? '#fef2f2' : 'transparent';
+                      const color = status === 'good' ? '#16a34a' : status === 'bad' ? '#dc2626' : '#94a3b8';
+                      return (
+                        <td key={shop} style={{ padding: '11px 16px', textAlign: 'center' }}>
+                          <span style={{ display: 'inline-block', minWidth: 70, padding: '4px 10px', borderRadius: 8, fontWeight: 700, fontSize: 13, background: bg, color }}>
+                            {formatVal(m, val)}
+                          </span>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
+
+      {/* Legend */}
+      {!loading && filtered.length > 0 && (
+        <div style={{ display: 'flex', gap: 16, fontSize: 12, color: '#888', marginBottom: 20 }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: '#f0fdf4', border: '1px solid #16a34a', display: 'inline-block' }} /> Đạt chỉ tiêu</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: '#fef2f2', border: '1px solid #dc2626', display: 'inline-block' }} /> Không đạt</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: '#f8fafc', border: '1px solid #e5e7eb', display: 'inline-block' }} /> Chưa có dữ liệu</span>
+        </div>
+      )}
+
+      {/* Form nhập liệu */}
+      {showForm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={() => setShowForm(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: 'min(600px, 95vw)', maxHeight: '90vh', overflow: 'auto', padding: '24px 28px', boxShadow: '0 30px 80px rgba(0,0,0,0.25)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 900 }}>📊 Nhập số liệu TikTok</h2>
+              <button onClick={() => setShowForm(false)} style={{ border: 'none', background: 'none', fontSize: '1.4rem', cursor: 'pointer', color: '#94a3b8' }}>×</button>
+            </div>
+
+            {/* Kỳ + Shop */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 18 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Ngày báo cáo</label>
+                <input type="date" value={form.report_date} onChange={e => setForm(p => ({ ...p, report_date: e.target.value }))}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 5 }}>Shop</label>
+                <select value={form.shop_name} onChange={e => setForm(p => ({ ...p, shop_name: e.target.value }))}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: 14, background: '#fff', outline: 'none', boxSizing: 'border-box' }}>
+                  {SHOPS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Metrics */}
+            {METRICS.map(({ section, metrics: mList }) => (
+              <div key={section} style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: '#f97316', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10, paddingBottom: 6, borderBottom: '2px solid #fed7aa' }}>
+                  {section}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {mList.map(m => (
+                    <div key={m.key} style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 10, alignItems: 'center' }}>
+                      <label style={{ fontSize: 13, color: '#374151' }}>
+                        {m.label}
+                        {m.target && <span style={{ marginLeft: 6, fontSize: 11, color: '#94a3b8' }}>({m.target})</span>}
+                      </label>
+                      <input
+                        type="number" step="0.01"
+                        placeholder={m.unit === '%' ? '0.00' : m.unit === '/5' ? '0.0' : '0'}
+                        value={form[m.key]}
+                        onChange={e => setForm(p => ({ ...p, [m.key]: e.target.value }))}
+                        style={{ padding: '8px 10px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: 13, outline: 'none', textAlign: 'right', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button onClick={() => setShowForm(false)} style={{ flex: 1, padding: 12, borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>
+                Hủy
+              </button>
+              <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: 12, borderRadius: 9, border: 'none', background: saving ? '#d1d5db' : 'linear-gradient(135deg, #f97316, #ef4444)', color: '#fff', fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontSize: 14, boxShadow: saving ? 'none' : '0 4px 12px rgba(249,115,22,0.3)' }}>
+                {saving ? '⏳ Đang lưu...' : '💾 Lưu'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Wrapper with tabs
 const TABS = [
   { key: 'danh_gia', label: '📋 Quản lý đánh giá' },
   { key: 'report_cs', label: '📝 Report CS' },
+  { key: 'tiktok_health', label: '🔴 Điểm TK TikTok' },
 ];
 
 export default function CSKHTab() {
@@ -505,6 +770,7 @@ export default function CSKHTab() {
       </div>
       {tab === 'danh_gia' && <DanhGiaTab />}
       {tab === 'report_cs' && <ReportCSTab />}
+      {tab === 'tiktok_health' && <TikTokHealthTab />}
     </div>
   );
 }

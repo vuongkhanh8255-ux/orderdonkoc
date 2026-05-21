@@ -685,6 +685,165 @@ const DataTable = ({ columns, data = [], title }) => {
     );
 };
 
+// ── KOC Approval Notification Panel ─────────────────────────────────────────
+const KocApprovalPanel = ({ currentUser }) => {
+    const isAdmin  = currentUser?.role === 'admin';
+    const isEcom   = currentUser?.role === 'ecom';
+    const username = currentUser?.username || '';
+
+    const [open,    setOpen]    = React.useState(false);
+    const [tab,     setTab]     = React.useState('pending');
+    const [pending, setPending] = React.useState([]);
+    const [history, setHistory] = React.useState([]);
+    const [loading, setLoading] = React.useState(false);
+    const panelRef = useRef(null);
+
+    const fetchData = React.useCallback(async () => {
+        setLoading(true);
+        try {
+            // Pending proposals
+            let pq = supabase
+                .from(KOC_ASSIGNMENTS_TABLE)
+                .select('koc_id, brand_name, staff_name, proposed_by, proposed_at, status, updated_at')
+                .eq('status', 'proposed')
+                .order('proposed_at', { ascending: false });
+            if (isEcom) pq = pq.eq('proposed_by', username);
+            const { data: pData } = await pq;
+            setPending(pData || []);
+
+            // History (approved)
+            let hq = supabase
+                .from(KOC_ASSIGNMENTS_TABLE)
+                .select('koc_id, brand_name, staff_name, proposed_by, proposed_at, approved_by, approved_at, status, updated_at')
+                .neq('status', 'proposed')
+                .order('approved_at', { ascending: false, nullsFirst: false })
+                .limit(40);
+            if (isEcom) hq = hq.eq('proposed_by', username);
+            const { data: hData } = await hq;
+            setHistory(hData || []);
+        } catch { /* silent */ } finally {
+            setLoading(false);
+        }
+    }, [isEcom, username]);
+
+    useEffect(() => {
+        fetchData();
+        const id = setInterval(fetchData, 30000);
+        return () => clearInterval(id);
+    }, [fetchData]);
+
+    // Close on outside click
+    useEffect(() => {
+        const handler = (e) => { if (panelRef.current && !panelRef.current.contains(e.target)) setOpen(false); };
+        if (open) document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [open]);
+
+    const handleApprove = async (item) => {
+        if (!isAdmin) return;
+        await supabase.from(KOC_ASSIGNMENTS_TABLE).update({
+            status: 'approved',
+            approved_by: username,
+            approved_at: new Date().toISOString(),
+            updated_at:  new Date().toISOString(),
+        }).eq('koc_id', item.koc_id).eq('brand_name', item.brand_name);
+        fetchData();
+    };
+
+    const pendingCount = pending.length;
+
+    return (
+        <div ref={panelRef} style={{ position: 'relative', flexShrink: 0 }}>
+            {/* Bell trigger */}
+            <button
+                onClick={() => { setOpen(v => !v); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 7, background: '#fff', border: `1.5px solid ${pendingCount > 0 ? '#fed7aa' : '#e5e7eb'}`, borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontWeight: 700, fontSize: '0.83rem', color: pendingCount > 0 ? '#ea580c' : '#374151', boxShadow: '0 1px 4px rgba(0,0,0,0.07)', transition: 'all 0.15s' }}>
+                🔔 Yêu cầu duyệt KOC
+                {pendingCount > 0 && (
+                    <span style={{ background: '#ea580c', color: '#fff', borderRadius: 999, padding: '1px 7px', fontSize: '0.7rem', fontWeight: 900 }}>
+                        {pendingCount}
+                    </span>
+                )}
+            </button>
+
+            {open && (
+                <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', width: 440, background: '#fff', borderRadius: 14, border: '1px solid #e5e7eb', boxShadow: '0 12px 40px rgba(0,0,0,0.13)', zIndex: 9999, overflow: 'hidden' }}>
+                    {/* Tabs */}
+                    <div style={{ display: 'flex', borderBottom: '2px solid #f3f4f6' }}>
+                        {[
+                            { key: 'pending', label: `⏳ Chờ duyệt${pendingCount > 0 ? ` (${pendingCount})` : ''}` },
+                            { key: 'history', label: `📋 Lịch sử` },
+                        ].map(t => (
+                            <button key={t.key} onClick={() => setTab(t.key)}
+                                style={{ flex: 1, padding: '11px 8px', border: 'none', background: tab === t.key ? '#fff7ed' : '#fafafa', fontWeight: tab === t.key ? 800 : 500, color: tab === t.key ? '#ea580c' : '#6b7280', fontSize: '0.8rem', cursor: 'pointer', borderBottom: tab === t.key ? '2px solid #ea580c' : '2px solid transparent', transition: 'all 0.12s' }}>
+                                {t.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+                        {loading
+                            ? <div style={{ textAlign: 'center', padding: 24, color: '#9ca3af', fontSize: '0.82rem' }}>⏳ Đang tải...</div>
+                            : tab === 'pending'
+                                ? pending.length === 0
+                                    ? <div style={{ textAlign: 'center', padding: 28, color: '#9ca3af', fontSize: '0.82rem' }}>✅ Không có yêu cầu nào đang chờ</div>
+                                    : pending.map((item, i) => (
+                                        <div key={i} style={{ padding: '11px 16px', borderBottom: '1px solid #f3f4f6', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                                                <div style={{ minWidth: 0 }}>
+                                                    <span style={{ fontWeight: 800, color: '#1e293b', fontSize: '0.84rem' }}>{item.koc_id}</span>
+                                                    <span style={{ color: '#94a3b8', fontSize: '0.72rem', marginLeft: 6 }}>→ {item.brand_name}</span>
+                                                </div>
+                                                {isAdmin && (
+                                                    <button onClick={() => handleApprove(item)}
+                                                        style={{ background: '#16a34a', color: '#fff', border: 'none', borderRadius: 7, padding: '4px 12px', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                                                        ✓ Duyệt
+                                                    </button>
+                                                )}
+                                                {!isAdmin && <span style={{ background: '#fef3c7', color: '#d97706', borderRadius: 999, padding: '1px 8px', fontSize: '0.68rem', fontWeight: 700 }}>Chờ duyệt</span>}
+                                            </div>
+                                            <div style={{ fontSize: '0.76rem', color: '#374151' }}>
+                                                👤 Nhân sự đề xuất: <strong>{item.staff_name || '—'}</strong>
+                                            </div>
+                                            <div style={{ fontSize: '0.71rem', color: '#94a3b8' }}>
+                                                Đề xuất bởi <strong style={{ color: '#6b7280' }}>{item.proposed_by || '?'}</strong> · {formatAssignmentTime(item.proposed_at)}
+                                            </div>
+                                        </div>
+                                    ))
+                                : history.length === 0
+                                    ? <div style={{ textAlign: 'center', padding: 28, color: '#9ca3af', fontSize: '0.82rem' }}>Chưa có lịch sử duyệt</div>
+                                    : history.map((item, i) => (
+                                        <div key={i} style={{ padding: '11px 16px', borderBottom: '1px solid #f3f4f6', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                                                <div style={{ minWidth: 0 }}>
+                                                    <span style={{ fontWeight: 800, color: '#1e293b', fontSize: '0.84rem' }}>{item.koc_id}</span>
+                                                    <span style={{ color: '#94a3b8', fontSize: '0.72rem', marginLeft: 6 }}>→ {item.brand_name}</span>
+                                                </div>
+                                                <span style={{ background: '#dcfce7', color: '#16a34a', borderRadius: 999, padding: '2px 9px', fontSize: '0.68rem', fontWeight: 800, flexShrink: 0 }}>✓ Đã duyệt</span>
+                                            </div>
+                                            <div style={{ fontSize: '0.76rem', color: '#374151' }}>
+                                                👤 <strong>{item.staff_name || '—'}</strong>
+                                            </div>
+                                            <div style={{ fontSize: '0.71rem', color: '#94a3b8' }}>
+                                                {item.proposed_by && <><span>Đề xuất: <strong style={{ color: '#6b7280' }}>{item.proposed_by}</strong></span> · </>}
+                                                Duyệt: <strong style={{ color: '#6b7280' }}>{item.approved_by || '?'}</strong> · {formatAssignmentTime(item.approved_at || item.updated_at)}
+                                            </div>
+                                        </div>
+                                    ))
+                        }
+                    </div>
+
+                    <div style={{ padding: '8px 16px', borderTop: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.7rem', color: '#9ca3af' }}>Tự động cập nhật mỗi 30s</span>
+                        <button onClick={fetchData} style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600, padding: '2px 6px' }}>🔄 Làm mới</button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 const BookingPerformanceTab = ({ currentUser = null }) => {
     const { brands, nhanSus, airLinks, loadAirLinks, setCastBudgetByNhanSu } = useAppData();
     const fileInputRef = useRef(null);
@@ -1898,7 +2057,10 @@ ${txtFormat}
 
     return (
         <div style={{ padding: '20px', maxWidth: '1600px', margin: '0 auto' }}>
-            <h1 className="page-header">📊 DASHBOARD HIỆU SUẤT BOOKING</h1>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                <h1 className="page-header" style={{ margin: 0 }}>📊 DASHBOARD HIỆU SUẤT BOOKING</h1>
+                <KocApprovalPanel currentUser={currentUser} />
+            </div>
 
                     {/* NOTE: Import feature has been moved to the Data Archive Tab */}
 

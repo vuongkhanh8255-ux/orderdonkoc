@@ -17,6 +17,7 @@
     "react-dom": "^19.1.1",
     "react-resizable": "^3.0.5",
     "recharts": "^3.6.0",
+    "tweetsodium": "^0.0.4",
     "xlsx": "^0.18.5",
     "xlsx-js-style": "^1.2.0"
   },

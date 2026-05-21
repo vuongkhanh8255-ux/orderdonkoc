@@ -11,13 +11,20 @@
   ],
   "functions": {
     "api/tiktok-shop/sync-orders.js": {
-      "maxDuration": 800
+      "maxDuration": 300
+    },
+    "api/tiktok-shop/sync-analytics.js": {
+      "maxDuration": 120
     }
   },
   "crons": [
     {
       "path": "/api/tiktok-shop/sync-orders",
       "schedule": "0 21 * * *"
+    },
+    {
+      "path": "/api/tiktok-shop/sync-analytics",
+      "schedule": "30 21 * * *"
     }
   ]
 }
