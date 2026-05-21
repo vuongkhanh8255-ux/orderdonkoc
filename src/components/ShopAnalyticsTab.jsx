@@ -172,18 +172,22 @@ const ShopAnalyticsTab = () => {
 
     dailyData.forEach(row => {
       const d = row.date;
-      if (!byDate[d]) byDate[d] = { date: d, gmv: 0, orders: 0, buyers: 0, page_views: 0 };
+      if (!byDate[d]) byDate[d] = { date: d, gmv: 0, orders: 0, buyers: 0, page_views: 0, visitors: 0, items_sold: 0 };
       byDate[d].gmv        += Number(row.payment_amount) || 0;
       byDate[d].orders     += Number(row.order_count) || 0;
       byDate[d].buyers     += Number(row.buyer_count) || 0;
       byDate[d].page_views += Number(row.page_views) || 0;
+      byDate[d].visitors   += Number(row.visitors) || 0;
+      byDate[d].items_sold += Number(row.items_sold) || 0;
 
       const sid = row.shop_id;
-      if (!byShop[sid]) byShop[sid] = { shop_id: sid, seller_name: row.seller_name || sid, gmv: 0, orders: 0, buyers: 0, page_views: 0 };
+      if (!byShop[sid]) byShop[sid] = { shop_id: sid, seller_name: row.seller_name || sid, gmv: 0, orders: 0, buyers: 0, page_views: 0, visitors: 0, items_sold: 0 };
       byShop[sid].gmv        += Number(row.payment_amount) || 0;
       byShop[sid].orders     += Number(row.order_count) || 0;
       byShop[sid].buyers     += Number(row.buyer_count) || 0;
       byShop[sid].page_views += Number(row.page_views) || 0;
+      byShop[sid].visitors   += Number(row.visitors) || 0;
+      byShop[sid].items_sold += Number(row.items_sold) || 0;
     });
 
     const chartData = Object.entries(byDate)
@@ -195,21 +199,25 @@ const ShopAnalyticsTab = () => {
         'Don hang': v.orders,
         'Nguoi mua': v.buyers,
         'Luot xem': v.page_views,
+        'Khach truy cap': v.visitors,
+        'SP ban ra': v.items_sold,
       }));
 
     const shopList = Object.values(byShop)
       .sort((a,b) => b.gmv - a.gmv)
       .map((s, i) => ({
         ...s,
-        conversion: s.buyers > 0 ? (s.orders / s.buyers * 100) : 0,
+        conversion: s.visitors > 0 ? (s.buyers / s.visitors * 100) : 0,
         aov: s.orders > 0 ? (s.gmv / s.orders) : 0,
         color: SHOP_COLORS[i % SHOP_COLORS.length],
       }));
 
-    const totalGmv    = shopList.reduce((s,v) => s + v.gmv, 0);
-    const totalOrders = shopList.reduce((s,v) => s + v.orders, 0);
-    const totalBuyers = shopList.reduce((s,v) => s + v.buyers, 0);
-    const totalPv     = shopList.reduce((s,v) => s + v.page_views, 0);
+    const totalGmv      = shopList.reduce((s,v) => s + v.gmv, 0);
+    const totalOrders   = shopList.reduce((s,v) => s + v.orders, 0);
+    const totalBuyers   = shopList.reduce((s,v) => s + v.buyers, 0);
+    const totalPv       = shopList.reduce((s,v) => s + v.page_views, 0);
+    const totalVisitors = shopList.reduce((s,v) => s + v.visitors, 0);
+    const totalItems    = shopList.reduce((s,v) => s + v.items_sold, 0);
 
     return {
       chartData,
@@ -218,7 +226,9 @@ const ShopAnalyticsTab = () => {
       totalOrders,
       totalBuyers,
       totalPv,
-      conversionRate: totalBuyers > 0 ? (totalOrders / totalBuyers * 100) : 0,
+      totalVisitors,
+      totalItems,
+      conversionRate: totalVisitors > 0 ? (totalBuyers / totalVisitors * 100) : 0,
       aov: totalOrders > 0 ? (totalGmv / totalOrders) : 0,
     };
   }, [dailyData]);
@@ -359,11 +369,11 @@ const ShopAnalyticsTab = () => {
             <StatCard icon="💰" label="GMV" value={`${fmtVnd(computed.totalGmv)} VND`}
               sub={`AOV: ${fmtVnd(computed.aov)} VND`} bgColor="#fff7ed" borderColor="#fed7aa" />
             <StatCard icon="🛒" label="Don hang" value={fmtNumber(computed.totalOrders)}
-              sub={`${dateRange.start} → ${dateRange.end}`} bgColor="#eff6ff" borderColor="#bfdbfe" />
+              sub={`${fmtNumber(computed.totalItems)} SP ban ra`} bgColor="#eff6ff" borderColor="#bfdbfe" />
             <StatCard icon="👥" label="Nguoi mua" value={fmtNumber(computed.totalBuyers)}
-              sub={computed.totalPv > 0 ? `${fmtNumber(computed.totalPv)} luot xem` : null} bgColor="#f0fdf4" borderColor="#bbf7d0" />
+              sub={`${fmtNumber(computed.totalVisitors)} khach truy cap · ${fmtNumber(computed.totalPv)} luot xem`} bgColor="#f0fdf4" borderColor="#bbf7d0" />
             <StatCard icon="📊" label="Ty le chuyen doi" value={fmtPercent(computed.conversionRate)}
-              sub="Nguoi mua / Luot xem" bgColor="#f5f3ff" borderColor="#ddd6fe" />
+              sub="Nguoi mua / Khach truy cap" bgColor="#f5f3ff" borderColor="#ddd6fe" />
           </div>
 
           {/* Charts */}
@@ -399,7 +409,7 @@ const ShopAnalyticsTab = () => {
               </div>
 
               {/* Traffic */}
-              {(computed.chartData.some(d => d['Nguoi mua'] > 0) || computed.chartData.some(d => d['Luot xem'] > 0)) && (
+              {(computed.chartData.some(d => d['Khach truy cap'] > 0) || computed.chartData.some(d => d['Luot xem'] > 0)) && (
                 <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '18px 20px', gridColumn: '1 / -1' }}>
                   <h3 style={{ margin: '0 0 14px', fontSize: '0.88rem', fontWeight: 800 }}>👥 Traffic theo ngay</h3>
                   <ResponsiveContainer width="100%" height={280}>
@@ -409,6 +419,7 @@ const ShopAnalyticsTab = () => {
                       <YAxis tick={{ fontSize:11, fill:'#64748b' }} width={60}/>
                       <Tooltip content={<ChartTooltip valueFormatter={fmtNumber}/>}/>
                       <Legend/>
+                      {computed.chartData.some(d => d['Khach truy cap'] > 0) && <Line type="monotone" dataKey="Khach truy cap" stroke="#0891b2" strokeWidth={2} dot={false}/>}
                       {computed.chartData.some(d => d['Nguoi mua'] > 0) && <Line type="monotone" dataKey="Nguoi mua" stroke="#16a34a" strokeWidth={2} dot={false}/>}
                       {computed.chartData.some(d => d['Luot xem'] > 0) && <Line type="monotone" dataKey="Luot xem" stroke="#8b5cf6" strokeWidth={2} dot={false}/>}
                     </LineChart>

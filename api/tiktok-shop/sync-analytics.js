@@ -187,71 +187,60 @@ export default async function handler(req, res) {
 
         if (resp?.code !== 0) {
           shopError = resp?.message || `code ${resp?.code}`;
-          console.log(`[sync-analytics] API error for ${shopLabel}: ${shopError}`);
           continue;
         }
 
         const data = resp?.data;
         if (!data) continue;
 
-        // ── Parse daily data from various response structures ────────────
+        // ── Parse daily data from TikTok response ──────────────────────
+        // Actual structure: data.performance.intervals[]
+        // Each interval: { start_date, end_date, sales: {...}, traffic: {...} }
         const dailyEntries = [];
+        const intervals = data?.performance?.intervals || [];
 
-        // Try known structures
-        const timeSeries = data.daily_data || data.time_series || data.data_list || data.daily || [];
+        for (const interval of intervals) {
+          const date = interval.start_date;
+          if (!date) continue;
 
-        if (Array.isArray(timeSeries) && timeSeries.length > 0) {
-          for (const entry of timeSeries) {
-            const date = entry.date || entry.dimensions?.date || entry.day;
-            if (!date) continue;
-            const m = entry.metrics || entry;
-            dailyEntries.push({
-              shop_id:         conn.shop_id,
-              seller_name:     conn.seller_name,
-              date,
-              payment_amount:  metricVal(m, 'payment_amount') || metricVal(m, 'gmv'),
-              order_count:     metricVal(m, 'order_count') || metricVal(m, 'orders'),
-              buyer_count:     metricVal(m, 'buyer_count') || metricVal(m, 'buyers'),
-              page_views:      metricVal(m, 'page_views') || metricVal(m, 'product_views'),
-              raw_metrics:     m,
-              synced_at:       new Date().toISOString(),
-            });
-          }
-        }
+          const sales   = interval.sales || {};
+          const traffic = interval.traffic || {};
 
-        // If no time series but has summary metrics (granularity=ALL case), store as single entry
-        if (dailyEntries.length === 0) {
-          const perf = data.performance || data.metrics || data.summary || data;
-          const gmv = metricVal(perf, 'payment_amount') || metricVal(perf, 'gmv') || metricVal(perf, 'total_payment_amount');
-          const orders = metricVal(perf, 'order_count') || metricVal(perf, 'total_orders');
-          const buyers = metricVal(perf, 'buyer_count') || metricVal(perf, 'unique_buyers');
-          const pv = metricVal(perf, 'page_views') || metricVal(perf, 'product_views');
+          // GMV: sales.gmv.overall.amount
+          const gmv = Number(sales.gmv?.overall?.amount || 0);
+          // Gross revenue: sales.gross_revenue.overall.amount
+          const grossRevenue = Number(sales.gross_revenue?.overall?.amount || 0);
+          // Orders
+          const orders = Number(sales.orders_count || 0);
+          // Buyers / customers
+          const buyers = Number(sales.avg_customers_count || 0);
+          // Items sold
+          const itemsSold = Number(sales.items_sold || 0);
+          // Refunds
+          const refunds = Number(sales.refunds?.amount || 0);
+          // Traffic
+          const pageViews = Number(traffic.avg_page_views || 0);
+          const visitors  = Number(traffic.avg_visitors || 0);
+          const convRate  = Number(traffic.avg_conversation_rate || 0);
 
-          // Only store if there's actual data
-          if (gmv > 0 || orders > 0 || buyers > 0 || pv > 0) {
-            dailyEntries.push({
-              shop_id:         conn.shop_id,
-              seller_name:     conn.seller_name,
-              date:            range.start,
-              payment_amount:  gmv,
-              order_count:     orders,
-              buyer_count:     buyers,
-              page_views:      pv,
-              raw_metrics:     perf,
-              synced_at:       new Date().toISOString(),
-            });
-          }
-        }
-
-        // Compute derived fields
-        for (const entry of dailyEntries) {
-          entry.conversion_rate = entry.buyer_count > 0
-            ? Number((entry.order_count / entry.buyer_count * 100).toFixed(2))
-            : 0;
-          entry.aov = entry.order_count > 0
-            ? Number((entry.payment_amount / entry.order_count).toFixed(0))
-            : 0;
-          entry.currency = 'VND';
+          dailyEntries.push({
+            shop_id:           conn.shop_id,
+            seller_name:       conn.seller_name,
+            date,
+            payment_amount:    gmv,
+            gross_revenue:     grossRevenue,
+            order_count:       orders,
+            buyer_count:       buyers,
+            items_sold:        itemsSold,
+            refund_amount:     refunds,
+            page_views:        pageViews,
+            visitors:          visitors,
+            conversion_rate:   Number((convRate * 100).toFixed(2)),  // API returns 0.08 → store as 8.00%
+            aov:               orders > 0 ? Number((gmv / orders).toFixed(0)) : 0,
+            currency:          'VND',
+            raw_metrics:       interval,
+            synced_at:         new Date().toISOString(),
+          });
         }
 
         // ── Upsert to Supabase ──────────────────────────────────────────
