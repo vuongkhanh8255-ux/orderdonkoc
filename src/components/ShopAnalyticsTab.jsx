@@ -1,62 +1,112 @@
 // src/components/ShopAnalyticsTab.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import {
-  ResponsiveContainer, BarChart, Bar, LineChart, Line, AreaChart, Area,
+  ResponsiveContainer, AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList,
 } from 'recharts';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SYNC_API = '/api/tiktok-shop/sync-analytics';
-const SHOP_COLORS = ['#ea580c','#3b82f6','#16a34a','#8b5cf6','#ec4899','#0891b2','#d97706','#dc2626','#059669','#7c3aed'];
 const ANALYTICS_APP_KEY = '6k2of554me0j9';
 const AUTH_URL = `https://services.tiktokshop.com/open/authorize?service_id=${ANALYTICS_APP_KEY}`;
 
+const ACCENT = { orange: '#ea580c', blue: '#3b82f6', green: '#16a34a', purple: '#8b5cf6', cyan: '#0891b2', amber: '#d97706', pink: '#ec4899' };
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmtVnd = (v) => {
-  if (!v && v !== 0) return '0';
-  const n = Number(v);
-  if (!Number.isFinite(n)) return '0';
-  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
-  if (n >= 1_000_000)     return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000)         return `${(n / 1_000).toFixed(1)}K`;
+  const n = Number(v); if (!Number.isFinite(n) || n === 0) return '0';
+  if (n >= 1e9) return `${(n/1e9).toFixed(2)} tỷ`;
+  if (n >= 1e6) return `${(n/1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `${(n/1e3).toFixed(1)}K`;
   return n.toLocaleString('vi-VN');
+};
+const fmtVndFull = (v) => { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString('vi-VN') : '0'; };
+const fmtShort = (v) => {
+  const n = Number(v); if (!Number.isFinite(n) || n === 0) return '';
+  if (n >= 1e6) return `${(n/1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `${(n/1e3).toFixed(1)}K`;
+  return String(n);
 };
 const fmtPercent = (v) => { const n = Number(v); return Number.isFinite(n) ? `${n.toFixed(2)}%` : '0%'; };
 const fmtNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString('vi-VN') : '0'; };
-const fmtShort = (v) => {
-  const n = Number(v);
-  if (!Number.isFinite(n) || n === 0) return '';
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return String(n);
-};
 const toYmd = (d) => {
   const dt = d instanceof Date ? d : new Date(d);
   return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
 };
 const shortDate = (ymd) => { if (!ymd) return ''; const p = ymd.split('-'); return `${p[2]}/${p[1]}`; };
+const daysBetween = (a, b) => Math.ceil((new Date(b) - new Date(a)) / 86400000);
 
-// ── Custom data label for charts ─────────────────────────────────────────────
-const SmallLabel = ({ x, y, value, formatter = fmtShort, color = '#64748b' }) => {
-  const label = formatter(value);
-  if (!label) return null;
+// ── Sparkline ─────────────────────────────────────────────────────────────────
+const Sparkline = ({ data, dataKey, color, height = 44 }) => (
+  <ResponsiveContainer width="100%" height={height}>
+    <AreaChart data={data} margin={{ top: 4, right: 2, bottom: 0, left: 2 }}>
+      <defs>
+        <linearGradient id={`sp-${dataKey}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="5%" stopColor={color} stopOpacity={0.25}/>
+          <stop offset="95%" stopColor={color} stopOpacity={0}/>
+        </linearGradient>
+      </defs>
+      <Area type="monotone" dataKey={dataKey} stroke={color} strokeWidth={1.8} fill={`url(#sp-${dataKey})`} dot={false} isAnimationActive={false}/>
+    </AreaChart>
+  </ResponsiveContainer>
+);
+
+// ── Change Badge ──────────────────────────────────────────────────────────────
+const ChangeBadge = ({ value }) => {
+  if (value === null || value === undefined || !Number.isFinite(value)) return null;
+  const up = value >= 0;
   return (
-    <text x={x} y={y - 8} textAnchor="middle" fill={color} fontSize={10} fontWeight={600}>
-      {label}
-    </text>
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 2,
+      background: up ? '#dcfce7' : '#fef2f2', color: up ? '#16a34a' : '#ef4444',
+      padding: '3px 10px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700, whiteSpace: 'nowrap',
+    }}>
+      {up ? '▲' : '▼'} {Math.abs(value).toFixed(1)} %
+    </span>
   );
 };
+
+// ── Stat Card (Stella-style) ──────────────────────────────────────────────────
+const StatCard = ({ icon, label, value, unit, sub, change, sparkData, sparkKey, accentColor = '#ea580c' }) => (
+  <div style={{
+    background: '#fff', borderRadius: 16, padding: '20px 22px', flex: '1 1 240px', minWidth: 230,
+    boxShadow: '0 1px 4px rgba(15,23,42,0.06)', border: '1px solid #f1f5f9',
+    borderLeft: `4px solid ${accentColor}`, position: 'relative', overflow: 'hidden',
+  }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: '1rem' }}>{icon}</span>
+        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.6px' }}>{label}</span>
+      </div>
+      <ChangeBadge value={change} />
+    </div>
+    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
+      <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+          <span style={{ fontSize: '1.7rem', fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>{value}</span>
+          {unit && <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#94a3b8' }}>{unit}</span>}
+        </div>
+        {sub && <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: 6, lineHeight: 1.4 }}>{sub}</div>}
+      </div>
+      {sparkData && sparkData.length > 1 && (
+        <div style={{ width: 100, flexShrink: 0 }}>
+          <Sparkline data={sparkData} dataKey={sparkKey} color={accentColor} />
+        </div>
+      )}
+    </div>
+  </div>
+);
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
 const ChartTooltip = ({ active, payload, label, valueFormatter = fmtVnd, suffix = '' }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:10, padding:'10px 14px', fontSize:'0.8rem', boxShadow:'0 4px 16px rgba(15,23,42,0.1)' }}>
-      <div style={{ fontWeight:700, color:'#0f172a', marginBottom:4 }}>{label}</div>
-      {payload.map((p,i) => (
-        <div key={i} style={{ color: p.color || '#ea580c', display:'flex', gap:6, alignItems:'center' }}>
-          <span style={{ width:8, height:8, borderRadius:'50%', background: p.color || '#ea580c', display:'inline-block' }} />
+    <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '10px 14px', fontSize: '0.8rem', boxShadow: '0 4px 16px rgba(15,23,42,0.1)' }}>
+      <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>{label}</div>
+      {payload.map((p, i) => (
+        <div key={i} style={{ color: p.color || '#ea580c', display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: p.color || '#ea580c', display: 'inline-block' }} />
           {p.name}: <strong>{valueFormatter(p.value)}{suffix}</strong>
         </div>
       ))}
@@ -64,26 +114,35 @@ const ChartTooltip = ({ active, payload, label, valueFormatter = fmtVnd, suffix 
   );
 };
 
-// ── Stat Card ─────────────────────────────────────────────────────────────────
-const StatCard = ({ icon, label, value, sub, bgColor = '#fff7ed', borderColor = '#fed7aa' }) => (
-  <div style={{
-    background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '18px 20px',
-    display: 'flex', alignItems: 'flex-start', gap: 14, flex: '1 1 220px', minWidth: 200,
-    boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
-  }}>
-    <div style={{
-      width: 42, height: 42, borderRadius: 10, background: bgColor, border: `1px solid ${borderColor}`,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', flexShrink: 0,
-    }}>{icon}</div>
-    <div>
-      <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.1 }}>{value}</div>
-      {sub && <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 3 }}>{sub}</div>}
+// ── Channel Bar ───────────────────────────────────────────────────────────────
+const ChannelBar = ({ name, color, amount, percent, maxPercent }) => (
+  <div style={{ marginBottom: 14 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ width: 10, height: 10, borderRadius: 3, background: color, display: 'inline-block' }} />
+        <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#374151' }}>{name}</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>{percent.toFixed(1)}%</span>
+        <span style={{ fontSize: '0.76rem', color: '#64748b', minWidth: 80, textAlign: 'right' }}>{fmtVnd(amount)} đ</span>
+      </div>
+    </div>
+    <div style={{ height: 8, background: '#f1f5f9', borderRadius: 6, overflow: 'hidden' }}>
+      <div style={{ height: '100%', width: `${(percent / maxPercent) * 100}%`, background: color, borderRadius: 6, transition: 'width 0.5s ease' }} />
     </div>
   </div>
 );
 
-// ── Main Component ────────────────────────────────────────────────────────────
+// ── Data Label ────────────────────────────────────────────────────────────────
+const SmallLabel = ({ x, y, value, color = '#64748b' }) => {
+  const label = fmtShort(value);
+  if (!label) return null;
+  return <text x={x} y={y - 8} textAnchor="middle" fill={color} fontSize={10} fontWeight={600}>{label}</text>;
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ██  MAIN COMPONENT
+// ══════════════════════════════════════════════════════════════════════════════
 const ShopAnalyticsTab = () => {
   const [connections, setConnections] = useState([]);
   const [loading, setLoading]       = useState(false);
@@ -91,22 +150,25 @@ const ShopAnalyticsTab = () => {
   const [syncResult, setSyncResult] = useState(null);
   const [shopFilter, setShopFilter] = useState('');
   const [dailyData, setDailyData]   = useState([]);
+  const [prevData, setPrevData]     = useState([]);
   const [lastSync, setLastSync]     = useState(null);
 
-  // Date range — default last 30 days
   const [dateRange, setDateRange] = useState(() => {
     const end = new Date();
-    const start = new Date();
-    start.setDate(start.getDate() - 30);
+    const start = new Date(); start.setDate(start.getDate() - 30);
     return { start: toYmd(start), end: toYmd(end) };
   });
 
   const setQuickRange = (days) => {
     const end = new Date();
-    const start = new Date();
-    start.setDate(start.getDate() - days);
+    const start = new Date(); start.setDate(start.getDate() - days);
     setDateRange({ start: toYmd(start), end: toYmd(end) });
   };
+
+  const periodLabel = useMemo(() => {
+    const days = daysBetween(dateRange.start, dateRange.end);
+    return `${days} ngày`;
+  }, [dateRange]);
 
   // ── Fetch connections ─────────────────────────────────────────────────────
   const fetchConnections = useCallback(async () => {
@@ -115,7 +177,6 @@ const ShopAnalyticsTab = () => {
       .select('shop_id, seller_name, access_token_expires_at, shop_cipher')
       .not('access_token', 'is', null);
     if (analytics?.length > 0) { setConnections(analytics); return; }
-
     const { data: orders } = await supabase
       .from('tiktok_shop_connections')
       .select('shop_id, seller_name, access_token_expires_at, shop_cipher')
@@ -123,434 +184,481 @@ const ShopAnalyticsTab = () => {
     setConnections(orders || []);
   }, []);
 
-  // ── Fetch analytics from Supabase ─────────────────────────────────────────
+  // ── Fetch analytics ───────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      let q = supabase
-        .from('tiktok_shop_analytics_daily')
-        .select('*')
-        .gte('date', dateRange.start)
-        .lte('date', dateRange.end)
+      // Current period
+      let q = supabase.from('tiktok_shop_analytics_daily').select('*')
+        .gte('date', dateRange.start).lte('date', dateRange.end)
         .order('date', { ascending: true });
       if (shopFilter) q = q.eq('shop_id', shopFilter);
-
       const { data, error } = await q;
-      if (error) { console.error('Fetch error:', error); setDailyData([]); }
-      else { setDailyData(data || []); }
+      if (error) { console.error(error); setDailyData([]); }
+      else setDailyData(data || []);
 
-      // Get last sync time
+      // Previous period (same length)
+      const days = daysBetween(dateRange.start, dateRange.end);
+      const prevEnd = new Date(dateRange.start); prevEnd.setDate(prevEnd.getDate() - 1);
+      const prevStart = new Date(prevEnd); prevStart.setDate(prevStart.getDate() - days + 1);
+      let pq = supabase.from('tiktok_shop_analytics_daily').select('*')
+        .gte('date', toYmd(prevStart)).lte('date', toYmd(prevEnd))
+        .order('date', { ascending: true });
+      if (shopFilter) pq = pq.eq('shop_id', shopFilter);
+      const { data: prev } = await pq;
+      setPrevData(prev || []);
+
+      // Last sync time
       const { data: latest } = await supabase
-        .from('tiktok_shop_analytics_daily')
-        .select('synced_at')
-        .order('synced_at', { ascending: false })
-        .limit(1);
+        .from('tiktok_shop_analytics_daily').select('synced_at')
+        .order('synced_at', { ascending: false }).limit(1);
       if (latest?.[0]) setLastSync(latest[0].synced_at);
-    } catch (err) {
-      console.error(err);
-      setDailyData([]);
-    }
+    } catch (err) { console.error(err); setDailyData([]); }
     setLoading(false);
   }, [dateRange, shopFilter]);
 
-  // ── Sync analytics (call backend) ─────────────────────────────────────────
+  // ── Sync ──────────────────────────────────────────────────────────────────
   const doSync = async (fullSync = false) => {
-    setSyncing(true);
-    setSyncResult(null);
+    setSyncing(true); setSyncResult(null);
     try {
       const params = new URLSearchParams();
-      if (fullSync) {
-        params.set('full_sync', '1');
-      } else {
-        params.set('start_date', dateRange.start);
-        params.set('end_date', dateRange.end);
-      }
+      if (fullSync) params.set('full_sync', '1');
+      else { params.set('start_date', dateRange.start); params.set('end_date', dateRange.end); }
       const res = await fetch(`${SYNC_API}?${params}`);
       const json = await res.json();
       setSyncResult(json);
       await fetchData();
-    } catch (err) {
-      setSyncResult({ error: err.message });
-    }
+    } catch (err) { setSyncResult({ error: err.message }); }
     setSyncing(false);
   };
 
-  // ── Effects ───────────────────────────────────────────────────────────────
   useEffect(() => { fetchConnections(); }, [fetchConnections]);
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // ── Compute aggregated metrics ────────────────────────────────────────────
-  const computed = React.useMemo(() => {
+  // ── Computed ──────────────────────────────────────────────────────────────
+  const computed = useMemo(() => {
     if (!dailyData.length) return null;
 
-    const byDate = {};
-    const byShop = {};
+    const sumRows = (rows) => {
+      const t = { gmv: 0, orders: 0, buyers: 0, pv: 0, visitors: 0, items: 0, refunds: 0 };
+      rows.forEach(r => {
+        t.gmv      += Number(r.payment_amount) || 0;
+        t.orders   += Number(r.order_count) || 0;
+        t.buyers   += Number(r.buyer_count) || 0;
+        t.pv       += Number(r.page_views) || 0;
+        t.visitors += Number(r.visitors) || 0;
+        t.items    += Number(r.items_sold) || 0;
+        t.refunds  += Number(r.refund_amount) || 0;
+      });
+      return t;
+    };
 
+    const cur = sumRows(dailyData);
+    const prev = sumRows(prevData);
+
+    const pctChange = (c, p) => p > 0 ? ((c - p) / p * 100) : (c > 0 ? 100 : null);
+
+    // ── Group by date ────────────────────────────────────────────────────
+    const byDate = {};
     dailyData.forEach(row => {
       const d = row.date;
-      if (!byDate[d]) byDate[d] = { date: d, gmv: 0, orders: 0, buyers: 0, page_views: 0, visitors: 0, items_sold: 0, refund_amount: 0 };
-      byDate[d].gmv           += Number(row.payment_amount) || 0;
-      byDate[d].orders        += Number(row.order_count) || 0;
-      byDate[d].buyers        += Number(row.buyer_count) || 0;
-      byDate[d].page_views    += Number(row.page_views) || 0;
-      byDate[d].visitors      += Number(row.visitors) || 0;
-      byDate[d].items_sold    += Number(row.items_sold) || 0;
-      byDate[d].refund_amount += Number(row.refund_amount) || 0;
-
-      const sid = row.shop_id;
-      if (!byShop[sid]) byShop[sid] = { shop_id: sid, seller_name: row.seller_name || sid, gmv: 0, orders: 0, buyers: 0, page_views: 0, visitors: 0, items_sold: 0, refund_amount: 0 };
-      byShop[sid].gmv           += Number(row.payment_amount) || 0;
-      byShop[sid].orders        += Number(row.order_count) || 0;
-      byShop[sid].buyers        += Number(row.buyer_count) || 0;
-      byShop[sid].page_views    += Number(row.page_views) || 0;
-      byShop[sid].visitors      += Number(row.visitors) || 0;
-      byShop[sid].items_sold    += Number(row.items_sold) || 0;
-      byShop[sid].refund_amount += Number(row.refund_amount) || 0;
+      if (!byDate[d]) byDate[d] = { date: d, gmv: 0, orders: 0, buyers: 0, pv: 0, visitors: 0, items: 0, refunds: 0 };
+      byDate[d].gmv      += Number(row.payment_amount) || 0;
+      byDate[d].orders   += Number(row.order_count) || 0;
+      byDate[d].buyers   += Number(row.buyer_count) || 0;
+      byDate[d].pv       += Number(row.page_views) || 0;
+      byDate[d].visitors += Number(row.visitors) || 0;
+      byDate[d].items    += Number(row.items_sold) || 0;
+      byDate[d].refunds  += Number(row.refund_amount) || 0;
     });
 
-    const chartData = Object.entries(byDate)
-      .sort(([a],[b]) => a.localeCompare(b))
-      .map(([date, v]) => ({
-        date: shortDate(date),
-        fullDate: date,
-        GMV: v.gmv,
-        'Đơn hàng': v.orders,
-        'Người mua': v.buyers,
-        'Lượt xem': v.page_views,
-        'Khách truy cập': v.visitors,
-        'SP bán ra': v.items_sold,
-      }));
+    const dailySorted = Object.entries(byDate).sort(([a],[b]) => a.localeCompare(b));
 
-    // Daily detail table data
-    const dailyTable = Object.entries(byDate)
-      .sort(([a],[b]) => b.localeCompare(a)) // newest first
-      .map(([date, v]) => ({
-        date,
-        dateShort: shortDate(date),
-        gmv: v.gmv,
-        orders: v.orders,
-        buyers: v.buyers,
-        visitors: v.visitors,
-        page_views: v.page_views,
-        items_sold: v.items_sold,
-        refund_amount: v.refund_amount,
-        conversion: v.visitors > 0 ? (v.buyers / v.visitors * 100) : 0,
-        aov: v.orders > 0 ? (v.gmv / v.orders) : 0,
-      }));
+    const chartData = dailySorted.map(([date, v]) => ({
+      date: shortDate(date), fullDate: date,
+      GMV: v.gmv, 'Đơn hàng': v.orders, 'Người mua': v.buyers,
+      'Lượt xem': v.pv, 'Khách truy cập': v.visitors,
+    }));
 
-    const shopList = Object.values(byShop)
-      .sort((a,b) => b.gmv - a.gmv)
-      .map((s, i) => ({
-        ...s,
-        conversion: s.visitors > 0 ? (s.buyers / s.visitors * 100) : 0,
-        aov: s.orders > 0 ? (s.gmv / s.orders) : 0,
-        color: SHOP_COLORS[i % SHOP_COLORS.length],
-      }));
+    // Sparkline arrays
+    const sparkGmv      = dailySorted.map(([,v]) => ({ v: v.gmv }));
+    const sparkOrders   = dailySorted.map(([,v]) => ({ v: v.orders }));
+    const sparkVisitors = dailySorted.map(([,v]) => ({ v: v.visitors }));
+    const sparkConv     = dailySorted.map(([,v]) => ({ v: v.visitors > 0 ? (v.buyers / v.visitors * 100) : 0 }));
 
-    const totalGmv      = shopList.reduce((s,v) => s + v.gmv, 0);
-    const totalOrders   = shopList.reduce((s,v) => s + v.orders, 0);
-    const totalBuyers   = shopList.reduce((s,v) => s + v.buyers, 0);
-    const totalPv       = shopList.reduce((s,v) => s + v.page_views, 0);
-    const totalVisitors = shopList.reduce((s,v) => s + v.visitors, 0);
-    const totalItems    = shopList.reduce((s,v) => s + v.items_sold, 0);
-    const totalRefunds  = shopList.reduce((s,v) => s + v.refund_amount, 0);
+    // ── Channel breakdown from raw_metrics ──────────────────────────────
+    const channels = { VIDEO: 0, LIVE: 0, PRODUCT_CARD: 0 };
+    dailyData.forEach(row => {
+      const breakdowns = row.raw_metrics?.sales?.gmv?.breakdowns;
+      if (Array.isArray(breakdowns)) {
+        breakdowns.forEach(b => {
+          if (b.type && channels[b.type] !== undefined) {
+            channels[b.type] += Number(b.gmv?.amount || 0);
+          }
+        });
+      }
+    });
+    const channelTotal = channels.VIDEO + channels.LIVE + channels.PRODUCT_CARD;
+    const channelList = [
+      { name: 'Video', color: ACCENT.orange, amount: channels.VIDEO },
+      { name: 'Livestream', color: ACCENT.amber, amount: channels.LIVE },
+      { name: 'Sản phẩm', color: ACCENT.blue, amount: channels.PRODUCT_CARD },
+    ].map(c => ({ ...c, percent: channelTotal > 0 ? (c.amount / channelTotal * 100) : 0 }))
+     .sort((a, b) => b.amount - a.amount);
+
+    // ── Daily table ──────────────────────────────────────────────────────
+    const dailyTable = dailySorted.map(([date, v]) => ({
+      date, dateShort: shortDate(date),
+      gmv: v.gmv, orders: v.orders, buyers: v.buyers,
+      visitors: v.visitors, pv: v.pv, items: v.items, refunds: v.refunds,
+      conversion: v.visitors > 0 ? (v.buyers / v.visitors * 100) : 0,
+      aov: v.orders > 0 ? (v.gmv / v.orders) : 0,
+    })).reverse();
+
+    // ── By shop ──────────────────────────────────────────────────────────
+    const byShop = {};
+    dailyData.forEach(row => {
+      const sid = row.shop_id;
+      if (!byShop[sid]) byShop[sid] = { shop_id: sid, seller_name: row.seller_name || sid, gmv: 0, orders: 0, buyers: 0, pv: 0, visitors: 0 };
+      byShop[sid].gmv      += Number(row.payment_amount) || 0;
+      byShop[sid].orders   += Number(row.order_count) || 0;
+      byShop[sid].buyers   += Number(row.buyer_count) || 0;
+      byShop[sid].pv       += Number(row.page_views) || 0;
+      byShop[sid].visitors += Number(row.visitors) || 0;
+    });
+    const shopList = Object.values(byShop).sort((a,b) => b.gmv - a.gmv).map((s,i) => ({
+      ...s,
+      conversion: s.visitors > 0 ? (s.buyers / s.visitors * 100) : 0,
+      aov: s.orders > 0 ? (s.gmv / s.orders) : 0,
+      color: Object.values(ACCENT)[i % Object.values(ACCENT).length],
+    }));
+
+    const numDays = dailySorted.length;
+    const gmvMax = Math.max(...dailySorted.map(([,v]) => v.gmv));
+    const gmvAvg = numDays > 0 ? cur.gmv / numDays : 0;
 
     return {
-      chartData,
-      dailyTable,
-      shopList,
-      totalGmv,
-      totalOrders,
-      totalBuyers,
-      totalPv,
-      totalVisitors,
-      totalItems,
-      totalRefunds,
-      conversionRate: totalVisitors > 0 ? (totalBuyers / totalVisitors * 100) : 0,
-      aov: totalOrders > 0 ? (totalGmv / totalOrders) : 0,
+      cur, prev, numDays, chartData, dailyTable, shopList, channelList, channelTotal,
+      sparkGmv, sparkOrders, sparkVisitors, sparkConv,
+      gmvMax, gmvAvg,
+      changes: {
+        gmv: pctChange(cur.gmv, prev.gmv),
+        orders: pctChange(cur.orders, prev.orders),
+        visitors: pctChange(cur.visitors, prev.visitors),
+        conversion: pctChange(
+          cur.visitors > 0 ? (cur.buyers / cur.visitors * 100) : 0,
+          prev.visitors > 0 ? (prev.buyers / prev.visitors * 100) : 0,
+        ),
+      },
+      conversionRate: cur.visitors > 0 ? (cur.buyers / cur.visitors * 100) : 0,
+      aov: cur.orders > 0 ? (cur.gmv / cur.orders) : 0,
     };
-  }, [dailyData]);
+  }, [dailyData, prevData]);
 
-  const hasNoConnections = connections.length === 0;
+  const th = { padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: '#475569', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.3px', borderBottom: '2px solid #e5e7eb', whiteSpace: 'nowrap' };
+  const td = { padding: '10px 14px', fontSize: '0.82rem', whiteSpace: 'nowrap' };
 
-  // ── Table cell style ─────────────────────────────────────────────────────
-  const thStyle = { padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: '#475569', fontSize: '0.73rem', textTransform: 'uppercase', letterSpacing: '0.3px', borderBottom: '2px solid #e5e7eb', whiteSpace: 'nowrap' };
-  const tdStyle = { padding: '10px 14px', fontSize: '0.82rem', whiteSpace: 'nowrap' };
-
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  // RENDER
+  // ══════════════════════════════════════════════════════════════════════════
   return (
     <div style={{ fontFamily: "'Outfit', sans-serif", color: '#0f172a' }}>
+
       {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 900, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ width: 38, height: 38, background: '#ea580c', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '1.1rem', boxShadow: '0 4px 12px rgba(234,88,12,0.2)' }}>📈</span>
-            TikTok Shop Analytics
-          </h2>
-          <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.82rem' }}>
-            GMV, đơn hàng, traffic & chuyển đổi — dữ liệu từ Supabase
-            {lastSync && <span style={{ marginLeft: 8, color: '#94a3b8' }}>| Sync gần nhất: {new Date(lastSync).toLocaleString('vi-VN')}</span>}
+          <div style={{ fontSize: '0.7rem', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 4 }}>
+            🏪 ECOM &nbsp;/&nbsp; TIKTOK ANALYTICS
+          </div>
+          <h2 style={{ margin: '0 0 4px', fontSize: '1.4rem', fontWeight: 900 }}>TikTok Shop Analytics</h2>
+          <p style={{ margin: 0, color: '#64748b', fontSize: '0.82rem' }}>
+            Tổng quan hiệu suất Ecom · {periodLabel} qua
+            {lastSync && <span style={{ color: '#94a3b8' }}> · cập nhật <strong>{new Date(lastSync).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</strong> {new Date(lastSync).toLocaleDateString('vi-VN')}</span>}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <a href={AUTH_URL} target="_blank" rel="noopener noreferrer"
-            style={{ padding: '9px 16px', borderRadius: 8, background: '#0f172a', color: '#fff', fontSize: '0.8rem', fontWeight: 700, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 4px 12px rgba(15,23,42,0.18)' }}>
-            ♪ Kết nối Shop
-          </a>
-          <button onClick={() => doSync(true)} disabled={syncing}
-            style={{ padding: '9px 16px', borderRadius: 8, border: '1.5px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontWeight: 700, fontSize: '0.8rem', cursor: syncing ? 'not-allowed' : 'pointer', opacity: syncing ? 0.6 : 1 }}>
-            {syncing ? '...' : '📥 Full Sync (01/04)'}
-          </button>
+          {/* Quick filters */}
+          <div style={{ display: 'flex', gap: 0, background: '#f1f5f9', borderRadius: 10, padding: 3 }}>
+            {[{ label: '7 ngày', days: 7 }, { label: '30 ngày', days: 30 }, { label: '90 ngày', days: 90 }].map(r => {
+              const end = new Date(); const start = new Date(); start.setDate(start.getDate() - r.days);
+              const isActive = dateRange.start === toYmd(start) && dateRange.end === toYmd(end);
+              return (
+                <button key={r.days} onClick={() => setQuickRange(r.days)}
+                  style={{ padding: '7px 16px', borderRadius: 8, fontSize: '0.78rem', fontWeight: 600, border: 'none', background: isActive ? '#fff' : 'transparent', color: isActive ? '#ea580c' : '#64748b', cursor: 'pointer', boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.15s' }}>
+                  {r.label}
+                </button>
+              );
+            })}
+          </div>
+          {/* Date inputs */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="date" value={dateRange.start} onChange={e => setDateRange(p => ({ ...p, start: e.target.value }))}
+              style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.78rem', fontFamily: 'inherit' }} />
+            <span style={{ color: '#cbd5e1' }}>—</span>
+            <input type="date" value={dateRange.end} onChange={e => setDateRange(p => ({ ...p, end: e.target.value }))}
+              style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.78rem', fontFamily: 'inherit' }} />
+          </div>
+          {/* Actions */}
           <button onClick={() => doSync(false)} disabled={syncing}
-            style={{ padding: '9px 16px', borderRadius: 8, border: '1.5px solid #ea580c', background: '#fff', color: '#ea580c', fontWeight: 700, fontSize: '0.8rem', cursor: syncing ? 'not-allowed' : 'pointer', opacity: syncing ? 0.6 : 1 }}>
-            {syncing ? '...' : '🔄 Sync'}
+            style={{ padding: '8px 16px', borderRadius: 8, border: '1.5px solid #e5e7eb', background: '#fff', color: '#374151', fontWeight: 600, fontSize: '0.78rem', cursor: syncing ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            🔄 Đồng bộ
+          </button>
+          <button onClick={() => doSync(true)} disabled={syncing}
+            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#ea580c', color: '#fff', fontWeight: 700, fontSize: '0.78rem', cursor: syncing ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 8px rgba(234,88,12,0.25)', opacity: syncing ? 0.6 : 1 }}>
+            {syncing ? '⏳ Đang sync...' : '📥 Full Sync'}
           </button>
         </div>
       </div>
 
-      {/* ── Sync result ──────────────────────────────────────────────────────── */}
-      {syncResult && (
-        <div style={{
-          background: syncResult.error ? '#fef2f2' : '#f0fdf4',
-          border: `1px solid ${syncResult.error ? '#fecaca' : '#bbf7d0'}`,
-          borderRadius: 14, padding: '12px 16px', marginBottom: 16, fontSize: '0.82rem',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        }}>
-          <span style={{ color: syncResult.error ? '#dc2626' : '#15803d', fontWeight: 700 }}>
-            {syncResult.error
-              ? `⚠️ Lỗi: ${syncResult.error}`
-              : `✅ Sync thành công: ${syncResult.total_upserted || 0} bản ghi (${syncResult.elapsed_seconds || 0}s)`}
-          </span>
-          <button onClick={() => setSyncResult(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '1rem', color: '#94a3b8' }}>×</button>
-        </div>
-      )}
-
-      {/* ── Connections status ───────────────────────────────────────────────── */}
+      {/* ── Status badge ─────────────────────────────────────────────────────── */}
       {connections.length > 0 && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
           {connections.map((c, i) => {
             const expired = c.access_token_expires_at && new Date(c.access_token_expires_at) < new Date();
             return (
               <div key={i} style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px',
+                display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 16px',
                 background: expired ? '#fef2f2' : '#f0fdf4', border: `1px solid ${expired ? '#fecaca' : '#bbf7d0'}`,
-                borderRadius: 8, fontSize: '0.76rem', fontWeight: 600,
+                borderRadius: 20, fontSize: '0.76rem', fontWeight: 600,
               }}>
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: expired ? '#ef4444' : '#22c55e' }} />
-                <span style={{ color: '#374151' }}>{c.seller_name || c.shop_id}</span>
-                {expired && <span style={{ color: '#dc2626', fontSize: '0.68rem' }}>(hết hạn)</span>}
+                {expired ? '⚠️' : '●'} {c.seller_name || c.shop_id}
+                {expired && <span style={{ color: '#dc2626' }}>(hết hạn)</span>}
               </div>
             );
           })}
+          <a href={AUTH_URL} target="_blank" rel="noopener noreferrer"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '6px 16px', background: '#0f172a', color: '#fff', borderRadius: 20, fontSize: '0.76rem', fontWeight: 600, textDecoration: 'none' }}>
+            + Kết nối Shop
+          </a>
+        </div>
+      )}
+
+      {/* ── Sync result ──────────────────────────────────────────────────────── */}
+      {syncResult && (
+        <div style={{
+          background: syncResult.error ? '#fef2f2' : '#f0fdf4',
+          border: `1px solid ${syncResult.error ? '#fecaca' : '#bbf7d0'}`,
+          borderRadius: 12, padding: '10px 16px', marginBottom: 16, fontSize: '0.82rem',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        }}>
+          <span style={{ color: syncResult.error ? '#dc2626' : '#15803d', fontWeight: 700 }}>
+            {syncResult.error ? `⚠️ Lỗi: ${syncResult.error}` : `✅ Sync thành công: ${syncResult.total_upserted || 0} bản ghi (${syncResult.elapsed_seconds || 0}s)`}
+          </span>
+          <button onClick={() => setSyncResult(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '1rem', color: '#94a3b8' }}>×</button>
         </div>
       )}
 
       {/* ── No connections ───────────────────────────────────────────────────── */}
-      {hasNoConnections && !loading && (
-        <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 14, padding: '24px 28px', marginBottom: 20, textAlign: 'center' }}>
-          <div style={{ fontSize: '2rem', marginBottom: 8 }}>🔗</div>
-          <h3 style={{ margin: '0 0 8px', fontSize: '1rem', fontWeight: 800, color: '#9a3412' }}>Chưa kết nối shop nào với Analytics App</h3>
-          <p style={{ color: '#c2410c', fontSize: '0.84rem', margin: '0 0 16px' }}>Click nút bên dưới để uỷ quyền shop.</p>
+      {connections.length === 0 && !loading && (
+        <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 16, padding: '32px', marginBottom: 20, textAlign: 'center' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: 10 }}>🔗</div>
+          <h3 style={{ margin: '0 0 8px', fontWeight: 800, color: '#9a3412' }}>Chưa kết nối shop nào</h3>
+          <p style={{ color: '#c2410c', fontSize: '0.84rem', margin: '0 0 16px' }}>Kết nối TikTok Shop để xem dữ liệu analytics.</p>
           <a href={AUTH_URL} target="_blank" rel="noopener noreferrer"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 24px', background: '#ea580c', color: '#fff', borderRadius: 10, fontWeight: 700, textDecoration: 'none', fontSize: '0.88rem', boxShadow: '0 6px 16px rgba(234,88,12,0.25)' }}>
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 28px', background: '#ea580c', color: '#fff', borderRadius: 12, fontWeight: 700, textDecoration: 'none', fontSize: '0.88rem', boxShadow: '0 6px 16px rgba(234,88,12,0.25)' }}>
             ♪ Kết nối TikTok Shop
           </a>
         </div>
       )}
 
-      {/* ── Filters ──────────────────────────────────────────────────────────── */}
-      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '16px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {[{ label: '7 ngày', days: 7 }, { label: '30 ngày', days: 30 }, { label: '90 ngày', days: 90 }].map(r => {
-            const end = new Date(); const start = new Date(); start.setDate(start.getDate() - r.days);
-            const isActive = dateRange.start === toYmd(start) && dateRange.end === toYmd(end);
-            return (
-              <button key={r.days} onClick={() => setQuickRange(r.days)}
-                style={{ padding: '6px 14px', borderRadius: 7, fontSize: '0.78rem', fontWeight: 600, border: isActive ? '1.5px solid #ea580c' : '1.5px solid #e5e7eb', background: isActive ? '#fff7ed' : '#fff', color: isActive ? '#ea580c' : '#64748b', cursor: 'pointer' }}>
-                {r.label}
-              </button>
-            );
-          })}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <input type="date" value={dateRange.start} onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-            style={{ padding: '6px 10px', borderRadius: 7, border: '1.5px solid #e5e7eb', fontSize: '0.8rem', fontFamily: 'inherit' }} />
-          <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>→</span>
-          <input type="date" value={dateRange.end} onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-            style={{ padding: '6px 10px', borderRadius: 7, border: '1.5px solid #e5e7eb', fontSize: '0.8rem', fontFamily: 'inherit' }} />
-        </div>
-        {connections.length > 1 && (
-          <select value={shopFilter} onChange={e => setShopFilter(e.target.value)}
-            style={{ padding: '6px 12px', borderRadius: 7, border: '1.5px solid #e5e7eb', fontSize: '0.8rem', fontFamily: 'inherit', color: '#374151', background: '#fff' }}>
-            <option value="">Tất cả shop</option>
-            {connections.map(c => (<option key={c.shop_id} value={c.shop_id}>{c.seller_name || c.shop_id}</option>))}
-          </select>
-        )}
-        <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginLeft: 'auto' }}>
-          {dailyData.length} bản ghi
-        </div>
-      </div>
-
       {/* ── Loading ──────────────────────────────────────────────────────────── */}
       {loading && (
-        <div style={{ textAlign: 'center', padding: '48px 20px', color: '#64748b' }}>
-          <div style={{ fontSize: '2rem', marginBottom: 8 }}>⏳</div>
-          <p style={{ fontSize: '0.88rem', fontWeight: 600 }}>Đang tải dữ liệu...</p>
+        <div style={{ textAlign: 'center', padding: '64px 20px', color: '#64748b' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: 10 }}>⏳</div>
+          <p style={{ fontWeight: 600 }}>Đang tải dữ liệu...</p>
         </div>
       )}
 
-      {/* ── Data ─────────────────────────────────────────────────────────────── */}
+      {/* ══════════════════════════════════════════════════════════════════════ */}
+      {/* DATA */}
+      {/* ══════════════════════════════════════════════════════════════════════ */}
       {!loading && computed && (
         <>
-          {/* ── Summary Cards ────────────────────────────────────────────────── */}
-          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 24 }}>
-            <StatCard icon="💰" label="GMV" value={`${fmtVnd(computed.totalGmv)} VND`}
-              sub={`AOV: ${fmtVnd(computed.aov)} VND`} bgColor="#fff7ed" borderColor="#fed7aa" />
-            <StatCard icon="🛒" label="Đơn hàng" value={fmtNumber(computed.totalOrders)}
-              sub={`${fmtNumber(computed.totalItems)} SP bán ra`} bgColor="#eff6ff" borderColor="#bfdbfe" />
-            <StatCard icon="👥" label="Người mua" value={fmtNumber(computed.totalBuyers)}
-              sub={`${fmtNumber(computed.totalVisitors)} khách truy cập · ${fmtNumber(computed.totalPv)} lượt xem`} bgColor="#f0fdf4" borderColor="#bbf7d0" />
-            <StatCard icon="📊" label="Tỷ lệ chuyển đổi" value={fmtPercent(computed.conversionRate)}
-              sub="Người mua / Khách truy cập" bgColor="#f5f3ff" borderColor="#ddd6fe" />
+          {/* ── 4 Stat Cards ─────────────────────────────────────────────────── */}
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
+            <StatCard icon="🌐" label="Traffic" accentColor={ACCENT.orange}
+              value={fmtVnd(computed.cur.visitors)} unit="lượt"
+              change={computed.changes.visitors}
+              sub={`vs ${periodLabel} trước · ${fmtVndFull(computed.cur.visitors)} lượt`}
+              sparkData={computed.sparkVisitors} sparkKey="v" />
+
+            <StatCard icon="💰" label="Tổng GMV" accentColor={ACCENT.green}
+              value={fmtVnd(computed.cur.gmv)} unit="đ"
+              change={computed.changes.gmv}
+              sub={`vs ${periodLabel} trước · ${fmtVndFull(computed.cur.gmv)} đ`}
+              sparkData={computed.sparkGmv} sparkKey="v" />
+
+            <StatCard icon="📦" label="Đơn hàng" accentColor={ACCENT.amber}
+              value={fmtNumber(computed.cur.orders)} unit=""
+              change={computed.changes.orders}
+              sub={`vs ${periodLabel} trước · ${computed.numDays > 0 ? Math.round(computed.cur.orders / computed.numDays) : 0} đơn / ngày`}
+              sparkData={computed.sparkOrders} sparkKey="v" />
+
+            <StatCard icon="📊" label="Tỷ lệ chuyển đổi" accentColor={ACCENT.purple}
+              value={computed.conversionRate.toFixed(2)} unit="%"
+              change={computed.changes.conversion}
+              sub={`vs ${periodLabel} trước · CVR trung bình`}
+              sparkData={computed.sparkConv} sparkKey="v" />
           </div>
 
-          {/* ── Charts ───────────────────────────────────────────────────────── */}
-          {computed.chartData.length > 0 && (
-            <div style={{ display: 'grid', gap: 20, gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))', marginBottom: 24 }}>
-              {/* GMV Chart */}
-              <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '18px 20px' }}>
-                <h3 style={{ margin: '0 0 14px', fontSize: '0.88rem', fontWeight: 800 }}>📈 GMV theo ngày</h3>
-                <ResponsiveContainer width="100%" height={280}>
-                  <AreaChart data={computed.chartData}>
-                    <defs><linearGradient id="gmvGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#ea580c" stopOpacity={0.15}/><stop offset="95%" stopColor="#ea580c" stopOpacity={0}/></linearGradient></defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/>
-                    <XAxis dataKey="date" tick={{ fontSize:11, fill:'#64748b' }}/>
-                    <YAxis tickFormatter={fmtVnd} tick={{ fontSize:11, fill:'#64748b' }} width={70}/>
-                    <Tooltip content={<ChartTooltip valueFormatter={fmtVnd} suffix=" VND"/>}/>
-                    <Area type="monotone" dataKey="GMV" stroke="#ea580c" strokeWidth={2.5} fill="url(#gmvGrad)" dot={{ r: 3, fill: '#ea580c' }}>
-                      <LabelList dataKey="GMV" content={<SmallLabel formatter={fmtShort} color="#c2410c" />} />
-                    </Area>
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-
-              {/* Orders Chart */}
-              <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '18px 20px' }}>
-                <h3 style={{ margin: '0 0 14px', fontSize: '0.88rem', fontWeight: 800 }}>🛒 Đơn hàng theo ngày</h3>
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={computed.chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/>
-                    <XAxis dataKey="date" tick={{ fontSize:11, fill:'#64748b' }}/>
-                    <YAxis tick={{ fontSize:11, fill:'#64748b' }} width={50}/>
-                    <Tooltip content={<ChartTooltip valueFormatter={fmtNumber}/>}/>
-                    <Bar dataKey="Đơn hàng" fill="#3b82f6" radius={[4,4,0,0]}>
-                      <LabelList dataKey="Đơn hàng" position="top" style={{ fontSize: 10, fill: '#3b82f6', fontWeight: 600 }} />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-
-              {/* Traffic Chart */}
-              {(computed.chartData.some(d => d['Khách truy cập'] > 0) || computed.chartData.some(d => d['Lượt xem'] > 0)) && (
-                <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '18px 20px', gridColumn: '1 / -1' }}>
-                  <h3 style={{ margin: '0 0 14px', fontSize: '0.88rem', fontWeight: 800 }}>👥 Traffic theo ngày</h3>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={computed.chartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/>
-                      <XAxis dataKey="date" tick={{ fontSize:11, fill:'#64748b' }}/>
-                      <YAxis tick={{ fontSize:11, fill:'#64748b' }} width={60}/>
-                      <Tooltip content={<ChartTooltip valueFormatter={fmtNumber}/>}/>
-                      <Legend />
-                      {computed.chartData.some(d => d['Lượt xem'] > 0) && (
-                        <Line type="monotone" dataKey="Lượt xem" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3, fill: '#8b5cf6' }}>
-                          <LabelList dataKey="Lượt xem" content={<SmallLabel formatter={fmtShort} color="#7c3aed" />} />
-                        </Line>
-                      )}
-                      {computed.chartData.some(d => d['Khách truy cập'] > 0) && (
-                        <Line type="monotone" dataKey="Khách truy cập" stroke="#0891b2" strokeWidth={2} dot={{ r: 3, fill: '#0891b2' }}>
-                          <LabelList dataKey="Khách truy cập" content={<SmallLabel formatter={fmtShort} color="#0e7490" />} />
-                        </Line>
-                      )}
-                      {computed.chartData.some(d => d['Người mua'] > 0) && (
-                        <Line type="monotone" dataKey="Người mua" stroke="#16a34a" strokeWidth={2} dot={{ r: 3, fill: '#16a34a' }}>
-                          <LabelList dataKey="Người mua" content={<SmallLabel formatter={fmtShort} color="#15803d" />} />
-                        </Line>
-                      )}
-                    </LineChart>
-                  </ResponsiveContainer>
+          {/* ── Main Charts: GMV + Channel breakdown ─────────────────────────── */}
+          <div style={{ display: 'grid', gap: 20, gridTemplateColumns: computed.channelTotal > 0 ? '1.5fr 1fr' : '1fr', marginBottom: 24 }}>
+            {/* GMV Area Chart */}
+            <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 16, padding: '20px 22px', boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800 }}>📈 Doanh số theo ngày</h3>
+                  <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: '#94a3b8' }}>Đơn vị: triệu đồng · {computed.numDays} ngày gần nhất</p>
                 </div>
-              )}
+                <div style={{ display: 'flex', gap: 16, fontSize: '0.74rem', color: '#64748b' }}>
+                  <span>Cao nhất: <strong style={{ color: '#ea580c' }}>{fmtVnd(computed.gmvMax)}</strong></span>
+                  <span>TB: <strong style={{ color: '#0f172a' }}>{fmtVnd(computed.gmvAvg)}</strong></span>
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={computed.chartData} margin={{ top: 20, right: 10, bottom: 0, left: 0 }}>
+                  <defs>
+                    <linearGradient id="gmvGradMain" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#ea580c" stopOpacity={0.12}/>
+                      <stop offset="95%" stopColor="#ea580c" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/>
+                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false}/>
+                  <YAxis tickFormatter={fmtVnd} tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false}/>
+                  <Tooltip content={<ChartTooltip valueFormatter={fmtVnd} suffix=" đ"/>}/>
+                  <Area type="monotone" dataKey="GMV" stroke="#ea580c" strokeWidth={2.5} fill="url(#gmvGradMain)" dot={{ r: 3, fill: '#ea580c', strokeWidth: 0 }} activeDot={{ r: 5, fill: '#ea580c' }}>
+                    <LabelList dataKey="GMV" content={<SmallLabel color="#c2410c" />} />
+                  </Area>
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
-          )}
 
-          {/* ── Bảng thống kê chi tiết theo ngày ─────────────────────────────── */}
+            {/* Channel Breakdown */}
+            {computed.channelTotal > 0 && (
+              <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 16, padding: '20px 22px', boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
+                <h3 style={{ margin: '0 0 4px', fontSize: '0.92rem', fontWeight: 800 }}>🎯 Doanh thu theo kênh</h3>
+                <p style={{ margin: '0 0 20px', fontSize: '0.72rem', color: '#94a3b8' }}>Tỷ trọng GMV trên tổng {periodLabel}</p>
+                {computed.channelList.map((ch, i) => (
+                  <ChannelBar key={i} name={ch.name} color={ch.color} amount={ch.amount}
+                    percent={ch.percent} maxPercent={computed.channelList[0]?.percent || 100} />
+                ))}
+                <div style={{ marginTop: 18, background: '#f8fafc', borderRadius: 10, padding: '12px 14px', fontSize: '0.78rem', color: '#475569', lineHeight: 1.5 }}>
+                  💡 <strong>{computed.channelList[0]?.name}</strong> đang chiếm <strong>{computed.channelList[0]?.percent.toFixed(1)}%</strong> doanh thu
+                  {computed.channelList[0]?.amount > 0 && <> — <strong style={{ color: '#ea580c' }}>{fmtVnd(computed.channelList[0]?.amount)} đ</strong></>}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Orders + Traffic Charts ───────────────────────────────────────── */}
+          <div style={{ display: 'grid', gap: 20, gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))', marginBottom: 24 }}>
+            {/* Orders */}
+            <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 16, padding: '20px 22px', boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
+              <h3 style={{ margin: '0 0 14px', fontSize: '0.88rem', fontWeight: 800 }}>🛒 Đơn hàng theo ngày</h3>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={computed.chartData} margin={{ top: 20, right: 10, bottom: 0, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/>
+                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false}/>
+                  <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} width={45} axisLine={false} tickLine={false}/>
+                  <Tooltip content={<ChartTooltip valueFormatter={fmtNumber}/>}/>
+                  <Bar dataKey="Đơn hàng" fill="#3b82f6" radius={[5,5,0,0]}>
+                    <LabelList dataKey="Đơn hàng" position="top" style={{ fontSize: 10, fill: '#3b82f6', fontWeight: 600 }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Traffic */}
+            <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 16, padding: '20px 22px', boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
+              <h3 style={{ margin: '0 0 14px', fontSize: '0.88rem', fontWeight: 800 }}>👥 Traffic theo ngày</h3>
+              <ResponsiveContainer width="100%" height={260}>
+                <LineChart data={computed.chartData} margin={{ top: 20, right: 10, bottom: 0, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/>
+                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false}/>
+                  <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} width={50} axisLine={false} tickLine={false}/>
+                  <Tooltip content={<ChartTooltip valueFormatter={fmtNumber}/>}/>
+                  <Legend wrapperStyle={{ fontSize: '0.75rem' }}/>
+                  <Line type="monotone" dataKey="Lượt xem" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 2.5, fill: '#8b5cf6' }}>
+                    <LabelList dataKey="Lượt xem" content={<SmallLabel color="#7c3aed" />} />
+                  </Line>
+                  <Line type="monotone" dataKey="Khách truy cập" stroke="#0891b2" strokeWidth={2} dot={{ r: 2.5, fill: '#0891b2' }}>
+                    <LabelList dataKey="Khách truy cập" content={<SmallLabel color="#0e7490" />} />
+                  </Line>
+                  <Line type="monotone" dataKey="Người mua" stroke="#16a34a" strokeWidth={2} dot={{ r: 2.5, fill: '#16a34a' }}>
+                    <LabelList dataKey="Người mua" content={<SmallLabel color="#15803d" />} />
+                  </Line>
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* ── Bảng thống kê chi tiết ───────────────────────────────────────── */}
           {computed.dailyTable.length > 0 && (
-            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, overflow: 'hidden', marginBottom: 24 }}>
-              <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb' }}>
+            <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 16, overflow: 'hidden', marginBottom: 24, boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
+              <div style={{ padding: '16px 22px', borderBottom: '1px solid #f1f5f9' }}>
                 <h3 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 800 }}>📋 Thống kê chi tiết theo ngày</h3>
               </div>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: '#f8fafc' }}>
-                      <th style={thStyle}>Ngày</th>
-                      <th style={{ ...thStyle, textAlign: 'right' }}>GMV</th>
-                      <th style={{ ...thStyle, textAlign: 'right' }}>Đơn hàng</th>
-                      <th style={{ ...thStyle, textAlign: 'right' }}>SP bán</th>
-                      <th style={{ ...thStyle, textAlign: 'right' }}>Người mua</th>
-                      <th style={{ ...thStyle, textAlign: 'right' }}>Khách truy cập</th>
-                      <th style={{ ...thStyle, textAlign: 'right' }}>Lượt xem</th>
-                      <th style={{ ...thStyle, textAlign: 'right' }}>Chuyển đổi</th>
-                      <th style={{ ...thStyle, textAlign: 'right' }}>AOV</th>
-                      <th style={{ ...thStyle, textAlign: 'right' }}>Hoàn tiền</th>
+                      <th style={th}>Ngày</th>
+                      <th style={{ ...th, textAlign: 'right' }}>GMV</th>
+                      <th style={{ ...th, textAlign: 'right' }}>Đơn hàng</th>
+                      <th style={{ ...th, textAlign: 'right' }}>SP bán</th>
+                      <th style={{ ...th, textAlign: 'right' }}>Người mua</th>
+                      <th style={{ ...th, textAlign: 'right' }}>Khách</th>
+                      <th style={{ ...th, textAlign: 'right' }}>Lượt xem</th>
+                      <th style={{ ...th, textAlign: 'right' }}>CVR</th>
+                      <th style={{ ...th, textAlign: 'right' }}>AOV</th>
+                      <th style={{ ...th, textAlign: 'right' }}>Hoàn tiền</th>
                     </tr>
                   </thead>
                   <tbody>
                     {computed.dailyTable.map((row, i) => (
-                      <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}
-                        onMouseEnter={e => e.currentTarget.style.background = '#fafafa'}
+                      <tr key={i} style={{ borderBottom: '1px solid #f8fafc' }}
+                        onMouseEnter={e => e.currentTarget.style.background = '#fafbfc'}
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                        <td style={{ ...tdStyle, fontWeight: 700, color: '#374151' }}>{row.dateShort}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: '#ea580c' }}>{fmtVnd(row.gmv)}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>{fmtNumber(row.orders)}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right', color: '#475569' }}>{fmtNumber(row.items_sold)}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600, color: '#16a34a' }}>{fmtNumber(row.buyers)}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right', color: '#0891b2' }}>{fmtNumber(row.visitors)}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right', color: '#8b5cf6' }}>{fmtNumber(row.page_views)}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right' }}>
+                        <td style={{ ...td, fontWeight: 700, color: '#374151' }}>{row.dateShort}</td>
+                        <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: '#ea580c' }}>{fmtVnd(row.gmv)}</td>
+                        <td style={{ ...td, textAlign: 'right', fontWeight: 600 }}>{fmtNumber(row.orders)}</td>
+                        <td style={{ ...td, textAlign: 'right', color: '#475569' }}>{fmtNumber(row.items)}</td>
+                        <td style={{ ...td, textAlign: 'right', fontWeight: 600, color: '#16a34a' }}>{fmtNumber(row.buyers)}</td>
+                        <td style={{ ...td, textAlign: 'right', color: '#0891b2' }}>{fmtNumber(row.visitors)}</td>
+                        <td style={{ ...td, textAlign: 'right', color: '#8b5cf6' }}>{fmtNumber(row.pv)}</td>
+                        <td style={{ ...td, textAlign: 'right' }}>
                           <span style={{
                             background: row.conversion > 8 ? '#dcfce7' : row.conversion > 5 ? '#fff7ed' : '#fef2f2',
                             color: row.conversion > 8 ? '#15803d' : row.conversion > 5 ? '#c2410c' : '#dc2626',
-                            padding: '2px 8px', borderRadius: 6, fontWeight: 700, fontSize: '0.78rem',
-                          }}>
-                            {fmtPercent(row.conversion)}
-                          </span>
+                            padding: '2px 8px', borderRadius: 6, fontWeight: 700, fontSize: '0.76rem',
+                          }}>{fmtPercent(row.conversion)}</span>
                         </td>
-                        <td style={{ ...tdStyle, textAlign: 'right', color: '#475569' }}>{fmtVnd(row.aov)}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right', color: row.refund_amount > 0 ? '#dc2626' : '#94a3b8', fontSize: '0.78rem' }}>
-                          {row.refund_amount > 0 ? `-${fmtVnd(row.refund_amount)}` : '—'}
+                        <td style={{ ...td, textAlign: 'right', color: '#475569' }}>{fmtVnd(row.aov)}</td>
+                        <td style={{ ...td, textAlign: 'right', color: row.refunds > 0 ? '#dc2626' : '#cbd5e1', fontSize: '0.78rem' }}>
+                          {row.refunds > 0 ? `-${fmtVnd(row.refunds)}` : '—'}
                         </td>
                       </tr>
                     ))}
                   </tbody>
-                  {/* Totals row */}
                   <tfoot>
                     <tr style={{ background: '#f8fafc', borderTop: '2px solid #e5e7eb' }}>
-                      <td style={{ ...tdStyle, fontWeight: 800, color: '#0f172a' }}>Tổng</td>
-                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 800, color: '#ea580c' }}>{fmtVnd(computed.totalGmv)}</td>
-                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 800 }}>{fmtNumber(computed.totalOrders)}</td>
-                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: '#475569' }}>{fmtNumber(computed.totalItems)}</td>
-                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 800, color: '#16a34a' }}>{fmtNumber(computed.totalBuyers)}</td>
-                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: '#0891b2' }}>{fmtNumber(computed.totalVisitors)}</td>
-                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: '#8b5cf6' }}>{fmtNumber(computed.totalPv)}</td>
-                      <td style={{ ...tdStyle, textAlign: 'right' }}>
-                        <span style={{ background: '#f5f3ff', color: '#7c3aed', padding: '2px 8px', borderRadius: 6, fontWeight: 800, fontSize: '0.78rem' }}>
+                      <td style={{ ...td, fontWeight: 800 }}>Tổng</td>
+                      <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: '#ea580c' }}>{fmtVnd(computed.cur.gmv)}</td>
+                      <td style={{ ...td, textAlign: 'right', fontWeight: 800 }}>{fmtNumber(computed.cur.orders)}</td>
+                      <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: '#475569' }}>{fmtNumber(computed.cur.items)}</td>
+                      <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: '#16a34a' }}>{fmtNumber(computed.cur.buyers)}</td>
+                      <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: '#0891b2' }}>{fmtNumber(computed.cur.visitors)}</td>
+                      <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: '#8b5cf6' }}>{fmtNumber(computed.cur.pv)}</td>
+                      <td style={{ ...td, textAlign: 'right' }}>
+                        <span style={{ background: '#f5f3ff', color: '#7c3aed', padding: '2px 8px', borderRadius: 6, fontWeight: 800, fontSize: '0.76rem' }}>
                           {fmtPercent(computed.conversionRate)}
                         </span>
                       </td>
-                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: '#475569' }}>{fmtVnd(computed.aov)}</td>
-                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: '#dc2626', fontSize: '0.78rem' }}>
-                        {computed.totalRefunds > 0 ? `-${fmtVnd(computed.totalRefunds)}` : '—'}
+                      <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: '#475569' }}>{fmtVnd(computed.aov)}</td>
+                      <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: '#dc2626', fontSize: '0.78rem' }}>
+                        {computed.cur.refunds > 0 ? `-${fmtVnd(computed.cur.refunds)}` : '—'}
                       </td>
                     </tr>
                   </tfoot>
@@ -561,45 +669,43 @@ const ShopAnalyticsTab = () => {
 
           {/* ── Hiệu suất theo Shop ──────────────────────────────────────────── */}
           {computed.shopList.length > 0 && (
-            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, overflow: 'hidden', marginBottom: 24 }}>
-              <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb' }}>
+            <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 16, overflow: 'hidden', marginBottom: 24, boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
+              <div style={{ padding: '16px 22px', borderBottom: '1px solid #f1f5f9' }}>
                 <h3 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 800 }}>🏪 Hiệu suất theo Shop</h3>
               </div>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: '#f8fafc' }}>
-                      {['Shop','GMV','Đơn hàng','Người mua','Khách truy cập','Lượt xem','Chuyển đổi','AOV'].map(h => (
-                        <th key={h} style={thStyle}>{h}</th>
+                      {['Shop','GMV','Đơn hàng','Người mua','Khách truy cập','Lượt xem','CVR','AOV'].map(h => (
+                        <th key={h} style={th}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {computed.shopList.map((s, i) => (
-                      <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}
-                        onMouseEnter={e => e.currentTarget.style.background = '#fafafa'}
+                      <tr key={i} style={{ borderBottom: '1px solid #f8fafc' }}
+                        onMouseEnter={e => e.currentTarget.style.background = '#fafbfc'}
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                        <td style={{ ...tdStyle, fontWeight: 700 }}>
+                        <td style={{ ...td, fontWeight: 700 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.color, flexShrink: 0 }}/>
                             {s.seller_name}
                           </div>
                         </td>
-                        <td style={{ ...tdStyle, fontWeight: 700, color: '#ea580c' }}>{fmtVnd(s.gmv)} VND</td>
-                        <td style={tdStyle}>{fmtNumber(s.orders)}</td>
-                        <td style={tdStyle}>{fmtNumber(s.buyers)}</td>
-                        <td style={tdStyle}>{fmtNumber(s.visitors)}</td>
-                        <td style={tdStyle}>{fmtNumber(s.page_views)}</td>
-                        <td style={tdStyle}>
+                        <td style={{ ...td, fontWeight: 700, color: '#ea580c' }}>{fmtVnd(s.gmv)} đ</td>
+                        <td style={td}>{fmtNumber(s.orders)}</td>
+                        <td style={td}>{fmtNumber(s.buyers)}</td>
+                        <td style={td}>{fmtNumber(s.visitors)}</td>
+                        <td style={td}>{fmtNumber(s.pv)}</td>
+                        <td style={td}>
                           <span style={{
                             background: s.conversion > 8 ? '#dcfce7' : s.conversion > 5 ? '#fff7ed' : '#fef2f2',
                             color: s.conversion > 8 ? '#15803d' : s.conversion > 5 ? '#c2410c' : '#dc2626',
-                            padding: '3px 8px', borderRadius: 6, fontWeight: 700, fontSize: '0.78rem',
-                          }}>
-                            {fmtPercent(s.conversion)}
-                          </span>
+                            padding: '2px 8px', borderRadius: 6, fontWeight: 700, fontSize: '0.76rem',
+                          }}>{fmtPercent(s.conversion)}</span>
                         </td>
-                        <td style={{ ...tdStyle, color: '#475569' }}>{fmtVnd(s.aov)} VND</td>
+                        <td style={{ ...td, color: '#475569' }}>{fmtVnd(s.aov)} đ</td>
                       </tr>
                     ))}
                   </tbody>
@@ -607,37 +713,17 @@ const ShopAnalyticsTab = () => {
               </div>
             </div>
           )}
-
-          {/* ── Shop GMV Chart (multi-shop) ──────────────────────────────────── */}
-          {computed.shopList.length > 1 && (
-            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '18px 20px', marginBottom: 24 }}>
-              <h3 style={{ margin: '0 0 14px', fontSize: '0.88rem', fontWeight: 800 }}>🏆 GMV theo Shop</h3>
-              <ResponsiveContainer width="100%" height={Math.max(200, computed.shopList.length * 50)}>
-                <BarChart data={computed.shopList} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/>
-                  <XAxis type="number" tickFormatter={fmtVnd} tick={{ fontSize:11, fill:'#64748b' }}/>
-                  <YAxis type="category" dataKey="seller_name" width={150} tick={{ fontSize:11, fill:'#374151' }}/>
-                  <Tooltip content={<ChartTooltip valueFormatter={fmtVnd} suffix=" VND"/>}/>
-                  <Bar dataKey="gmv" name="GMV" fill="#ea580c" radius={[0,6,6,0]}>
-                    <LabelList dataKey="gmv" position="right" formatter={fmtVnd} style={{ fontSize: 11, fill: '#ea580c', fontWeight: 700 }} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
         </>
       )}
 
       {/* ── Empty state ──────────────────────────────────────────────────────── */}
-      {!loading && !computed && (
-        <div style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 14, padding: '48px 20px', textAlign: 'center', marginBottom: 20 }}>
+      {!loading && !computed && connections.length > 0 && (
+        <div style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 16, padding: '56px 20px', textAlign: 'center', marginBottom: 20 }}>
           <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>📭</div>
           <h3 style={{ margin: '0 0 8px', fontWeight: 800, color: '#374151' }}>Chưa có dữ liệu analytics</h3>
-          <p style={{ color: '#64748b', fontSize: '0.84rem', margin: '0 0 16px' }}>
-            Bấm "Full Sync (01/04)" để kéo dữ liệu từ TikTok Analytics API về Supabase.
-          </p>
+          <p style={{ color: '#64748b', fontSize: '0.84rem', margin: '0 0 16px' }}>Bấm Full Sync để kéo dữ liệu từ TikTok Analytics API.</p>
           <button onClick={() => doSync(true)} disabled={syncing}
-            style={{ padding: '11px 24px', background: '#ea580c', color: '#fff', borderRadius: 10, fontWeight: 700, border: 'none', fontSize: '0.88rem', cursor: syncing ? 'not-allowed' : 'pointer', boxShadow: '0 6px 16px rgba(234,88,12,0.25)' }}>
+            style={{ padding: '12px 28px', background: '#ea580c', color: '#fff', borderRadius: 12, fontWeight: 700, border: 'none', fontSize: '0.88rem', cursor: syncing ? 'not-allowed' : 'pointer', boxShadow: '0 6px 16px rgba(234,88,12,0.25)' }}>
             {syncing ? '⏳ Đang sync...' : '📥 Full Sync từ 01/04/2026'}
           </button>
         </div>
