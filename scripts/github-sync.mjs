@@ -109,11 +109,17 @@ const main = async () => {
   if (error) { console.error('❌ Supabase error:', error.message); process.exit(1); }
   if (!connections?.length) { console.log('ℹ️  Không có shop nào.'); return; }
 
-  // Lọc eHerb VN nếu cần
+  // Lọc shop
   const EHERB_VN_ID = '7494529979361168222';
-  const conns = SKIP_EHERB
-    ? connections.filter(c => String(c.shop_id) !== EHERB_VN_ID)
-    : connections;
+  const ONLY_SHOP   = process.env.ONLY_SHOP_ID?.trim();
+  let conns;
+  if (ONLY_SHOP) {
+    conns = connections.filter(c => String(c.shop_id) === ONLY_SHOP);
+  } else {
+    conns = SKIP_EHERB
+      ? connections.filter(c => String(c.shop_id) !== EHERB_VN_ID)
+      : connections;
+  }
 
   // Tạo danh sách windows
   const FROM_TS    = Math.floor(new Date(FROM_DATE).getTime() / 1000);

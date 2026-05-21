@@ -12,9 +12,13 @@ on:
         required: false
         default: '3'
       skip_eherb_vn:
-        description: 'Bỏ qua eHerb VN (token lỗi)? yes/no'
+        description: 'Bỏ qua eHerb VN? yes/no'
         required: false
-        default: 'yes'
+        default: 'no'
+      only_shop_id:
+        description: 'Chỉ sync 1 shop (shop_id), để trống = tất cả'
+        required: false
+        default: ''
 
   schedule:
     - cron: '0 2 * * *'
@@ -45,5 +49,6 @@ jobs:
           SUPABASE_SERVICE_KEY:   ${{ secrets.SUPABASE_SERVICE_KEY }}
           FROM_DATE:    ${{ github.event.inputs.from_date || '2026-04-01' }}
           WINDOW_DAYS:  ${{ github.event.inputs.window_days || '3' }}
-          SKIP_EHERB_VN: ${{ github.event.inputs.skip_eherb_vn || 'yes' }}
+          SKIP_EHERB_VN: ${{ github.event.inputs.skip_eherb_vn || 'no' }}
+          ONLY_SHOP_ID: ${{ github.event.inputs.only_shop_id || '' }}
         run: node scripts/github-sync.mjs
