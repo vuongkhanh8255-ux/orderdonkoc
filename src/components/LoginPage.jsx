@@ -152,6 +152,8 @@ export const ACCOUNTS = [
     { username: 'booking',    password: 'Booking@SK2025',  role: 'booking',    name: 'Booking'     },
     { username: 'cs',         password: 'CS@SK2025',       role: 'cs',         name: 'CS'          },
     { username: 'livestream', password: 'Live@SK2025',     role: 'livestream', name: 'Livestream'  },
+    // ── Reviewer account (for Shopee/TikTok API review) ──
+    { username: 'shopee-reviewer', password: 'ShopeeTest@2026', role: 'reviewer', name: 'Reviewer' },
     // ── ECOM accounts (5 users, propose-only quyền cho phần Định danh KOC) ──
     { username: 'ha',         password: 'Ha@SK2025',       role: 'ecom',       name: 'Hạ'          },
     { username: 'phong',      password: 'Phong@SK2025',    role: 'ecom',       name: 'Phong'       },
@@ -170,6 +172,7 @@ export const ROLE_VIEWS = {
     // ECOM: full Ecom group + CSKH + Livestream + Booking group (trừ Hợp Đồng) + Ngân Sách Ecom
     //       booking_performance chỉ được "đề xuất" (yellow), admin duyệt mới thành red
     //       KHÔNG có: Hợp Đồng, Lưu Trữ Data, Task & Notes
+    reviewer:   ['shop_analytics','listed_price'],
     ecom:       [
         'stella_dashboard','listed_price','tiktok_orders','shop_analytics','camp_registration', // Ecom group
         'cskh',                                                                // CSKH
