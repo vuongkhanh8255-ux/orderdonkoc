@@ -1,4 +1,17 @@
 {
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
+        { "key": "X-XSS-Protection", "value": "1; mode=block" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/bluecore-api/:match*",
@@ -10,18 +23,11 @@
     }
   ],
   "functions": {
-    "api/tiktok-shop/sync-orders.js": {
-      "maxDuration": 300
-    },
     "api/tiktok-shop/sync-analytics.js": {
       "maxDuration": 120
     }
   },
   "crons": [
-    {
-      "path": "/api/tiktok-shop/sync-orders",
-      "schedule": "0 21 * * *"
-    },
     {
       "path": "/api/tiktok-shop/sync-analytics",
       "schedule": "30 21 * * *"
