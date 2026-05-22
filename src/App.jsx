@@ -26,6 +26,7 @@ import TikTokOrdersTab from './components/TikTokOrdersTab';
 import CostingTab from './components/CostingTab';
 import CrmTab from './components/CrmTab';
 import ShopAnalyticsTab from './components/ShopAnalyticsTab';
+import PublicLandingPage from './components/PublicLandingPage';
 
 const SESSION_KEY = 'sk_session';
 
@@ -58,6 +59,9 @@ function App() {
     setUser(null);
   };
 
+  const [showLogin, setShowLogin] = useState(false);
+
+  if (!user && !showLogin) return <PublicLandingPage onGoLogin={() => setShowLogin(true)} />;
   if (!user) return <LoginPage onLogin={handleLogin} />;
 
   const allowedViews = ROLE_VIEWS[user.role] || [];
@@ -209,11 +213,9 @@ function AppMain({ user, onLogout, allowedViews }) {
           <div style={{ flex: 1, paddingTop: '8px', overflowY: 'auto', overflowX: 'hidden' }}>
             {[
               { key: 'ecom', label: '🛍️ Ecom', emoji: '🛍️', items: [
-                { view: 'stella_dashboard',  icon: '📊', name: 'Stella Dashboard' },
+                { view: 'shop_analytics',    icon: '📊', name: 'Dashboard Ecom' },
                 { view: 'listed_price',      icon: '🏷️', name: 'Bảng giá niêm yết' },
                 { view: 'costing',           icon: '💰', name: 'Giá Cost' },
-                { view: 'tiktok_orders',     icon: '🛒', name: 'TikTok Shop Orders' },
-                { view: 'shop_analytics',    icon: '📈', name: 'TikTok Analytics' },
                 { view: 'camp_registration', icon: '🎪', name: 'Đăng Kí Camp' },
               ]},
               { key: 'crm', label: '👥 CRM', emoji: '👥', items: [
