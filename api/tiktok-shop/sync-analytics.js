@@ -129,7 +129,7 @@ export default async function handler(req, res) {
     endDate   = addDays(today, 1); // end_date_lt is exclusive
   } else if (params.start_date && params.end_date) {
     startDate = params.start_date;
-    endDate   = params.end_date;
+    endDate   = addDays(params.end_date, 1); // end_date_lt is exclusive, need +1
   } else {
     // Default cron: sync last 3 days (to catch late data updates)
     const d = new Date();
