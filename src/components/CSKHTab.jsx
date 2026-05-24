@@ -777,6 +777,11 @@ function TikTokReviewsTab() {
   const [showImportGuide, setShowImportGuide] = useState(false);
   const fileInputRef = useRef(null);
 
+  // Shop connections (kho lưu trữ)
+  const [connections, setConnections] = useState([]);
+  const [syncingShop, setSyncingShop] = useState(null); // shop_id being synced
+  const [shopSyncResult, setShopSyncResult] = useState({}); // { [shop_id]: result }
+
   // Filters
   const [shopFilter, setShopFilter] = useState('Tất cả');
   const [ratingFilter, setRatingFilter] = useState('Tất cả');
@@ -807,7 +812,19 @@ function TikTokReviewsTab() {
     }
   };
 
-  useEffect(() => { fetchReviews(); }, []);
+  // Fetch connected shops
+  const fetchConnections = async () => {
+    try {
+      const { data } = await supabase
+        .from('tiktok_reviews_connections')
+        .select('shop_id, seller_name, shop_cipher, access_token_expires_at, updated_at')
+        .not('access_token', 'is', null)
+        .order('seller_name');
+      setConnections(data || []);
+    } catch { /* ignore */ }
+  };
+
+  useEffect(() => { fetchReviews(); fetchConnections(); }, []);
 
   // Trigger sync
   const handleSync = async (fullSync = false) => {
@@ -825,6 +842,25 @@ function TikTokReviewsTab() {
       setSyncResult({ success: false, message: e.message });
     } finally {
       setSyncing(false);
+    }
+  };
+
+  // Sync a single shop
+  const handleShopSync = async (shopId, fullSync = false) => {
+    setSyncingShop(shopId);
+    setShopSyncResult(prev => ({ ...prev, [shopId]: null }));
+    try {
+      const params = new URLSearchParams({ shop_id: shopId });
+      if (fullSync) params.set('full_sync', '1');
+      const resp = await fetch(`/api/tiktok-shop/sync-reviews?${params}`);
+      const json = await resp.json();
+      const shopResult = json.shops?.[0] || json;
+      setShopSyncResult(prev => ({ ...prev, [shopId]: shopResult }));
+      if (json.success && json.total_upserted > 0) await fetchReviews();
+    } catch (e) {
+      setShopSyncResult(prev => ({ ...prev, [shopId]: { error: e.message } }));
+    } finally {
+      setSyncingShop(null);
     }
   };
 
@@ -1204,6 +1240,101 @@ function TikTokReviewsTab() {
       {error && (
         <div style={{ ...card, marginBottom: 16, borderLeft: '4px solid #ef4444', background: '#fef2f2' }}>
           <span style={{ fontWeight: 700, color: '#dc2626' }}>⚠️ Lỗi tải dữ liệu: {error}</span>
+        </div>
+      )}
+
+      {/* Kho lưu trữ — Connected Shops */}
+      {connections.length > 0 && (
+        <div style={{ ...card, marginBottom: 20, padding: '20px 24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 20 }}>🏪</span>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800 }}>Kho lưu trữ đánh giá</h3>
+                <p style={{ margin: 0, fontSize: 12, color: '#888' }}>{connections.length} shop đã kết nối Reviews API</p>
+              </div>
+            </div>
+            <button onClick={() => handleSync(false)} disabled={syncing || syncingShop}
+              style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: syncing ? '#d1d5db' : 'linear-gradient(135deg, #f97316, #ef4444)', color: '#fff', fontWeight: 700, fontSize: 12, cursor: syncing ? 'default' : 'pointer', boxShadow: syncing ? 'none' : '0 2px 8px rgba(249,115,22,0.25)' }}>
+              {syncing ? '⏳ Syncing all...' : '🔄 Sync tất cả'}
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+            {connections.map(conn => {
+              const isExpired = conn.access_token_expires_at && new Date(conn.access_token_expires_at) < new Date();
+              const expiresAt = conn.access_token_expires_at ? new Date(conn.access_token_expires_at).toLocaleDateString('vi-VN') : '—';
+              const isSyncing = syncingShop === conn.shop_id;
+              const result = shopSyncResult[conn.shop_id];
+              const shopReviewCount = reviews.filter(r => r.shop_id === conn.shop_id).length;
+              const shopColor = SHOP_COLORS[normalizeShopName(conn.seller_name)] || '#6b7280';
+
+              return (
+                <div key={conn.shop_id} style={{
+                  border: `1px solid ${isExpired ? '#fecaca' : '#e5e7eb'}`,
+                  borderRadius: 12, padding: 14,
+                  background: isExpired ? '#fef2f2' : '#fafbfc',
+                  borderLeft: `4px solid ${shopColor}`,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 14, color: '#1e293b' }}>{conn.seller_name}</div>
+                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                        {shopReviewCount} reviews trong DB
+                      </div>
+                    </div>
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 6,
+                      background: isExpired ? '#fecaca' : '#dcfce7',
+                      color: isExpired ? '#dc2626' : '#16a34a',
+                    }}>
+                      {isExpired ? '❌ Hết hạn' : '✅ Active'}
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 10 }}>
+                    Token hết hạn: {expiresAt}
+                  </div>
+
+                  {/* Per-shop sync result */}
+                  {result && (
+                    <div style={{
+                      fontSize: 11, padding: '6px 10px', borderRadius: 6, marginBottom: 8,
+                      background: result.error ? '#fef2f2' : '#f0fdf4',
+                      color: result.error ? '#dc2626' : '#16a34a',
+                      border: `1px solid ${result.error ? '#fecaca' : '#bbf7d0'}`,
+                    }}>
+                      {result.error
+                        ? `❌ ${result.error}`
+                        : `✅ ${result.upserted || 0} reviews (${result.products || 0} sản phẩm)`}
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => handleShopSync(conn.shop_id, false)}
+                      disabled={isSyncing || syncing || isExpired}
+                      style={{
+                        flex: 1, padding: '7px 0', borderRadius: 8, border: 'none', fontSize: 12, fontWeight: 700,
+                        background: isSyncing ? '#e5e7eb' : isExpired ? '#f3f4f6' : 'linear-gradient(135deg, #3b82f6, #2563eb)',
+                        color: isSyncing || isExpired ? '#999' : '#fff',
+                        cursor: isSyncing || isExpired ? 'default' : 'pointer',
+                      }}>
+                      {isSyncing ? '⏳...' : '🔄 Sync'}
+                    </button>
+                    <button onClick={() => handleShopSync(conn.shop_id, true)}
+                      disabled={isSyncing || syncing || isExpired}
+                      style={{
+                        padding: '7px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 12, fontWeight: 600,
+                        background: '#fff', color: isSyncing || isExpired ? '#ccc' : '#666',
+                        cursor: isSyncing || isExpired ? 'default' : 'pointer',
+                      }}>
+                      Full
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
