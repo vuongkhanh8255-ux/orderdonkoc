@@ -200,14 +200,24 @@ export default async function handler(req, res) {
   const started = Date.now();
   console.log('[sync-reviews] Starting...');
 
-  const appKey    = (process.env.TIKTOK_ANALYTICS_APP_KEY    || process.env.TIKTOK_SHOP_APP_KEY)?.trim();
-  const appSecret = (process.env.TIKTOK_ANALYTICS_APP_SECRET || process.env.TIKTOK_SHOP_APP_SECRET)?.trim();
+  // Products API uses Analytics app (has Product Basic scope)
+  const prodAppKey    = (process.env.TIKTOK_ANALYTICS_APP_KEY    || process.env.TIKTOK_SHOP_APP_KEY)?.trim();
+  const prodAppSecret = (process.env.TIKTOK_ANALYTICS_APP_SECRET || process.env.TIKTOK_SHOP_APP_SECRET)?.trim();
+
+  // Reviews API uses Reviews app (has Reviews and ratings scope)
+  // Falls back to Analytics app if reviews-specific credentials not set
+  const reviewAppKey    = (process.env.TIKTOK_REVIEWS_APP_KEY    || prodAppKey)?.trim();
+  const reviewAppSecret = (process.env.TIKTOK_REVIEWS_APP_SECRET || prodAppSecret)?.trim();
+
   const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL)?.trim();
   const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY)?.trim();
 
-  if (!appKey || !appSecret || !supabaseUrl || !supabaseKey) {
-    return res.status(500).json({ error: 'Missing env config', details: { appKey: !!appKey, appSecret: !!appSecret, supabaseUrl: !!supabaseUrl, supabaseKey: !!supabaseKey } });
+  if (!prodAppKey || !prodAppSecret || !supabaseUrl || !supabaseKey) {
+    return res.status(500).json({ error: 'Missing env config', details: { prodAppKey: !!prodAppKey, reviewAppKey: !!reviewAppKey, supabaseUrl: !!supabaseUrl, supabaseKey: !!supabaseKey } });
   }
+
+  const usingReviewsApp = reviewAppKey !== prodAppKey;
+  console.log(`[sync-reviews] Apps: products=${prodAppKey?.slice(0,6)}..., reviews=${reviewAppKey?.slice(0,6)}... (separate=${usingReviewsApp})`);
 
   const supabase = createClient(supabaseUrl, supabaseKey, {
     auth: { persistSession: false, autoRefreshToken: false }
@@ -252,6 +262,27 @@ export default async function handler(req, res) {
     connections = orderConns || [];
   }
 
+  // If using separate Reviews app, try to get reviews-specific access tokens
+  if (usingReviewsApp) {
+    const { data: reviewConns } = await supabase
+      .from('tiktok_reviews_connections')
+      .select('access_token, shop_id')
+      .not('access_token', 'is', null)
+      .catch(() => ({ data: null }));
+
+    if (reviewConns?.length > 0) {
+      const reviewTokenMap = {};
+      reviewConns.forEach(rc => { reviewTokenMap[rc.shop_id] = rc.access_token; });
+      connections = connections.map(c => ({
+        ...c,
+        reviews_access_token: reviewTokenMap[c.shop_id] || null,
+      }));
+      console.log(`[sync-reviews] Found ${reviewConns.length} reviews-specific tokens`);
+    } else {
+      console.log('[sync-reviews] No reviews-specific tokens found — will try with analytics tokens');
+    }
+  }
+
   if (targetShopId) {
     connections = connections.filter(c => c.shop_id === targetShopId);
   }
@@ -282,7 +313,7 @@ export default async function handler(req, res) {
       do {
         prodPageNum++;
         const prodResp = await fetchProducts({
-          appKey, appSecret,
+          appKey: prodAppKey, appSecret: prodAppSecret,
           accessToken: conn.access_token,
           shopCipher: conn.shop_cipher,
           pageSize: 100,
@@ -327,9 +358,11 @@ export default async function handler(req, res) {
 
         do {
           pageNum++;
+          // Use Reviews app credentials + reviews-specific access token if available
+          const reviewToken = conn.reviews_access_token || conn.access_token;
           const resp = await fetchReviewsBatch({
-            appKey, appSecret,
-            accessToken: conn.access_token,
+            appKey: reviewAppKey, appSecret: reviewAppSecret,
+            accessToken: reviewToken,
             shopCipher: conn.shop_cipher,
             productIds: batchIds,
             pageSize,
