@@ -3,20 +3,26 @@
  *
  * Vercel serverless — GET/POST /api/tiktok-shop/sync-reviews
  *
- * Sync TikTok Shop Customer Reviews → Supabase tiktok_shop_reviews
+ * Sync TikTok Shop Product Reviews → Supabase tiktok_shop_reviews
+ *
+ * Uses: POST /review_rating/202605/product_reviews/search
+ * Docs: https://partner.tiktokshop.com/docv2/page/get-product-reviews-202605
  *
  * Query params:
  *   shop_id     — (optional) sync specific shop only
- *   page_size   — items per page (default 20, max 100)
- *   full_sync   — "1" to sync all available reviews
+ *   page_size   — reviews per page (default 50, max 100)
+ *   full_sync   — "1" to sync all reviews (more pages)
+ *   days        — number of days back to sync (default 7, full_sync ignores)
  *
- * Uses TikTok Shop Open API — Customer Engagement / Customer Reviews
+ * Cron: runs daily at 5am VN (22:00 UTC)
  */
 
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 
 const TIKTOK_BASE = 'https://open-api.tiktokglobalshop.com';
+const REVIEWS_PATH = '/review_rating/202605/product_reviews/search';
+const PRODUCTS_PATH = '/product/202309/products/search';
 
 // ── TikTok HMAC Sign ─────────────────────────────────────────────────────────
 const buildSign = (appSecret, path, urlParams) => {
@@ -29,7 +35,7 @@ const buildSign = (appSecret, path, urlParams) => {
 };
 
 // ── Fetch with timeout ─────────────────────────────────────────────────────────
-const fetchWithTimeout = async (url, options = {}, timeoutMs = 20000) => {
+const fetchWithTimeout = async (url, options = {}, timeoutMs = 25000) => {
   const ctrl = new AbortController();
   const tid = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -44,297 +50,147 @@ const fetchWithTimeout = async (url, options = {}, timeoutMs = 20000) => {
   }
 };
 
-// ── Try fetching reviews from a TikTok API endpoint ───────────────────────────
-const tryFetchReviews = async ({ appKey, appSecret, accessToken, shopCipher, path, pageSize, pageToken, version }) => {
+// ── Get product list from shop ────────────────────────────────────────────────
+const fetchProducts = async ({ appKey, appSecret, accessToken, shopCipher, pageSize = 100, pageToken }) => {
   const ts = String(Math.floor(Date.now() / 1000));
 
   const urlParams = {
     app_key: appKey,
     timestamp: ts,
-    page_size: String(pageSize || 20),
+    page_size: String(pageSize),
   };
   if (shopCipher) urlParams.shop_cipher = shopCipher;
   if (pageToken) urlParams.page_token = pageToken;
 
-  urlParams.sign = buildSign(appSecret, path, urlParams);
+  urlParams.sign = buildSign(appSecret, PRODUCTS_PATH, urlParams);
 
   const qs = new URLSearchParams(urlParams);
-  const url = `${TIKTOK_BASE}${path}?${qs.toString()}`;
+  const url = `${TIKTOK_BASE}${PRODUCTS_PATH}?${qs.toString()}`;
 
-  console.log(`[sync-reviews] Trying: GET ${path}`);
-
-  const resp = await fetchWithTimeout(url, {
-    method: 'GET',
+  return fetchWithTimeout(url, {
+    method: 'POST',
     headers: {
       'x-tts-access-token': accessToken,
       'content-type': 'application/json',
     },
+    body: JSON.stringify({ page_size: pageSize }),
   });
-
-  return resp;
 };
 
-// ── Try POST-based endpoint ───────────────────────────────────────────────────
-const tryPostReviews = async ({ appKey, appSecret, accessToken, shopCipher, path, pageSize, pageToken, body }) => {
+// ── Fetch reviews for a batch of product IDs ──────────────────────────────────
+const fetchReviewsBatch = async ({
+  appKey, appSecret, accessToken, shopCipher,
+  productIds, pageSize = 50, pageToken,
+  reviewStartTime, reviewEndTime,
+}) => {
   const ts = String(Math.floor(Date.now() / 1000));
 
   const urlParams = {
     app_key: appKey,
     timestamp: ts,
+    page_size: String(pageSize),
+    sort_field: 'create_time',
+    sort_order: 'DESC',
   };
   if (shopCipher) urlParams.shop_cipher = shopCipher;
+  if (pageToken) urlParams.page_token = pageToken;
 
-  urlParams.sign = buildSign(appSecret, path, urlParams);
+  urlParams.sign = buildSign(appSecret, REVIEWS_PATH, urlParams);
 
   const qs = new URLSearchParams(urlParams);
-  const url = `${TIKTOK_BASE}${path}?${qs.toString()}`;
+  const url = `${TIKTOK_BASE}${REVIEWS_PATH}?${qs.toString()}`;
 
-  console.log(`[sync-reviews] Trying: POST ${path}`);
+  // Request body — pass product IDs
+  const body = {};
+  if (productIds?.length > 0) {
+    body.tiktok_product_ids = productIds.map(String);
+  }
+  if (reviewStartTime) body.review_start_time = reviewStartTime;
+  if (reviewEndTime) body.review_end_time = reviewEndTime;
 
-  const requestBody = {
-    page_size: pageSize || 20,
-    ...body,
-  };
-  if (pageToken) requestBody.page_token = pageToken;
-
-  const resp = await fetchWithTimeout(url, {
+  return fetchWithTimeout(url, {
     method: 'POST',
     headers: {
       'x-tts-access-token': accessToken,
       'content-type': 'application/json',
     },
-    body: JSON.stringify(requestBody),
-  });
-
-  return resp;
-};
-
-// ── Convert TikTok rating string/number to 1-5 ─────────────────────────────
-const parseRating = (val) => {
-  if (typeof val === 'number') return Math.min(5, Math.max(1, val));
-  const map = { ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5 };
-  if (typeof val === 'string') {
-    if (map[val.toUpperCase()]) return map[val.toUpperCase()];
-    const n = parseInt(val, 10);
-    if (!isNaN(n) && n >= 1 && n <= 5) return n;
-  }
-  return null;
-};
-
-// ── Parse review items from different response formats ────────────────────────
-const parseReviews = (data, shopId, sellerName) => {
-  // Try different response structures
-  const items = data?.reviews || data?.review_list || data?.review_data || data?.items || [];
-
-  return items.map(r => {
-    // Flexible field mapping — TikTok API may use different field names
-    const reviewId = r.review_id || r.id || r.comment_id || null;
-    const rating = parseRating(r.review_rating || r.rating || r.star || r.score);
-    const reviewText = r.review_text || r.content || r.comment || r.text || '';
-    const productName = r.product_name || r.product_title || '';
-    const productId = r.product_id || '';
-    const orderId = r.order_id || r.order_sn || '';
-    const skuName = r.sku_name || r.sku_specification || r.variation || '';
-    const reviewerName = r.reviewer_name || r.display_name || r.user_name || r.buyer_name || '';
-    const reviewerAvatar = r.reviewer_avatar_url || r.avatar || '';
-    const images = r.review_images || r.images || r.media || [];
-    const sellerReply = r.seller_reply?.content || r.reply?.content || r.reply_content || r.seller_reply || null;
-    const replyAt = r.seller_reply?.create_time || r.reply?.create_time || r.reply_time || null;
-
-    // create_time could be in seconds or milliseconds
-    let reviewAt = r.create_time || r.review_time || r.created_at || null;
-    if (reviewAt && typeof reviewAt === 'number') {
-      // If > 1e12, it's milliseconds
-      reviewAt = reviewAt > 1e12
-        ? new Date(reviewAt).toISOString()
-        : new Date(reviewAt * 1000).toISOString();
-    }
-
-    let parsedReplyAt = null;
-    if (replyAt && typeof replyAt === 'number') {
-      parsedReplyAt = replyAt > 1e12
-        ? new Date(replyAt).toISOString()
-        : new Date(replyAt * 1000).toISOString();
-    }
-
-    return {
-      shop_id: shopId,
-      seller_name: sellerName,
-      review_id: reviewId ? String(reviewId) : `${shopId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      order_id: orderId ? String(orderId) : null,
-      product_id: productId ? String(productId) : null,
-      product_name: productName,
-      sku_name: skuName || null,
-      rating,
-      review_text: reviewText,
-      reviewer_name: reviewerName,
-      reviewer_avatar: reviewerAvatar || null,
-      review_images: Array.isArray(images) ? images : [],
-      seller_reply: typeof sellerReply === 'string' ? sellerReply : null,
-      reply_at: parsedReplyAt,
-      review_at: reviewAt || new Date().toISOString(),
-      is_replied: !!(sellerReply || replyAt),
-      platform: 'TikTok',
-      raw_data: r,
-      synced_at: new Date().toISOString(),
-    };
+    body: JSON.stringify(body),
   });
 };
 
-// ── Research API (separate from Partner API) ─────────────────────────────────
-const RESEARCH_BASE = 'https://open.tiktokapis.com';
+// ── Parse review from API response ────────────────────────────────────────────
+const parseReview = (item, shopId, sellerName) => {
+  // Response: each item has a "review" object
+  const r = item.review || item;
 
-const getClientAccessToken = async (clientKey, clientSecret) => {
-  try {
-    const resp = await fetchWithTimeout(`${RESEARCH_BASE}/v2/oauth/token/`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_key: clientKey,
-        client_secret: clientSecret,
-        grant_type: 'client_credentials',
-      }).toString(),
-    }, 15000);
+  const reviewId = r.review_id || null;
+  const rating = (typeof r.rating === 'number' && r.rating >= 1 && r.rating <= 5) ? r.rating : null;
+  const title = r.title || '';
+  const content = r.content || '';
+  const reviewText = title ? `${title}\n${content}` : content;
+  const productId = r.tiktok_product_id || r.external_product_id || '';
+  const orderId = r.order_id || '';
+  const sellerSku = r.seller_sku || '';
+  const productName = r.product_name || '';
 
-    if (resp?.data?.access_token) {
-      console.log('[sync-reviews] Got Research API client_access_token');
-      return resp.data.access_token;
-    }
-    console.log('[sync-reviews] Research API token failed:', resp?.message || JSON.stringify(resp).slice(0, 200));
-    return null;
-  } catch (e) {
-    console.log('[sync-reviews] Research API token error:', e.message);
-    return null;
+  // Review media — array of image/video objects
+  const reviewMedia = r.review_media || [];
+  const images = reviewMedia.map(m => m.url || m.media_url || '').filter(Boolean);
+
+  // Timestamps
+  let reviewAt = r.create_time || r.review_time || null;
+  if (reviewAt && typeof reviewAt === 'number') {
+    reviewAt = reviewAt > 1e12
+      ? new Date(reviewAt).toISOString()
+      : new Date(reviewAt * 1000).toISOString();
+  } else if (typeof reviewAt === 'string' && !reviewAt.includes('T')) {
+    reviewAt = new Date(reviewAt).toISOString();
   }
-};
 
-// Fetch reviews via Research API — requires product_id
-const fetchResearchReviews = async (clientToken, productId, pageStart = 1, pageSize = 10) => {
-  const resp = await fetchWithTimeout(`${RESEARCH_BASE}/v2/research/tts/review/`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${clientToken}`,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      product_id: String(productId),
-      fields: 'product_name,review_text,review_like_count,create_time,review_rating',
-      page_start: pageStart,
-      page_size: Math.min(10, pageSize), // Research API max is 10
-    }),
-  }, 15000);
-  return resp;
-};
-
-// Fetch product list via Research API
-const fetchResearchProducts = async (clientToken, shopName) => {
-  try {
-    const resp = await fetchWithTimeout(`${RESEARCH_BASE}/v2/research/tts/product/`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${clientToken}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        fields: 'id,product_name,product_review_count,product_rating',
-        page_start: 1,
-        page_size: 10,
-      }),
-    }, 15000);
-    return resp;
-  } catch (e) {
-    return { code: -1, message: e.message };
+  // Seller reply
+  const reply = r.seller_reply || r.reply || null;
+  let sellerReply = null;
+  let replyAt = null;
+  if (reply && typeof reply === 'object') {
+    sellerReply = reply.content || reply.text || null;
+    replyAt = reply.create_time || reply.reply_time || null;
+  } else if (typeof reply === 'string') {
+    sellerReply = reply;
   }
-};
 
-// Get products from Partner API
-const fetchPartnerProducts = async ({ appKey, appSecret, accessToken, shopCipher }) => {
-  const path = '/product/202309/products/search';
-  const ts = String(Math.floor(Date.now() / 1000));
-  const urlParams = {
-    app_key: appKey,
-    timestamp: ts,
-    page_size: '50',
+  if (replyAt && typeof replyAt === 'number') {
+    replyAt = replyAt > 1e12
+      ? new Date(replyAt).toISOString()
+      : new Date(replyAt * 1000).toISOString();
+  }
+
+  return {
+    shop_id: shopId,
+    seller_name: sellerName,
+    review_id: reviewId ? String(reviewId) : `${shopId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    order_id: orderId ? String(orderId) : null,
+    product_id: productId ? String(productId) : null,
+    product_name: productName,
+    sku_name: sellerSku || null,
+    rating,
+    review_text: reviewText,
+    reviewer_name: r.buyer_name || r.reviewer_name || '',
+    reviewer_avatar: r.buyer_avatar || r.reviewer_avatar || null,
+    review_images: images,
+    seller_reply: sellerReply,
+    reply_at: replyAt,
+    review_at: reviewAt || new Date().toISOString(),
+    is_replied: !!(sellerReply || replyAt),
+    platform: 'TikTok',
+    raw_data: r,
+    synced_at: new Date().toISOString(),
   };
-  if (shopCipher) urlParams.shop_cipher = shopCipher;
-  urlParams.sign = buildSign(appSecret, path, urlParams);
-  const qs = new URLSearchParams(urlParams);
-  const url = `${TIKTOK_BASE}${path}?${qs.toString()}`;
-
-  const resp = await fetchWithTimeout(url, {
-    method: 'POST',
-    headers: {
-      'x-tts-access-token': accessToken,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({ page_size: 50 }),
-  }, 20000);
-  return resp;
 };
 
-// Parse Research API review format → our standard format
-const parseResearchReviews = (items, shopId, sellerName, productId, productName) => {
-  return (items || []).map(r => {
-    const rating = parseRating(r.review_rating);
-    let reviewAt = r.create_time;
-    if (reviewAt && typeof reviewAt === 'number') {
-      reviewAt = reviewAt > 1e12
-        ? new Date(reviewAt).toISOString()
-        : new Date(reviewAt * 1000).toISOString();
-    }
+// ── Date helpers ─────────────────────────────────────────────────────────────
+const toISO = (d) => d.toISOString().replace(/\.\d{3}Z$/, 'Z'); // "2026-03-25T10:45:00Z"
 
-    return {
-      shop_id: shopId,
-      seller_name: sellerName,
-      review_id: `research_${productId}_${r.create_time || Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      order_id: null,
-      product_id: String(productId),
-      product_name: r.product_name || productName || '',
-      sku_name: null,
-      rating,
-      review_text: r.review_text || '',
-      reviewer_name: '',
-      reviewer_avatar: null,
-      review_images: [],
-      seller_reply: null,
-      reply_at: null,
-      review_at: reviewAt || new Date().toISOString(),
-      is_replied: false,
-      platform: 'TikTok',
-      raw_data: r,
-      synced_at: new Date().toISOString(),
-    };
-  });
-};
-
-// ── Endpoint paths to try (ordered by likelihood) ─────────────────────────────
-const REVIEW_ENDPOINTS = [
-  // Customer Engagement module (most likely for product reviews — separate from Customer Service which is chat)
-  { method: 'GET',  path: '/customer_engagement/202309/reviews',         version: '202309' },
-  { method: 'POST', path: '/customer_engagement/202309/reviews/search',  version: '202309' },
-  { method: 'GET',  path: '/customer_engagement/202409/reviews',         version: '202409' },
-  { method: 'POST', path: '/customer_engagement/202409/reviews/search',  version: '202409' },
-  { method: 'GET',  path: '/customer_engagement/202509/reviews',         version: '202509' },
-  { method: 'POST', path: '/customer_engagement/202509/reviews/search',  version: '202509' },
-  // Product module — reviews may be under product
-  { method: 'GET',  path: '/product/202309/reviews',                     version: '202309' },
-  { method: 'GET',  path: '/product/202409/reviews',                     version: '202409' },
-  { method: 'GET',  path: '/product/202509/reviews',                     version: '202509' },
-  { method: 'POST', path: '/product/202309/reviews/search',              version: '202309' },
-  // Seller module
-  { method: 'GET',  path: '/seller/202309/reviews',                      version: '202309' },
-  { method: 'GET',  path: '/seller/202409/reviews',                      version: '202409' },
-  // Customer Service module (chat-based, but try anyway)
-  { method: 'GET',  path: '/customer_service/202309/reviews',            version: '202309' },
-  { method: 'POST', path: '/customer_service/202309/reviews/search',     version: '202309' },
-  // Review standalone module
-  { method: 'GET',  path: '/review/202309/reviews',                      version: '202309' },
-  { method: 'POST', path: '/review/202309/reviews/search',               version: '202309' },
-  // Order module — reviews might be linked to orders
-  { method: 'GET',  path: '/order/202309/reviews',                       version: '202309' },
-];
-
-// ── Main handler ───────────────────────────────────────────────────────────────
+// ── Main handler ────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   const started = Date.now();
   console.log('[sync-reviews] Starting...');
@@ -355,10 +211,25 @@ export default async function handler(req, res) {
   // ── Parse params ────────────────────────────────────────────────────────────
   const params = { ...req.query, ...(req.body || {}) };
   const targetShopId = params.shop_id || null;
-  const pageSize = Math.min(100, Math.max(1, parseInt(params.page_size) || 20));
+  const pageSize = Math.min(100, Math.max(1, parseInt(params.page_size) || 50));
   const fullSync = params.full_sync === '1';
+  const daysBack = parseInt(params.days) || 7;
 
-  // ── Get connections ─────────────────────────────────────────────────────────
+  // Date range for filtering
+  let reviewStartTime = null;
+  let reviewEndTime = null;
+  if (!fullSync) {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - daysBack);
+    reviewStartTime = toISO(startDate);
+    reviewEndTime = toISO(endDate);
+  }
+
+  console.log(`[sync-reviews] fullSync=${fullSync}, daysBack=${daysBack}, pageSize=${pageSize}`);
+  if (reviewStartTime) console.log(`[sync-reviews] Date range: ${reviewStartTime} → ${reviewEndTime}`);
+
+  // ── Get connections ────────────────────────────────────────────────────────
   let connections = [];
   const { data: analyticsConns } = await supabase
     .from('tiktok_analytics_connections')
@@ -384,297 +255,158 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, message: 'No connections found', synced: 0 });
   }
 
-  // ── Discover working endpoint (try once with first connection) ──────────────
-  let workingEndpoint = null;
-  const firstConn = connections[0];
-
-  for (const ep of REVIEW_ENDPOINTS) {
-    try {
-      let resp;
-      if (ep.method === 'GET') {
-        resp = await tryFetchReviews({
-          appKey, appSecret,
-          accessToken: firstConn.access_token,
-          shopCipher: firstConn.shop_cipher,
-          path: ep.path,
-          pageSize: 1,
-          version: ep.version,
-        });
-      } else {
-        resp = await tryPostReviews({
-          appKey, appSecret,
-          accessToken: firstConn.access_token,
-          shopCipher: firstConn.shop_cipher,
-          path: ep.path,
-          pageSize: 1,
-          version: ep.version,
-          body: {},
-        });
-      }
-
-      console.log(`[sync-reviews] ${ep.method} ${ep.path} → code: ${resp?.code}, msg: ${resp?.message?.slice(0, 100)}`);
-
-      // code 0 = success, or we got actual data
-      if (resp?.code === 0 || resp?.data) {
-        workingEndpoint = ep;
-        console.log(`[sync-reviews] ✅ Found working endpoint: ${ep.method} ${ep.path}`);
-        break;
-      }
-    } catch (e) {
-      console.log(`[sync-reviews] ${ep.method} ${ep.path} → exception: ${e.message}`);
-    }
-  }
-
-  // ── If Partner API found a working endpoint, use it ─────────────────────────
-  if (workingEndpoint) {
-    const results = [];
-    let totalUpserted = 0;
-
-    for (const conn of connections) {
-      const shopLabel = conn.seller_name || conn.shop_id;
-      console.log(`[sync-reviews] Processing shop: ${shopLabel}`);
-
-      let shopUpserted = 0;
-      let shopError = null;
-      let pageToken = null;
-      let pageNum = 0;
-      const maxPages = fullSync ? 50 : 5;
-
-      do {
-        pageNum++;
-        try {
-          let resp;
-          if (workingEndpoint.method === 'GET') {
-            resp = await tryFetchReviews({
-              appKey, appSecret,
-              accessToken: conn.access_token,
-              shopCipher: conn.shop_cipher,
-              path: workingEndpoint.path,
-              pageSize,
-              pageToken,
-              version: workingEndpoint.version,
-            });
-          } else {
-            resp = await tryPostReviews({
-              appKey, appSecret,
-              accessToken: conn.access_token,
-              shopCipher: conn.shop_cipher,
-              path: workingEndpoint.path,
-              pageSize,
-              pageToken,
-              version: workingEndpoint.version,
-              body: {},
-            });
-          }
-
-          if (resp?.code !== 0) {
-            shopError = resp?.message || `code ${resp?.code}`;
-            console.error(`[sync-reviews] API error for ${shopLabel}: ${shopError}`);
-            break;
-          }
-
-          const data = resp?.data;
-          if (!data) break;
-
-          const reviews = parseReviews(data, conn.shop_id, conn.seller_name);
-
-          if (reviews.length > 0) {
-            const { error: upsertErr } = await supabase
-              .from('tiktok_shop_reviews')
-              .upsert(reviews, { onConflict: 'shop_id,review_id' });
-
-            if (upsertErr) {
-              console.error(`[sync-reviews] Upsert error:`, upsertErr.message);
-              shopError = upsertErr.message;
-            } else {
-              shopUpserted += reviews.length;
-            }
-          }
-
-          console.log(`[sync-reviews] ${shopLabel} page ${pageNum}: ${reviews.length} reviews`);
-
-          pageToken = data.next_page_token || data.page_token || data.cursor || null;
-          const hasMore = data.has_more !== false && data.more !== false && pageToken;
-          if (!hasMore || reviews.length === 0) break;
-
-        } catch (err) {
-          shopError = err.message;
-          console.error(`[sync-reviews] Exception for ${shopLabel}:`, err.message);
-          break;
-        }
-      } while (pageToken && pageNum < maxPages);
-
-      totalUpserted += shopUpserted;
-      results.push({
-        shop_id: conn.shop_id,
-        seller_name: conn.seller_name,
-        upserted: shopUpserted,
-        pages_fetched: pageNum,
-        error: shopError,
-      });
-    }
-
-    const elapsed = ((Date.now() - started) / 1000).toFixed(1);
-    console.log(`[sync-reviews] Done in ${elapsed}s. Total upserted: ${totalUpserted}`);
-
-    return res.status(200).json({
-      success: true,
-      source: 'partner_api',
-      endpoint_used: `${workingEndpoint.method} ${workingEndpoint.path}`,
-      total_upserted: totalUpserted,
-      shops: results,
-      elapsed_seconds: Number(elapsed),
-      synced_at: new Date().toISOString(),
-    });
-  }
-
-  // ── FALLBACK: Try Research API ──────────────────────────────────────────────
-  console.log(`[sync-reviews] ❌ No Partner API endpoint found. Trying Research API fallback...`);
-
-  const clientToken = await getClientAccessToken(appKey, appSecret);
-
-  if (!clientToken) {
-    const elapsed = ((Date.now() - started) / 1000).toFixed(1);
-    return res.status(200).json({
-      success: false,
-      message: 'Không tìm thấy endpoint Partner API cho reviews. Research API cũng không khả dụng (cần đăng ký scope research.data.basic).',
-      partner_api_tried: REVIEW_ENDPOINTS.map(ep => `${ep.method} ${ep.path}`),
-      elapsed_seconds: Number(elapsed),
-      hint: 'Vào Partner Center → API Documentation → tìm mục "Reviews" hoặc "Customer Engagement". Nếu không có, đăng ký Research API tại developers.tiktok.com.',
-    });
-  }
-
-  // ── Research API: get products then fetch reviews per product ───────────────
-  console.log('[sync-reviews] Research API token acquired. Fetching products...');
-
+  // ── Sync each shop ─────────────────────────────────────────────────────────
   const results = [];
   let totalUpserted = 0;
 
   for (const conn of connections) {
     const shopLabel = conn.seller_name || conn.shop_id;
-    console.log(`[sync-reviews] [Research] Processing shop: ${shopLabel}`);
+    console.log(`[sync-reviews] Processing shop: ${shopLabel}`);
 
     let shopUpserted = 0;
     let shopError = null;
+    let productsFound = 0;
 
-    // Try to get product IDs from Partner API
-    let productIds = [];
     try {
-      const prodResp = await fetchPartnerProducts({
-        appKey, appSecret,
-        accessToken: conn.access_token,
-        shopCipher: conn.shop_cipher,
-      });
-
-      if (prodResp?.code === 0 && prodResp?.data?.products) {
-        productIds = prodResp.data.products.map(p => ({
-          id: p.id || p.product_id,
-          name: p.title || p.product_name || '',
-        })).filter(p => p.id);
-        console.log(`[sync-reviews] [Research] Found ${productIds.length} products for ${shopLabel}`);
-      } else {
-        console.log(`[sync-reviews] [Research] Product list failed: ${prodResp?.message || 'unknown'}`);
-      }
-    } catch (e) {
-      console.log(`[sync-reviews] [Research] Product fetch error: ${e.message}`);
-    }
-
-    // Also try getting product IDs from existing analytics/orders in Supabase
-    if (productIds.length === 0) {
-      try {
-        const { data: existingProducts } = await supabase
-          .from('tiktok_shop_reviews')
-          .select('product_id, product_name')
-          .eq('shop_id', conn.shop_id)
-          .not('product_id', 'is', null)
-          .limit(50);
-
-        if (existingProducts?.length > 0) {
-          const seen = new Set();
-          productIds = existingProducts
-            .filter(p => p.product_id && !seen.has(p.product_id) && seen.add(p.product_id))
-            .map(p => ({ id: p.product_id, name: p.product_name || '' }));
-          console.log(`[sync-reviews] [Research] Using ${productIds.length} product IDs from Supabase`);
-        }
-      } catch (e) {
-        console.log(`[sync-reviews] [Research] Supabase product lookup error: ${e.message}`);
-      }
-    }
-
-    if (productIds.length === 0) {
-      shopError = 'Không tìm thấy product IDs — cần có danh sách sản phẩm để query Research API';
-      console.log(`[sync-reviews] [Research] No product IDs for ${shopLabel}`);
-      results.push({ shop_id: conn.shop_id, seller_name: conn.seller_name, upserted: 0, error: shopError });
-      continue;
-    }
-
-    // Fetch reviews for each product
-    const maxProducts = fullSync ? productIds.length : Math.min(10, productIds.length);
-    for (let i = 0; i < maxProducts; i++) {
-      const prod = productIds[i];
-      let pageStart = 1;
-      const maxPages = fullSync ? 20 : 3; // 10 reviews per page max
-      let pagesFetched = 0;
+      // ── Step 1: Get product IDs from shop ──────────────────────────────
+      const allProductIds = [];
+      let prodPageToken = null;
+      let prodPageNum = 0;
+      const maxProdPages = fullSync ? 20 : 5;
 
       do {
-        pagesFetched++;
-        try {
-          const resp = await fetchResearchReviews(clientToken, prod.id, pageStart, 10);
+        prodPageNum++;
+        const prodResp = await fetchProducts({
+          appKey, appSecret,
+          accessToken: conn.access_token,
+          shopCipher: conn.shop_cipher,
+          pageSize: 100,
+          pageToken: prodPageToken,
+        });
 
-          if (resp?.error || (resp?.code && resp.code !== 0)) {
-            console.log(`[sync-reviews] [Research] Product ${prod.id} error: ${resp?.error?.message || resp?.message || 'unknown'}`);
+        if (prodResp?.code !== 0) {
+          console.log(`[sync-reviews] Product list error: code=${prodResp?.code}, msg=${prodResp?.message?.slice(0, 200)}`);
+          shopError = `Product list: ${prodResp?.message || `code ${prodResp?.code}`}`;
+          break;
+        }
+
+        const products = prodResp?.data?.products || [];
+        products.forEach(p => {
+          const pid = p.id || p.product_id;
+          if (pid) allProductIds.push(String(pid));
+        });
+
+        prodPageToken = prodResp?.data?.next_page_token || null;
+        console.log(`[sync-reviews] ${shopLabel} products page ${prodPageNum}: ${products.length} products`);
+
+        if (!prodPageToken || products.length === 0) break;
+      } while (prodPageNum < maxProdPages);
+
+      productsFound = allProductIds.length;
+      console.log(`[sync-reviews] ${shopLabel}: ${productsFound} total products`);
+
+      if (productsFound === 0) {
+        shopError = shopError || 'No products found in shop';
+        results.push({ shop_id: conn.shop_id, seller_name: conn.seller_name, products: 0, upserted: 0, error: shopError });
+        continue;
+      }
+
+      // ── Step 2: Fetch reviews in batches of 50 product IDs ────────────
+      const batchSize = 50; // API max per request
+      const maxReviewPages = fullSync ? 20 : 5;
+
+      for (let i = 0; i < allProductIds.length; i += batchSize) {
+        const batchIds = allProductIds.slice(i, i + batchSize);
+        let pageToken = null;
+        let pageNum = 0;
+
+        do {
+          pageNum++;
+          const resp = await fetchReviewsBatch({
+            appKey, appSecret,
+            accessToken: conn.access_token,
+            shopCipher: conn.shop_cipher,
+            productIds: batchIds,
+            pageSize,
+            pageToken,
+            reviewStartTime,
+            reviewEndTime,
+          });
+
+          // Handle response — may have nested data structure
+          const outerCode = resp?.code;
+          if (outerCode !== 0 && outerCode !== undefined) {
+            const msg = resp?.message || `code ${outerCode}`;
+            console.error(`[sync-reviews] API error: ${msg}`);
+            // Error 32002017 = app not authorized for this API
+            if (outerCode === 32002017 || resp?.code === 32002017) {
+              shopError = 'App chưa được cấp quyền Reviews API. Vào Partner Center → App Management → thêm quyền "Reviews and ratings".';
+            } else {
+              shopError = msg;
+            }
             break;
           }
 
-          const items = resp?.data?.reviews || resp?.data?.items || [];
-          if (items.length === 0) break;
+          // TikTok may nest: resp.data.data.reviews or resp.data.reviews
+          const innerData = resp?.data?.data || resp?.data || {};
+          const reviewItems = innerData.reviews || [];
 
-          const reviews = parseResearchReviews(items, conn.shop_id, conn.seller_name, prod.id, prod.name);
+          if (reviewItems.length === 0) {
+            console.log(`[sync-reviews] ${shopLabel} batch ${Math.floor(i/batchSize)+1} page ${pageNum}: 0 reviews`);
+            break;
+          }
 
-          if (reviews.length > 0) {
+          // Parse reviews
+          const parsed = reviewItems.map(item => parseReview(item, conn.shop_id, conn.seller_name));
+
+          // Upsert to Supabase
+          if (parsed.length > 0) {
             const { error: upsertErr } = await supabase
               .from('tiktok_shop_reviews')
-              .upsert(reviews, { onConflict: 'shop_id,review_id' });
+              .upsert(parsed, { onConflict: 'shop_id,review_id' });
 
             if (upsertErr) {
-              console.error(`[sync-reviews] [Research] Upsert error:`, upsertErr.message);
+              console.error(`[sync-reviews] Upsert error:`, upsertErr.message);
+              shopError = upsertErr.message;
             } else {
-              shopUpserted += reviews.length;
+              shopUpserted += parsed.length;
             }
           }
 
-          console.log(`[sync-reviews] [Research] Product ${prod.id} page ${pagesFetched}: ${items.length} reviews`);
+          console.log(`[sync-reviews] ${shopLabel} batch ${Math.floor(i/batchSize)+1} page ${pageNum}: ${reviewItems.length} reviews`);
 
-          // Research API uses page_start (1-based index), not page_token
-          if (items.length < 10) break;
-          pageStart += items.length;
+          // Pagination
+          pageToken = innerData.next_page_token || null;
+          if (!pageToken || reviewItems.length < pageSize) break;
 
-        } catch (err) {
-          console.log(`[sync-reviews] [Research] Product ${prod.id} exception: ${err.message}`);
-          break;
-        }
-      } while (pagesFetched < maxPages);
+        } while (pageNum < maxReviewPages);
+
+        // If we hit an auth error, stop processing this shop
+        if (shopError?.includes('cấp quyền')) break;
+      }
+
+    } catch (err) {
+      shopError = err.message;
+      console.error(`[sync-reviews] Exception for ${shopLabel}:`, err.message);
     }
 
     totalUpserted += shopUpserted;
     results.push({
       shop_id: conn.shop_id,
       seller_name: conn.seller_name,
+      products: productsFound,
       upserted: shopUpserted,
-      products_queried: Math.min(maxProducts, productIds.length),
       error: shopError,
     });
   }
 
   const elapsed = ((Date.now() - started) / 1000).toFixed(1);
-  console.log(`[sync-reviews] [Research] Done in ${elapsed}s. Total upserted: ${totalUpserted}`);
+  console.log(`[sync-reviews] Done in ${elapsed}s. Total upserted: ${totalUpserted}`);
 
   return res.status(200).json({
-    success: totalUpserted > 0,
-    source: 'research_api',
-    message: totalUpserted > 0
-      ? `Synced ${totalUpserted} reviews via Research API`
-      : 'Research API connected but no reviews found. Check product IDs or API permissions.',
+    success: !results.every(r => r.error),
+    source: 'partner_api',
+    endpoint_used: `POST ${REVIEWS_PATH}`,
     total_upserted: totalUpserted,
     shops: results,
     elapsed_seconds: Number(elapsed),
