@@ -967,11 +967,16 @@ function TikTokReviewsTab() {
               <span style={{ fontWeight: 700, color: syncResult.success ? '#16a34a' : '#dc2626' }}>
                 {syncResult.success ? '✅' : '❌'} {syncResult.success ? `Đã sync ${syncResult.total_upserted || 0} đánh giá` : 'Sync thất bại'}
               </span>
-              {syncResult.endpoint_used && (
-                <span style={{ marginLeft: 12, fontSize: 12, color: '#888' }}>Endpoint: {syncResult.endpoint_used}</span>
+              {syncResult.source && (
+                <span style={{ marginLeft: 12, fontSize: 11, padding: '2px 8px', borderRadius: 4, background: syncResult.source === 'research_api' ? '#ede9fe' : '#ecfdf5', color: syncResult.source === 'research_api' ? '#7c3aed' : '#059669' }}>
+                  {syncResult.source === 'research_api' ? '🔬 Research API' : '🏪 Partner API'}
+                </span>
               )}
-              {syncResult.message && !syncResult.success && (
-                <p style={{ margin: '6px 0 0', fontSize: 12, color: '#888' }}>{syncResult.message}</p>
+              {syncResult.endpoint_used && (
+                <span style={{ marginLeft: 8, fontSize: 12, color: '#888' }}>{syncResult.endpoint_used}</span>
+              )}
+              {syncResult.message && (
+                <p style={{ margin: '6px 0 0', fontSize: 12, color: syncResult.success ? '#16a34a' : '#888' }}>{syncResult.message}</p>
               )}
               {syncResult.hint && (
                 <p style={{ margin: '4px 0 0', fontSize: 12, color: '#b45309' }}>💡 {syncResult.hint}</p>
