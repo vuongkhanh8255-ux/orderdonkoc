@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import ReportCSTab from './ReportCSTab';
+import ChatInboxTab from './ChatInboxTab';
 import { supabase } from '../supabaseClient';
 
 const PROXY_URL  = 'https://xkyhvcmnkrxdtmwtghln.supabase.co/functions/v1/sheets-proxy';
@@ -742,19 +743,537 @@ function TikTokHealthTab() {
   );
 }
 
+// ── TikTok API Reviews Tab ──────────────────────────────────────────────────
+const SHOP_COLORS = {
+  'BODYMISS':      '#3b82f6',
+  'MILAGANICS':    '#10b981',
+  'MOAW MOAWS':    '#f97316',
+  'MOAWS':         '#f97316',
+  'EHERB HCM':     '#eab308',
+  'EHERB':         '#eab308',
+  'REAL STEEL':    '#8b5cf6',
+};
+
+const normalizeShopName = (name) => {
+  if (!name) return 'Không rõ';
+  const n = name.toUpperCase().trim();
+  if (n.includes('BODYMISS')) return 'BODYMISS';
+  if (n.includes('MILAGANICS') || n.includes('MILA')) return 'MILAGANICS';
+  if (n.includes('MOAW')) return 'MOAW MOAWS';
+  if (n.includes('EHERB')) return 'EHERB HCM';
+  if (n.includes('REAL') && n.includes('STEEL')) return 'REAL STEEL';
+  return name.trim();
+};
+
+function TikTokReviewsTab() {
+  const [reviews, setReviews] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState(null);
+  const [error, setError] = useState(null);
+
+  // Filters
+  const [shopFilter, setShopFilter] = useState('Tất cả');
+  const [ratingFilter, setRatingFilter] = useState('Tất cả');
+  const [replyFilter, setReplyFilter] = useState('Tất cả');
+  const [searchText, setSearchText] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
+  // Pagination
+  const [page, setPage] = useState(1);
+  const perPage = 20;
+
+  const fetchReviews = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: dbErr } = await supabase
+        .from('tiktok_shop_reviews')
+        .select('*')
+        .order('review_at', { ascending: false })
+        .limit(2000);
+      if (dbErr) throw dbErr;
+      setReviews(data || []);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchReviews(); }, []);
+
+  // Trigger sync
+  const handleSync = async (fullSync = false) => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const url = `/api/tiktok-shop/sync-reviews${fullSync ? '?full_sync=1' : ''}`;
+      const resp = await fetch(url);
+      const json = await resp.json();
+      setSyncResult(json);
+      if (json.success && json.total_upserted > 0) {
+        await fetchReviews();
+      }
+    } catch (e) {
+      setSyncResult({ success: false, message: e.message });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // Unique filter values
+  const shops = useMemo(() => ['Tất cả', ...new Set(reviews.map(r => normalizeShopName(r.seller_name)).filter(Boolean))], [reviews]);
+
+  // Filtered data
+  const filtered = useMemo(() => {
+    return reviews.filter(r => {
+      if (shopFilter !== 'Tất cả' && normalizeShopName(r.seller_name) !== shopFilter) return false;
+      if (ratingFilter !== 'Tất cả' && String(r.rating) !== String(ratingFilter)) return false;
+      if (replyFilter === 'Đã trả lời' && !r.is_replied) return false;
+      if (replyFilter === 'Chưa trả lời' && r.is_replied) return false;
+      if (dateFrom || dateTo) {
+        const ts = r.review_at ? new Date(r.review_at).getTime() : 0;
+        if (!ts) return false;
+        if (dateFrom && ts < new Date(dateFrom).setHours(0, 0, 0, 0)) return false;
+        if (dateTo && ts > new Date(dateTo).setHours(23, 59, 59, 999)) return false;
+      }
+      if (searchText) {
+        const s = searchText.toLowerCase();
+        const match = [r.product_name, r.review_text, r.reviewer_name, r.order_id]
+          .some(v => v && String(v).toLowerCase().includes(s));
+        if (!match) return false;
+      }
+      return true;
+    });
+  }, [reviews, shopFilter, ratingFilter, replyFilter, searchText, dateFrom, dateTo]);
+
+  // Stats
+  const stats = useMemo(() => {
+    const byShop = {};
+    const byStar = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    let totalRating = 0;
+    let ratingCount = 0;
+    let replied = 0;
+
+    filtered.forEach(r => {
+      const shop = normalizeShopName(r.seller_name);
+      byShop[shop] = (byShop[shop] || 0) + 1;
+      if (r.rating >= 1 && r.rating <= 5) {
+        byStar[r.rating]++;
+        totalRating += r.rating;
+        ratingCount++;
+      }
+      if (r.is_replied) replied++;
+    });
+
+    return {
+      byShop,
+      byStar,
+      total: filtered.length,
+      avgRating: ratingCount > 0 ? (totalRating / ratingCount).toFixed(1) : '0.0',
+      replyRate: filtered.length > 0 ? ((replied / filtered.length) * 100).toFixed(1) : '0.0',
+      replied,
+      negative: (byStar[1] || 0) + (byStar[2] || 0),
+    };
+  }, [filtered]);
+
+  // Top products with most reviews
+  const topProducts = useMemo(() => {
+    const map = {};
+    filtered.forEach(r => {
+      const p = r.product_name || 'Không rõ';
+      if (!map[p]) map[p] = { count: 0, totalRating: 0, ratingCount: 0 };
+      map[p].count++;
+      if (r.rating) { map[p].totalRating += r.rating; map[p].ratingCount++; }
+    });
+    return Object.entries(map)
+      .map(([name, d]) => ({ name, count: d.count, avg: d.ratingCount > 0 ? (d.totalRating / d.ratingCount).toFixed(1) : '—' }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+  }, [filtered]);
+
+  const totalPages = Math.ceil(filtered.length / perPage);
+  const pageData = filtered.slice((page - 1) * perPage, page * perPage);
+
+  useEffect(() => { setPage(1); }, [shopFilter, ratingFilter, replyFilter, searchText, dateFrom, dateTo]);
+
+  const formatDate = (d) => {
+    if (!d) return '—';
+    try {
+      const dt = new Date(d);
+      if (isNaN(dt)) return '—';
+      return dt.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    } catch { return '—'; }
+  };
+
+  const formatTime = (d) => {
+    if (!d) return '';
+    try {
+      const dt = new Date(d);
+      return dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    } catch { return ''; }
+  };
+
+  const card = { background: '#fff', borderRadius: 12, padding: '16px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', border: '1px solid #f3f4f6' };
+  const labelSt = { fontSize: 11, color: '#888', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4, letterSpacing: '0.5px' };
+  const selectSt = { width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, background: '#fff', cursor: 'pointer', outline: 'none' };
+  const pill = (active) => ({
+    padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: 'none',
+    background: active ? 'linear-gradient(135deg, #f97316, #ef4444)' : '#f3f4f6',
+    color: active ? '#fff' : '#666', transition: 'all 0.2s',
+  });
+
+  if (loading) return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 40, marginBottom: 16 }}>⏳</div>
+        <p style={{ color: '#888', fontSize: 14 }}>Đang tải đánh giá TikTok...</p>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ fontFamily: "'Outfit', sans-serif" }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h1 className="page-header" style={{ margin: 0 }}>🛍️ ĐÁNH GIÁ TIKTOK SHOP (API)</h1>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#888' }}>
+            Nguồn: TikTok Shop Open API — Customer Reviews
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button onClick={() => handleSync(false)} disabled={syncing}
+            style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: syncing ? '#d1d5db' : 'linear-gradient(135deg, #f97316, #ef4444)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: syncing ? 'default' : 'pointer', boxShadow: syncing ? 'none' : '0 4px 12px rgba(249,115,22,0.3)', transition: 'all 0.2s' }}>
+            {syncing ? '⏳ Đang đồng bộ...' : '🔄 Sync đánh giá'}
+          </button>
+          <button onClick={() => handleSync(true)} disabled={syncing}
+            style={{ padding: '10px 16px', borderRadius: 10, border: '2px solid #e5e7eb', background: '#fff', color: '#666', fontWeight: 600, fontSize: 13, cursor: syncing ? 'default' : 'pointer' }}>
+            Full Sync
+          </button>
+        </div>
+      </div>
+
+      {/* Sync Result Banner */}
+      {syncResult && (
+        <div style={{
+          ...card, marginBottom: 16, borderLeft: `4px solid ${syncResult.success ? '#10b981' : '#ef4444'}`,
+          background: syncResult.success ? '#f0fdf4' : '#fef2f2',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <span style={{ fontWeight: 700, color: syncResult.success ? '#16a34a' : '#dc2626' }}>
+                {syncResult.success ? '✅' : '❌'} {syncResult.success ? `Đã sync ${syncResult.total_upserted || 0} đánh giá` : 'Sync thất bại'}
+              </span>
+              {syncResult.endpoint_used && (
+                <span style={{ marginLeft: 12, fontSize: 12, color: '#888' }}>Endpoint: {syncResult.endpoint_used}</span>
+              )}
+              {syncResult.message && !syncResult.success && (
+                <p style={{ margin: '6px 0 0', fontSize: 12, color: '#888' }}>{syncResult.message}</p>
+              )}
+              {syncResult.hint && (
+                <p style={{ margin: '4px 0 0', fontSize: 12, color: '#b45309' }}>💡 {syncResult.hint}</p>
+              )}
+            </div>
+            <button onClick={() => setSyncResult(null)} style={{ border: 'none', background: 'none', fontSize: 18, cursor: 'pointer', color: '#94a3b8' }}>×</button>
+          </div>
+        </div>
+      )}
+
+      {/* Error state */}
+      {error && (
+        <div style={{ ...card, marginBottom: 16, borderLeft: '4px solid #ef4444', background: '#fef2f2' }}>
+          <span style={{ fontWeight: 700, color: '#dc2626' }}>⚠️ Lỗi tải dữ liệu: {error}</span>
+        </div>
+      )}
+
+      {/* Stats Overview */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
+        <div style={{ ...card, borderTop: '3px solid #f97316' }}>
+          <div style={labelSt}>Tổng đánh giá</div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: '#f97316' }}>{stats.total}</div>
+        </div>
+        <div style={{ ...card, borderTop: '3px solid #10b981' }}>
+          <div style={labelSt}>Đánh giá TB</div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: '#10b981' }}>{stats.avgRating} ⭐</div>
+        </div>
+        <div style={{ ...card, borderTop: '3px solid #3b82f6' }}>
+          <div style={labelSt}>Tỷ lệ phản hồi</div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: '#3b82f6' }}>{stats.replyRate}%</div>
+          <div style={{ fontSize: 11, color: '#aaa' }}>{stats.replied}/{stats.total} đã trả lời</div>
+        </div>
+        <div style={{ ...card, borderTop: '3px solid #ef4444' }}>
+          <div style={labelSt}>Đánh giá xấu</div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: '#ef4444' }}>{stats.negative}</div>
+          <div style={{ fontSize: 11, color: '#aaa' }}>1-2 sao</div>
+        </div>
+      </div>
+
+      {/* Shop cards + Star distribution */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+        {/* By Shop */}
+        <div style={card}>
+          <div style={{ ...labelSt, marginBottom: 12 }}>Theo Shop</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {Object.entries(stats.byShop).sort((a, b) => b[1] - a[1]).map(([shop, count]) => {
+              const pct = stats.total > 0 ? (count / stats.total * 100).toFixed(1) : 0;
+              const color = SHOP_COLORS[shop] || '#6b7280';
+              return (
+                <div key={shop} onClick={() => setShopFilter(shopFilter === shop ? 'Tất cả' : shop)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '6px 10px', borderRadius: 8, background: shopFilter === shop ? color + '15' : 'transparent', transition: 'all 0.2s' }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                  <span style={{ flex: 1, fontSize: 13, fontWeight: shopFilter === shop ? 700 : 400 }}>{shop}</span>
+                  <span style={{ fontWeight: 800, color, fontSize: 14 }}>{count}</span>
+                  <span style={{ fontSize: 11, color: '#aaa', width: 40, textAlign: 'right' }}>{pct}%</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Star distribution */}
+        <div style={card}>
+          <div style={{ ...labelSt, marginBottom: 12 }}>Phân bố số sao</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {[5, 4, 3, 2, 1].map(s => {
+              const count = stats.byStar[s] || 0;
+              const pct = stats.total > 0 ? (count / stats.total * 100) : 0;
+              return (
+                <div key={s} onClick={() => setRatingFilter(ratingFilter === String(s) ? 'Tất cả' : String(s))}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '4px 0' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, width: 20, textAlign: 'right', color: STAR_COLORS[s] }}>{s}⭐</span>
+                  <div style={{ flex: 1, height: 16, borderRadius: 8, background: '#f3f4f6', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', borderRadius: 8, background: ratingFilter === String(s) ? STAR_COLORS[s] : STAR_COLORS[s] + 'aa', width: `${pct}%`, transition: 'width 0.3s', minWidth: pct > 0 ? 4 : 0 }} />
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: STAR_COLORS[s], width: 30, textAlign: 'right' }}>{count}</span>
+                  <span style={{ fontSize: 11, color: '#aaa', width: 40, textAlign: 'right' }}>{pct.toFixed(1)}%</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Top Products */}
+      {topProducts.length > 0 && (
+        <div style={{ ...card, marginBottom: 20 }}>
+          <div style={{ ...labelSt, marginBottom: 12 }}>Top sản phẩm có nhiều đánh giá</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
+            {topProducts.map((p, i) => (
+              <div key={p.name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, background: '#f9fafb', border: '1px solid #f3f4f6' }}>
+                <span style={{ width: 24, height: 24, borderRadius: 6, background: i < 3 ? 'linear-gradient(135deg, #f97316, #ef4444)' : '#e5e7eb', color: i < 3 ? '#fff' : '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{i + 1}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.name}>{p.name}</div>
+                  <div style={{ fontSize: 11, color: '#888' }}>{p.count} đánh giá · ⭐ {p.avg}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Filters */}
+      <div style={{ ...card, marginBottom: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, alignItems: 'end' }}>
+          <div>
+            <div style={labelSt}>Shop</div>
+            <select value={shopFilter} onChange={e => setShopFilter(e.target.value)} style={selectSt}>
+              {shops.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={labelSt}>Số sao</div>
+            <select value={ratingFilter} onChange={e => setRatingFilter(e.target.value)} style={selectSt}>
+              <option value="Tất cả">Tất cả</option>
+              {[5, 4, 3, 2, 1].map(s => <option key={s} value={s}>{s} ⭐</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={labelSt}>Trạng thái</div>
+            <select value={replyFilter} onChange={e => setReplyFilter(e.target.value)} style={selectSt}>
+              <option value="Tất cả">Tất cả</option>
+              <option value="Đã trả lời">Đã trả lời</option>
+              <option value="Chưa trả lời">Chưa trả lời</option>
+            </select>
+          </div>
+          <div>
+            <div style={labelSt}>Từ ngày</div>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={selectSt} />
+          </div>
+          <div>
+            <div style={labelSt}>Đến ngày</div>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={selectSt} />
+          </div>
+          <div>
+            <div style={labelSt}>Tìm kiếm</div>
+            <input type="text" placeholder="Tên SP, nội dung, người đánh giá..."
+              value={searchText} onChange={e => setSearchText(e.target.value)}
+              style={{ ...selectSt, border: '1px solid #e5e7eb' }} />
+          </div>
+        </div>
+        {/* Active pills */}
+        {(shopFilter !== 'Tất cả' || ratingFilter !== 'Tất cả' || replyFilter !== 'Tất cả' || searchText || dateFrom || dateTo) && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: '#888' }}>Đang lọc:</span>
+            {shopFilter !== 'Tất cả' && <button onClick={() => setShopFilter('Tất cả')} style={pill(true)}>{shopFilter} ✕</button>}
+            {ratingFilter !== 'Tất cả' && <button onClick={() => setRatingFilter('Tất cả')} style={pill(true)}>{ratingFilter}⭐ ✕</button>}
+            {replyFilter !== 'Tất cả' && <button onClick={() => setReplyFilter('Tất cả')} style={pill(true)}>{replyFilter} ✕</button>}
+            {dateFrom && <button onClick={() => setDateFrom('')} style={pill(true)}>Từ {dateFrom} ✕</button>}
+            {dateTo && <button onClick={() => setDateTo('')} style={pill(true)}>Đến {dateTo} ✕</button>}
+            {searchText && <button onClick={() => setSearchText('')} style={pill(true)}>"{searchText}" ✕</button>}
+            <button onClick={() => { setShopFilter('Tất cả'); setRatingFilter('Tất cả'); setReplyFilter('Tất cả'); setSearchText(''); setDateFrom(''); setDateTo(''); }}
+              style={{ ...pill(false), fontSize: 11 }}>Xóa tất cả</button>
+          </div>
+        )}
+      </div>
+
+      {/* Result count */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <span style={{ fontSize: 13, color: '#888' }}>Hiển thị <b style={{ color: '#333' }}>{filtered.length}</b> / {reviews.length} đánh giá</span>
+        {reviews.length > 0 && (
+          <span style={{ fontSize: 11, color: '#aaa' }}>
+            Sync gần nhất: {formatDate(reviews[0]?.synced_at)} {formatTime(reviews[0]?.synced_at)}
+          </span>
+        )}
+      </div>
+
+      {/* Review Cards (card-based layout for better UX) */}
+      {filtered.length === 0 && !loading ? (
+        <div style={{ ...card, padding: 60, textAlign: 'center', color: '#aaa' }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>📭</div>
+          <div style={{ fontSize: 15, fontWeight: 600 }}>
+            {reviews.length === 0 ? 'Chưa có dữ liệu đánh giá' : 'Không có kết quả phù hợp'}
+          </div>
+          {reviews.length === 0 && (
+            <div style={{ fontSize: 13, marginTop: 8, color: '#888' }}>
+              Bấm "🔄 Sync đánh giá" để kéo dữ liệu từ TikTok Shop API
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {pageData.map((r, idx) => {
+            const shopName = normalizeShopName(r.seller_name);
+            const shopColor = SHOP_COLORS[shopName] || '#6b7280';
+            return (
+              <div key={r.id || idx} style={{ ...card, padding: 0, overflow: 'hidden', borderLeft: `4px solid ${STAR_COLORS[r.rating] || '#e5e7eb'}` }}>
+                <div style={{ padding: '14px 18px' }}>
+                  {/* Top row: reviewer + rating + date */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: `${shopColor}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, color: shopColor, flexShrink: 0 }}>
+                        {(r.reviewer_name || '?')[0]?.toUpperCase()}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>{r.reviewer_name || 'Ẩn danh'}</div>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 2 }}>
+                          <span style={{ padding: '1px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: shopColor + '18', color: shopColor }}>{shopName}</span>
+                          <span style={{ fontSize: 11, color: '#aaa' }}>{formatDate(r.review_at)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      {r.rating && (
+                        <span style={{ padding: '3px 10px', borderRadius: 8, fontSize: 13, fontWeight: 800, background: (STAR_COLORS[r.rating] || '#888') + '18', color: STAR_COLORS[r.rating] || '#888' }}>
+                          {'⭐'.repeat(r.rating)}
+                        </span>
+                      )}
+                      <span style={{ padding: '3px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: r.is_replied ? '#f0fdf4' : '#fef2f2', color: r.is_replied ? '#16a34a' : '#dc2626' }}>
+                        {r.is_replied ? '✅ Đã TL' : '⏳ Chưa TL'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Product info */}
+                  {r.product_name && (
+                    <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6, display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <span style={{ color: '#aaa' }}>📦</span>
+                      <span style={{ fontWeight: 600 }}>{r.product_name}</span>
+                      {r.sku_name && <span style={{ color: '#aaa' }}>· {r.sku_name}</span>}
+                    </div>
+                  )}
+
+                  {/* Review text */}
+                  {r.review_text && (
+                    <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.6, padding: '8px 12px', background: '#f9fafb', borderRadius: 8, margin: '6px 0' }}>
+                      "{r.review_text}"
+                    </div>
+                  )}
+
+                  {/* Review images */}
+                  {r.review_images && r.review_images.length > 0 && (
+                    <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                      {(Array.isArray(r.review_images) ? r.review_images : []).slice(0, 5).map((img, imgIdx) => {
+                        const imgUrl = typeof img === 'string' ? img : img?.url || img?.thumb_url || '';
+                        return imgUrl ? (
+                          <img key={imgIdx} src={imgUrl} alt="" style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'cover', border: '1px solid #e5e7eb' }}
+                            onError={e => e.target.style.display = 'none'} />
+                        ) : null;
+                      })}
+                    </div>
+                  )}
+
+                  {/* Seller reply */}
+                  {r.seller_reply && (
+                    <div style={{ marginTop: 8, padding: '8px 12px', background: '#eff6ff', borderRadius: 8, borderLeft: '3px solid #3b82f6' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#3b82f6', marginBottom: 4 }}>💬 Phản hồi của shop {r.reply_at ? `· ${formatDate(r.reply_at)}` : ''}</div>
+                      <div style={{ fontSize: 12, color: '#1e40af' }}>{r.seller_reply}</div>
+                    </div>
+                  )}
+
+                  {/* Order ID */}
+                  {r.order_id && (
+                    <div style={{ marginTop: 8, fontSize: 11, color: '#aaa' }}>
+                      ID đơn: <span style={{ fontFamily: 'monospace', color: '#888' }}>{r.order_id}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 20 }}>
+          <button disabled={page === 1} onClick={() => setPage(p => p - 1)}
+            style={{ ...pill(false), opacity: page === 1 ? 0.4 : 1 }}>← Trước</button>
+          {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+            let p;
+            if (totalPages <= 7) p = i + 1;
+            else if (page <= 4) p = i + 1;
+            else if (page >= totalPages - 3) p = totalPages - 6 + i;
+            else p = page - 3 + i;
+            return (
+              <button key={p} onClick={() => setPage(p)} style={pill(page === p)}>{p}</button>
+            );
+          })}
+          <button disabled={page === totalPages} onClick={() => setPage(p => p + 1)}
+            style={{ ...pill(false), opacity: page === totalPages ? 0.4 : 1 }}>Sau →</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Wrapper with tabs
 const TABS = [
+  { key: 'chat_inbox', label: '💬 Chat Inbox' },
   { key: 'danh_gia', label: '📋 Quản lý đánh giá' },
+  { key: 'tiktok_reviews', label: '🛍️ Đánh giá TikTok' },
   { key: 'report_cs', label: '📝 Report CS' },
   { key: 'tiktok_health', label: '🔴 Điểm TK TikTok' },
 ];
 
 export default function CSKHTab() {
-  const [tab, setTab] = useState('danh_gia');
+  const [tab, setTab] = useState('chat_inbox');
   return (
     <div style={{ fontFamily: "'Outfit', sans-serif" }}>
       {/* Tab bar */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: '#f3f4f6', borderRadius: 12, padding: 4, width: 'fit-content' }}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: '#f3f4f6', borderRadius: 12, padding: 4, width: 'fit-content', flexWrap: 'wrap' }}>
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             style={{
@@ -768,7 +1287,9 @@ export default function CSKHTab() {
           </button>
         ))}
       </div>
+      {tab === 'chat_inbox' && <ChatInboxTab />}
       {tab === 'danh_gia' && <DanhGiaTab />}
+      {tab === 'tiktok_reviews' && <TikTokReviewsTab />}
       {tab === 'report_cs' && <ReportCSTab />}
       {tab === 'tiktok_health' && <TikTokHealthTab />}
     </div>

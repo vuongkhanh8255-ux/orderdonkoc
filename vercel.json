@@ -25,12 +25,19 @@
   "functions": {
     "api/tiktok-shop/sync-analytics.js": {
       "maxDuration": 120
+    },
+    "api/tiktok-shop/sync-reviews.js": {
+      "maxDuration": 120
     }
   },
   "crons": [
     {
       "path": "/api/tiktok-shop/sync-analytics",
       "schedule": "30 21 * * *"
+    },
+    {
+      "path": "/api/tiktok-shop/sync-reviews",
+      "schedule": "0 22 * * *"
     }
   ]
 }
