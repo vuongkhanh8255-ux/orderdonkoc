@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ReportCSTab from './ReportCSTab';
 import ChatInboxTab from './ChatInboxTab';
 import { supabase } from '../supabaseClient';
+import * as XLSX from 'xlsx';
 
 const PROXY_URL  = 'https://xkyhvcmnkrxdtmwtghln.supabase.co/functions/v1/sheets-proxy';
 const CS_SHEET_ID = '1w9Y10K-eSasVbL1_jpT1_o1EkqCJq068OAwRg-ZPYcE';
@@ -771,6 +772,10 @@ function TikTokReviewsTab() {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
   const [error, setError] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
+  const [showImportGuide, setShowImportGuide] = useState(false);
+  const fileInputRef = useRef(null);
 
   // Filters
   const [shopFilter, setShopFilter] = useState('Tất cả');
@@ -820,6 +825,161 @@ function TikTokReviewsTab() {
       setSyncResult({ success: false, message: e.message });
     } finally {
       setSyncing(false);
+    }
+  };
+
+  // ── Import Excel/CSV handler ─────────────────────────────────────────────
+  const COLUMN_MAP = {
+    // Vietnamese column names from Seller Center
+    'mã đơn hàng': 'order_id', 'order id': 'order_id', 'order_id': 'order_id', 'mã đơn': 'order_id',
+    'sản phẩm': 'product_name', 'product name': 'product_name', 'product_name': 'product_name', 'tên sản phẩm': 'product_name', 'tên sp': 'product_name',
+    'mã sản phẩm': 'product_id', 'product id': 'product_id', 'product_id': 'product_id',
+    'sku': 'sku_name', 'sku_name': 'sku_name', 'phân loại': 'sku_name', 'biến thể': 'sku_name', 'variation': 'sku_name',
+    'đánh giá': 'rating', 'rating': 'rating', 'số sao': 'rating', 'star': 'rating', 'sao': 'rating', 'điểm': 'rating',
+    'nội dung': 'review_text', 'review': 'review_text', 'review_text': 'review_text', 'nhận xét': 'review_text', 'bình luận': 'review_text', 'comment': 'review_text', 'nội dung đánh giá': 'review_text',
+    'người mua': 'reviewer_name', 'buyer': 'reviewer_name', 'reviewer': 'reviewer_name', 'reviewer_name': 'reviewer_name', 'khách hàng': 'reviewer_name', 'tên người mua': 'reviewer_name', 'username': 'reviewer_name',
+    'ngày': 'review_at', 'date': 'review_at', 'review_at': 'review_at', 'thời gian': 'review_at', 'ngày đánh giá': 'review_at', 'created': 'review_at', 'create_time': 'review_at', 'ngày tạo': 'review_at',
+    'trả lời': 'seller_reply', 'reply': 'seller_reply', 'seller_reply': 'seller_reply', 'phản hồi': 'seller_reply',
+    'shop': 'seller_name', 'seller': 'seller_name', 'seller_name': 'seller_name', 'cửa hàng': 'seller_name', 'tên shop': 'seller_name',
+  };
+
+  const parseExcelDate = (val) => {
+    if (!val) return null;
+    // Excel serial number
+    if (typeof val === 'number' && val > 25000 && val < 100000) {
+      const d = new Date((val - 25569) * 86400 * 1000);
+      return d.toISOString();
+    }
+    // String date
+    if (typeof val === 'string') {
+      // Try DD/MM/YYYY or DD-MM-YYYY
+      const vn = val.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+      if (vn) return new Date(`${vn[3]}-${vn[2].padStart(2,'0')}-${vn[1].padStart(2,'0')}T00:00:00`).toISOString();
+      // Try YYYY-MM-DD
+      const iso = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (iso) return new Date(val).toISOString();
+      // Try other formats
+      const d = new Date(val);
+      if (!isNaN(d)) return d.toISOString();
+    }
+    if (val instanceof Date && !isNaN(val)) return val.toISOString();
+    return null;
+  };
+
+  const parseRatingValue = (val) => {
+    if (!val) return null;
+    const n = typeof val === 'number' ? val : parseInt(String(val).replace(/[^\d]/g, ''), 10);
+    return (n >= 1 && n <= 5) ? n : null;
+  };
+
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setImportResult(null);
+
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+      if (!raw.length) {
+        setImportResult({ success: false, message: 'File rỗng — không có dữ liệu' });
+        return;
+      }
+
+      // Map columns
+      const headers = Object.keys(raw[0]);
+      const colMapping = {};
+      headers.forEach(h => {
+        const key = h.toLowerCase().trim();
+        if (COLUMN_MAP[key]) colMapping[h] = COLUMN_MAP[key];
+      });
+
+      const mappedFields = Object.values(colMapping);
+      if (!mappedFields.includes('review_text') && !mappedFields.includes('rating') && !mappedFields.includes('product_name')) {
+        setImportResult({
+          success: false,
+          message: `Không nhận diện được cột dữ liệu. Cần ít nhất 1 trong: Nội dung/Review, Đánh giá/Rating, Sản phẩm/Product Name.`,
+          hint: `Cột tìm thấy: ${headers.join(', ')}`,
+        });
+        return;
+      }
+
+      // Parse rows
+      const now = new Date().toISOString();
+      const parsed = raw.map((row, idx) => {
+        const mapped = {};
+        Object.entries(colMapping).forEach(([origCol, field]) => {
+          mapped[field] = row[origCol];
+        });
+
+        const rating = parseRatingValue(mapped.rating);
+        const reviewAt = parseExcelDate(mapped.review_at) || now;
+        const reviewText = String(mapped.review_text || '').trim();
+        const sellerReply = mapped.seller_reply ? String(mapped.seller_reply).trim() : null;
+
+        return {
+          shop_id: mapped.seller_name ? String(mapped.seller_name).trim() : 'import',
+          seller_name: mapped.seller_name ? String(mapped.seller_name).trim() : file.name.replace(/\.[^.]+$/, ''),
+          review_id: `import_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
+          order_id: mapped.order_id ? String(mapped.order_id).trim() : null,
+          product_id: mapped.product_id ? String(mapped.product_id).trim() : null,
+          product_name: mapped.product_name ? String(mapped.product_name).trim() : '',
+          sku_name: mapped.sku_name ? String(mapped.sku_name).trim() : null,
+          rating,
+          review_text: reviewText,
+          reviewer_name: mapped.reviewer_name ? String(mapped.reviewer_name).trim() : '',
+          reviewer_avatar: null,
+          review_images: [],
+          seller_reply: sellerReply || null,
+          reply_at: null,
+          review_at: reviewAt,
+          is_replied: !!sellerReply,
+          platform: 'TikTok',
+          raw_data: row,
+          synced_at: now,
+        };
+      }).filter(r => r.review_text || r.rating || r.product_name); // skip empty rows
+
+      if (parsed.length === 0) {
+        setImportResult({ success: false, message: 'Không tìm thấy dòng dữ liệu hợp lệ' });
+        return;
+      }
+
+      // Upsert in batches
+      const batchSize = 100;
+      let totalInserted = 0;
+      let errors = [];
+
+      for (let i = 0; i < parsed.length; i += batchSize) {
+        const batch = parsed.slice(i, i + batchSize);
+        const { error: upsertErr } = await supabase
+          .from('tiktok_shop_reviews')
+          .upsert(batch, { onConflict: 'shop_id,review_id' });
+
+        if (upsertErr) {
+          errors.push(upsertErr.message);
+        } else {
+          totalInserted += batch.length;
+        }
+      }
+
+      setImportResult({
+        success: totalInserted > 0,
+        message: `Đã import ${totalInserted}/${parsed.length} đánh giá từ "${file.name}"`,
+        columns_mapped: Object.entries(colMapping).map(([k, v]) => `${k} → ${v}`),
+        errors: errors.length > 0 ? errors : undefined,
+      });
+
+      if (totalInserted > 0) await fetchReviews();
+
+    } catch (err) {
+      setImportResult({ success: false, message: `Lỗi đọc file: ${err.message}` });
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
