@@ -24,13 +24,13 @@ const TIKTOK_BASE = 'https://open-api.tiktokglobalshop.com';
 const REVIEWS_PATH = '/review_rating/202605/product_reviews/search';
 const PRODUCTS_PATH = '/product/202309/products/search';
 
-// ── TikTok HMAC Sign ─────────────────────────────────────────────────────────
-const buildSign = (appSecret, path, urlParams) => {
+// ── TikTok HMAC Sign (POST requests must include body in signature) ──────────
+const buildSign = (appSecret, path, urlParams, body = '') => {
   const keys = Object.keys(urlParams)
     .filter(k => k !== 'sign' && k !== 'access_token')
     .sort();
   const paramStr = keys.map(k => `${k}${urlParams[k]}`).join('');
-  const base = `${appSecret}${path}${paramStr}${appSecret}`;
+  const base = `${appSecret}${path}${paramStr}${body}${appSecret}`;
   return crypto.createHmac('sha256', appSecret).update(base).digest('hex');
 };
 
@@ -54,6 +54,9 @@ const fetchWithTimeout = async (url, options = {}, timeoutMs = 25000) => {
 const fetchProducts = async ({ appKey, appSecret, accessToken, shopCipher, pageSize = 100, pageToken }) => {
   const ts = String(Math.floor(Date.now() / 1000));
 
+  const bodyObj = { page_size: pageSize };
+  const bodyStr = JSON.stringify(bodyObj);
+
   const urlParams = {
     app_key: appKey,
     timestamp: ts,
@@ -62,7 +65,7 @@ const fetchProducts = async ({ appKey, appSecret, accessToken, shopCipher, pageS
   if (shopCipher) urlParams.shop_cipher = shopCipher;
   if (pageToken) urlParams.page_token = pageToken;
 
-  urlParams.sign = buildSign(appSecret, PRODUCTS_PATH, urlParams);
+  urlParams.sign = buildSign(appSecret, PRODUCTS_PATH, urlParams, bodyStr);
 
   const qs = new URLSearchParams(urlParams);
   const url = `${TIKTOK_BASE}${PRODUCTS_PATH}?${qs.toString()}`;
@@ -73,7 +76,7 @@ const fetchProducts = async ({ appKey, appSecret, accessToken, shopCipher, pageS
       'x-tts-access-token': accessToken,
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ page_size: pageSize }),
+    body: bodyStr,
   });
 };
 
@@ -85,6 +88,15 @@ const fetchReviewsBatch = async ({
 }) => {
   const ts = String(Math.floor(Date.now() / 1000));
 
+  // Build body first (needed for sign)
+  const bodyObj = {};
+  if (productIds?.length > 0) {
+    bodyObj.tiktok_product_ids = productIds.map(String);
+  }
+  if (reviewStartTime) bodyObj.review_start_time = reviewStartTime;
+  if (reviewEndTime) bodyObj.review_end_time = reviewEndTime;
+  const bodyStr = JSON.stringify(bodyObj);
+
   const urlParams = {
     app_key: appKey,
     timestamp: ts,
@@ -95,18 +107,11 @@ const fetchReviewsBatch = async ({
   if (shopCipher) urlParams.shop_cipher = shopCipher;
   if (pageToken) urlParams.page_token = pageToken;
 
-  urlParams.sign = buildSign(appSecret, REVIEWS_PATH, urlParams);
+  // Include body in HMAC signature for POST requests
+  urlParams.sign = buildSign(appSecret, REVIEWS_PATH, urlParams, bodyStr);
 
   const qs = new URLSearchParams(urlParams);
   const url = `${TIKTOK_BASE}${REVIEWS_PATH}?${qs.toString()}`;
-
-  // Request body — pass product IDs
-  const body = {};
-  if (productIds?.length > 0) {
-    body.tiktok_product_ids = productIds.map(String);
-  }
-  if (reviewStartTime) body.review_start_time = reviewStartTime;
-  if (reviewEndTime) body.review_end_time = reviewEndTime;
 
   return fetchWithTimeout(url, {
     method: 'POST',
@@ -114,7 +119,7 @@ const fetchReviewsBatch = async ({
       'x-tts-access-token': accessToken,
       'content-type': 'application/json',
     },
-    body: JSON.stringify(body),
+    body: bodyStr,
   });
 };
 
