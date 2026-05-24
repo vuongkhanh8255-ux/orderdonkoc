@@ -164,7 +164,7 @@ export const ACCOUNTS = [
 
 // ── ROLE PERMISSIONS ──────────────────────────────────────
 export const ROLE_VIEWS = {
-    admin:      ['stella_dashboard','listed_price','costing','tiktok_orders','shop_analytics','crm','cskh','livestream','dashboard','order','booking_performance','contract','airlinks','booking','data_archive','expense','landing_orders','camp_registration','task_notes'],
+    admin:      ['shop_analytics','stella_dashboard','listed_price','costing','tiktok_orders','crm','cskh','livestream','dashboard','order','booking_performance','contract','airlinks','booking','data_archive','expense','landing_orders','camp_registration','task_notes'],
     // BOOKING: chỉ Booking group + Ngân Sách Ecom. KHÔNG Ecom group, KHÔNG Task & Notes.
     booking:    ['dashboard','order','booking_performance','contract','airlinks','booking','expense'],
     cs:         ['crm','cskh','order','airlinks','expense','task_notes'],

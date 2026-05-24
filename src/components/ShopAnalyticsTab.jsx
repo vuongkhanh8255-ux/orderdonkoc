@@ -149,6 +149,7 @@ const ShopAnalyticsTab = () => {
   const [syncing, setSyncing]       = useState(false);
   const [syncResult, setSyncResult] = useState(null);
   const [shopFilter, setShopFilter] = useState('');
+  const [platformFilter, setPlatformFilter] = useState('');
   const [dailyData, setDailyData]   = useState([]);
   const [prevData, setPrevData]     = useState([]);
   const [lastSync, setLastSync]     = useState(null);
@@ -173,43 +174,72 @@ const ShopAnalyticsTab = () => {
     return `${days} ngày`;
   }, [dateRange]);
 
-  // ── Fetch connections ─────────────────────────────────────────────────────
+  // ── Fetch connections (TikTok + Shopee) ──────────────────────────────────
+  const [shopeeShops, setShopeeShops] = useState([]);
   const fetchConnections = useCallback(async () => {
+    // TikTok connections
     const { data: analytics } = await supabase
       .from('tiktok_analytics_connections')
       .select('shop_id, seller_name, access_token_expires_at, shop_cipher')
       .not('access_token', 'is', null);
-    if (analytics?.length > 0) { setConnections(analytics); return; }
-    const { data: orders } = await supabase
-      .from('tiktok_shop_connections')
-      .select('shop_id, seller_name, access_token_expires_at, shop_cipher')
-      .not('access_token', 'is', null).not('shop_cipher', 'is', null);
-    setConnections(orders || []);
+    if (analytics?.length > 0) setConnections(analytics);
+    else {
+      const { data: orders } = await supabase
+        .from('tiktok_shop_connections')
+        .select('shop_id, seller_name, access_token_expires_at, shop_cipher')
+        .not('access_token', 'is', null).not('shop_cipher', 'is', null);
+      setConnections(orders || []);
+    }
+    // Shopee connections
+    const { data: spShops } = await supabase
+      .from('shopee_tokens').select('shop_id, shop_name').eq('status', 'active');
+    setShopeeShops(spShops || []);
   }, []);
 
-  // ── Fetch analytics ───────────────────────────────────────────────────────
+  // ── Fetch analytics (TikTok + Shopee) ──────────────────────────────────
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      // Current period
-      let q = supabase.from('tiktok_shop_analytics_daily').select('*')
-        .gte('date', dateRange.start).lte('date', dateRange.end)
-        .order('date', { ascending: true });
-      if (shopFilter) q = q.eq('shop_id', shopFilter);
-      const { data, error } = await q;
-      if (error) { console.error(error); setDailyData([]); }
-      else setDailyData(data || []);
-
-      // Previous period (same length)
+      let allCur = [];
+      let allPrev = [];
       const days = daysBetween(dateRange.start, dateRange.end);
       const prevEnd = new Date(dateRange.start); prevEnd.setDate(prevEnd.getDate() - 1);
       const prevStart = new Date(prevEnd); prevStart.setDate(prevStart.getDate() - days + 1);
-      let pq = supabase.from('tiktok_shop_analytics_daily').select('*')
-        .gte('date', toYmd(prevStart)).lte('date', toYmd(prevEnd))
-        .order('date', { ascending: true });
-      if (shopFilter) pq = pq.eq('shop_id', shopFilter);
-      const { data: prev } = await pq;
-      setPrevData(prev || []);
+
+      // ── TikTok data ──
+      if (!platformFilter || platformFilter === 'tiktok') {
+        let q = supabase.from('tiktok_shop_analytics_daily').select('*')
+          .gte('date', dateRange.start).lte('date', dateRange.end)
+          .order('date', { ascending: true });
+        if (shopFilter) q = q.eq('shop_id', shopFilter);
+        const { data } = await q;
+        if (data) allCur.push(...data.map(r => ({ ...r, platform: 'tiktok' })));
+
+        let pq = supabase.from('tiktok_shop_analytics_daily').select('*')
+          .gte('date', toYmd(prevStart)).lte('date', toYmd(prevEnd))
+          .order('date', { ascending: true });
+        if (shopFilter) pq = pq.eq('shop_id', shopFilter);
+        const { data: prev } = await pq;
+        if (prev) allPrev.push(...prev.map(r => ({ ...r, platform: 'tiktok' })));
+      }
+
+      // ── Shopee data ──
+      if (!platformFilter || platformFilter === 'shopee') {
+        let sq = supabase.from('shopee_daily_stats').select('*')
+          .gte('date', dateRange.start).lte('date', dateRange.end);
+        if (shopFilter) sq = sq.eq('shop_id', shopFilter);
+        const { data: spData } = await sq;
+        if (spData) allCur.push(...spData.map(r => ({ ...r, platform: 'shopee' })));
+
+        let spq = supabase.from('shopee_daily_stats').select('*')
+          .gte('date', toYmd(prevStart)).lte('date', toYmd(prevEnd));
+        if (shopFilter) spq = spq.eq('shop_id', shopFilter);
+        const { data: spPrev } = await spq;
+        if (spPrev) allPrev.push(...spPrev.map(r => ({ ...r, platform: 'shopee' })));
+      }
+
+      setDailyData(allCur);
+      setPrevData(allPrev);
 
       // Last sync time
       const { data: latest } = await supabase
@@ -218,7 +248,7 @@ const ShopAnalyticsTab = () => {
       if (latest?.[0]) setLastSync(latest[0].synced_at);
     } catch (err) { console.error(err); setDailyData([]); }
     setLoading(false);
-  }, [dateRange, shopFilter]);
+  }, [dateRange, shopFilter, platformFilter]);
 
   // ── Sync ──────────────────────────────────────────────────────────────────
   const doSync = async (fullSync = false) => {
@@ -288,6 +318,7 @@ const ShopAnalyticsTab = () => {
     const sparkOrders   = dailySorted.map(([,v]) => ({ v: v.orders }));
     const sparkVisitors = dailySorted.map(([,v]) => ({ v: v.visitors }));
     const sparkConv     = dailySorted.map(([,v]) => ({ v: v.visitors > 0 ? (v.buyers / v.visitors * 100) : 0 }));
+    const sparkAov      = dailySorted.map(([,v]) => ({ v: v.orders > 0 ? (v.gmv / v.orders) : 0 }));
 
     // ── Channel breakdown from raw_metrics ──────────────────────────────
     const channels = { VIDEO: 0, LIVE: 0, PRODUCT_CARD: 0 };
@@ -342,7 +373,7 @@ const ShopAnalyticsTab = () => {
 
     return {
       cur, prev, numDays, chartData, dailyTable, shopList, channelList, channelTotal,
-      sparkGmv, sparkOrders, sparkVisitors, sparkConv,
+      sparkGmv, sparkOrders, sparkVisitors, sparkConv, sparkAov,
       gmvMax, gmvAvg,
       changes: {
         gmv: pctChange(cur.gmv, prev.gmv),
@@ -351,6 +382,10 @@ const ShopAnalyticsTab = () => {
         conversion: pctChange(
           cur.visitors > 0 ? (cur.buyers / cur.visitors * 100) : 0,
           prev.visitors > 0 ? (prev.buyers / prev.visitors * 100) : 0,
+        ),
+        aov: pctChange(
+          cur.orders > 0 ? (cur.gmv / cur.orders) : 0,
+          prev.orders > 0 ? (prev.gmv / prev.orders) : 0,
         ),
       },
       conversionRate: cur.visitors > 0 ? (cur.buyers / cur.visitors * 100) : 0,
@@ -368,74 +403,112 @@ const ShopAnalyticsTab = () => {
     <div style={{ fontFamily: "'Outfit', sans-serif", color: '#0f172a' }}>
 
       {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
         <div>
           <div style={{ fontSize: '0.7rem', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 4 }}>
             🏪 ECOM &nbsp;/&nbsp; TIKTOK ANALYTICS
           </div>
-          <h2 style={{ margin: '0 0 4px', fontSize: '1.4rem', fontWeight: 900 }}>TikTok Shop Analytics</h2>
-          <p style={{ margin: 0, color: '#64748b', fontSize: '0.82rem' }}>
-            Tổng quan hiệu suất Ecom · {periodLabel} qua
+          <h2 style={{ margin: '0 0 2px', fontSize: '1.4rem', fontWeight: 900 }}>Dashboard Ecom</h2>
+          <p style={{ margin: 0, color: '#64748b', fontSize: '0.8rem' }}>
+            Tổng quan hiệu suất Ecom{platformFilter === 'tiktok' ? ' · TikTok Shop' : platformFilter === 'shopee' ? ' · Shopee' : ' · Tất cả sàn'} · {periodLabel} qua
             {lastSync && <span style={{ color: '#94a3b8' }}> · cập nhật <strong>{new Date(lastSync).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</strong> {new Date(lastSync).toLocaleDateString('vi-VN')}</span>}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* Quick filters */}
-          <div style={{ display: 'flex', gap: 0, background: '#f1f5f9', borderRadius: 10, padding: 3 }}>
-            {[{ label: '7 ngày', days: 7 }, { label: '30 ngày', days: 30 }, { label: '90 ngày', days: 90 }].map(r => {
-              const end = new Date(); const start = new Date(); start.setDate(start.getDate() - r.days);
-              const isActive = dateRange.start === toYmd(start) && dateRange.end === toYmd(end);
-              return (
-                <button key={r.days} onClick={() => setQuickRange(r.days)}
-                  style={{ padding: '7px 16px', borderRadius: 8, fontSize: '0.78rem', fontWeight: 600, border: 'none', background: isActive ? '#fff' : 'transparent', color: isActive ? '#ea580c' : '#64748b', cursor: 'pointer', boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.15s' }}>
-                  {r.label}
-                </button>
-              );
-            })}
-          </div>
-          {/* Date inputs */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input type="date" value={dateRange.start} onChange={e => setDateRange(p => ({ ...p, start: e.target.value }))}
-              style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.78rem', fontFamily: 'inherit' }} />
-            <span style={{ color: '#cbd5e1' }}>—</span>
-            <input type="date" value={dateRange.end} onChange={e => setDateRange(p => ({ ...p, end: e.target.value }))}
-              style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.78rem', fontFamily: 'inherit' }} />
-          </div>
-          {/* Actions */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={() => doSync(false)} disabled={syncing}
-            style={{ padding: '8px 16px', borderRadius: 8, border: '1.5px solid #e5e7eb', background: '#fff', color: '#374151', fontWeight: 600, fontSize: '0.78rem', cursor: syncing ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            style={{ padding: '8px 18px', borderRadius: 8, border: '1.5px solid #e5e7eb', background: '#fff', color: '#374151', fontWeight: 600, fontSize: '0.78rem', cursor: syncing ? 'not-allowed' : 'pointer' }}>
             🔄 Đồng bộ
           </button>
           <button onClick={() => doSync(true)} disabled={syncing}
-            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#ea580c', color: '#fff', fontWeight: 700, fontSize: '0.78rem', cursor: syncing ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 8px rgba(234,88,12,0.25)', opacity: syncing ? 0.6 : 1 }}>
+            style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#ea580c', color: '#fff', fontWeight: 700, fontSize: '0.78rem', cursor: syncing ? 'not-allowed' : 'pointer', boxShadow: '0 2px 8px rgba(234,88,12,0.25)', opacity: syncing ? 0.6 : 1 }}>
             {syncing ? '⏳ Đang sync...' : '📥 Full Sync'}
           </button>
+          <a href={AUTH_URL} target="_blank" rel="noopener noreferrer"
+            style={{ padding: '8px 18px', borderRadius: 8, background: '#0f172a', color: '#fff', fontWeight: 600, fontSize: '0.78rem', textDecoration: 'none' }}>
+            + Kết nối
+          </a>
         </div>
       </div>
 
-      {/* ── Status badge ─────────────────────────────────────────────────────── */}
-      {connections.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-          {connections.map((c, i) => {
-            const expired = c.access_token_expires_at && new Date(c.access_token_expires_at) < new Date();
-            return (
-              <div key={i} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 16px',
-                background: expired ? '#fef2f2' : '#f0fdf4', border: `1px solid ${expired ? '#fecaca' : '#bbf7d0'}`,
-                borderRadius: 20, fontSize: '0.76rem', fontWeight: 600,
-              }}>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: expired ? '#ef4444' : '#22c55e' }} />
-                {expired ? '⚠️' : '●'} {c.seller_name || c.shop_id}
-                {expired && <span style={{ color: '#dc2626' }}>(hết hạn)</span>}
-              </div>
-            );
-          })}
-          <a href={AUTH_URL} target="_blank" rel="noopener noreferrer"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '6px 16px', background: '#0f172a', color: '#fff', borderRadius: 20, fontSize: '0.76rem', fontWeight: 600, textDecoration: 'none' }}>
-            + Kết nối Shop
-          </a>
+      {/* ── Filter Bar ───────────────────────────────────────────────────────── */}
+      {(() => {
+        const selectStyle = {
+          padding: '8px 32px 8px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb',
+          fontSize: '0.8rem', fontWeight: 600, fontFamily: 'inherit', color: '#374151',
+          background: '#fff', cursor: 'pointer', appearance: 'none', minWidth: 150,
+          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+          backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center',
+        };
+        const labelStyle = { fontSize: '0.65rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 };
+        return (
+        <div style={{
+          background: '#fff', border: '1px solid #f1f5f9', borderRadius: 14, padding: '14px 20px',
+          marginBottom: 16, display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap',
+          boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
+        }}>
+          {/* Sàn */}
+          <div>
+            <div style={labelStyle}>Sàn</div>
+            <select value={platformFilter} onChange={e => { setPlatformFilter(e.target.value); setShopFilter(''); setTablePage(0); }} style={selectStyle}>
+              <option value="">Tất cả sàn</option>
+              <option value="tiktok">TikTok Shop</option>
+              <option value="shopee">Shopee</option>
+            </select>
+          </div>
+          {/* Shop */}
+          <div>
+            <div style={labelStyle}>Shop</div>
+            <select value={shopFilter} onChange={e => { setShopFilter(e.target.value); setTablePage(0); }} style={selectStyle}>
+              <option value="">Tất cả shop</option>
+              {(!platformFilter || platformFilter === 'tiktok') && connections.map((c, i) => (
+                <option key={`tt-${i}`} value={c.shop_id}>🎵 {c.seller_name || c.shop_id}</option>
+              ))}
+              {(!platformFilter || platformFilter === 'shopee') && shopeeShops.map((s, i) => (
+                <option key={`sp-${i}`} value={s.shop_id}>🛒 {s.shop_name || s.shop_id}</option>
+              ))}
+            </select>
+          </div>
+          {/* Separator */}
+          <div style={{ width: 1, height: 36, background: '#e5e7eb', alignSelf: 'center' }} />
+          {/* Khung thời gian */}
+          <div>
+            <div style={labelStyle}>Khung thời gian</div>
+            <div style={{ display: 'flex', gap: 0, background: '#f1f5f9', borderRadius: 8, padding: 3 }}>
+              {[{ label: 'Hôm qua', days: 1, single: true }, { label: '7 Ngày', days: 7 }, { label: '30 Ngày', days: 30 }, { label: '90 Ngày', days: 90 }].map(r => {
+                let expStart, expEnd;
+                if (r.single) {
+                  const d = new Date(); d.setDate(d.getDate() - 1);
+                  expStart = toYmd(d); expEnd = toYmd(d);
+                } else {
+                  expEnd = toYmd(new Date()); const s = new Date(); s.setDate(s.getDate() - r.days); expStart = toYmd(s);
+                }
+                const isActive = dateRange.start === expStart && dateRange.end === expEnd;
+                const handleClick = () => {
+                  if (r.single) { const d = new Date(); d.setDate(d.getDate() - 1); setDateRange({ start: toYmd(d), end: toYmd(d) }); }
+                  else setQuickRange(r.days);
+                  setTablePage(0);
+                };
+                return (
+                  <button key={r.label} onClick={handleClick}
+                    style={{ padding: '6px 16px', borderRadius: 6, fontSize: '0.78rem', fontWeight: 600, border: 'none', background: isActive ? '#ea580c' : 'transparent', color: isActive ? '#fff' : '#64748b', cursor: 'pointer', transition: 'all 0.15s' }}>
+                    {r.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {/* Custom date */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="date" value={dateRange.start} onChange={e => setDateRange(p => ({ ...p, start: e.target.value }))}
+              style={{ padding: '7px 10px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.78rem', fontFamily: 'inherit' }} />
+            <span style={{ color: '#cbd5e1', fontSize: '0.8rem' }}>→</span>
+            <input type="date" value={dateRange.end} onChange={e => setDateRange(p => ({ ...p, end: e.target.value }))}
+              style={{ padding: '7px 10px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.78rem', fontFamily: 'inherit' }} />
+          </div>
         </div>
-      )}
+        );
+      })()}
+
 
       {/* ── Sync result ──────────────────────────────────────────────────────── */}
       {syncResult && (
@@ -497,6 +570,12 @@ const ShopAnalyticsTab = () => {
               change={computed.changes.orders}
               sub={`vs ${periodLabel} trước · ${computed.numDays > 0 ? Math.round(computed.cur.orders / computed.numDays) : 0} đơn / ngày`}
               sparkData={computed.sparkOrders} sparkKey="v" />
+
+            <StatCard icon="💎" label="AOV" accentColor={ACCENT.blue}
+              value={fmtVnd(computed.aov)} unit="đ"
+              change={computed.changes.aov}
+              sub={`vs ${periodLabel} trước · ${fmtVndFull(computed.aov)} đ/đơn`}
+              sparkData={computed.sparkAov} sparkKey="v" />
 
             <StatCard icon="📊" label="Tỷ lệ chuyển đổi" accentColor={ACCENT.purple}
               value={computed.conversionRate.toFixed(2)} unit="%"
