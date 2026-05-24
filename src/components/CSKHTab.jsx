@@ -1104,7 +1104,7 @@ function TikTokReviewsTab() {
             Nguồn: TikTok Shop Open API — Customer Reviews
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button onClick={() => handleSync(false)} disabled={syncing}
             style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: syncing ? '#d1d5db' : 'linear-gradient(135deg, #f97316, #ef4444)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: syncing ? 'default' : 'pointer', boxShadow: syncing ? 'none' : '0 4px 12px rgba(249,115,22,0.3)', transition: 'all 0.2s' }}>
             {syncing ? '⏳ Đang đồng bộ...' : '🔄 Sync đánh giá'}
@@ -1113,8 +1113,61 @@ function TikTokReviewsTab() {
             style={{ padding: '10px 16px', borderRadius: 10, border: '2px solid #e5e7eb', background: '#fff', color: '#666', fontWeight: 600, fontSize: 13, cursor: syncing ? 'default' : 'pointer' }}>
             Full Sync
           </button>
+          <div style={{ width: 1, height: 28, background: '#e5e7eb' }} />
+          <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleImportFile} style={{ display: 'none' }} />
+          <button onClick={() => fileInputRef.current?.click()} disabled={importing}
+            style={{ padding: '10px 16px', borderRadius: 10, border: '2px solid #dbeafe', background: importing ? '#e5e7eb' : '#eff6ff', color: importing ? '#999' : '#2563eb', fontWeight: 700, fontSize: 13, cursor: importing ? 'default' : 'pointer', transition: 'all 0.2s' }}>
+            {importing ? '⏳ Importing...' : '📥 Import Excel'}
+          </button>
+          <button onClick={() => setShowImportGuide(!showImportGuide)}
+            style={{ padding: '10px 12px', borderRadius: 10, border: '2px solid #e5e7eb', background: showImportGuide ? '#fef3c7' : '#fff', color: '#666', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+            title="Hướng dẫn import">
+            ❓
+          </button>
         </div>
       </div>
+
+      {/* Import Guide */}
+      {showImportGuide && (
+        <div style={{ ...card, marginBottom: 16, background: '#fffbeb', borderLeft: '4px solid #f59e0b' }}>
+          <h3 style={{ margin: '0 0 8px', fontSize: 14, color: '#b45309' }}>📥 Hướng dẫn Import Excel / CSV</h3>
+          <ol style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: '#78350f', lineHeight: 1.8 }}>
+            <li>Vào <b>TikTok Seller Center</b> → Đánh giá → Export Excel</li>
+            <li>File cần có ít nhất 1 cột: <b>Nội dung/Review</b>, <b>Đánh giá/Rating</b>, hoặc <b>Sản phẩm/Product Name</b></li>
+            <li>Cột tự nhận diện (Tiếng Việt & English): Mã đơn hàng, Sản phẩm, SKU, Đánh giá, Nội dung, Người mua, Ngày, Shop...</li>
+            <li>Hỗ trợ định dạng: <code>.xlsx</code>, <code>.xls</code>, <code>.csv</code></li>
+          </ol>
+          <button onClick={() => setShowImportGuide(false)} style={{ marginTop: 10, fontSize: 12, padding: '4px 12px', borderRadius: 6, border: '1px solid #fbbf24', background: '#fef3c7', color: '#92400e', cursor: 'pointer', fontWeight: 600 }}>Đóng</button>
+        </div>
+      )}
+
+      {/* Import Result Banner */}
+      {importResult && (
+        <div style={{
+          ...card, marginBottom: 16, borderLeft: `4px solid ${importResult.success ? '#3b82f6' : '#ef4444'}`,
+          background: importResult.success ? '#eff6ff' : '#fef2f2',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <span style={{ fontWeight: 700, fontSize: 14, color: importResult.success ? '#2563eb' : '#dc2626' }}>
+                {importResult.success ? '📥' : '❌'} {importResult.message}
+              </span>
+              {importResult.columns_mapped && (
+                <p style={{ margin: '6px 0 0', fontSize: 11, color: '#6b7280' }}>
+                  Cột đã map: {importResult.columns_mapped.join(' | ')}
+                </p>
+              )}
+              {importResult.hint && (
+                <p style={{ margin: '4px 0 0', fontSize: 11, color: '#9ca3af' }}>{importResult.hint}</p>
+              )}
+              {importResult.errors && (
+                <p style={{ margin: '4px 0 0', fontSize: 11, color: '#dc2626' }}>Lỗi: {importResult.errors.join(', ')}</p>
+              )}
+            </div>
+            <button onClick={() => setImportResult(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 16, color: '#999' }}>×</button>
+          </div>
+        </div>
+      )}
 
       {/* Sync Result Banner */}
       {syncResult && (
