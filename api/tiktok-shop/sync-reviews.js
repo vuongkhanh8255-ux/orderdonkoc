@@ -264,22 +264,32 @@ export default async function handler(req, res) {
 
   // If using separate Reviews app, try to get reviews-specific access tokens
   if (usingReviewsApp) {
-    const { data: reviewConns } = await supabase
-      .from('tiktok_reviews_connections')
-      .select('access_token, shop_id')
-      .not('access_token', 'is', null)
-      .catch(() => ({ data: null }));
+    try {
+      const { data: reviewConns, error: rcErr } = await supabase
+        .from('tiktok_reviews_connections')
+        .select('access_token, shop_id, shop_cipher')
+        .not('access_token', 'is', null);
 
-    if (reviewConns?.length > 0) {
-      const reviewTokenMap = {};
-      reviewConns.forEach(rc => { reviewTokenMap[rc.shop_id] = rc.access_token; });
-      connections = connections.map(c => ({
-        ...c,
-        reviews_access_token: reviewTokenMap[c.shop_id] || null,
-      }));
-      console.log(`[sync-reviews] Found ${reviewConns.length} reviews-specific tokens`);
-    } else {
-      console.log('[sync-reviews] No reviews-specific tokens found — will try with analytics tokens');
+      if (rcErr) {
+        console.log(`[sync-reviews] Reviews connections query error: ${rcErr.message}`);
+      } else if (reviewConns?.length > 0) {
+        const reviewTokenMap = {};
+        const reviewCipherMap = {};
+        reviewConns.forEach(rc => {
+          reviewTokenMap[rc.shop_id] = rc.access_token;
+          if (rc.shop_cipher) reviewCipherMap[rc.shop_id] = rc.shop_cipher;
+        });
+        connections = connections.map(c => ({
+          ...c,
+          reviews_access_token: reviewTokenMap[c.shop_id] || null,
+          shop_cipher: c.shop_cipher || reviewCipherMap[c.shop_id] || null,
+        }));
+        console.log(`[sync-reviews] Found ${reviewConns.length} reviews-specific tokens`);
+      } else {
+        console.log('[sync-reviews] No reviews-specific tokens found — will try with analytics tokens');
+      }
+    } catch (e) {
+      console.log(`[sync-reviews] Reviews connections error: ${e.message}`);
     }
   }
 
