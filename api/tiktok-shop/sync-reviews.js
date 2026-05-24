@@ -282,7 +282,7 @@ export default async function handler(req, res) {
         connections = connections.map(c => ({
           ...c,
           reviews_access_token: reviewTokenMap[c.shop_id] || null,
-          shop_cipher: c.shop_cipher || reviewCipherMap[c.shop_id] || null,
+          reviews_shop_cipher: reviewCipherMap[c.shop_id] || null,
         }));
         console.log(`[sync-reviews] Found ${reviewConns.length} reviews-specific tokens`);
       } else {
@@ -368,12 +368,16 @@ export default async function handler(req, res) {
 
         do {
           pageNum++;
-          // Use Reviews app credentials + reviews-specific access token if available
+          // Use Reviews app credentials + reviews-specific access token + cipher
           const reviewToken = conn.reviews_access_token || conn.access_token;
+          const reviewCipher = conn.reviews_shop_cipher || conn.shop_cipher;
+          if (pageNum === 1 && i === 0) {
+            console.log(`[sync-reviews] ${shopLabel}: using reviewToken=${reviewToken ? 'reviews_app' : 'analytics'}, cipher=${reviewCipher?.slice(0,12)}...`);
+          }
           const resp = await fetchReviewsBatch({
             appKey: reviewAppKey, appSecret: reviewAppSecret,
             accessToken: reviewToken,
-            shopCipher: conn.shop_cipher,
+            shopCipher: reviewCipher,
             productIds: batchIds,
             pageSize,
             pageToken,
