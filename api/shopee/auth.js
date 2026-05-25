@@ -17,8 +17,7 @@ export default async function handler(req, res) {
   }
 
   // Redirect URL phải trùng với URL đã đăng ký trong Shopee Partner Center
-  const host     = req.headers.host || 'koc-tool.vercel.app';
-  const redirect = `https://${host}/shopee-callback`;
+  const redirect = 'https://stellakinetics.space/shopee-callback';
 
   const path      = '/api/v2/shop/auth_partner';
   const timestamp = Math.floor(Date.now() / 1000);
