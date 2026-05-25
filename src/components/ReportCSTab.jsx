@@ -37,7 +37,7 @@ const TIKTOK_METRICS = [
   ]},
   { group: 'HIỆU SUẤT\nCỬA HÀNG', items: [
     { key: 'tt_danh_gia_tieu_cuc', label: 'Tỉ lệ đánh giá tiêu cực', target: '≤ 0.50%' },
-    { key: 'tt_danh_gia_tieu_cuc_dv', label: 'Tỷ lệ đánh giá tiêu cực dịch vụ', target: '≤ 0.50%' },
+    { key: 'tt_danh_gia_tieu_cuc_dv', label: 'Điểm tình trạng tài khoản', target: '≤ 0.50%' },
     { key: 'tt_tra_hang_hoan_tien', label: 'Tỷ lệ trả hàng/hoàn tiền', target: '≤ 1.50%' },
     { key: 'tt_huy_loi_nguoi_ban', label: 'Tỷ lệ hủy do lỗi của người bán', target: '≤ 2.50%' },
     { key: 'tt_gui_hang_muon', label: 'Tỷ lệ gửi hàng muộn', target: '≤ 4.00%' },

@@ -10,6 +10,7 @@ import {
    Constants
    ═══════════════════════════════════════════════════════════════════════════ */
 const SALES_PERSONS = ['HUỆ', 'KỲ ANH', 'HẠNH'];
+const BUSINESS_TYPES = ['Spa', 'Mini Mart', 'Wax', 'Công ty', 'Bán lẻ'];
 const ORDER_SOURCES = ['Zalo Spa', 'Website', 'Zalo Group'];
 const PAY_METHODS   = ['COD', 'Chuyển khoản'];
 const PROVINCES = [
@@ -98,10 +99,10 @@ const pctChange = (cur, prev) => {
 };
 
 const EMPTY_ORDER = {
-  order_source:'', products:[{ name:'', quantity:1 }],
+  order_source:'', products:[{ name:'', quantity:1, is_gift:false }],
   payment_method:'COD', total_amount:'',
   recipient_name:'', recipient_phone:'', recipient_address:'',
-  sales_person:'', notes:'',
+  sales_person:'', notes:'', freeship:false, vat_invoice:false,
 };
 const EMPTY_CUSTOMER = {
   phone:'', full_name:'', province:'', business_type:'', customer_type:'Mới',
@@ -155,6 +156,7 @@ const CrmTab = () => {
   const [fProvince, setFProvince] = useState('');
   const [fCustType, setFCustType] = useState('');
   const [fPerson,   setFPerson]   = useState('');
+  const [fBizType,  setFBizType]  = useState('');
   const [fSearch,   setFSearch]   = useState('');
   const [fOrderType, setFOrderType] = useState('');
 
@@ -220,7 +222,9 @@ const CrmTab = () => {
       setNewOrder(p => ({ ...p,
         recipient_name:  data.full_name || p.recipient_name,
         recipient_phone: phone,
+        recipient_address: data.province || p.recipient_address,
         sales_person:    data.sales_person || p.sales_person,
+        order_source:    data.data_source || p.order_source,
       }));
     }
     setPhoneLoading(false);
@@ -241,6 +245,7 @@ const CrmTab = () => {
     return enriched.filter(c => {
       if (fProvince && c.province !== fProvince) return false;
       if (fCustType && c.tag !== fCustType) return false;
+      if (fBizType  && c.business_type !== fBizType) return false;
       if (fPerson   && c.sales_person !== fPerson) return false;
       if (fDateFrom && c.created_date < fDateFrom) return false;
       if (fDateTo   && c.created_date > fDateTo) return false;
@@ -250,7 +255,7 @@ const CrmTab = () => {
       }
       return true;
     });
-  }, [enriched, fProvince, fCustType, fPerson, fDateFrom, fDateTo, fSearch]);
+  }, [enriched, fProvince, fCustType, fBizType, fPerson, fDateFrom, fDateTo, fSearch]);
 
   const filteredOrders = useMemo(() => {
     return orders.filter(o => {
@@ -262,40 +267,63 @@ const CrmTab = () => {
     });
   }, [orders, fDateFrom, fDateTo, fPerson]);
 
-  /* ── KPIs with trends ───────────────────────────────────────────────── */
+  /* ── KPIs with trends (respects filters) ─────────────────────────── */
   const kpis = useMemo(() => {
-    const now = new Date();
-    const d30 = daysAgo(30).toISOString();
-    const d60 = daysAgo(60).toISOString();
-    const d30s = daysAgo(30).toISOString().slice(0,10);
-    const d60s = daysAgo(60).toISOString().slice(0,10);
+    // Date range: use filter dates if set, else last 30 days
+    const curStart = fDateFrom || daysAgo(30).toISOString().slice(0,10);
+    const curEnd   = fDateTo   || today();
+    const daysDiff = Math.round((new Date(curEnd) - new Date(curStart)) / 86400000) || 30;
+    const prevEnd  = new Date(curStart); prevEnd.setDate(prevEnd.getDate() - 1);
+    const prevStart= new Date(prevEnd);  prevStart.setDate(prevStart.getDate() - daysDiff);
+    const prevS = prevStart.toISOString().slice(0,10);
+    const prevE = prevEnd.toISOString().slice(0,10);
 
-    const totalCust   = enriched.length;
-    const newCust30   = enriched.filter(c => c.created_date >= d30s).length;
-    const newCust60   = enriched.filter(c => c.created_date >= d60s && c.created_date < d30s).length;
-    const activeCust  = enriched.filter(c => c.orderCount > 0 && orders.some(o => o.recipient_phone === c.phone && (o.order_date || o.created_at?.slice(0,10)) >= d30s)).length;
-    const activePrev  = enriched.filter(c => c.orderCount > 0 && orders.some(o => o.recipient_phone === c.phone && (o.order_date || o.created_at?.slice(0,10)) >= d60s && (o.order_date || o.created_at?.slice(0,10)) < d30s)).length;
+    // Apply non-date filters to customers
+    const fc = enriched.filter(c => {
+      if (fProvince && c.province !== fProvince) return false;
+      if (fBizType  && c.business_type !== fBizType) return false;
+      if (fPerson   && c.sales_person !== fPerson) return false;
+      return true;
+    });
+    // Apply non-date filters to orders
+    const fo = orders.filter(o => {
+      if (fPerson && o.sales_person !== fPerson) return false;
+      return true;
+    });
 
-    const orders30  = orders.filter(o => (o.order_date || o.created_at?.slice(0,10)) >= d30s);
-    const orders60  = orders.filter(o => { const d = o.order_date || o.created_at?.slice(0,10); return d >= d60s && d < d30s; });
-    const rev30     = orders30.reduce((s,o) => s + Number(o.total_amount||0), 0);
-    const rev60     = orders60.reduce((s,o) => s + Number(o.total_amount||0), 0);
-    const aov30     = orders30.length ? Math.round(rev30 / orders30.length) : 0;
-    const aov60     = orders60.length ? Math.round(rev60 / orders60.length) : 0;
+    const totalCust   = fc.length;
+    const newCustCur  = fc.filter(c => c.created_date >= curStart && c.created_date <= curEnd).length;
+    const newCustPrev = fc.filter(c => c.created_date >= prevS && c.created_date <= prevE).length;
 
-    const repeatCust = enriched.filter(c => c.orderCount > 1).length;
-    const returnRate = totalCust ? (repeatCust / totalCust * 100) : 0;
+    // Đã liên hệ = customers with contact_status = 'Đã liên hệ'
+    const contactedCust = fc.filter(c => c.contact_status === 'Đã liên hệ').length;
+
+    const ordersCurAll  = fo.filter(o => { const d = o.order_date || o.created_at?.slice(0,10) || ''; return d >= curStart && d <= curEnd; });
+    const ordersPrevAll = fo.filter(o => { const d = o.order_date || o.created_at?.slice(0,10) || ''; return d >= prevS && d <= prevE; });
+    // Loại bỏ đơn Quà tặng (total_amount=0) khỏi KPI Đơn/Doanh thu/AOV
+    const ordersCur  = ordersCurAll.filter(o => Number(o.total_amount||0) > 0);
+    const ordersPrev = ordersPrevAll.filter(o => Number(o.total_amount||0) > 0);
+    const revCur     = ordersCur.reduce((s,o) => s + Number(o.total_amount||0), 0);
+    const revPrev    = ordersPrev.reduce((s,o) => s + Number(o.total_amount||0), 0);
+    const aovCur     = ordersCur.length ? Math.round(revCur / ordersCur.length) : 0;
+    const aovPrev    = ordersPrev.length ? Math.round(revPrev / ordersPrev.length) : 0;
+
+    // Tỷ lệ chuyển đổi = đơn đã chốt / khách đã liên hệ
+    const convRate = contactedCust > 0 ? (ordersCur.length / contactedCust * 100) : 0;
+    const convPrev = 0; // no previous period comparison for conversion
+
+    const periodLabel = fDateFrom ? '' : '30 ngày';
 
     return [
-      { label:'Tổng KH',       value: fmtNum(totalCust),        raw: totalCust,       trend: pctChange(totalCust, totalCust - newCust30) },
-      { label:'KH Mới',        value: fmtNum(newCust30),        raw: newCust30,       trend: pctChange(newCust30, newCust60) },
-      { label:'KH Active',     value: fmtNum(activeCust),       raw: activeCust,      trend: pctChange(activeCust, activePrev) },
-      { label:'Đơn 30 ngày',   value: fmtNum(orders30.length),  raw: orders30.length, trend: pctChange(orders30.length, orders60.length) },
-      { label:'Doanh thu',     value: fmtMoney(rev30),          raw: rev30,           trend: pctChange(rev30, rev60) },
-      { label:'AOV',           value: fmtMoneyK(aov30),         raw: aov30,           trend: pctChange(aov30, aov60) },
-      { label:'Tỷ lệ quay lại', value:`${returnRate.toFixed(1)}%`, raw: returnRate,   trend: 0 },
+      { label:'Tổng KH',         value: fmtNum(totalCust),        raw: totalCust,       trend: pctChange(totalCust, totalCust - newCustCur) },
+      { label:'KH Mới',          value: fmtNum(newCustCur),       raw: newCustCur,      trend: pctChange(newCustCur, newCustPrev) },
+      { label:'Đã liên hệ',     value: fmtNum(contactedCust),    raw: contactedCust,   trend: 0 },
+      { label:`Đơn ${periodLabel}`, value: fmtNum(ordersCur.length), raw: ordersCur.length, trend: pctChange(ordersCur.length, ordersPrev.length) },
+      { label:'Doanh thu',       value: fmtMoney(revCur),         raw: revCur,          trend: pctChange(revCur, revPrev) },
+      { label:'AOV',             value: fmtMoneyK(aovCur),        raw: aovCur,          trend: pctChange(aovCur, aovPrev) },
+      { label:'Tỷ lệ chuyển đổi', value:`${convRate.toFixed(1)}%`, raw: convRate,       trend: 0 },
     ];
-  }, [enriched, orders]);
+  }, [enriched, orders, fDateFrom, fDateTo, fProvince, fBizType, fPerson]);
 
   /* ── Chart: customer growth (last 6 months) ─────────────────────────── */
   const growthChart = useMemo(() => {
@@ -311,12 +339,75 @@ const CrmTab = () => {
     return months;
   }, [customers, orders]);
 
-  /* ── Chart: donut — customer classification ─────────────────────────── */
+  /* ── Chart: donut — phân loại theo loại hình KD ─────────────────────── */
   const donutData = useMemo(() => {
-    const counts = { VIP:0, loyal:0, regular:0, new:0, inactive:0 };
-    enriched.forEach(c => { counts[c.tag] = (counts[c.tag]||0) + 1; });
-    return Object.entries(TAG_CONFIG).map(([k,v]) => ({ name:v.label, value:counts[k]||0 }));
-  }, [enriched]);
+    const counts = {};
+    const fc = enriched.filter(c => {
+      if (fProvince && c.province !== fProvince) return false;
+      if (fBizType  && c.business_type !== fBizType) return false;
+      if (fPerson   && c.sales_person !== fPerson) return false;
+      return true;
+    });
+    fc.forEach(c => { const bt = c.business_type || 'Khác'; counts[bt] = (counts[bt]||0) + 1; });
+    return Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0,6).map(([name,value]) => ({ name, value }));
+  }, [enriched, fProvince, fBizType, fPerson]);
+
+  /* ── Chart: doanh thu theo khu vực ─────────────────────────────────── */
+  const revenueByRegion = useMemo(() => {
+    const curStart = fDateFrom || daysAgo(30).toISOString().slice(0,10);
+    const curEnd   = fDateTo   || today();
+    const map = {};
+    orders.forEach(o => {
+      const d = o.order_date || o.created_at?.slice(0,10) || '';
+      if (d < curStart || d > curEnd) return;
+      if (fPerson && o.sales_person !== fPerson) return;
+      // Find customer province
+      const cust = enriched.find(c => c.phone === o.recipient_phone);
+      const prov = cust?.province || o.recipient_address || 'Khác';
+      map[prov] = (map[prov]||0) + Number(o.total_amount||0);
+    });
+    const sorted = Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,6);
+    const max = sorted[0]?.[1] || 1;
+    return sorted.map(([name,rev]) => ({ name: name.replace('TP. ',''), rev, pct: Math.round(rev/max*100) }));
+  }, [orders, enriched, fDateFrom, fDateTo, fPerson]);
+
+  /* ── Chart: data theo loại hình KD ──────────────────────────────────── */
+  const dataByBizType = useMemo(() => {
+    const curStart = fDateFrom || daysAgo(30).toISOString().slice(0,10);
+    const curEnd   = fDateTo   || today();
+    const map = {};
+    orders.forEach(o => {
+      const d = o.order_date || o.created_at?.slice(0,10) || '';
+      if (d < curStart || d > curEnd) return;
+      if (fPerson && o.sales_person !== fPerson) return;
+      const cust = enriched.find(c => c.phone === o.recipient_phone);
+      const bt = cust?.business_type || 'Khác';
+      if (!map[bt]) map[bt] = { orders:0, rev:0, custs: new Set() };
+      map[bt].orders++;
+      map[bt].rev += Number(o.total_amount||0);
+      if (o.recipient_phone) map[bt].custs.add(o.recipient_phone);
+    });
+    return Object.entries(map)
+      .map(([name,v]) => ({ name, orders:v.orders, rev:v.rev, custs:v.custs.size }))
+      .sort((a,b) => b.rev - a.rev);
+  }, [orders, enriched, fDateFrom, fDateTo, fPerson]);
+
+  /* ── KH mới vs KH cũ ───────────────────────────────────────────────── */
+  const newVsReturn = useMemo(() => {
+    const curStart = fDateFrom || daysAgo(30).toISOString().slice(0,10);
+    const curEnd   = fDateTo   || today();
+    let newOrders = 0, newRev = 0, retOrders = 0, retRev = 0;
+    orders.forEach(o => {
+      const d = o.order_date || o.created_at?.slice(0,10) || '';
+      if (d < curStart || d > curEnd) return;
+      if (fPerson && o.sales_person !== fPerson) return;
+      const cust = enriched.find(c => c.phone === o.recipient_phone);
+      const isNew = cust?.customer_type === 'Mới';
+      if (isNew) { newOrders++; newRev += Number(o.total_amount||0); }
+      else       { retOrders++; retRev += Number(o.total_amount||0); }
+    });
+    return { newOrders, newRev, retOrders, retRev };
+  }, [orders, enriched, fDateFrom, fDateTo, fPerson]);
 
   /* ── Chart: province distribution ───────────────────────────────────── */
   const provinceData = useMemo(() => {
@@ -347,6 +438,13 @@ const CrmTab = () => {
       ...newOrder, order_code:genCode(),
       total_amount: Number(newOrder.total_amount||0),
       products: newOrder.products.filter(p=>p.name),
+      freeship: !!newOrder.freeship,
+      vat_invoice: !!newOrder.vat_invoice,
+      notes: [
+        newOrder.freeship ? '[Freeship]' : '',
+        newOrder.vat_invoice ? '[VAT]' : '',
+        newOrder.notes || '',
+      ].filter(Boolean).join(' '),
     };
     const { error } = await supabase.from('crm_orders').insert(record);
     setSaving(false);
@@ -384,7 +482,7 @@ const CrmTab = () => {
 
   const resetFilters = () => {
     setFDateFrom(''); setFDateTo(''); setFProvince('');
-    setFCustType(''); setFPerson(''); setFSearch('');
+    setFCustType(''); setFPerson(''); setFSearch(''); setFBizType('');
   };
 
   /* ══════════════════════════════════════════════════════════════════════
@@ -461,10 +559,10 @@ const CrmTab = () => {
         {PROVINCES.map(p=><option key={p} value={p}>{p}</option>)}
       </select>
 
-      <select value={fCustType} onChange={e=>setFCustType(e.target.value)}
-        style={{ ...S.select, width:130, padding:'7px 10px' }}>
-        <option value=''>Loại KH</option>
-        {Object.entries(TAG_CONFIG).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+      <select value={fBizType} onChange={e=>setFBizType(e.target.value)}
+        style={{ ...S.select, width:160, padding:'7px 10px' }}>
+        <option value=''>Loại hình KD</option>
+        {BUSINESS_TYPES.map(b=><option key={b} value={b}>{b}</option>)}
       </select>
 
       <select value={fPerson} onChange={e=>setFPerson(e.target.value)}
@@ -614,10 +712,10 @@ const CrmTab = () => {
               )}
             </div>
 
-            {/* Donut chart — Phân loại KH */}
+            {/* Donut chart — Phân loại theo loại hình */}
             <div style={{ ...S.card, padding:20 }}>
               <div style={{ fontWeight:800, fontSize:'0.95rem', color:'#0f172a', marginBottom:16 }}>
-                Phân loại khách hàng
+                Phân loại theo loại hình
               </div>
               {donutData.some(d=>d.value>0) ? (
                 <div style={{ display:'flex', flexDirection:'column', alignItems:'center' }}>
@@ -647,30 +745,106 @@ const CrmTab = () => {
             </div>
           </div>
 
-          {/* Province distribution */}
+          {/* Row 3: Revenue by region + KH mới/cũ */}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20, marginBottom:24 }}>
+            {/* Doanh thu theo khu vực */}
+            <div style={{ ...S.card, padding:20 }}>
+              <div style={{ fontWeight:800, fontSize:'0.95rem', color:'#0f172a', marginBottom:16 }}>
+                Doanh thu theo khu vực
+              </div>
+              {revenueByRegion.length > 0 ? (
+                <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                  {revenueByRegion.map((p,i) => (
+                    <div key={i}>
+                      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
+                        <span style={{ fontSize:'0.82rem', fontWeight:600, color:'#334155' }}>{p.name}</span>
+                        <span style={{ fontSize:'0.82rem', fontWeight:700, color:'#16a34a' }}>{fmtMoney(p.rev)}đ</span>
+                      </div>
+                      <div style={{ height:8, background:'#f1f5f9', borderRadius:4, overflow:'hidden' }}>
+                        <div style={{ width:`${p.pct}%`, height:'100%', background:
+                          i===0?'#ea580c':i===1?'#f97316':i===2?'#fb923c':'#fdba74',
+                          borderRadius:4, transition:'width 0.4s' }}/>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ padding:24, textAlign:'center', color:'#94a3b8', fontSize:'0.85rem' }}>
+                  Chưa có dữ liệu
+                </div>
+              )}
+            </div>
+
+            {/* KH mới vs KH cũ */}
+            <div style={{ ...S.card, padding:20 }}>
+              <div style={{ fontWeight:800, fontSize:'0.95rem', color:'#0f172a', marginBottom:16 }}>
+                Khách mới vs Khách cũ
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+                <div style={{ background:'#eff6ff', borderRadius:12, padding:16, textAlign:'center' }}>
+                  <div style={{ fontSize:'0.72rem', color:'#3b82f6', fontWeight:600, marginBottom:6, textTransform:'uppercase' }}>KH Mới</div>
+                  <div style={{ fontSize:'1.4rem', fontWeight:800, color:'#1e40af' }}>{fmtNum(newVsReturn.newOrders)}</div>
+                  <div style={{ fontSize:'0.75rem', color:'#64748b', marginTop:2 }}>đơn</div>
+                  <div style={{ fontSize:'0.85rem', fontWeight:700, color:'#16a34a', marginTop:6 }}>{fmtMoney(newVsReturn.newRev)}đ</div>
+                </div>
+                <div style={{ background:'#fff7ed', borderRadius:12, padding:16, textAlign:'center' }}>
+                  <div style={{ fontSize:'0.72rem', color:'#ea580c', fontWeight:600, marginBottom:6, textTransform:'uppercase' }}>KH Cũ</div>
+                  <div style={{ fontSize:'1.4rem', fontWeight:800, color:'#c2410c' }}>{fmtNum(newVsReturn.retOrders)}</div>
+                  <div style={{ fontSize:'0.75rem', color:'#64748b', marginTop:2 }}>đơn</div>
+                  <div style={{ fontSize:'0.85rem', fontWeight:700, color:'#16a34a', marginTop:6 }}>{fmtMoney(newVsReturn.retRev)}đ</div>
+                </div>
+              </div>
+              {(newVsReturn.newOrders + newVsReturn.retOrders) > 0 && (
+                <div style={{ marginTop:14 }}>
+                  <div style={{ display:'flex', height:10, borderRadius:5, overflow:'hidden', background:'#f1f5f9' }}>
+                    <div style={{ width:`${Math.round(newVsReturn.newOrders/(newVsReturn.newOrders+newVsReturn.retOrders)*100)}%`,
+                      background:'#3b82f6', transition:'width 0.4s' }}/>
+                    <div style={{ flex:1, background:'#ea580c', transition:'width 0.4s' }}/>
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginTop:4, fontSize:'0.72rem', color:'#64748b' }}>
+                    <span>{Math.round(newVsReturn.newOrders/(newVsReturn.newOrders+newVsReturn.retOrders)*100)}% mới</span>
+                    <span>{Math.round(newVsReturn.retOrders/(newVsReturn.newOrders+newVsReturn.retOrders)*100)}% cũ</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Row 4: Data theo loại hình KD */}
           <div style={{ ...S.card, padding:20 }}>
             <div style={{ fontWeight:800, fontSize:'0.95rem', color:'#0f172a', marginBottom:16 }}>
-              Phân bố theo khu vực
+              Data theo loại hình kinh doanh
             </div>
-            {provinceData.length > 0 ? (
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
-                {provinceData.map((p,i) => (
-                  <div key={i}>
-                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
-                      <span style={{ fontSize:'0.82rem', fontWeight:600, color:'#334155' }}>{p.name}</span>
-                      <span style={{ fontSize:'0.82rem', fontWeight:700, color:'#0f172a' }}>{fmtNum(p.count)}</span>
-                    </div>
-                    <div style={{ height:8, background:'#f1f5f9', borderRadius:4, overflow:'hidden' }}>
-                      <div style={{ width:`${p.pct}%`, height:'100%', background:
-                        i===0?'#ea580c':i===1?'#f97316':i===2?'#fb923c':'#fdba74',
-                        borderRadius:4, transition:'width 0.4s' }}/>
-                    </div>
-                  </div>
-                ))}
+            {dataByBizType.length > 0 ? (
+              <div style={{ overflowX:'auto' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.83rem' }}>
+                  <thead>
+                    <tr style={{ background:'#f8fafc' }}>
+                      {['LOẠI HÌNH','SỐ KH','SỐ ĐƠN','DOANH THU','AOV'].map(h => (
+                        <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700,
+                          color:'#64748b', fontSize:'0.72rem', letterSpacing:'0.5px',
+                          borderBottom:'1px solid #e5e7eb' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dataByBizType.map((b,i) => (
+                      <tr key={i} style={{ borderBottom:'1px solid #f1f5f9' }}>
+                        <td style={{ padding:'10px 14px', fontWeight:700, color:'#0f172a' }}>{b.name}</td>
+                        <td style={{ padding:'10px 14px', color:'#475569' }}>{fmtNum(b.custs)}</td>
+                        <td style={{ padding:'10px 14px', fontWeight:600, color:'#0f172a' }}>{fmtNum(b.orders)}</td>
+                        <td style={{ padding:'10px 14px', fontWeight:700, color:'#16a34a' }}>{fmtMoney(b.rev)}đ</td>
+                        <td style={{ padding:'10px 14px', fontWeight:600, color:'#ea580c' }}>
+                          {b.orders > 0 ? fmtMoneyK(Math.round(b.rev/b.orders)) + 'đ' : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             ) : (
               <div style={{ padding:24, textAlign:'center', color:'#94a3b8', fontSize:'0.85rem' }}>
-                Chưa có dữ liệu khu vực
+                Chưa có dữ liệu
               </div>
             )}
           </div>
@@ -843,20 +1017,29 @@ const CrmTab = () => {
             <div style={{ marginBottom:14 }}>
               <FieldLabel label='Sản phẩm'/>
               {newOrder.products.map((p,i) => (
-                <div key={i} style={{ display:'flex', gap:8, marginBottom:8 }}>
+                <div key={i} style={{ display:'flex', gap:8, marginBottom:8, alignItems:'center' }}>
                   <input value={p.name}
                     onChange={e=>{const ps=[...newOrder.products];ps[i]={...ps[i],name:e.target.value};setNewOrder(o=>({...o,products:ps}));}}
                     placeholder='Tên sản phẩm' style={{ ...S.input, flex:1 }}/>
                   <input type='number' value={p.quantity} min={1}
                     onChange={e=>{const ps=[...newOrder.products];ps[i]={...ps[i],quantity:e.target.value};setNewOrder(o=>({...o,products:ps}));}}
                     style={{ ...S.input, width:60, textAlign:'center' }}/>
-                  <button onClick={()=>{const ps=newOrder.products.filter((_,j)=>j!==i);setNewOrder(o=>({...o,products:ps.length?ps:[{name:'',quantity:1}]}));}}
+                  <label style={{ display:'flex', alignItems:'center', gap:4, cursor:'pointer', whiteSpace:'nowrap',
+                    fontSize:'0.72rem', fontWeight:600, color: p.is_gift ? '#16a34a' : '#94a3b8',
+                    background: p.is_gift ? '#dcfce7' : '#f8fafc', padding:'6px 10px', borderRadius:8,
+                    border: p.is_gift ? '1.5px solid #86efac' : '1.5px solid #e2e8f0' }}>
+                    <input type='checkbox' checked={!!p.is_gift}
+                      onChange={e=>{const ps=[...newOrder.products];ps[i]={...ps[i],is_gift:e.target.checked};setNewOrder(o=>({...o,products:ps}));}}
+                      style={{ width:14, height:14, accentColor:'#16a34a' }}/>
+                    🎁 Quà
+                  </label>
+                  <button onClick={()=>{const ps=newOrder.products.filter((_,j)=>j!==i);setNewOrder(o=>({...o,products:ps.length?ps:[{name:'',quantity:1,is_gift:false}]}));}}
                     style={{ width:36, height:36, borderRadius:8, border:'1.5px solid #fca5a5',
                       background:'#fef2f2', color:'#dc2626', cursor:'pointer', fontWeight:700,
                       fontSize:'1rem', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
                 </div>
               ))}
-              <button onClick={()=>setNewOrder(o=>({...o,products:[...o.products,{name:'',quantity:1}]}))}
+              <button onClick={()=>setNewOrder(o=>({...o,products:[...o.products,{name:'',quantity:1,is_gift:false}]}))}
                 style={{ padding:'6px 14px', borderRadius:8, border:'1.5px dashed #d1d5db',
                   background:'#f8fafc', fontSize:'0.8rem', cursor:'pointer', color:'#64748b',
                   fontFamily:S.font, fontWeight:500 }}>
@@ -880,8 +1063,31 @@ const CrmTab = () => {
               </div>
             </div>
 
+            {/* Lưu ý */}
             <div style={{ marginBottom:14 }}>
-              <FieldLabel label='Ghi chú'/>
+              <FieldLabel label='Lưu ý'/>
+              <div style={{ display:'flex', gap:12, marginBottom:10 }}>
+                <label style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer',
+                  padding:'8px 14px', borderRadius:8,
+                  border: newOrder.freeship ? '2px solid #16a34a' : '1.5px solid #e2e8f0',
+                  background: newOrder.freeship ? '#f0fdf4' : '#fff',
+                  fontSize:'0.82rem', fontWeight:600, color: newOrder.freeship ? '#16a34a' : '#64748b' }}>
+                  <input type='checkbox' checked={!!newOrder.freeship}
+                    onChange={e=>setNewOrder(p=>({...p,freeship:e.target.checked}))}
+                    style={{ width:16, height:16, accentColor:'#16a34a' }}/>
+                  🚚 Freeship
+                </label>
+                <label style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer',
+                  padding:'8px 14px', borderRadius:8,
+                  border: newOrder.vat_invoice ? '2px solid #2563eb' : '1.5px solid #e2e8f0',
+                  background: newOrder.vat_invoice ? '#eff6ff' : '#fff',
+                  fontSize:'0.82rem', fontWeight:600, color: newOrder.vat_invoice ? '#2563eb' : '#64748b' }}>
+                  <input type='checkbox' checked={!!newOrder.vat_invoice}
+                    onChange={e=>setNewOrder(p=>({...p,vat_invoice:e.target.checked}))}
+                    style={{ width:16, height:16, accentColor:'#2563eb' }}/>
+                  🧾 Xuất hoá đơn VAT
+                </label>
+              </div>
               <textarea value={newOrder.notes||''} rows={2}
                 onChange={e=>setNewOrder(p=>({...p,notes:e.target.value}))}
                 placeholder='Ghi chú đơn hàng...'
@@ -1295,6 +1501,14 @@ const CrmTab = () => {
                 style={S.select}>
                 <option value=''>Chọn tỉnh/thành</option>
                 {PROVINCES.map(p=><option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+            <div>
+              <FieldLabel label='Loại hình KD'/>
+              <select value={newCust.business_type} onChange={e=>setNewCust(p=>({...p,business_type:e.target.value}))}
+                style={S.select}>
+                <option value=''>Chọn loại hình</option>
+                {BUSINESS_TYPES.map(b=><option key={b} value={b}>{b}</option>)}
               </select>
             </div>
             <div>
