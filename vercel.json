@@ -20,6 +20,10 @@
     {
       "source": "/tiktok-shop/callback",
       "destination": "/api/tiktok-shop/callback"
+    },
+    {
+      "source": "/shopee-callback",
+      "destination": "/api/shopee/callback"
     }
   ],
   "functions": {
