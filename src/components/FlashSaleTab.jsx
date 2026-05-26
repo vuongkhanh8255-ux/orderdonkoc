@@ -1,8 +1,16 @@
-// src/components/FlashSaleTab.jsx — Flash Sale Automation Tool (like Atosa)
+// src/components/FlashSaleTab.jsx — Flash Sale Automation Tool
+// Built by Quốc Khánh
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 
 const API_BASE = '/api/shopee/flash-sale';
 const DEFAULT_SHOP_ID = '341325550';
+
+// ── Shop list ───────────────────────────────────────────────────────────────
+const SHOPS = [
+  { id: '341325550', name: 'Milaganics Official', icon: '🌿' },
+  // { id: '...', name: 'eHerb Mall', icon: '🌱' },
+  // { id: '...', name: 'Bodymiss', icon: '💜' },
+];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const fmtVnd = (v) => {
@@ -362,20 +370,46 @@ export default function FlashSaleTab() {
             Flash Sale Automation
           </h1>
           <p style={{ margin: '6px 0 0', fontSize: '0.82rem', color: '#64748b' }}>
-            Tạo và quản lý Flash Sale tự động — tương tự Atosa
+            Tạo và quản lý Flash Sale tự động
+            <span style={{ margin: '0 0 0 12px', fontSize: '0.7rem', color: '#c4b5a0', fontStyle: 'italic' }}>
+              Built by Quốc Khánh
+            </span>
           </p>
         </div>
-        {step === 0 && (
-          <button style={BTN_PRIMARY} onClick={startCreateWizard}>
-            + Tạo Flash Sale
-          </button>
-        )}
-        {step > 0 && step < 5 && (
-          <button style={BTN_SECONDARY} onClick={backToList}>
-            ← Quay lại
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {step === 0 && (
+            <button style={BTN_PRIMARY} onClick={startCreateWizard}>
+              + Tạo Flash Sale
+            </button>
+          )}
+          {step > 0 && step < 5 && (
+            <button style={BTN_SECONDARY} onClick={backToList}>
+              ← Quay lại
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Shop Selector */}
+      {step === 0 && SHOPS.length > 1 && (
+        <div style={{ ...CARD, marginBottom: 16, padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569' }}>🏪 Shop:</span>
+          {SHOPS.map(shop => (
+            <button
+              key={shop.id}
+              style={{
+                padding: '6px 16px', borderRadius: 20, fontSize: '0.78rem', fontWeight: 700,
+                border: '1.5px solid', cursor: 'pointer', transition: 'all 0.2s',
+                ...(DEFAULT_SHOP_ID === shop.id
+                  ? { borderColor: '#ea580c', background: '#fff7ed', color: '#ea580c' }
+                  : { borderColor: '#e5e7eb', background: '#fff', color: '#64748b' }),
+              }}
+            >
+              {shop.icon} {shop.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Stepper */}
       {step > 0 && step < 5 && (
@@ -572,16 +606,18 @@ function FlashSaleList({ flashSales, onDelete, onRefresh }) {
                 <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#0f172a' }}>
                   {fmtDateTime(fs.start_time)} — {fmtTime(fs.end_time)}
                 </div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                  <span style={BADGE('#ea580c', '#fff7ed')}>
-                    ID: {fs.flash_sale_id}
-                  </span>
+                <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
                   <span style={BADGE(
-                    fs.status === 'ongoing' ? '#16a34a' : fs.status === 'upcoming' ? '#d97706' : '#64748b',
-                    fs.status === 'ongoing' ? '#f0fdf4' : fs.status === 'upcoming' ? '#fffbeb' : '#f8fafc',
+                    fs.type === 2 ? '#16a34a' : fs.type === 1 ? '#d97706' : '#64748b',
+                    fs.type === 2 ? '#f0fdf4' : fs.type === 1 ? '#fffbeb' : '#f8fafc',
                   )}>
-                    {fs.status === 'ongoing' ? 'Đang diễn ra' : fs.status === 'upcoming' ? 'Sắp diễn ra' : fs.status || 'N/A'}
+                    {fs.type === 2 ? '🟢 Đang diễn ra' : fs.type === 1 ? '🟡 Sắp diễn ra' : '⚪ Đã kết thúc'}
                   </span>
+                  {(fs.item_count > 0 || fs.enabled_item_count > 0) && (
+                    <span style={BADGE('#475569', '#f1f5f9')}>
+                      📦 {fs.enabled_item_count || 0}/{fs.item_count || 0} SP
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
