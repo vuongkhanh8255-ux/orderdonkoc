@@ -275,26 +275,30 @@ export default function FlashSaleTab() {
         time_slot_id: selectedSlot.time_slot_id || selectedSlot.timeslot_id,
       });
       if (!createRes.ok) {
-        throw new Error(createRes.error || 'Lỗi tạo Flash Sale');
+        const msg = createRes.message ? `${createRes.error}: ${createRes.message}` : createRes.error;
+        throw new Error(msg || 'Lỗi tạo Flash Sale');
       }
       const fsId = createRes.data?.flash_sale_id;
       if (!fsId) throw new Error('Không nhận được flash_sale_id');
       setCreatedFsId(fsId);
 
-      // Step 2: Add items
+      // Step 2: Add items — Shopee expects items grouped by product with models array
       const items = [];
       for (const prod of selectedProducts) {
         const config = productConfigs[prod.item_id];
         if (!config) continue;
-        for (const [modelId, c] of Object.entries(config)) {
-          if (!c.enabled) continue;
-          items.push({
-            item_id: Number(prod.item_id),
+        const enabledModels = Object.entries(config).filter(([, c]) => c.enabled);
+        if (enabledModels.length === 0) continue;
+
+        items.push({
+          item_id: Number(prod.item_id),
+          purchase_limit: 0, // 0 = no limit
+          models: enabledModels.map(([modelId, c]) => ({
             model_id: modelId === '0' ? 0 : Number(modelId),
-            flash_sale_stock: Number(c.stock),
-            flash_sale_price: Number(c.price),
-          });
-        }
+            input_promo_price: Number(c.price),
+            stock: Number(c.stock),
+          })),
+        });
       }
 
       const addRes = await apiCall('add_items', {}, {
@@ -302,7 +306,8 @@ export default function FlashSaleTab() {
         items,
       });
       if (!addRes.ok) {
-        throw new Error(addRes.error || 'Lỗi thêm sản phẩm vào Flash Sale');
+        const msg2 = addRes.message ? `${addRes.error}: ${addRes.message}` : addRes.error;
+        throw new Error(msg2 || 'Lỗi thêm sản phẩm vào Flash Sale');
       }
 
       setSuccess(`Tạo Flash Sale thành công! ID: ${fsId}`);

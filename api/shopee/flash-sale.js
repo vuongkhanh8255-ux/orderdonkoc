@@ -240,14 +240,29 @@ async function handleCreate(supabase, shopId, body) {
   if (!time_slot_id) return { ok: false, error: 'Missing time_slot_id in request body' };
 
   const creds = await getCredentials(supabase, shopId, 'marketing');
-  const result = await shopeePost(
+
+  // Correct Shopee v2 endpoint: create_shop_flash_sale (not add_flash_sale)
+  // Body uses timeslot_id (no underscore between time/slot in some versions)
+  let result = await shopeePost(
     creds.partnerKey, creds.partnerId,
-    '/api/v2/shop_flash_sale/add_flash_sale',
+    '/api/v2/shop_flash_sale/create_shop_flash_sale',
     creds.accessToken, creds.shopId,
-    { time_slot_id: Number(time_slot_id) },
+    { timeslot_id: Number(time_slot_id) },
   );
 
-  if (result.error) return { ok: false, error: result.error, message: result.message };
+  // Fallback: try alternate endpoint names if not found
+  if (result.error === 'error_not_found') {
+    result = await shopeePost(
+      creds.partnerKey, creds.partnerId,
+      '/api/v2/shop_flash_sale/add_flash_sale',
+      creds.accessToken, creds.shopId,
+      { time_slot_id: Number(time_slot_id) },
+    );
+  }
+
+  console.log('[FS Create] timeslot_id:', time_slot_id, 'result:', JSON.stringify(result).slice(0, 500));
+
+  if (result.error) return { ok: false, error: result.error, message: result.message, detail: result };
   return { ok: true, data: result.response };
 }
 
@@ -260,14 +275,28 @@ async function handleAddItems(supabase, shopId, body) {
   }
 
   const creds = await getCredentials(supabase, shopId, 'marketing');
-  const result = await shopeePost(
+
+  // Correct Shopee v2 endpoint: add_shop_flash_sale_items
+  let result = await shopeePost(
     creds.partnerKey, creds.partnerId,
-    '/api/v2/shop_flash_sale/add_flash_sale_item',
+    '/api/v2/shop_flash_sale/add_shop_flash_sale_items',
     creds.accessToken, creds.shopId,
     { flash_sale_id: Number(flash_sale_id), items },
   );
 
-  if (result.error) return { ok: false, error: result.error, message: result.message };
+  // Fallback: try alternate endpoint name
+  if (result.error === 'error_not_found') {
+    result = await shopeePost(
+      creds.partnerKey, creds.partnerId,
+      '/api/v2/shop_flash_sale/add_flash_sale_item',
+      creds.accessToken, creds.shopId,
+      { flash_sale_id: Number(flash_sale_id), items },
+    );
+  }
+
+  console.log('[FS AddItems] flash_sale_id:', flash_sale_id, 'items:', items.length, 'result:', JSON.stringify(result).slice(0, 500));
+
+  if (result.error) return { ok: false, error: result.error, message: result.message, detail: result };
   return { ok: true, data: result.response };
 }
 
@@ -275,15 +304,23 @@ async function handleAddItems(supabase, shopId, body) {
 async function handleList(supabase, shopId) {
   const creds = await getCredentials(supabase, shopId, 'marketing');
 
-  // Try get_flash_sale_list first, fall back to get_flash_sale
+  // Try correct endpoint name: get_shop_flash_sale_list
   let result = await shopeeGet(
     creds.partnerKey, creds.partnerId,
-    '/api/v2/shop_flash_sale/get_flash_sale_list',
+    '/api/v2/shop_flash_sale/get_shop_flash_sale_list',
     creds.accessToken, creds.shopId,
     { page_no: 1, page_size: 20 },
   );
 
-  // If endpoint doesn't exist, try the alternate endpoint
+  // Fallback: try alternate endpoint names
+  if (result.error === 'error_not_found') {
+    result = await shopeeGet(
+      creds.partnerKey, creds.partnerId,
+      '/api/v2/shop_flash_sale/get_flash_sale_list',
+      creds.accessToken, creds.shopId,
+      { page_no: 1, page_size: 20 },
+    );
+  }
   if (result.error === 'error_not_found') {
     result = await shopeeGet(
       creds.partnerKey, creds.partnerId,
@@ -308,12 +345,23 @@ async function handleDelete(supabase, shopId, body) {
   if (!flash_sale_id) return { ok: false, error: 'Missing flash_sale_id in request body' };
 
   const creds = await getCredentials(supabase, shopId, 'marketing');
-  const result = await shopeePost(
+
+  // Try correct endpoint name first
+  let result = await shopeePost(
     creds.partnerKey, creds.partnerId,
-    '/api/v2/shop_flash_sale/delete_flash_sale',
+    '/api/v2/shop_flash_sale/delete_shop_flash_sale',
     creds.accessToken, creds.shopId,
     { flash_sale_id: Number(flash_sale_id) },
   );
+
+  if (result.error === 'error_not_found') {
+    result = await shopeePost(
+      creds.partnerKey, creds.partnerId,
+      '/api/v2/shop_flash_sale/delete_flash_sale',
+      creds.accessToken, creds.shopId,
+      { flash_sale_id: Number(flash_sale_id) },
+    );
+  }
 
   if (result.error) return { ok: false, error: result.error, message: result.message };
   return { ok: true, data: result.response };
