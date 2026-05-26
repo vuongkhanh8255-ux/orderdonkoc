@@ -236,6 +236,49 @@ async function handleDelete(supabase, shopId, body) {
   return { ok: true, data: result.response };
 }
 
+/** 5. Boost items — push to top of search results (max 5 items, 4h duration) */
+async function handleBoost(supabase, shopId, body) {
+  const { item_id_list } = body || {};
+  if (!item_id_list || !Array.isArray(item_id_list) || item_id_list.length === 0) {
+    return { ok: false, error: 'Missing or empty item_id_list in request body' };
+  }
+  if (item_id_list.length > 5) {
+    return { ok: false, error: 'Shopee chỉ cho phép đẩy tối đa 5 sản phẩm cùng lúc' };
+  }
+
+  // Boost uses dashboard app (product API), not marketing
+  const creds = await getCredentials(supabase, shopId, 'dashboard');
+
+  const result = await shopeePost(
+    creds.partnerKey, creds.partnerId,
+    '/api/v2/product/boost_item',
+    creds.accessToken, creds.shopId,
+    { item_id_list: item_id_list.map(Number) },
+  );
+
+  console.log('[Boost] items:', item_id_list, 'result:', JSON.stringify(result).slice(0, 500));
+
+  if (result.error) return { ok: false, error: result.error, message: result.message, detail: result };
+  return { ok: true, data: result.response };
+}
+
+/** 6. Get currently boosted items */
+async function handleBoostedList(supabase, shopId) {
+  // Boosted list uses dashboard app (product API)
+  const creds = await getCredentials(supabase, shopId, 'dashboard');
+
+  const result = await shopeeGet(
+    creds.partnerKey, creds.partnerId,
+    '/api/v2/product/get_boosted_list',
+    creds.accessToken, creds.shopId,
+  );
+
+  console.log('[Boosted List] result:', JSON.stringify(result).slice(0, 500));
+
+  if (result.error) return { ok: false, error: result.error, message: result.message };
+  return { ok: true, data: result.response };
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Main handler
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -253,7 +296,7 @@ export default async function handler(req, res) {
     return res.status(400).json({
       ok: false,
       error: 'Missing ?action= parameter',
-      available: ['list', 'create', 'update', 'delete'],
+      available: ['list', 'create', 'update', 'delete', 'boost', 'boosted_list'],
     });
   }
 
@@ -281,11 +324,18 @@ export default async function handler(req, res) {
         if (req.method !== 'POST') return res.status(200).json({ ok: false, error: 'POST required for delete' });
         result = await handleDelete(supabase, shopId, req.body);
         break;
+      case 'boost':
+        if (req.method !== 'POST') return res.status(200).json({ ok: false, error: 'POST required for boost' });
+        result = await handleBoost(supabase, shopId, req.body);
+        break;
+      case 'boosted_list':
+        result = await handleBoostedList(supabase, shopId);
+        break;
       default:
         return res.status(200).json({
           ok: false,
           error: `Unknown action: ${action}`,
-          available: ['list', 'create', 'update', 'delete'],
+          available: ['list', 'create', 'update', 'delete', 'boost', 'boosted_list'],
         });
     }
 
