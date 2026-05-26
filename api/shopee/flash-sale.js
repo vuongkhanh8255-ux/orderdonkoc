@@ -155,10 +155,13 @@ async function getCredentials(supabase, shopId, appType) {
 /** 1. Get available Flash Sale time slots */
 async function handleTimeSlots(supabase, shopId) {
   const creds = await getCredentials(supabase, shopId, 'marketing');
+  // Shopee requires start_time/end_time — fetch next 30 days of slots
+  const now = Math.floor(Date.now() / 1000);
   const result = await shopeeGet(
     creds.partnerKey, creds.partnerId,
     '/api/v2/shop_flash_sale/get_time_slot_id',
     creds.accessToken, creds.shopId,
+    { start_time: now, end_time: now + 30 * 86400 },
   );
   if (result.error) return { ok: false, error: result.error, message: result.message };
   return { ok: true, data: result.response };
@@ -275,6 +278,7 @@ async function handleList(supabase, shopId) {
     creds.partnerKey, creds.partnerId,
     '/api/v2/shop_flash_sale/get_flash_sale_list',
     creds.accessToken, creds.shopId,
+    { page_no: 1, page_size: 20 },
   );
 
   if (result.error) return { ok: false, error: result.error, message: result.message };
