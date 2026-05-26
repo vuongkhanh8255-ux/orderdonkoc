@@ -155,15 +155,22 @@ async function getCredentials(supabase, shopId, appType) {
 /** 1. Get available Flash Sale time slots */
 async function handleTimeSlots(supabase, shopId) {
   const creds = await getCredentials(supabase, shopId, 'marketing');
-  // Shopee requires start_time/end_time — fetch next 30 days of slots
+  // Shopee requires start_time >= now — add 5min buffer to avoid clock-skew/race condition
   const now = Math.floor(Date.now() / 1000);
-  const result = await shopeeGet(
+  const startTime = now + 300; // 5 minutes from now to be safe
+
+  // Try correct endpoint name first
+  let result = await shopeeGet(
     creds.partnerKey, creds.partnerId,
     '/api/v2/shop_flash_sale/get_time_slot_id',
     creds.accessToken, creds.shopId,
-    { start_time: now, end_time: now + 30 * 86400 },
+    { start_time: startTime, end_time: startTime + 30 * 86400 },
   );
-  if (result.error) return { ok: false, error: result.error, message: result.message };
+
+  console.log('[FS TimeSlots] start_time:', startTime, 'result:', JSON.stringify(result).slice(0, 500));
+
+  // If param error, also return useful message
+  if (result.error) return { ok: false, error: result.error, message: result.message || 'Lỗi lấy khung giờ' };
   return { ok: true, data: result.response };
 }
 
