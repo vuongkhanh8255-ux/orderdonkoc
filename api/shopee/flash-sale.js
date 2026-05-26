@@ -274,12 +274,29 @@ async function handleAddItems(supabase, shopId, body) {
 /** 6. List existing Flash Sales */
 async function handleList(supabase, shopId) {
   const creds = await getCredentials(supabase, shopId, 'marketing');
-  const result = await shopeeGet(
+
+  // Try get_flash_sale_list first, fall back to get_flash_sale
+  let result = await shopeeGet(
     creds.partnerKey, creds.partnerId,
     '/api/v2/shop_flash_sale/get_flash_sale_list',
     creds.accessToken, creds.shopId,
     { page_no: 1, page_size: 20 },
   );
+
+  // If endpoint doesn't exist, try the alternate endpoint
+  if (result.error === 'error_not_found') {
+    result = await shopeeGet(
+      creds.partnerKey, creds.partnerId,
+      '/api/v2/shop_flash_sale/get_flash_sale',
+      creds.accessToken, creds.shopId,
+      { page_no: 1, page_size: 20 },
+    );
+  }
+
+  // If still error_not_found or error_param, return empty list (no flash sales exist)
+  if (result.error === 'error_not_found' || result.error === 'error_param') {
+    return { ok: true, data: { flash_sale_list: [] } };
+  }
 
   if (result.error) return { ok: false, error: result.error, message: result.message };
   return { ok: true, data: result.response };
@@ -367,11 +384,13 @@ export default async function handler(req, res) {
         });
     }
 
-    const status = result.ok ? 200 : 502;
-    return res.status(status).json(result);
+    // Always return 200 so Cloudflare doesn't intercept with its own HTML error page.
+    // The `ok` field in JSON body indicates success/failure to the frontend.
+    return res.status(200).json(result);
 
   } catch (err) {
-    return res.status(500).json({
+    // Return 200 with ok:false so Cloudflare doesn't replace response with HTML error page
+    return res.status(200).json({
       ok: false,
       error: err.message || 'Internal server error',
     });
