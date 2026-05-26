@@ -1,8 +1,16 @@
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 
-const PARTNER_ID  = 2035068;
-const HOST        = 'https://partner.shopeemobile.com';
+const HOST = 'https://partner.shopeemobile.com';
+
+/* ── Multi-app config ───────────────────────────────────────────────────── */
+const APPS = {
+  dashboard:  { id: 2035068, envKey: 'SHOPEE_PARTNER_KEY',           label: 'Stella Kinetics Dashboard', table: 'shopee_tokens' },
+  ads:        { id: 2035170, envKey: 'SHOPEE_ADS_PARTNER_KEY',       label: 'SK Ads Service',            table: 'shopee_tokens' },
+  marketing:  { id: 2035171, envKey: 'SHOPEE_MARKETING_PARTNER_KEY', label: 'SK Marketing',              table: 'shopee_tokens' },
+  livestream: { id: 2035172, envKey: 'SHOPEE_LIVESTREAM_PARTNER_KEY', label: 'SK Livestream',             table: 'shopee_tokens' },
+  video:      { id: 2035173, envKey: 'SHOPEE_VIDEO_PARTNER_KEY',     label: 'SK Video',                  table: 'shopee_tokens' },
+};
 
 /* ── HTML renderer ──────────────────────────────────────────────────────── */
 const html = ({ title, status, details = [], tone = 'success' }) => {
@@ -43,34 +51,34 @@ const html = ({ title, status, details = [], tone = 'success' }) => {
 };
 
 /* ── Shopee sign helper ─────────────────────────────────────────────────── */
-function makeSign(partnerKey, path, ts, accessToken = '', shopId = 0) {
-  let base = PARTNER_ID.toString() + path + ts.toString();
+function makeSign(partnerKey, partnerId, path, ts, accessToken = '', shopId = 0) {
+  let base = partnerId.toString() + path + ts.toString();
   if (accessToken) base += accessToken;
   if (shopId)      base += shopId.toString();
   return crypto.createHmac('sha256', partnerKey).update(base).digest('hex');
 }
 
 /* ── Exchange code → token ──────────────────────────────────────────────── */
-async function exchangeToken(partnerKey, code, shopId) {
+async function exchangeToken(partnerKey, partnerId, code, shopId) {
   const path = '/api/v2/auth/token/get';
   const ts   = Math.floor(Date.now() / 1000);
-  const sign = makeSign(partnerKey, path, ts);
-  const url  = `${HOST}${path}?partner_id=${PARTNER_ID}&timestamp=${ts}&sign=${sign}`;
+  const sign = makeSign(partnerKey, partnerId, path, ts);
+  const url  = `${HOST}${path}?partner_id=${partnerId}&timestamp=${ts}&sign=${sign}`;
 
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code, shop_id: Number(shopId), partner_id: PARTNER_ID }),
+    body: JSON.stringify({ code, shop_id: Number(shopId), partner_id: partnerId }),
   });
   return res.json();
 }
 
 /* ── Get shop info ──────────────────────────────────────────────────────── */
-async function getShopInfo(partnerKey, accessToken, shopId) {
+async function getShopInfo(partnerKey, partnerId, accessToken, shopId) {
   const path = '/api/v2/shop/get_shop_info';
   const ts   = Math.floor(Date.now() / 1000);
-  const sign = makeSign(partnerKey, path, ts, accessToken, Number(shopId));
-  const url  = `${HOST}${path}?partner_id=${PARTNER_ID}&timestamp=${ts}&sign=${sign}&access_token=${accessToken}&shop_id=${shopId}`;
+  const sign = makeSign(partnerKey, partnerId, path, ts, accessToken, Number(shopId));
+  const url  = `${HOST}${path}?partner_id=${partnerId}&timestamp=${ts}&sign=${sign}&access_token=${accessToken}&shop_id=${shopId}`;
 
   try {
     const res  = await fetch(url);
@@ -81,9 +89,10 @@ async function getShopInfo(partnerKey, accessToken, shopId) {
 
 /* ── Main handler ───────────────────────────────────────────────────────── */
 export default async function handler(req, res) {
-  const reqUrl = new URL(req.url, `https://${req.headers.host || 'koc-tool.vercel.app'}`);
-  const code   = reqUrl.searchParams.get('code');
-  const shopId = reqUrl.searchParams.get('shop_id');
+  const reqUrl  = new URL(req.url, `https://${req.headers.host || 'koc-tool.vercel.app'}`);
+  const code    = reqUrl.searchParams.get('code');
+  const shopId  = reqUrl.searchParams.get('shop_id');
+  const appName = reqUrl.searchParams.get('app') || 'dashboard';
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
@@ -95,41 +104,82 @@ export default async function handler(req, res) {
     }));
   }
 
-  const partnerKey = process.env.SHOPEE_PARTNER_KEY?.trim();
+  // Resolve app — try specified app first, then try ALL apps
+  let matchedApp = null;
+  let partnerKey = null;
+
+  if (APPS[appName]) {
+    const key = process.env[APPS[appName].envKey]?.trim();
+    if (key) {
+      matchedApp = { ...APPS[appName], name: appName };
+      partnerKey = key;
+    }
+  }
+
+  // Fallback: try all apps if specified one failed
+  if (!matchedApp) {
+    for (const [name, app] of Object.entries(APPS)) {
+      const key = process.env[app.envKey]?.trim();
+      if (key) {
+        matchedApp = { ...app, name };
+        partnerKey = key;
+        break;
+      }
+    }
+  }
+
   const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL)?.trim();
   const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY)?.trim();
 
-  if (!partnerKey || !supabaseUrl || !supabaseKey) {
+  if (!matchedApp || !partnerKey || !supabaseUrl || !supabaseKey) {
     return res.status(500).send(html({
       title: 'Thiếu cấu hình', tone: 'error',
-      status: 'Cần set SHOPEE_PARTNER_KEY + Supabase env trên Vercel.',
+      status: `App "${appName}" chưa có key hoặc thiếu Supabase env.`,
       details: [
-        ['SHOPEE_PARTNER_KEY', partnerKey ? '✅' : '❌ Missing'],
-        ['SUPABASE_URL',       supabaseUrl ? '✅' : '❌ Missing'],
-        ['SUPABASE key',       supabaseKey ? '✅' : '❌ Missing'],
+        ['app', appName],
+        ['partner_key', partnerKey ? '✅' : '❌ Missing'],
+        ['SUPABASE_URL', supabaseUrl ? '✅' : '❌ Missing'],
+        ['SUPABASE key', supabaseKey ? '✅' : '❌ Missing'],
       ],
     }));
   }
 
   try {
     // 1. Exchange code → token
-    const tokenData = await exchangeToken(partnerKey, code, shopId);
+    const tokenData = await exchangeToken(partnerKey, matchedApp.id, code, shopId);
 
     if (tokenData.error || !tokenData.access_token) {
-      return res.status(502).send(html({
-        title: 'Lỗi đổi token Shopee', tone: 'error',
-        status: `${tokenData.error || 'unknown'}: ${tokenData.message || 'Không lấy được access token'}`,
-        details: [
-          ['shop_id', shopId],
-          ['error', tokenData.error || '-'],
-          ['message', tokenData.message || '-'],
-          ['request_id', tokenData.request_id || '-'],
-        ],
-      }));
+      // If specified app failed, try other apps
+      let success = false;
+      for (const [name, app] of Object.entries(APPS)) {
+        if (name === matchedApp.name) continue;
+        const key = process.env[app.envKey]?.trim();
+        if (!key) continue;
+        const tryData = await exchangeToken(key, app.id, code, shopId);
+        if (!tryData.error && tryData.access_token) {
+          matchedApp = { ...app, name };
+          partnerKey = key;
+          Object.assign(tokenData, tryData);
+          success = true;
+          break;
+        }
+      }
+      if (!success) {
+        return res.status(502).send(html({
+          title: 'Lỗi đổi token Shopee', tone: 'error',
+          status: `${tokenData.error || 'unknown'}: ${tokenData.message || 'Không lấy được access token'}`,
+          details: [
+            ['app', matchedApp.label],
+            ['shop_id', shopId],
+            ['error', tokenData.error || '-'],
+            ['message', tokenData.message || '-'],
+          ],
+        }));
+      }
     }
 
     // 2. Get shop info
-    const shopInfo = await getShopInfo(partnerKey, tokenData.access_token, shopId);
+    const shopInfo = await getShopInfo(partnerKey, matchedApp.id, tokenData.access_token, shopId);
 
     // 3. Save to Supabase
     const supabase = createClient(supabaseUrl, supabaseKey, {
@@ -140,7 +190,8 @@ export default async function handler(req, res) {
       shop_id:        shopId,
       shop_name:      shopInfo?.shop_name || `Shop ${shopId}`,
       platform:       'shopee',
-      partner_id:     PARTNER_ID,
+      partner_id:     matchedApp.id,
+      app_type:       matchedApp.name,
       access_token:   tokenData.access_token,
       refresh_token:  tokenData.refresh_token,
       token_expires:  new Date(Date.now() + (tokenData.expire_in || 14400) * 1000).toISOString(),
@@ -149,16 +200,33 @@ export default async function handler(req, res) {
       updated_at:     new Date().toISOString(),
     };
 
-    const { error: saveError } = await supabase
-      .from('shopee_tokens')
-      .upsert(record, { onConflict: 'shop_id' });
+    // Use composite key: shop_id + app_type for multi-app per shop
+    const { data: existing } = await supabase
+      .from(matchedApp.table)
+      .select('id')
+      .eq('shop_id', shopId)
+      .eq('app_type', matchedApp.name)
+      .maybeSingle();
+
+    let saveError;
+    if (existing) {
+      ({ error: saveError } = await supabase
+        .from(matchedApp.table)
+        .update(record)
+        .eq('id', existing.id));
+    } else {
+      ({ error: saveError } = await supabase
+        .from(matchedApp.table)
+        .insert(record));
+    }
 
     if (saveError) throw saveError;
 
     return res.status(200).send(html({
-      title: 'Shopee Shop đã kết nối ✅',
+      title: `${matchedApp.label} đã kết nối ✅`,
       status: `Đã lưu token cho ${record.shop_name}. Bạn có thể đóng trang này.`,
       details: [
+        ['app',           matchedApp.label],
         ['shop_name',     record.shop_name],
         ['shop_id',       record.shop_id],
         ['region',        record.region],
@@ -171,7 +239,7 @@ export default async function handler(req, res) {
     return res.status(500).send(html({
       title: 'Lỗi callback Shopee', tone: 'error',
       status: err?.message || 'Unknown error',
-      details: [['code', err?.code || '-'], ['details', err?.details || '-']],
+      details: [['app', matchedApp?.label || appName], ['code', err?.code || '-'], ['details', err?.details || '-']],
     }));
   }
 }
