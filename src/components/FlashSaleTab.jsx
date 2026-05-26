@@ -94,7 +94,7 @@ export default function FlashSaleTab() {
       if (res.ok) {
         setFlashSales(res.data?.flash_sale_list || res.data || []);
       } else {
-        setError(res.error || 'Loi load Flash Sale list');
+        setError(res.error || 'Lỗi load Flash Sale list');
       }
     } catch (e) {
       setError(e.message);
@@ -113,7 +113,7 @@ export default function FlashSaleTab() {
       if (res.ok) {
         setTimeSlots(res.data?.slot_list || res.data || []);
       } else {
-        setError(res.error || 'Loi load time slots');
+        setError(res.error || 'Lỗi load time slots');
       }
     } catch (e) {
       setError(e.message);
@@ -137,7 +137,7 @@ export default function FlashSaleTab() {
         setHasMoreProducts(items.length >= 50);
         setProductPage(page);
       } else {
-        setError(res.error || 'Loi load products');
+        setError(res.error || 'Lỗi load sản phẩm');
       }
     } catch (e) {
       setError(e.message);
@@ -226,7 +226,7 @@ export default function FlashSaleTab() {
   // ── Go to config step ──────────────────────────────────────────────────
   const goToConfig = () => {
     if (selectedProducts.length === 0) {
-      setError('Vui long chon it nhat 1 san pham');
+      setError('Vui lòng chọn ít nhất 1 sản phẩm');
       return;
     }
     setError('');
@@ -241,21 +241,21 @@ export default function FlashSaleTab() {
       if (!config) continue;
       const hasEnabled = Object.values(config).some(c => c.enabled);
       if (!hasEnabled) {
-        setError(`San pham "${prod.item_name}" chua co variant nao duoc bat`);
+        setError(`Sản phẩm "${prod.item_name}" chưa có variant nào được bật`);
         return;
       }
       for (const [modelId, c] of Object.entries(config)) {
         if (!c.enabled) continue;
         if (!c.price || c.price <= 0) {
-          setError(`Gia Flash Sale khong hop le cho "${c.model_name}"`);
+          setError(`Giá Flash Sale không hợp lệ cho "${c.model_name}"`);
           return;
         }
         if (!c.stock || c.stock <= 0) {
-          setError(`So luong khuyen mai khong hop le cho "${c.model_name}"`);
+          setError(`Số lượng khuyến mãi không hợp lệ cho "${c.model_name}"`);
           return;
         }
         if (c.price >= c.original_price) {
-          setError(`Gia Flash Sale phai thap hon gia goc cho "${c.model_name}"`);
+          setError(`Giá Flash Sale phải thấp hơn giá gốc cho "${c.model_name}"`);
           return;
         }
       }
@@ -275,10 +275,10 @@ export default function FlashSaleTab() {
         time_slot_id: selectedSlot.time_slot_id || selectedSlot.timeslot_id,
       });
       if (!createRes.ok) {
-        throw new Error(createRes.error || 'Loi tao Flash Sale');
+        throw new Error(createRes.error || 'Lỗi tạo Flash Sale');
       }
       const fsId = createRes.data?.flash_sale_id;
-      if (!fsId) throw new Error('Khong nhan duoc flash_sale_id');
+      if (!fsId) throw new Error('Không nhận được flash_sale_id');
       setCreatedFsId(fsId);
 
       // Step 2: Add items
@@ -302,10 +302,10 @@ export default function FlashSaleTab() {
         items,
       });
       if (!addRes.ok) {
-        throw new Error(addRes.error || 'Loi them san pham vao Flash Sale');
+        throw new Error(addRes.error || 'Lỗi thêm sản phẩm vào Flash Sale');
       }
 
-      setSuccess(`Tao Flash Sale thanh cong! ID: ${fsId}`);
+      setSuccess(`Tạo Flash Sale thành công! ID: ${fsId}`);
       setStep(5); // Success step
     } catch (e) {
       setError(e.message);
@@ -315,16 +315,16 @@ export default function FlashSaleTab() {
 
   // ── Delete Flash Sale ──────────────────────────────────────────────────
   const deleteFlashSale = async (fsId) => {
-    if (!confirm('Ban co chac chan muon xoa Flash Sale nay?')) return;
+    if (!confirm('Bạn có chắc chắn muốn xóa Flash Sale này?')) return;
     setLoading(true);
     setError('');
     try {
       const res = await apiCall('delete', {}, { flash_sale_id: fsId });
       if (res.ok) {
-        setSuccess('Da xoa Flash Sale');
+        setSuccess('Đã xóa Flash Sale');
         await loadFlashSales();
       } else {
-        setError(res.error || 'Loi xoa Flash Sale');
+        setError(res.error || 'Lỗi xóa Flash Sale');
       }
     } catch (e) {
       setError(e.message);
@@ -357,17 +357,17 @@ export default function FlashSaleTab() {
             Flash Sale Automation
           </h1>
           <p style={{ margin: '6px 0 0', fontSize: '0.82rem', color: '#64748b' }}>
-            Tao va quan ly Flash Sale tu dong — tuong tu Atosa
+            Tạo và quản lý Flash Sale tự động — tương tự Atosa
           </p>
         </div>
         {step === 0 && (
           <button style={BTN_PRIMARY} onClick={startCreateWizard}>
-            + Tao Flash Sale
+            + Tạo Flash Sale
           </button>
         )}
         {step > 0 && step < 5 && (
           <button style={BTN_SECONDARY} onClick={backToList}>
-            ← Quay lai
+            ← Quay lại
           </button>
         )}
       </div>
@@ -376,7 +376,7 @@ export default function FlashSaleTab() {
       {step > 0 && step < 5 && (
         <div style={{ ...CARD, marginBottom: 20, padding: '16px 24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
-            {['Chon khung gio', 'Chon san pham', 'Cau hinh gia', 'Xac nhan'].map((label, i) => {
+            {['Chọn khung giờ', 'Chọn sản phẩm', 'Cấu hình giá', 'Xác nhận'].map((label, i) => {
               const stepNum = i + 1;
               const isActive = step === stepNum;
               const isDone = step > stepNum;
@@ -438,7 +438,7 @@ export default function FlashSaleTab() {
             borderRadius: '50%', margin: '0 auto 12px',
             animation: 'fsSpin 0.8s linear infinite',
           }} />
-          Dang tai...
+          Đang tải...
           <style>{`@keyframes fsSpin { to { transform: rotate(360deg); } }`}</style>
         </div>
       )}
@@ -500,21 +500,21 @@ export default function FlashSaleTab() {
         <div style={{ ...CARD, textAlign: 'center', padding: '60px 40px' }}>
           <div style={{ fontSize: '3rem', marginBottom: 16 }}>🎉</div>
           <h2 style={{ margin: '0 0 8px', fontSize: '1.4rem', fontWeight: 900, color: '#0f172a' }}>
-            Tao Flash Sale thanh cong!
+            Tạo Flash Sale thành công!
           </h2>
           <p style={{ color: '#64748b', marginBottom: 24, fontSize: '0.9rem' }}>
             Flash Sale ID: <strong>{createdFsId}</strong>
             <br />
-            Khung gio: <strong>{fmtDateTime(selectedSlot?.start_time)} - {fmtTime(selectedSlot?.end_time)}</strong>
+            Khung giờ: <strong>{fmtDateTime(selectedSlot?.start_time)} - {fmtTime(selectedSlot?.end_time)}</strong>
             <br />
-            So san pham: <strong>{selectedProducts.length}</strong>
+            Số sản phẩm: <strong>{selectedProducts.length}</strong>
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
             <button style={BTN_PRIMARY} onClick={backToList}>
-              Quay lai danh sach
+              Quay lại danh sách
             </button>
             <button style={BTN_SECONDARY} onClick={startCreateWizard}>
-              Tao Flash Sale moi
+              Tạo Flash Sale mới
             </button>
           </div>
         </div>
@@ -533,9 +533,9 @@ function FlashSaleList({ flashSales, onDelete, onRefresh }) {
     return (
       <div style={{ ...CARD, textAlign: 'center', padding: '60px 40px' }}>
         <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>⚡</div>
-        <h3 style={{ margin: '0 0 6px', color: '#0f172a', fontWeight: 800 }}>Chua co Flash Sale nao</h3>
+        <h3 style={{ margin: '0 0 6px', color: '#0f172a', fontWeight: 800 }}>Chưa có Flash Sale nào</h3>
         <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
-          Bam "Tao Flash Sale" de bat dau tao chuong trinh moi
+          Bấm "Tạo Flash Sale" để bắt đầu tạo chương trình mới
         </p>
       </div>
     );
@@ -545,10 +545,10 @@ function FlashSaleList({ flashSales, onDelete, onRefresh }) {
     <div style={{ ...CARD }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
-          Danh sach Flash Sale ({flashSales.length})
+          Danh sách Flash Sale ({flashSales.length})
         </h3>
         <button onClick={onRefresh} style={{ ...BTN_SECONDARY, padding: '6px 14px', fontSize: '0.78rem' }}>
-          🔄 Lam moi
+          🔄 Làm mới
         </button>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -575,14 +575,14 @@ function FlashSaleList({ flashSales, onDelete, onRefresh }) {
                     fs.status === 'ongoing' ? '#16a34a' : fs.status === 'upcoming' ? '#d97706' : '#64748b',
                     fs.status === 'ongoing' ? '#f0fdf4' : fs.status === 'upcoming' ? '#fffbeb' : '#f8fafc',
                   )}>
-                    {fs.status === 'ongoing' ? 'Dang dien ra' : fs.status === 'upcoming' ? 'Sap dien ra' : fs.status || 'N/A'}
+                    {fs.status === 'ongoing' ? 'Đang diễn ra' : fs.status === 'upcoming' ? 'Sắp diễn ra' : fs.status || 'N/A'}
                   </span>
                 </div>
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => onDelete(fs.flash_sale_id)} style={{ ...BTN_DANGER, padding: '6px 14px', fontSize: '0.76rem' }}>
-                🗑️ Xoa
+                🗑️ Xóa
               </button>
             </div>
           </div>
@@ -614,9 +614,9 @@ function TimeSlotPicker({ slots, onSelect }) {
     return (
       <div style={{ ...CARD, textAlign: 'center', padding: '60px 40px' }}>
         <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>📅</div>
-        <h3 style={{ margin: '0 0 6px', color: '#0f172a', fontWeight: 800 }}>Khong tim thay khung gio nao</h3>
+        <h3 style={{ margin: '0 0 6px', color: '#0f172a', fontWeight: 800 }}>Không tìm thấy khung giờ nào</h3>
         <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
-          Hien tai khong co khung gio Flash Sale kha dung
+          Hiện tại không có khung giờ Flash Sale khả dụng
         </p>
       </div>
     );
@@ -625,10 +625,10 @@ function TimeSlotPicker({ slots, onSelect }) {
   return (
     <div style={{ ...CARD }}>
       <h3 style={{ margin: '0 0 6px', fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
-        📅 Chon khung gio Flash Sale
+        📅 Chọn khung giờ Flash Sale
       </h3>
       <p style={{ margin: '0 0 20px', fontSize: '0.82rem', color: '#64748b' }}>
-        Chon khung gio ban muon tao Flash Sale. Moi khung gio co thoi gian bat dau va ket thuc cu the.
+        Chọn khung giờ bạn muốn tạo Flash Sale. Mỗi khung giờ có thời gian bắt đầu và kết thúc cụ thể.
       </p>
 
       {grouped.map(([date, dateSlots]) => (
@@ -657,7 +657,7 @@ function TimeSlotPicker({ slots, onSelect }) {
                   {fmtTime(slot.start_time)} — {fmtTime(slot.end_time)}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: 4 }}>
-                  Bam de chon khung gio nay
+                  Bấm để chọn khung giờ này
                 </div>
               </div>
             ))}
@@ -688,10 +688,10 @@ function ProductSelector({ products, selectedProducts, onToggle, onLoadMore, has
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
           <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
-            🛍️ Chon san pham ({selectedProducts.length} da chon)
+            🛍️ Chọn sản phẩm ({selectedProducts.length} đã chọn)
           </h3>
           <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: '#64748b' }}>
-            Chon cac san pham muon them vao Flash Sale
+            Chọn các sản phẩm muốn thêm vào Flash Sale
           </p>
         </div>
         <button
@@ -699,7 +699,7 @@ function ProductSelector({ products, selectedProducts, onToggle, onLoadMore, has
           onClick={onNext}
           disabled={selectedProducts.length === 0}
         >
-          Tiep theo →
+          Tiếp theo →
         </button>
       </div>
 
@@ -709,7 +709,7 @@ function ProductSelector({ products, selectedProducts, onToggle, onLoadMore, has
           type="text"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="🔍 Tim kiem san pham..."
+          placeholder="🔍 Tìm kiếm sản phẩm..."
           style={{ ...INPUT, maxWidth: 400 }}
         />
       </div>
@@ -781,14 +781,14 @@ function ProductSelector({ products, selectedProducts, onToggle, onLoadMore, has
       {hasMore && (
         <div style={{ textAlign: 'center', marginTop: 16 }}>
           <button onClick={onLoadMore} style={{ ...BTN_SECONDARY, fontSize: '0.82rem' }} disabled={loading}>
-            {loading ? 'Dang tai...' : 'Tai them san pham'}
+            {loading ? 'Đang tải...' : 'Tải thêm sản phẩm'}
           </button>
         </div>
       )}
 
       {filtered.length === 0 && (
         <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
-          Khong tim thay san pham nao
+          Không tìm thấy sản phẩm nào
         </div>
       )}
     </div>
@@ -838,15 +838,15 @@ function PriceConfigurator({ selectedProducts, configs, onUpdateConfig, onNext, 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
           <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
-            💰 Cau hinh gia Flash Sale
+            💰 Cấu hình giá Flash Sale
           </h3>
           <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: '#64748b' }}>
-            Thiet lap gia khuyen mai va so luong cho tung variant
+            Thiết lập giá khuyến mãi và số lượng cho từng variant
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button style={BTN_SECONDARY} onClick={onBack}>← Quay lai</button>
-          <button style={BTN_PRIMARY} onClick={onNext}>Tiep theo →</button>
+          <button style={BTN_SECONDARY} onClick={onBack}>← Quay lại</button>
+          <button style={BTN_PRIMARY} onClick={onNext}>Tiếp theo →</button>
         </div>
       </div>
 
@@ -856,9 +856,9 @@ function PriceConfigurator({ selectedProducts, configs, onUpdateConfig, onNext, 
         background: '#f8fafc', borderRadius: 12, border: '1px solid #e5e7eb', marginBottom: 20,
         flexWrap: 'wrap',
       }}>
-        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569' }}>Ap dung hang loat:</span>
+        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569' }}>Áp dụng hàng loạt:</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Giam</span>
+          <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Giảm</span>
           <input
             type="number"
             value={bulkDiscount}
@@ -879,7 +879,7 @@ function PriceConfigurator({ selectedProducts, configs, onUpdateConfig, onNext, 
           />
         </div>
         <button onClick={applyBulkDiscount} style={{ ...BTN_PRIMARY, padding: '6px 16px', fontSize: '0.78rem' }}>
-          Ap dung
+          Áp dụng
         </button>
       </div>
 
@@ -917,11 +917,11 @@ function PriceConfigurator({ selectedProducts, configs, onUpdateConfig, onNext, 
                 <thead>
                   <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
                     <th style={{ textAlign: 'left', padding: '8px 4px', color: '#64748b', fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase' }}>Variant</th>
-                    <th style={{ textAlign: 'right', padding: '8px 4px', color: '#64748b', fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase' }}>Gia goc</th>
-                    <th style={{ textAlign: 'center', padding: '8px 4px', color: '#64748b', fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase' }}>Gia FS</th>
-                    <th style={{ textAlign: 'center', padding: '8px 4px', color: '#64748b', fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase' }}>% Giam</th>
-                    <th style={{ textAlign: 'center', padding: '8px 4px', color: '#64748b', fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase' }}>So luong</th>
-                    <th style={{ textAlign: 'center', padding: '8px 4px', color: '#64748b', fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase' }}>Bat/Tat</th>
+                    <th style={{ textAlign: 'right', padding: '8px 4px', color: '#64748b', fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase' }}>Giá gốc</th>
+                    <th style={{ textAlign: 'center', padding: '8px 4px', color: '#64748b', fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase' }}>Giá FS</th>
+                    <th style={{ textAlign: 'center', padding: '8px 4px', color: '#64748b', fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase' }}>% Giảm</th>
+                    <th style={{ textAlign: 'center', padding: '8px 4px', color: '#64748b', fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase' }}>Số lượng</th>
+                    <th style={{ textAlign: 'center', padding: '8px 4px', color: '#64748b', fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase' }}>Bật/Tắt</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1010,10 +1010,10 @@ function ReviewStep({ slot, selectedProducts, configs, onSubmit, onBack }) {
   return (
     <div style={{ ...CARD }}>
       <h3 style={{ margin: '0 0 6px', fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
-        📋 Xac nhan tao Flash Sale
+        📋 Xác nhận tạo Flash Sale
       </h3>
       <p style={{ margin: '0 0 20px', fontSize: '0.82rem', color: '#64748b' }}>
-        Kiem tra thong tin truoc khi tao Flash Sale
+        Kiểm tra thông tin trước khi tạo Flash Sale
       </p>
 
       {/* Summary Card */}
@@ -1024,7 +1024,7 @@ function ReviewStep({ slot, selectedProducts, configs, onSubmit, onBack }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
           <div>
             <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#9a3412', textTransform: 'uppercase', marginBottom: 4 }}>
-              Khung gio
+              Khung giờ
             </div>
             <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
               {fmtTime(slot?.start_time)} — {fmtTime(slot?.end_time)}
@@ -1033,10 +1033,10 @@ function ReviewStep({ slot, selectedProducts, configs, onSubmit, onBack }) {
           </div>
           <div>
             <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#9a3412', textTransform: 'uppercase', marginBottom: 4 }}>
-              So san pham
+              Số sản phẩm
             </div>
             <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
-              {selectedProducts.length} san pham
+              {selectedProducts.length} sản phẩm
             </div>
             <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{totalItems} variants</div>
           </div>
@@ -1085,12 +1085,12 @@ function ReviewStep({ slot, selectedProducts, configs, onSubmit, onBack }) {
 
       {/* Actions */}
       <div style={{ display: 'flex', gap: 12, marginTop: 24, justifyContent: 'flex-end' }}>
-        <button style={BTN_SECONDARY} onClick={onBack}>← Quay lai</button>
+        <button style={BTN_SECONDARY} onClick={onBack}>← Quay lại</button>
         <button
           style={{ ...BTN_PRIMARY, padding: '12px 32px', fontSize: '0.92rem' }}
           onClick={onSubmit}
         >
-          ⚡ Tao Flash Sale
+          ⚡ Tạo Flash Sale
         </button>
       </div>
     </div>
