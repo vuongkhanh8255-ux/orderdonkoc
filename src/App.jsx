@@ -27,6 +27,7 @@ import CostingTab from './components/CostingTab';
 import CrmTab from './components/CrmTab';
 import ShopAnalyticsTab from './components/ShopAnalyticsTab';
 import FlashSaleTab from './components/FlashSaleTab';
+import TopPicksTab from './components/TopPicksTab';
 import PublicLandingPage from './components/PublicLandingPage';
 
 const SESSION_KEY = 'sk_session';
@@ -74,7 +75,7 @@ function App() {
 function AppMain({ user, onLogout, allowedViews }) {
   const defaultView = allowedViews[0] || 'dashboard';
   const [currentView, setCurrentView]   = useState(defaultView);
-  const [openGroups, setOpenGroups]     = useState({ ecom: true, crm: true, cskh: true, livestream: true, booking: true, archive: true, camp: true, tools: true });
+  const [openGroups, setOpenGroups]     = useState({ shopee: true, ecom: true, crm: true, cskh: true, livestream: true, booking: true, archive: true, camp: true, tools: true });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarHovered,   setSidebarHovered]   = useState(false);
   const [pwModalOpen, setPwModalOpen]   = useState(false);
@@ -213,9 +214,14 @@ function AppMain({ user, onLogout, allowedViews }) {
           {/* Menu Items */}
           <div style={{ flex: 1, paddingTop: '8px', overflowY: 'auto', overflowX: 'hidden' }}>
             {[
+              { key: 'shopee', label: '🟠 Shopee', emoji: '🟠', items: [
+                { view: 'flash_sale',        icon: '⚡', name: 'Tạo FS' },
+                { view: 'top_picks',         icon: '🚀', name: 'Đẩy SP' },
+                { view: 'shopee_livestream', icon: '📺', name: 'Livestream' },
+                { view: 'shopee_video',      icon: '🎬', name: 'Video' },
+              ]},
               { key: 'ecom', label: '🛍️ Ecom', emoji: '🛍️', items: [
                 { view: 'shop_analytics',    icon: '📊', name: 'Dashboard Ecom' },
-                { view: 'flash_sale',        icon: '⚡', name: 'Flash Sale' },
                 { view: 'listed_price',      icon: '🏷️', name: 'Bảng giá niêm yết' },
                 { view: 'costing',           icon: '💰', name: 'Giá Cost' },
                 { view: 'camp_registration', icon: '🎪', name: 'Đăng Kí Camp' },
@@ -363,6 +369,13 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'crm' && <CrmTab />}
           {currentView === 'shop_analytics' && <ShopAnalyticsTab />}
           {currentView === 'flash_sale' && <FlashSaleTab />}
+          {currentView === 'top_picks' && <TopPicksTab />}
+          {currentView === 'shopee_livestream' && (
+            <ComingSoonPlaceholder icon="📺" title="Shopee Livestream" description="Quản lý phiên livestream, theo dõi GMV, đơn hàng, người xem trực tiếp" />
+          )}
+          {currentView === 'shopee_video' && (
+            <ComingSoonPlaceholder icon="🎬" title="Shopee Video" description="Đăng video, theo dõi hiệu suất, phân tích khán giả" />
+          )}
 
           {/* BookingPerformanceTab luôn mounted, chỉ ẩn/hiện bằng display
               → state và data cache không mất khi đổi tab */}
@@ -380,6 +393,31 @@ function AppMain({ user, onLogout, allowedViews }) {
         <AdminPasswordModal onClose={() => setPwModalOpen(false)} onLogout={onLogout} />
       )}
     </AppDataProvider>
+  );
+}
+
+// ── Coming Soon Placeholder ────────────────────────────────────────
+function ComingSoonPlaceholder({ icon, title, description }) {
+  return (
+    <div style={{ fontFamily: "'Outfit', sans-serif", maxWidth: 800, margin: '0 auto', textAlign: 'center', padding: '80px 40px' }}>
+      <div style={{
+        width: 80, height: 80, borderRadius: 20, background: '#fff7ed', border: '2px solid #fed7aa',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2.2rem',
+        margin: '0 auto 24px', boxShadow: '0 8px 24px rgba(234,88,12,0.1)',
+      }}>{icon}</div>
+      <h1 style={{ margin: '0 0 8px', fontSize: '1.6rem', fontWeight: 900, color: '#0f172a' }}>{title}</h1>
+      <p style={{ margin: '0 0 24px', fontSize: '0.92rem', color: '#64748b', lineHeight: 1.6 }}>{description}</p>
+      <div style={{
+        display: 'inline-flex', alignItems: 'center', gap: 8,
+        padding: '12px 28px', borderRadius: 12, background: '#f8fafc',
+        border: '1.5px solid #e5e7eb', color: '#94a3b8', fontWeight: 700, fontSize: '0.88rem',
+      }}>
+        🚧 Đang phát triển — Sắp ra mắt
+      </div>
+      <p style={{ marginTop: 16, fontSize: '0.72rem', color: '#c4b5a0', fontStyle: 'italic' }}>
+        Built by Quốc Khánh
+      </p>
+    </div>
   );
 }
 
