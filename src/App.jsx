@@ -214,17 +214,17 @@ function AppMain({ user, onLogout, allowedViews }) {
           {/* Menu Items */}
           <div style={{ flex: 1, paddingTop: '8px', overflowY: 'auto', overflowX: 'hidden' }}>
             {[
-              { key: 'shopee', label: '🟠 Shopee', emoji: '🟠', items: [
-                { view: 'flash_sale',        icon: '⚡', name: 'Tạo FS' },
-                { view: 'top_picks',         icon: '🚀', name: 'Đẩy SP' },
-                { view: 'shopee_livestream', icon: '📺', name: 'Livestream' },
-                { view: 'shopee_video',      icon: '🎬', name: 'Video' },
-              ]},
               { key: 'ecom', label: '🛍️ Ecom', emoji: '🛍️', items: [
                 { view: 'shop_analytics',    icon: '📊', name: 'Dashboard Ecom' },
                 { view: 'listed_price',      icon: '🏷️', name: 'Bảng giá niêm yết' },
                 { view: 'costing',           icon: '💰', name: 'Giá Cost' },
                 { view: 'camp_registration', icon: '🎪', name: 'Đăng Kí Camp' },
+              ]},
+              { key: 'shopee', label: '🟠 Shopee', emoji: '🟠', items: [
+                { view: 'flash_sale',        icon: '⚡', name: 'Tạo FS' },
+                { view: 'top_picks',         icon: '🚀', name: 'Đẩy SP' },
+                { view: 'shopee_livestream', icon: '📺', name: 'Livestream' },
+                { view: 'shopee_video',      icon: '🎬', name: 'Video' },
               ]},
               { key: 'crm', label: '👥 CRM', emoji: '👥', items: [
                 { view: 'crm', icon: '👥', name: 'CRM' },
