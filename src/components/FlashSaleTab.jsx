@@ -1,0 +1,1098 @@
+// src/components/FlashSaleTab.jsx — Flash Sale Automation Tool (like Atosa)
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+
+const API_BASE = '/api/shopee/flash-sale';
+const DEFAULT_SHOP_ID = '341325550';
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const fmtVnd = (v) => {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n === 0) return '0';
+  return n.toLocaleString('vi-VN') + ' ₫';
+};
+const fmtDate = (ts) => {
+  if (!ts) return '';
+  const d = new Date(ts * 1000);
+  return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+};
+const fmtTime = (ts) => {
+  if (!ts) return '';
+  const d = new Date(ts * 1000);
+  return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+};
+const fmtDateTime = (ts) => `${fmtTime(ts)} ${fmtDate(ts)}`;
+
+// ── API caller ───────────────────────────────────────────────────────────────
+async function apiCall(action, params = {}, body = null) {
+  const qs = new URLSearchParams({ action, shop_id: DEFAULT_SHOP_ID, ...params });
+  const url = `${API_BASE}?${qs}`;
+  const opts = body
+    ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+    : { method: 'GET' };
+  const res = await fetch(url, opts);
+  return res.json();
+}
+
+// ── Styles ───────────────────────────────────────────────────────────────────
+const CARD = {
+  background: '#fff', borderRadius: 16, padding: '24px',
+  boxShadow: '0 1px 4px rgba(15,23,42,0.06)', border: '1px solid #f1f5f9',
+};
+const BTN_PRIMARY = {
+  padding: '10px 24px', borderRadius: 10, border: 'none',
+  background: '#ea580c', color: '#fff', fontWeight: 700, fontSize: '0.88rem',
+  cursor: 'pointer', boxShadow: '0 4px 12px rgba(234,88,12,0.2)',
+  transition: 'all 0.2s',
+};
+const BTN_SECONDARY = {
+  padding: '10px 24px', borderRadius: 10,
+  border: '1.5px solid #e5e7eb', background: '#fff',
+  color: '#64748b', fontWeight: 700, fontSize: '0.88rem', cursor: 'pointer',
+};
+const BTN_DANGER = {
+  ...BTN_SECONDARY, color: '#dc2626', borderColor: '#fecaca',
+};
+const INPUT = {
+  padding: '8px 12px', borderRadius: 8, border: '2px solid #e5e7eb',
+  fontSize: '0.85rem', outline: 'none', width: '100%', boxSizing: 'border-box',
+  fontFamily: 'inherit', transition: 'border 0.2s',
+};
+const BADGE = (color = '#ea580c', bg = '#fff7ed') => ({
+  display: 'inline-flex', alignItems: 'center', gap: 4,
+  padding: '3px 10px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700,
+  color, background: bg,
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ══════════════════════════════════════════════════════════════════════════════
+export default function FlashSaleTab() {
+  const [step, setStep] = useState(0); // 0=list, 1=slots, 2=products, 3=config, 4=review
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  // Flash Sale list
+  const [flashSales, setFlashSales] = useState([]);
+
+  // Creation wizard state
+  const [timeSlots, setTimeSlots] = useState([]);
+  const [selectedSlot, setSelectedSlot] = useState(null);
+  const [products, setProducts] = useState([]);
+  const [productPage, setProductPage] = useState(0);
+  const [hasMoreProducts, setHasMoreProducts] = useState(true);
+  const [selectedProducts, setSelectedProducts] = useState([]); // [{item_id, name, image, models: [...]}]
+  const [productConfigs, setProductConfigs] = useState({}); // {item_id: {model_id: {price, stock, enabled}}}
+  const [createdFsId, setCreatedFsId] = useState(null);
+
+  // ── Load Flash Sale list ────────────────────────────────────────────────
+  const loadFlashSales = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await apiCall('list');
+      if (res.ok) {
+        setFlashSales(res.data?.flash_sale_list || res.data || []);
+      } else {
+        setError(res.error || 'Loi load Flash Sale list');
+      }
+    } catch (e) {
+      setError(e.message);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadFlashSales(); }, [loadFlashSales]);
+
+  // ── Load time slots ─────────────────────────────────────────────────────
+  const loadTimeSlots = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await apiCall('time_slots');
+      if (res.ok) {
+        setTimeSlots(res.data?.slot_list || res.data || []);
+      } else {
+        setError(res.error || 'Loi load time slots');
+      }
+    } catch (e) {
+      setError(e.message);
+    }
+    setLoading(false);
+  }, []);
+
+  // ── Load products ───────────────────────────────────────────────────────
+  const loadProducts = useCallback(async (page = 0, append = false) => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await apiCall('products', { offset: page * 50, page_size: 50 });
+      if (res.ok) {
+        const items = res.data?.items || res.data || [];
+        if (append) {
+          setProducts(prev => [...prev, ...items]);
+        } else {
+          setProducts(items);
+        }
+        setHasMoreProducts(items.length >= 50);
+        setProductPage(page);
+      } else {
+        setError(res.error || 'Loi load products');
+      }
+    } catch (e) {
+      setError(e.message);
+    }
+    setLoading(false);
+  }, []);
+
+  // ── Load models for selected product ────────────────────────────────────
+  const loadModels = useCallback(async (itemId) => {
+    try {
+      const res = await apiCall('product_models', { item_id: itemId });
+      if (res.ok) {
+        return res.data?.model || res.data || [];
+      }
+    } catch (e) {
+      console.error('loadModels error:', e);
+    }
+    return [];
+  }, []);
+
+  // ── Start creation wizard ──────────────────────────────────────────────
+  const startCreateWizard = async () => {
+    setStep(1);
+    setSelectedSlot(null);
+    setSelectedProducts([]);
+    setProductConfigs({});
+    setCreatedFsId(null);
+    setSuccess('');
+    await loadTimeSlots();
+  };
+
+  // ── Select time slot → go to products ──────────────────────────────────
+  const selectSlot = async (slot) => {
+    setSelectedSlot(slot);
+    setStep(2);
+    await loadProducts(0);
+  };
+
+  // ── Toggle product selection ────────────────────────────────────────────
+  const toggleProduct = async (product) => {
+    const idx = selectedProducts.findIndex(p => p.item_id === product.item_id);
+    if (idx >= 0) {
+      // Remove
+      setSelectedProducts(prev => prev.filter(p => p.item_id !== product.item_id));
+      setProductConfigs(prev => {
+        const next = { ...prev };
+        delete next[product.item_id];
+        return next;
+      });
+    } else {
+      // Add — load models
+      const models = await loadModels(product.item_id);
+      const newProduct = { ...product, models };
+      setSelectedProducts(prev => [...prev, newProduct]);
+
+      // Init config with default prices
+      const config = {};
+      if (models.length > 0) {
+        models.forEach(m => {
+          const origPrice = m.price_info?.[0]?.original_price || m.original_price || 0;
+          config[m.model_id] = {
+            enabled: true,
+            price: Math.floor(origPrice * 0.9), // Default 10% discount
+            stock: 100,
+            original_price: origPrice,
+            model_name: m.model_name || m.name || `Model ${m.model_id}`,
+            model_sku: m.model_sku || '',
+          };
+        });
+      } else {
+        // No variants — single item
+        const origPrice = product.price_info?.[0]?.original_price || product.original_price || 0;
+        config[0] = {
+          enabled: true,
+          price: Math.floor(origPrice * 0.9),
+          stock: 100,
+          original_price: origPrice,
+          model_name: product.item_name || 'Single',
+          model_sku: '',
+        };
+      }
+      setProductConfigs(prev => ({ ...prev, [product.item_id]: config }));
+    }
+  };
+
+  // ── Go to config step ──────────────────────────────────────────────────
+  const goToConfig = () => {
+    if (selectedProducts.length === 0) {
+      setError('Vui long chon it nhat 1 san pham');
+      return;
+    }
+    setError('');
+    setStep(3);
+  };
+
+  // ── Go to review step ─────────────────────────────────────────────────
+  const goToReview = () => {
+    // Validate configs
+    for (const prod of selectedProducts) {
+      const config = productConfigs[prod.item_id];
+      if (!config) continue;
+      const hasEnabled = Object.values(config).some(c => c.enabled);
+      if (!hasEnabled) {
+        setError(`San pham "${prod.item_name}" chua co variant nao duoc bat`);
+        return;
+      }
+      for (const [modelId, c] of Object.entries(config)) {
+        if (!c.enabled) continue;
+        if (!c.price || c.price <= 0) {
+          setError(`Gia Flash Sale khong hop le cho "${c.model_name}"`);
+          return;
+        }
+        if (!c.stock || c.stock <= 0) {
+          setError(`So luong khuyen mai khong hop le cho "${c.model_name}"`);
+          return;
+        }
+        if (c.price >= c.original_price) {
+          setError(`Gia Flash Sale phai thap hon gia goc cho "${c.model_name}"`);
+          return;
+        }
+      }
+    }
+    setError('');
+    setStep(4);
+  };
+
+  // ── Submit Flash Sale ──────────────────────────────────────────────────
+  const submitFlashSale = async () => {
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      // Step 1: Create Flash Sale with time slot
+      const createRes = await apiCall('create', {}, {
+        time_slot_id: selectedSlot.time_slot_id || selectedSlot.timeslot_id,
+      });
+      if (!createRes.ok) {
+        throw new Error(createRes.error || 'Loi tao Flash Sale');
+      }
+      const fsId = createRes.data?.flash_sale_id;
+      if (!fsId) throw new Error('Khong nhan duoc flash_sale_id');
+      setCreatedFsId(fsId);
+
+      // Step 2: Add items
+      const items = [];
+      for (const prod of selectedProducts) {
+        const config = productConfigs[prod.item_id];
+        if (!config) continue;
+        for (const [modelId, c] of Object.entries(config)) {
+          if (!c.enabled) continue;
+          items.push({
+            item_id: Number(prod.item_id),
+            model_id: modelId === '0' ? 0 : Number(modelId),
+            flash_sale_stock: Number(c.stock),
+            flash_sale_price: Number(c.price),
+          });
+        }
+      }
+
+      const addRes = await apiCall('add_items', {}, {
+        flash_sale_id: fsId,
+        items,
+      });
+      if (!addRes.ok) {
+        throw new Error(addRes.error || 'Loi them san pham vao Flash Sale');
+      }
+
+      setSuccess(`Tao Flash Sale thanh cong! ID: ${fsId}`);
+      setStep(5); // Success step
+    } catch (e) {
+      setError(e.message);
+    }
+    setLoading(false);
+  };
+
+  // ── Delete Flash Sale ──────────────────────────────────────────────────
+  const deleteFlashSale = async (fsId) => {
+    if (!confirm('Ban co chac chan muon xoa Flash Sale nay?')) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await apiCall('delete', {}, { flash_sale_id: fsId });
+      if (res.ok) {
+        setSuccess('Da xoa Flash Sale');
+        await loadFlashSales();
+      } else {
+        setError(res.error || 'Loi xoa Flash Sale');
+      }
+    } catch (e) {
+      setError(e.message);
+    }
+    setLoading(false);
+  };
+
+  // ── Back to list ───────────────────────────────────────────────────────
+  const backToList = () => {
+    setStep(0);
+    setError('');
+    setSuccess('');
+    loadFlashSales();
+  };
+
+  // ══════════════════════════════════════════════════════════════════════
+  // RENDER
+  // ══════════════════════════════════════════════════════════════════════
+
+  return (
+    <div style={{ fontFamily: "'Outfit', sans-serif", maxWidth: 1200, margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{
+              width: 42, height: 42, borderRadius: 12, background: '#fff7ed', border: '1px solid #fed7aa',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem',
+            }}>⚡</span>
+            Flash Sale Automation
+          </h1>
+          <p style={{ margin: '6px 0 0', fontSize: '0.82rem', color: '#64748b' }}>
+            Tao va quan ly Flash Sale tu dong — tuong tu Atosa
+          </p>
+        </div>
+        {step === 0 && (
+          <button style={BTN_PRIMARY} onClick={startCreateWizard}>
+            + Tao Flash Sale
+          </button>
+        )}
+        {step > 0 && step < 5 && (
+          <button style={BTN_SECONDARY} onClick={backToList}>
+            ← Quay lai
+          </button>
+        )}
+      </div>
+
+      {/* Stepper */}
+      {step > 0 && step < 5 && (
+        <div style={{ ...CARD, marginBottom: 20, padding: '16px 24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+            {['Chon khung gio', 'Chon san pham', 'Cau hinh gia', 'Xac nhan'].map((label, i) => {
+              const stepNum = i + 1;
+              const isActive = step === stepNum;
+              const isDone = step > stepNum;
+              return (
+                <React.Fragment key={i}>
+                  {i > 0 && <div style={{ flex: 1, height: 2, background: isDone ? '#ea580c' : '#e5e7eb', margin: '0 8px' }} />}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '0.8rem', fontWeight: 800,
+                      background: isDone ? '#ea580c' : isActive ? '#fff7ed' : '#f1f5f9',
+                      color: isDone ? '#fff' : isActive ? '#ea580c' : '#94a3b8',
+                      border: isActive ? '2px solid #ea580c' : '2px solid transparent',
+                    }}>
+                      {isDone ? '✓' : stepNum}
+                    </div>
+                    <span style={{
+                      fontSize: '0.78rem', fontWeight: isActive ? 800 : 600,
+                      color: isActive ? '#ea580c' : isDone ? '#16a34a' : '#94a3b8',
+                    }}>{label}</span>
+                  </div>
+                </React.Fragment>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Error / Success */}
+      {error && (
+        <div style={{
+          background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 12,
+          padding: '12px 16px', marginBottom: 16, color: '#dc2626', fontSize: '0.82rem', fontWeight: 600,
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <span>⚠️</span> {error}
+          <button onClick={() => setError('')} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', color: '#dc2626' }}>×</button>
+        </div>
+      )}
+      {success && (
+        <div style={{
+          background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 12,
+          padding: '12px 16px', marginBottom: 16, color: '#15803d', fontSize: '0.82rem', fontWeight: 600,
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <span>✅</span> {success}
+          <button onClick={() => setSuccess('')} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', color: '#15803d' }}>×</button>
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <div style={{
+          textAlign: 'center', padding: '40px 20px', color: '#ea580c',
+          fontSize: '0.9rem', fontWeight: 700,
+        }}>
+          <div style={{
+            width: 40, height: 40, border: '3px solid #fed7aa', borderTopColor: '#ea580c',
+            borderRadius: '50%', margin: '0 auto 12px',
+            animation: 'fsSpin 0.8s linear infinite',
+          }} />
+          Dang tai...
+          <style>{`@keyframes fsSpin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      )}
+
+      {/* ═══ STEP 0: Flash Sale List ═══ */}
+      {step === 0 && !loading && (
+        <FlashSaleList
+          flashSales={flashSales}
+          onDelete={deleteFlashSale}
+          onRefresh={loadFlashSales}
+        />
+      )}
+
+      {/* ═══ STEP 1: Select Time Slot ═══ */}
+      {step === 1 && !loading && (
+        <TimeSlotPicker
+          slots={timeSlots}
+          onSelect={selectSlot}
+        />
+      )}
+
+      {/* ═══ STEP 2: Select Products ═══ */}
+      {step === 2 && !loading && (
+        <ProductSelector
+          products={products}
+          selectedProducts={selectedProducts}
+          onToggle={toggleProduct}
+          onLoadMore={() => loadProducts(productPage + 1, true)}
+          hasMore={hasMoreProducts}
+          onNext={goToConfig}
+          loading={loading}
+        />
+      )}
+
+      {/* ═══ STEP 3: Configure Prices ═══ */}
+      {step === 3 && !loading && (
+        <PriceConfigurator
+          selectedProducts={selectedProducts}
+          configs={productConfigs}
+          onUpdateConfig={setProductConfigs}
+          onNext={goToReview}
+          onBack={() => setStep(2)}
+        />
+      )}
+
+      {/* ═══ STEP 4: Review & Submit ═══ */}
+      {step === 4 && !loading && (
+        <ReviewStep
+          slot={selectedSlot}
+          selectedProducts={selectedProducts}
+          configs={productConfigs}
+          onSubmit={submitFlashSale}
+          onBack={() => setStep(3)}
+        />
+      )}
+
+      {/* ═══ STEP 5: Success ═══ */}
+      {step === 5 && (
+        <div style={{ ...CARD, textAlign: 'center', padding: '60px 40px' }}>
+          <div style={{ fontSize: '3rem', marginBottom: 16 }}>🎉</div>
+          <h2 style={{ margin: '0 0 8px', fontSize: '1.4rem', fontWeight: 900, color: '#0f172a' }}>
+            Tao Flash Sale thanh cong!
+          </h2>
+          <p style={{ color: '#64748b', marginBottom: 24, fontSize: '0.9rem' }}>
+            Flash Sale ID: <strong>{createdFsId}</strong>
+            <br />
+            Khung gio: <strong>{fmtDateTime(selectedSlot?.start_time)} - {fmtTime(selectedSlot?.end_time)}</strong>
+            <br />
+            So san pham: <strong>{selectedProducts.length}</strong>
+          </p>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+            <button style={BTN_PRIMARY} onClick={backToList}>
+              Quay lai danh sach
+            </button>
+            <button style={BTN_SECONDARY} onClick={startCreateWizard}>
+              Tao Flash Sale moi
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SUB-COMPONENTS
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Flash Sale List ──────────────────────────────────────────────────────────
+function FlashSaleList({ flashSales, onDelete, onRefresh }) {
+  if (!flashSales || flashSales.length === 0) {
+    return (
+      <div style={{ ...CARD, textAlign: 'center', padding: '60px 40px' }}>
+        <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>⚡</div>
+        <h3 style={{ margin: '0 0 6px', color: '#0f172a', fontWeight: 800 }}>Chua co Flash Sale nao</h3>
+        <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
+          Bam "Tao Flash Sale" de bat dau tao chuong trinh moi
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ ...CARD }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+          Danh sach Flash Sale ({flashSales.length})
+        </h3>
+        <button onClick={onRefresh} style={{ ...BTN_SECONDARY, padding: '6px 14px', fontSize: '0.78rem' }}>
+          🔄 Lam moi
+        </button>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {flashSales.map((fs, i) => (
+          <div key={fs.flash_sale_id || i} style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '14px 18px', borderRadius: 12, border: '1px solid #e5e7eb',
+            background: '#fafafa', transition: 'border-color 0.2s',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div style={{
+                width: 40, height: 40, borderRadius: 10, background: '#fff7ed', border: '1px solid #fed7aa',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem',
+              }}>⚡</div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#0f172a' }}>
+                  {fmtDateTime(fs.start_time)} — {fmtTime(fs.end_time)}
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                  <span style={BADGE('#ea580c', '#fff7ed')}>
+                    ID: {fs.flash_sale_id}
+                  </span>
+                  <span style={BADGE(
+                    fs.status === 'ongoing' ? '#16a34a' : fs.status === 'upcoming' ? '#d97706' : '#64748b',
+                    fs.status === 'ongoing' ? '#f0fdf4' : fs.status === 'upcoming' ? '#fffbeb' : '#f8fafc',
+                  )}>
+                    {fs.status === 'ongoing' ? 'Dang dien ra' : fs.status === 'upcoming' ? 'Sap dien ra' : fs.status || 'N/A'}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => onDelete(fs.flash_sale_id)} style={{ ...BTN_DANGER, padding: '6px 14px', fontSize: '0.76rem' }}>
+                🗑️ Xoa
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Time Slot Picker ─────────────────────────────────────────────────────────
+function TimeSlotPicker({ slots, onSelect }) {
+  // Group slots by date
+  const grouped = useMemo(() => {
+    const map = {};
+    (slots || []).forEach(slot => {
+      const date = fmtDate(slot.start_time);
+      if (!map[date]) map[date] = [];
+      map[date].push(slot);
+    });
+    return Object.entries(map).sort((a, b) => {
+      // Sort by actual date
+      const da = slots.find(s => fmtDate(s.start_time) === a[0]);
+      const db = slots.find(s => fmtDate(s.start_time) === b[0]);
+      return (da?.start_time || 0) - (db?.start_time || 0);
+    });
+  }, [slots]);
+
+  if (!slots || slots.length === 0) {
+    return (
+      <div style={{ ...CARD, textAlign: 'center', padding: '60px 40px' }}>
+        <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>📅</div>
+        <h3 style={{ margin: '0 0 6px', color: '#0f172a', fontWeight: 800 }}>Khong tim thay khung gio nao</h3>
+        <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
+          Hien tai khong co khung gio Flash Sale kha dung
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ ...CARD }}>
+      <h3 style={{ margin: '0 0 6px', fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+        📅 Chon khung gio Flash Sale
+      </h3>
+      <p style={{ margin: '0 0 20px', fontSize: '0.82rem', color: '#64748b' }}>
+        Chon khung gio ban muon tao Flash Sale. Moi khung gio co thoi gian bat dau va ket thuc cu the.
+      </p>
+
+      {grouped.map(([date, dateSlots]) => (
+        <div key={date} style={{ marginBottom: 20 }}>
+          <div style={{
+            fontSize: '0.82rem', fontWeight: 800, color: '#475569',
+            padding: '8px 12px', background: '#f8fafc', borderRadius: 8,
+            marginBottom: 10, border: '1px solid #e5e7eb',
+          }}>
+            📅 {date}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+            {dateSlots.map(slot => (
+              <div
+                key={slot.time_slot_id || slot.timeslot_id}
+                onClick={() => onSelect(slot)}
+                style={{
+                  padding: '16px', borderRadius: 12, border: '2px solid #e5e7eb',
+                  cursor: 'pointer', transition: 'all 0.2s', textAlign: 'center',
+                  background: '#fff',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = '#ea580c'; e.currentTarget.style.background = '#fff7ed'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.background = '#fff'; }}
+              >
+                <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#0f172a' }}>
+                  {fmtTime(slot.start_time)} — {fmtTime(slot.end_time)}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: 4 }}>
+                  Bam de chon khung gio nay
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Product Selector ─────────────────────────────────────────────────────────
+function ProductSelector({ products, selectedProducts, onToggle, onLoadMore, hasMore, onNext, loading }) {
+  const [search, setSearch] = useState('');
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return products;
+    const q = search.toLowerCase();
+    return products.filter(p =>
+      (p.item_name || '').toLowerCase().includes(q) ||
+      String(p.item_id).includes(q)
+    );
+  }, [products, search]);
+
+  const isSelected = (itemId) => selectedProducts.some(p => p.item_id === itemId);
+
+  return (
+    <div style={{ ...CARD }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+            🛍️ Chon san pham ({selectedProducts.length} da chon)
+          </h3>
+          <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: '#64748b' }}>
+            Chon cac san pham muon them vao Flash Sale
+          </p>
+        </div>
+        <button
+          style={{ ...BTN_PRIMARY, opacity: selectedProducts.length === 0 ? 0.5 : 1 }}
+          onClick={onNext}
+          disabled={selectedProducts.length === 0}
+        >
+          Tiep theo →
+        </button>
+      </div>
+
+      {/* Search */}
+      <div style={{ marginBottom: 16 }}>
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="🔍 Tim kiem san pham..."
+          style={{ ...INPUT, maxWidth: 400 }}
+        />
+      </div>
+
+      {/* Product Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+        {filtered.map(product => {
+          const selected = isSelected(product.item_id);
+          return (
+            <div
+              key={product.item_id}
+              onClick={() => onToggle(product)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '12px 14px', borderRadius: 12, cursor: 'pointer',
+                border: selected ? '2px solid #ea580c' : '2px solid #e5e7eb',
+                background: selected ? '#fff7ed' : '#fff',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => { if (!selected) e.currentTarget.style.borderColor = '#fed7aa'; }}
+              onMouseLeave={e => { if (!selected) e.currentTarget.style.borderColor = '#e5e7eb'; }}
+            >
+              {/* Checkbox */}
+              <div style={{
+                width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                border: selected ? '2px solid #ea580c' : '2px solid #d1d5db',
+                background: selected ? '#ea580c' : '#fff',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#fff', fontSize: '0.7rem', fontWeight: 900,
+              }}>
+                {selected && '✓'}
+              </div>
+
+              {/* Image */}
+              <div style={{
+                width: 48, height: 48, borderRadius: 8, flexShrink: 0, overflow: 'hidden',
+                background: '#f1f5f9', border: '1px solid #e5e7eb',
+              }}>
+                {product.image?.image_url_list?.[0] && (
+                  <img src={product.image.image_url_list[0]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                )}
+              </div>
+
+              {/* Info */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontSize: '0.8rem', fontWeight: 700, color: '#0f172a',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {product.item_name || `Item ${product.item_id}`}
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                  <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                    ID: {product.item_id}
+                  </span>
+                  {product.price_info?.[0]?.original_price && (
+                    <span style={{ fontSize: '0.72rem', color: '#ea580c', fontWeight: 600 }}>
+                      {fmtVnd(product.price_info[0].original_price)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Load More */}
+      {hasMore && (
+        <div style={{ textAlign: 'center', marginTop: 16 }}>
+          <button onClick={onLoadMore} style={{ ...BTN_SECONDARY, fontSize: '0.82rem' }} disabled={loading}>
+            {loading ? 'Dang tai...' : 'Tai them san pham'}
+          </button>
+        </div>
+      )}
+
+      {filtered.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+          Khong tim thay san pham nao
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Price Configurator ───────────────────────────────────────────────────────
+function PriceConfigurator({ selectedProducts, configs, onUpdateConfig, onNext, onBack }) {
+  const [bulkDiscount, setBulkDiscount] = useState(10);
+  const [bulkStock, setBulkStock] = useState(100);
+
+  const updateField = (itemId, modelId, field, value) => {
+    onUpdateConfig(prev => ({
+      ...prev,
+      [itemId]: {
+        ...prev[itemId],
+        [modelId]: {
+          ...prev[itemId]?.[modelId],
+          [field]: value,
+        },
+      },
+    }));
+  };
+
+  const applyBulkDiscount = () => {
+    onUpdateConfig(prev => {
+      const next = { ...prev };
+      for (const itemId of Object.keys(next)) {
+        for (const modelId of Object.keys(next[itemId])) {
+          const orig = next[itemId][modelId].original_price;
+          next[itemId] = {
+            ...next[itemId],
+            [modelId]: {
+              ...next[itemId][modelId],
+              price: Math.floor(orig * (1 - bulkDiscount / 100)),
+              stock: bulkStock,
+            },
+          };
+        }
+      }
+      return next;
+    });
+  };
+
+  return (
+    <div style={{ ...CARD }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+            💰 Cau hinh gia Flash Sale
+          </h3>
+          <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: '#64748b' }}>
+            Thiet lap gia khuyen mai va so luong cho tung variant
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button style={BTN_SECONDARY} onClick={onBack}>← Quay lai</button>
+          <button style={BTN_PRIMARY} onClick={onNext}>Tiep theo →</button>
+        </div>
+      </div>
+
+      {/* Bulk Actions */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 16, padding: '14px 18px',
+        background: '#f8fafc', borderRadius: 12, border: '1px solid #e5e7eb', marginBottom: 20,
+        flexWrap: 'wrap',
+      }}>
+        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569' }}>Ap dung hang loat:</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Giam</span>
+          <input
+            type="number"
+            value={bulkDiscount}
+            onChange={e => setBulkDiscount(Number(e.target.value))}
+            style={{ ...INPUT, width: 70, textAlign: 'center' }}
+            min={5} max={90}
+          />
+          <span style={{ fontSize: '0.78rem', color: '#64748b' }}>%</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: '0.78rem', color: '#64748b' }}>SL:</span>
+          <input
+            type="number"
+            value={bulkStock}
+            onChange={e => setBulkStock(Number(e.target.value))}
+            style={{ ...INPUT, width: 80, textAlign: 'center' }}
+            min={1} max={1000}
+          />
+        </div>
+        <button onClick={applyBulkDiscount} style={{ ...BTN_PRIMARY, padding: '6px 16px', fontSize: '0.78rem' }}>
+          Ap dung
+        </button>
+      </div>
+
+      {/* Product configs */}
+      {selectedProducts.map(product => {
+        const config = configs[product.item_id] || {};
+        return (
+          <div key={product.item_id} style={{
+            border: '1px solid #e5e7eb', borderRadius: 12, marginBottom: 14, overflow: 'hidden',
+          }}>
+            {/* Product header */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '12px 16px', background: '#f8fafc', borderBottom: '1px solid #e5e7eb',
+            }}>
+              <div style={{
+                width: 40, height: 40, borderRadius: 8, overflow: 'hidden', flexShrink: 0,
+                background: '#e5e7eb',
+              }}>
+                {product.image?.image_url_list?.[0] && (
+                  <img src={product.image.image_url_list[0]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                )}
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a' }}>
+                  {product.item_name || `Item ${product.item_id}`}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>ID: {product.item_id}</div>
+              </div>
+            </div>
+
+            {/* Variants table */}
+            <div style={{ padding: '12px 16px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                    <th style={{ textAlign: 'left', padding: '8px 4px', color: '#64748b', fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase' }}>Variant</th>
+                    <th style={{ textAlign: 'right', padding: '8px 4px', color: '#64748b', fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase' }}>Gia goc</th>
+                    <th style={{ textAlign: 'center', padding: '8px 4px', color: '#64748b', fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase' }}>Gia FS</th>
+                    <th style={{ textAlign: 'center', padding: '8px 4px', color: '#64748b', fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase' }}>% Giam</th>
+                    <th style={{ textAlign: 'center', padding: '8px 4px', color: '#64748b', fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase' }}>So luong</th>
+                    <th style={{ textAlign: 'center', padding: '8px 4px', color: '#64748b', fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase' }}>Bat/Tat</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(config).map(([modelId, c]) => {
+                    const discountPct = c.original_price > 0
+                      ? Math.round((1 - c.price / c.original_price) * 100)
+                      : 0;
+                    return (
+                      <tr key={modelId} style={{ borderBottom: '1px solid #f1f5f9', opacity: c.enabled ? 1 : 0.4 }}>
+                        <td style={{ padding: '8px 4px', fontWeight: 600, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {c.model_name}
+                          {c.model_sku && <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>SKU: {c.model_sku}</div>}
+                        </td>
+                        <td style={{ padding: '8px 4px', textAlign: 'right', color: '#64748b' }}>
+                          {fmtVnd(c.original_price)}
+                        </td>
+                        <td style={{ padding: '8px 4px', textAlign: 'center' }}>
+                          <input
+                            type="number"
+                            value={c.price}
+                            onChange={e => updateField(product.item_id, modelId, 'price', Number(e.target.value))}
+                            style={{ ...INPUT, width: 110, textAlign: 'right', borderColor: c.price >= c.original_price ? '#ef4444' : '#e5e7eb' }}
+                            disabled={!c.enabled}
+                          />
+                        </td>
+                        <td style={{ padding: '8px 4px', textAlign: 'center' }}>
+                          <span style={BADGE(
+                            discountPct >= 5 ? '#16a34a' : '#dc2626',
+                            discountPct >= 5 ? '#f0fdf4' : '#fef2f2',
+                          )}>
+                            {discountPct}%
+                          </span>
+                        </td>
+                        <td style={{ padding: '8px 4px', textAlign: 'center' }}>
+                          <input
+                            type="number"
+                            value={c.stock}
+                            onChange={e => updateField(product.item_id, modelId, 'stock', Number(e.target.value))}
+                            style={{ ...INPUT, width: 80, textAlign: 'center' }}
+                            min={1} max={1000}
+                            disabled={!c.enabled}
+                          />
+                        </td>
+                        <td style={{ padding: '8px 4px', textAlign: 'center' }}>
+                          <div
+                            onClick={() => updateField(product.item_id, modelId, 'enabled', !c.enabled)}
+                            style={{
+                              width: 40, height: 22, borderRadius: 11, cursor: 'pointer',
+                              background: c.enabled ? '#ea580c' : '#d1d5db', position: 'relative',
+                              transition: 'background 0.2s',
+                            }}
+                          >
+                            <div style={{
+                              width: 18, height: 18, borderRadius: '50%', background: '#fff',
+                              position: 'absolute', top: 2,
+                              left: c.enabled ? 20 : 2,
+                              transition: 'left 0.2s',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                            }} />
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Review Step ───────────────────────────────────────────────────────────────
+function ReviewStep({ slot, selectedProducts, configs, onSubmit, onBack }) {
+  const totalItems = useMemo(() => {
+    let count = 0;
+    for (const prod of selectedProducts) {
+      const config = configs[prod.item_id] || {};
+      count += Object.values(config).filter(c => c.enabled).length;
+    }
+    return count;
+  }, [selectedProducts, configs]);
+
+  return (
+    <div style={{ ...CARD }}>
+      <h3 style={{ margin: '0 0 6px', fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+        📋 Xac nhan tao Flash Sale
+      </h3>
+      <p style={{ margin: '0 0 20px', fontSize: '0.82rem', color: '#64748b' }}>
+        Kiem tra thong tin truoc khi tao Flash Sale
+      </p>
+
+      {/* Summary Card */}
+      <div style={{
+        background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12,
+        padding: '18px 22px', marginBottom: 20,
+      }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+          <div>
+            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#9a3412', textTransform: 'uppercase', marginBottom: 4 }}>
+              Khung gio
+            </div>
+            <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+              {fmtTime(slot?.start_time)} — {fmtTime(slot?.end_time)}
+            </div>
+            <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{fmtDate(slot?.start_time)}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#9a3412', textTransform: 'uppercase', marginBottom: 4 }}>
+              So san pham
+            </div>
+            <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+              {selectedProducts.length} san pham
+            </div>
+            <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{totalItems} variants</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#9a3412', textTransform: 'uppercase', marginBottom: 4 }}>
+              Time Slot ID
+            </div>
+            <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+              {slot?.time_slot_id || slot?.timeslot_id || 'N/A'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Product Details */}
+      {selectedProducts.map(product => {
+        const config = configs[product.item_id] || {};
+        const enabledModels = Object.entries(config).filter(([, c]) => c.enabled);
+        return (
+          <div key={product.item_id} style={{
+            border: '1px solid #e5e7eb', borderRadius: 10, padding: '12px 16px', marginBottom: 10,
+          }}>
+            <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a', marginBottom: 8 }}>
+              {product.item_name}
+            </div>
+            {enabledModels.map(([modelId, c]) => {
+              const disc = c.original_price > 0 ? Math.round((1 - c.price / c.original_price) * 100) : 0;
+              return (
+                <div key={modelId} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '6px 0', borderBottom: '1px solid #f1f5f9', fontSize: '0.8rem',
+                }}>
+                  <span style={{ color: '#475569', fontWeight: 600 }}>{c.model_name}</span>
+                  <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                    <span style={{ color: '#94a3b8', textDecoration: 'line-through' }}>{fmtVnd(c.original_price)}</span>
+                    <span style={{ color: '#ea580c', fontWeight: 700 }}>{fmtVnd(c.price)}</span>
+                    <span style={BADGE('#16a34a', '#f0fdf4')}>-{disc}%</span>
+                    <span style={{ color: '#64748b' }}>x{c.stock}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: 12, marginTop: 24, justifyContent: 'flex-end' }}>
+        <button style={BTN_SECONDARY} onClick={onBack}>← Quay lai</button>
+        <button
+          style={{ ...BTN_PRIMARY, padding: '12px 32px', fontSize: '0.92rem' }}
+          onClick={onSubmit}
+        >
+          ⚡ Tao Flash Sale
+        </button>
+      </div>
+    </div>
+  );
+}

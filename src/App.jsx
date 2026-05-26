@@ -26,6 +26,7 @@ import TikTokOrdersTab from './components/TikTokOrdersTab';
 import CostingTab from './components/CostingTab';
 import CrmTab from './components/CrmTab';
 import ShopAnalyticsTab from './components/ShopAnalyticsTab';
+import FlashSaleTab from './components/FlashSaleTab';
 import PublicLandingPage from './components/PublicLandingPage';
 
 const SESSION_KEY = 'sk_session';
@@ -214,6 +215,7 @@ function AppMain({ user, onLogout, allowedViews }) {
             {[
               { key: 'ecom', label: '🛍️ Ecom', emoji: '🛍️', items: [
                 { view: 'shop_analytics',    icon: '📊', name: 'Dashboard Ecom' },
+                { view: 'flash_sale',        icon: '⚡', name: 'Flash Sale' },
                 { view: 'listed_price',      icon: '🏷️', name: 'Bảng giá niêm yết' },
                 { view: 'costing',           icon: '💰', name: 'Giá Cost' },
                 { view: 'camp_registration', icon: '🎪', name: 'Đăng Kí Camp' },
@@ -360,6 +362,7 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'task_notes' && <TaskNoteTab />}
           {currentView === 'crm' && <CrmTab />}
           {currentView === 'shop_analytics' && <ShopAnalyticsTab />}
+          {currentView === 'flash_sale' && <FlashSaleTab />}
 
           {/* BookingPerformanceTab luôn mounted, chỉ ẩn/hiện bằng display
               → state và data cache không mất khi đổi tab */}
