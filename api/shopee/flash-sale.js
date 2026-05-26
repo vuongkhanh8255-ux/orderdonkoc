@@ -304,34 +304,19 @@ async function handleAddItems(supabase, shopId, body) {
 async function handleList(supabase, shopId) {
   const creds = await getCredentials(supabase, shopId, 'marketing');
 
-  // Try correct endpoint name: get_shop_flash_sale_list
-  let result = await shopeeGet(
+  // Correct params: type (0=all,1=upcoming,2=ongoing,3=expired), offset, limit
+  const result = await shopeeGet(
     creds.partnerKey, creds.partnerId,
     '/api/v2/shop_flash_sale/get_shop_flash_sale_list',
     creds.accessToken, creds.shopId,
-    { page_no: 1, page_size: 20 },
+    { type: 0, offset: 0, limit: 50 },
   );
 
-  // Fallback: try alternate endpoint names
-  if (result.error === 'error_not_found') {
-    result = await shopeeGet(
-      creds.partnerKey, creds.partnerId,
-      '/api/v2/shop_flash_sale/get_flash_sale_list',
-      creds.accessToken, creds.shopId,
-      { page_no: 1, page_size: 20 },
-    );
-  }
-  if (result.error === 'error_not_found') {
-    result = await shopeeGet(
-      creds.partnerKey, creds.partnerId,
-      '/api/v2/shop_flash_sale/get_flash_sale',
-      creds.accessToken, creds.shopId,
-      { page_no: 1, page_size: 20 },
-    );
-  }
+  console.log('[FS List] result:', JSON.stringify(result).slice(0, 500));
 
-  // If still error_not_found or error_param, return empty list (no flash sales exist)
-  if (result.error === 'error_not_found' || result.error === 'error_param') {
+  // If param error or no flash sales, return empty list
+  if (result.error === 'error_not_found' || result.error === 'error_param'
+      || result.error === 'shop_flash_sale_param_error') {
     return { ok: true, data: { flash_sale_list: [] } };
   }
 
