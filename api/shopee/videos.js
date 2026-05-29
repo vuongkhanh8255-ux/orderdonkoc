@@ -4,8 +4,6 @@ import { createClient } from '@supabase/supabase-js';
 const HOST = 'https://partner.shopeemobile.com';
 
 const APP = { id: 2035173, envKey: 'SHOPEE_VIDEO_PARTNER_KEY' };
-// Fallback to livestream app if video app doesn't work
-const APP_LIVE = { id: 2035172, envKey: 'SHOPEE_LIVESTREAM_PARTNER_KEY' };
 
 /* ── Helpers ─────────────────────────────────────────────────────── */
 function makeSign(partnerKey, partnerId, path, ts, accessToken = '', shopId = 0) {
@@ -99,62 +97,32 @@ export default async function handler(req, res) {
     const partnerKey = process.env[APP.envKey]?.trim();
     if (!partnerKey) return res.status(500).json({ error: `${APP.envKey} not configured` });
 
-    // Fetch videos from all shops in parallel
+    // Fetch posted videos from all shops in parallel.
+    // Endpoint: GET /api/v2/video/get_video_list
+    // Required params: page_no, page_size, list_type (1 = draft, 2 = posted)
     const results = await Promise.all(tokens.map(async (tk) => {
       try {
         const refreshed = await refreshIfNeeded(supabase, tk, APP);
 
-        // Try media_space first
-        const data = await shopeeGet(partnerKey, APP.id, '/api/v2/media_space/get_media_space_list',
-          refreshed.access_token, refreshed.shop_id, { page_no: 1, page_size: pageSize, file_type: 'video' });
-        console.log(`[video] shop=${tk.shop_id} media_space:`, JSON.stringify(data).slice(0, 500));
+        const data = await shopeeGet(partnerKey, APP.id, '/api/v2/video/get_video_list',
+          refreshed.access_token, refreshed.shop_id,
+          { page_no: 1, page_size: pageSize, list_type: 2 });
 
-        // If media_space fails, try get_video_list
-        if (!data.response || data.error) {
-          const data2 = await shopeeGet(partnerKey, APP.id, '/api/v2/video/get_video_list',
-            refreshed.access_token, refreshed.shop_id, { page_no: 1, page_size: pageSize });
-          console.log(`[video] shop=${tk.shop_id} video_list:`, JSON.stringify(data2).slice(0, 500));
-
-          // Also try with livestream app as fallback
-          const liveKey = process.env[APP_LIVE.envKey]?.trim();
-          let data3 = null;
-          if (liveKey) {
-            const liveRefreshed = await refreshIfNeeded(supabase,
-              { ...tk, app_type: 'livestream' }, APP_LIVE).catch(() => null);
-            if (liveRefreshed) {
-              // Try loading livestream token separately
-              const { data: liveTk } = await supabase.from('shopee_tokens').select('*')
-                .eq('shop_id', tk.shop_id).eq('app_type', 'livestream').maybeSingle();
-              if (liveTk) {
-                const lr = await refreshIfNeeded(supabase, liveTk, APP_LIVE).catch(() => null);
-                if (lr) {
-                  data3 = await shopeeGet(liveKey, APP_LIVE.id, '/api/v2/media_space/get_media_space_list',
-                    lr.access_token, lr.shop_id, { page_no: 1, page_size: pageSize, file_type: 'video' });
-                  console.log(`[video] shop=${tk.shop_id} livestream_app_media:`, JSON.stringify(data3).slice(0, 500));
-                }
-              }
-            }
-          }
-
-          const videos3 = data3?.response?.file_list || [];
-          const videos2 = data2.response?.video_list || data2.response?.file_list || [];
-          const allVids = videos3.length > 0 ? videos3 : videos2;
+        if (data.error) {
           return {
             shop_id: tk.shop_id,
             shop_name: tk.shop_name || tk.shop_id,
-            videos: allVids,
-            total: allVids.length,
-            source: videos3.length > 0 ? 'livestream_media_space' : 'video_list',
-            _debug: { media_space: data.error || data.msg, video_list: data2.error || data2.msg, livestream: data3?.error || data3?.msg },
+            videos: [], total: 0,
+            error: `${data.error}: ${data.message || ''}`.trim(),
           };
         }
 
+        const list = data.response?.list || [];
         return {
           shop_id: tk.shop_id,
           shop_name: tk.shop_name || tk.shop_id,
-          videos: data.response?.file_list || [],
-          total: data.response?.total || 0,
-          source: 'media_space',
+          videos: list,
+          total: data.response?.total_count ?? list.length,
         };
       } catch (err) {
         return { shop_id: tk.shop_id, shop_name: tk.shop_name || tk.shop_id, videos: [], total: 0, error: err.message };

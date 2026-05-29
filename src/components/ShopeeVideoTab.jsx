@@ -12,13 +12,15 @@ const SHOPS = {
 function fmtDate(ts) {
   if (!ts) return '—';
   const d = typeof ts === 'number' ? new Date(ts * 1000) : new Date(ts);
+  if (isNaN(d.getTime())) return '—';
   return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
-function fmtDuration(sec) {
-  if (!sec) return '—';
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return m > 0 ? `${m}p${s > 0 ? s + 's' : ''}` : `${s}s`;
+function fmtDuration(ms) {
+  if (!ms) return '—';
+  const totalSec = Math.round(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return m > 0 ? `${m}p${s > 0 ? ` ${s}s` : ''}` : `${s}s`;
 }
 function fmtNum(n) {
   return (n || 0).toLocaleString('vi-VN');
@@ -28,22 +30,14 @@ function truncate(s, max) {
   return s.length > max ? s.slice(0, max) + '…' : s;
 }
 
-const STATUS_MAP = {
-  NORMAL:       { label: 'Hoạt động', color: '#22c55e', bg: '#f0fdf4' },
-  TRANSCODING:  { label: 'Đang xử lý', color: '#eab308', bg: '#fefce8' },
-  FAILED:       { label: 'Lỗi', color: '#ef4444', bg: '#fef2f2' },
-  DELETED:      { label: 'Đã xóa', color: '#94a3b8', bg: '#f8fafc' },
-  REVIEWING:    { label: 'Đang duyệt', color: '#3b82f6', bg: '#eff6ff' },
-};
-
 export default function ShopeeVideoTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [shopData, setShopData] = useState([]);
   const [hasFetched, setHasFetched] = useState(false);
   const [shopFilter, setShopFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
   const [searchText, setSearchText] = useState('');
+  const [sortBy, setSortBy] = useState('recent');
 
   const fetchVideos = useCallback(async () => {
     setLoading(true);
@@ -71,7 +65,6 @@ export default function ShopeeVideoTab() {
           ...v,
           shop_id: shop.shop_id,
           shop_name: shop.shop_name || SHOPS[shop.shop_id] || shop.shop_id,
-          _shopError: shop.error,
         });
       }
     }
@@ -82,36 +75,40 @@ export default function ShopeeVideoTab() {
   const stats = useMemo(() => {
     const totalShops = shopData.length;
     const totalVideos = allVideos.length;
-    const byStatus = {};
-    for (const v of allVideos) {
-      const st = (v.file_status || v.status || 'UNKNOWN').toUpperCase();
-      byStatus[st] = (byStatus[st] || 0) + 1;
-    }
+    const totalViews = allVideos.reduce((s, v) => s + (v.views || 0), 0);
+    const totalLikes = allVideos.reduce((s, v) => s + (v.likes || 0), 0);
+    const totalComments = allVideos.reduce((s, v) => s + (v.comments || 0), 0);
     const shopErrors = shopData.filter(s => s.error).length;
-    return { totalShops, totalVideos, byStatus, shopErrors };
+    return { totalShops, totalVideos, totalViews, totalLikes, totalComments, shopErrors };
   }, [shopData, allVideos]);
 
-  // Filtered
+  // Filtered + sorted
   const filtered = useMemo(() => {
     let result = [...allVideos];
     if (shopFilter !== 'all') result = result.filter(v => v.shop_id === shopFilter);
-    if (statusFilter !== 'all') {
-      result = result.filter(v => (v.file_status || v.status || '').toUpperCase() === statusFilter);
-    }
     if (searchText) {
       const q = searchText.toLowerCase();
       result = result.filter(v =>
-        (v.file_name || v.video_id || '').toString().toLowerCase().includes(q) ||
+        (v.caption || '').toLowerCase().includes(q) ||
         (v.shop_name || '').toLowerCase().includes(q)
       );
     }
+    if (sortBy === 'views') result.sort((a, b) => (b.views || 0) - (a.views || 0));
+    else if (sortBy === 'likes') result.sort((a, b) => (b.likes || 0) - (a.likes || 0));
+    else result.sort((a, b) => (b.post_time || 0) - (a.post_time || 0));
     return result;
-  }, [allVideos, shopFilter, statusFilter, searchText]);
+  }, [allVideos, shopFilter, searchText, sortBy]);
 
   // Styles
   const card = { background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', padding: '20px 24px', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' };
   const thStyle = { padding: '10px 12px', fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '2px solid #e5e7eb', textAlign: 'left', background: '#f8fafc' };
   const tdStyle = { padding: '10px 12px', fontSize: '0.82rem', color: '#0f172a', borderBottom: '1px solid #f1f5f9', verticalAlign: 'middle' };
+  const statCard = (label, value) => (
+    <div style={card}>
+      <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#0f172a', marginTop: 4 }}>{value}</div>
+    </div>
+  );
 
   return (
     <div style={{ fontFamily: "'Outfit', sans-serif", maxWidth: 1400, margin: '0 auto', padding: '0 24px 40px' }}>
@@ -120,7 +117,7 @@ export default function ShopeeVideoTab() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <div>
             <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 900, color: '#0f172a' }}>🎬 Shopee Video</h2>
-            <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#64748b' }}>Danh sách video từ tất cả shop Shopee</p>
+            <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#64748b' }}>Video đã đăng từ tất cả shop Shopee</p>
           </div>
           <button onClick={fetchVideos} disabled={loading}
             style={{
@@ -163,40 +160,13 @@ export default function ShopeeVideoTab() {
       {hasFetched && (
         <>
           {/* ── STATS ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12, marginBottom: 20 }}>
-            <div style={card}>
-              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Tổng Video</div>
-              <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#0f172a', marginTop: 4 }}>{fmtNum(stats.totalVideos)}</div>
-            </div>
-            <div style={card}>
-              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Shop kết nối</div>
-              <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#0f172a', marginTop: 4 }}>{stats.totalShops - stats.shopErrors}/{stats.totalShops}</div>
-            </div>
-            {Object.entries(stats.byStatus).map(([st, count]) => {
-              const info = STATUS_MAP[st] || { label: st, color: '#64748b', bg: '#f8fafc' };
-              return (
-                <div key={st} style={{ ...card, background: info.bg, cursor: 'pointer', border: statusFilter === st ? `2px solid ${info.color}` : '1px solid #e5e7eb' }}
-                  onClick={() => setStatusFilter(statusFilter === st ? 'all' : st)}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: info.color, textTransform: 'uppercase' }}>{info.label}</div>
-                  <div style={{ fontSize: '1.6rem', fontWeight: 900, color: info.color, marginTop: 4 }}>{fmtNum(count)}</div>
-                </div>
-              );
-            })}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12, marginBottom: 20 }}>
+            {statCard('Tổng Video', fmtNum(stats.totalVideos))}
+            {statCard('Shop kết nối', `${stats.totalShops - stats.shopErrors}/${stats.totalShops}`)}
+            {statCard('Tổng lượt xem', fmtNum(stats.totalViews))}
+            {statCard('Tổng lượt thích', fmtNum(stats.totalLikes))}
+            {statCard('Tổng bình luận', fmtNum(stats.totalComments))}
           </div>
-
-          {/* ── DEBUG INFO ── */}
-          {shopData.some(s => s._debug || s.source) && (
-            <div style={{ ...card, marginBottom: 20, background: '#f8fafc', borderColor: '#e2e8f0' }}>
-              <h4 style={{ margin: '0 0 8px', fontSize: '0.82rem', fontWeight: 800, color: '#475569' }}>🔍 API Debug</h4>
-              {shopData.map(s => (
-                <div key={s.shop_id} style={{ fontSize: '0.72rem', color: '#64748b', marginBottom: 4, fontFamily: 'monospace' }}>
-                  <b>{s.shop_name}</b>: source={s.source} | total={s.total} | videos={s.videos?.length}
-                  {s._debug && ` | debug=${JSON.stringify(s._debug)}`}
-                  {s.error && ` | error=${s.error}`}
-                </div>
-              ))}
-            </div>
-          )}
 
           {/* ── SHOP ERRORS ── */}
           {shopData.filter(s => s.error).length > 0 && (
@@ -242,7 +212,7 @@ export default function ShopeeVideoTab() {
 
           {/* ── FILTERS ── */}
           <div style={{ ...card, marginBottom: 20, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-            <input type="text" placeholder="🔍 Tìm theo tên file..." value={searchText} onChange={e => setSearchText(e.target.value)}
+            <input type="text" placeholder="🔍 Tìm theo nội dung..." value={searchText} onChange={e => setSearchText(e.target.value)}
               style={{ flex: '1 1 200px', padding: '8px 14px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.82rem', fontFamily: 'inherit', outline: 'none' }} />
             <select value={shopFilter} onChange={e => setShopFilter(e.target.value)}
               style={{ padding: '8px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.82rem', fontFamily: 'inherit', cursor: 'pointer' }}>
@@ -251,12 +221,11 @@ export default function ShopeeVideoTab() {
                 <option key={s.shop_id} value={s.shop_id}>{s.shop_name}</option>
               ))}
             </select>
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)}
               style={{ padding: '8px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.82rem', fontFamily: 'inherit', cursor: 'pointer' }}>
-              <option value="all">Trạng thái: Tất cả</option>
-              {Object.entries(STATUS_MAP).map(([k, v]) => (
-                <option key={k} value={k}>{v.label}</option>
-              ))}
+              <option value="recent">Mới nhất</option>
+              <option value="views">Lượt xem cao</option>
+              <option value="likes">Lượt thích cao</option>
             </select>
             <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600, marginLeft: 'auto' }}>
               {fmtNum(filtered.length)} video
@@ -269,57 +238,64 @@ export default function ShopeeVideoTab() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
-                    <th style={{ ...thStyle, width: 60, textAlign: 'center' }}>#</th>
+                    <th style={{ ...thStyle, width: 50, textAlign: 'center' }}>#</th>
                     <th style={{ ...thStyle, width: 80 }}>Preview</th>
-                    <th style={{ ...thStyle, minWidth: 200 }}>Tên file</th>
-                    <th style={{ ...thStyle, width: 140 }}>Shop</th>
-                    <th style={{ ...thStyle, width: 80, textAlign: 'center' }}>Thời lượng</th>
-                    <th style={{ ...thStyle, width: 100, textAlign: 'center' }}>Trạng thái</th>
-                    <th style={{ ...thStyle, width: 100, textAlign: 'center' }}>Ngày tạo</th>
+                    <th style={{ ...thStyle, minWidth: 240 }}>Nội dung</th>
+                    <th style={{ ...thStyle, width: 130 }}>Shop</th>
+                    <th style={{ ...thStyle, width: 80, textAlign: 'center' }}>👁 Xem</th>
+                    <th style={{ ...thStyle, width: 80, textAlign: 'center' }}>❤️ Thích</th>
+                    <th style={{ ...thStyle, width: 80, textAlign: 'center' }}>💬 BL</th>
+                    <th style={{ ...thStyle, width: 90, textAlign: 'center' }}>Thời lượng</th>
+                    <th style={{ ...thStyle, width: 100, textAlign: 'center' }}>Ngày đăng</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={7} style={{ ...tdStyle, textAlign: 'center', padding: 40, color: '#94a3b8', fontStyle: 'italic' }}>
+                      <td colSpan={9} style={{ ...tdStyle, textAlign: 'center', padding: 40, color: '#94a3b8', fontStyle: 'italic' }}>
                         {allVideos.length === 0 ? 'Không có video nào' : 'Không tìm thấy video phù hợp'}
                       </td>
                     </tr>
                   ) : filtered.map((v, i) => {
-                    const st = (v.file_status || v.status || 'UNKNOWN').toUpperCase();
-                    const info = STATUS_MAP[st] || { label: st, color: '#64748b', bg: '#f8fafc' };
-                    const thumb = v.thumbnail_url || v.cover_url || v.url || '';
-                    const fileName = v.file_name || v.video_id || `Video #${i + 1}`;
-                    const duration = v.duration || v.file_duration || 0;
-                    const createdAt = v.create_time || v.upload_time || v.created_at || '';
+                    const thumb = v.cover_image_url || '';
+                    const caption = v.caption || `Video #${i + 1}`;
+                    const link = v.video_url || '';
+                    const id = v.post_id || v.video_upload_id || i;
                     return (
-                      <tr key={v.file_id || v.video_id || i}
+                      <tr key={id}
                         style={{ transition: 'background 0.12s' }}
                         onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                         <td style={{ ...tdStyle, textAlign: 'center', fontSize: '0.76rem', color: '#94a3b8' }}>{i + 1}</td>
                         <td style={tdStyle}>
                           {thumb ? (
-                            <img src={thumb} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6, border: '1px solid #e5e7eb' }}
-                              onError={e => { e.target.style.display = 'none'; }} />
+                            <a href={link || thumb} target="_blank" rel="noopener noreferrer">
+                              <img src={thumb} alt="" style={{ width: 48, height: 64, objectFit: 'cover', borderRadius: 6, border: '1px solid #e5e7eb', display: 'block' }}
+                                onError={e => { e.target.style.display = 'none'; }} />
+                            </a>
                           ) : (
-                            <div style={{ width: 56, height: 56, borderRadius: 6, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem' }}>🎬</div>
+                            <div style={{ width: 48, height: 64, borderRadius: 6, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem' }}>🎬</div>
                           )}
                         </td>
                         <td style={tdStyle}>
-                          <div style={{ fontWeight: 600, fontSize: '0.82rem', lineHeight: 1.3 }} title={fileName}>
-                            {truncate(fileName, 50)}
-                          </div>
-                          {v.file_id && <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: 2 }}>ID: {v.file_id}</div>}
+                          {link ? (
+                            <a href={link} target="_blank" rel="noopener noreferrer"
+                              style={{ fontWeight: 600, fontSize: '0.82rem', lineHeight: 1.3, color: '#0f172a', textDecoration: 'none' }}
+                              title={caption}>
+                              {truncate(caption, 70)}
+                            </a>
+                          ) : (
+                            <div style={{ fontWeight: 600, fontSize: '0.82rem', lineHeight: 1.3 }} title={caption}>
+                              {truncate(caption, 70)}
+                            </div>
+                          )}
                         </td>
                         <td style={{ ...tdStyle, fontSize: '0.78rem', fontWeight: 600 }}>{v.shop_name}</td>
-                        <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: '0.82rem' }}>{fmtDuration(duration)}</td>
-                        <td style={{ ...tdStyle, textAlign: 'center' }}>
-                          <span style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: 6, fontWeight: 700, background: info.bg, color: info.color, border: `1px solid ${info.color}30` }}>
-                            {info.label}
-                          </span>
-                        </td>
-                        <td style={{ ...tdStyle, textAlign: 'center', fontSize: '0.78rem', color: '#64748b' }}>{fmtDate(createdAt)}</td>
+                        <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700, fontSize: '0.82rem' }}>{fmtNum(v.views)}</td>
+                        <td style={{ ...tdStyle, textAlign: 'center', fontSize: '0.82rem', color: '#64748b' }}>{fmtNum(v.likes)}</td>
+                        <td style={{ ...tdStyle, textAlign: 'center', fontSize: '0.82rem', color: '#64748b' }}>{fmtNum(v.comments)}</td>
+                        <td style={{ ...tdStyle, textAlign: 'center', fontSize: '0.82rem' }}>{fmtDuration(v.duration)}</td>
+                        <td style={{ ...tdStyle, textAlign: 'center', fontSize: '0.78rem', color: '#64748b' }}>{fmtDate(v.post_time)}</td>
                       </tr>
                     );
                   })}
