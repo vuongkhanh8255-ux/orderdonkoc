@@ -29,6 +29,7 @@ import ShopAnalyticsTab from './components/ShopAnalyticsTab';
 import FlashSaleTab from './components/FlashSaleTab';
 import TopPicksTab from './components/TopPicksTab';
 import ReviewsTab from './components/ReviewsTab';
+import ShopeeVideoTab from './components/ShopeeVideoTab';
 import PublicLandingPage from './components/PublicLandingPage';
 
 const SESSION_KEY = 'sk_session';
@@ -76,7 +77,7 @@ function App() {
 function AppMain({ user, onLogout, allowedViews }) {
   const defaultView = allowedViews[0] || 'dashboard';
   const [currentView, setCurrentView]   = useState(defaultView);
-  const [openGroups, setOpenGroups]     = useState({ shopee: true, ecom: true, reviews: true, crm: true, cskh: true, livestream: true, booking: true, archive: true, camp: true, tools: true });
+  const [openGroups, setOpenGroups]     = useState({ shopee: true, ecom: true, crm: true, cskh: true, livestream: true, booking: true, archive: true, camp: true, tools: true });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarHovered,   setSidebarHovered]   = useState(false);
   const [pwModalOpen, setPwModalOpen]   = useState(false);
@@ -227,14 +228,12 @@ function AppMain({ user, onLogout, allowedViews }) {
                 { view: 'shopee_livestream', icon: '📺', name: 'Livestream' },
                 { view: 'shopee_video',      icon: '🎬', name: 'Video' },
               ]},
-              { key: 'reviews', label: '⭐ Đánh giá', emoji: '⭐', items: [
-                { view: 'reviews', icon: '⭐', name: 'Đánh giá sàn' },
-              ]},
               { key: 'crm', label: '👥 CRM', emoji: '👥', items: [
                 { view: 'crm', icon: '👥', name: 'CRM' },
               ]},
               { key: 'cskh', label: '📋 CSKH', emoji: '📋', items: [
                 { view: 'cskh', icon: '📋', name: 'CSKH' },
+                { view: 'reviews', icon: '⭐', name: 'Đánh giá sàn' },
               ]},
               { key: 'livestream', label: '🎬 Livestream', emoji: '🎬', items: [
                 { view: 'livestream', icon: '🎬', name: 'Livestream' },
@@ -378,9 +377,7 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'shopee_livestream' && (
             <ComingSoonPlaceholder icon="📺" title="Shopee Livestream" description="Quản lý phiên livestream, theo dõi GMV, đơn hàng, người xem trực tiếp" />
           )}
-          {currentView === 'shopee_video' && (
-            <ComingSoonPlaceholder icon="🎬" title="Shopee Video" description="Đăng video, theo dõi hiệu suất, phân tích khán giả" />
-          )}
+          {currentView === 'shopee_video' && <ShopeeVideoTab />}
 
           {/* BookingPerformanceTab luôn mounted, chỉ ẩn/hiện bằng display
               → state và data cache không mất khi đổi tab */}
