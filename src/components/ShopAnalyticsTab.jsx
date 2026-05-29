@@ -191,10 +191,11 @@ const ShopAnalyticsTab = () => {
         .not('access_token', 'is', null).not('shop_cipher', 'is', null);
       setConnections(orders || []);
     }
-    // Shopee connections
+    // Shopee connections (deduplicate by shop_id)
     const { data: spShops } = await supabase
       .from('shopee_tokens').select('shop_id, shop_name').eq('status', 'active');
-    setShopeeShops(spShops || []);
+    const seen = new Set();
+    setShopeeShops((spShops || []).filter(s => { if (seen.has(s.shop_id)) return false; seen.add(s.shop_id); return true; }));
   }, []);
 
   // ── Fetch analytics (TikTok + Shopee) ──────────────────────────────────
