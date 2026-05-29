@@ -39,7 +39,7 @@
     "api/erp/reviews.js": {
       "maxDuration": 30
     },
-    "api/shopee/videos.js": {
+    "api/shopee/ads.js": {
       "maxDuration": 30
     }
   },

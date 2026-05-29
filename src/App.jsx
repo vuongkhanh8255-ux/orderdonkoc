@@ -29,7 +29,7 @@ import ShopAnalyticsTab from './components/ShopAnalyticsTab';
 import FlashSaleTab from './components/FlashSaleTab';
 import TopPicksTab from './components/TopPicksTab';
 import ReviewsTab from './components/ReviewsTab';
-import ShopeeVideoTab from './components/ShopeeVideoTab';
+import ShopeeAdsTab from './components/ShopeeAdsTab';
 import PublicLandingPage from './components/PublicLandingPage';
 
 const SESSION_KEY = 'sk_session';
@@ -226,7 +226,7 @@ function AppMain({ user, onLogout, allowedViews }) {
                 { view: 'flash_sale',        icon: '⚡', name: 'Tạo FS' },
                 { view: 'top_picks',         icon: '🚀', name: 'Đẩy SP' },
                 { view: 'shopee_livestream', icon: '📺', name: 'Livestream' },
-                { view: 'shopee_video',      icon: '🎬', name: 'Video' },
+                { view: 'shopee_ads',        icon: '📣', name: 'Quảng cáo' },
               ]},
               { key: 'crm', label: '👥 CRM', emoji: '👥', items: [
                 { view: 'crm', icon: '👥', name: 'CRM' },
@@ -377,7 +377,7 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'shopee_livestream' && (
             <ComingSoonPlaceholder icon="📺" title="Shopee Livestream" description="Quản lý phiên livestream, theo dõi GMV, đơn hàng, người xem trực tiếp" />
           )}
-          {currentView === 'shopee_video' && <ShopeeVideoTab />}
+          {currentView === 'shopee_ads' && <ShopeeAdsTab />}
 
           {/* BookingPerformanceTab luôn mounted, chỉ ẩn/hiện bằng display
               → state và data cache không mất khi đổi tab */}
