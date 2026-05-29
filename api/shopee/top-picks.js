@@ -462,6 +462,61 @@ async function handleBoostLog(supabase, shopId, limit = 20) {
   return { ok: true, data: data || [] };
 }
 
+/** 10. list_shops — shops connected for boost (active dashboard token), for the shop selector */
+async function handleListShops(supabase) {
+  const { data, error } = await supabase
+    .from('shopee_tokens')
+    .select('shop_id, shop_name')
+    .eq('app_type', 'dashboard')
+    .eq('status', 'active')
+    .order('shop_id');
+  if (error) return { ok: false, error: error.message };
+  const seen = new Set();
+  const shops = [];
+  for (const r of (data || [])) {
+    if (seen.has(r.shop_id)) continue;
+    seen.add(r.shop_id);
+    shops.push({ shop_id: r.shop_id, shop_name: r.shop_name || `Shop ${r.shop_id}` });
+  }
+  return { ok: true, data: shops };
+}
+
+/** 11. auto_boost_all — run recurring boost for EVERY enabled schedule (multi-shop cron) */
+async function runAutoBoostAll(supabase, { source = 'cron', force = false } = {}) {
+  const { data: schedules, error } = await supabase
+    .from('shopee_boost_schedule')
+    .select('shop_id')
+    .eq('enabled', true);
+  if (error) return { ok: false, error: error.message };
+
+  const list = schedules || [];
+  const results = [];
+  for (const s of list) {
+    try {
+      const r = await runAutoBoost(supabase, s.shop_id, { source, force });
+      results.push({ shop_id: s.shop_id, ...r });
+    } catch (e) {
+      results.push({ shop_id: s.shop_id, ok: false, error: e.message });
+    }
+  }
+  return {
+    ok: true,
+    total: list.length,
+    ran_count: results.filter(r => r.ran).length,
+    results,
+  };
+}
+
+/** Parse cron auth from request: source + whether `force` (skip the timer) is allowed */
+function parseCronAuth(req, reqUrl) {
+  const secret = (process.env.BOOST_CRON_SECRET || '').trim();
+  const providedSecret = (req.headers['x-boost-secret'] || reqUrl.searchParams.get('secret') || '').toString().trim();
+  const source = reqUrl.searchParams.get('source') || 'cron';
+  const hasValidSecret = !!secret && providedSecret === secret;
+  const force = reqUrl.searchParams.get('force') === '1' && (hasValidSecret || source === 'frontend');
+  return { source, force };
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Main handler
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -479,7 +534,7 @@ export default async function handler(req, res) {
     return res.status(400).json({
       ok: false,
       error: 'Missing ?action= parameter',
-      available: ['list', 'create', 'update', 'delete', 'boost', 'boosted_list', 'schedule_get', 'schedule_save', 'auto_boost', 'boost_log'],
+      available: ['list', 'create', 'update', 'delete', 'boost', 'boosted_list', 'list_shops', 'schedule_get', 'schedule_save', 'auto_boost', 'auto_boost_all', 'boost_log'],
     });
   }
 
@@ -524,23 +579,28 @@ export default async function handler(req, res) {
       case 'boost_log':
         result = await handleBoostLog(supabase, shopId, reqUrl.searchParams.get('limit'));
         break;
+      case 'list_shops':
+        result = await handleListShops(supabase);
+        break;
       case 'auto_boost': {
-        // Recurring boost trigger. Used by GitHub Actions cron (24/7) and the frontend countdown.
+        // Recurring boost trigger for ONE shop. Used by the frontend countdown / "run now".
         // Due-gated so it never over-boosts. `force` (skip the timer) is honored only with a valid
-        // secret or when explicitly invoked from the frontend "test now" button.
-        const secret = (process.env.BOOST_CRON_SECRET || '').trim();
-        const providedSecret = (req.headers['x-boost-secret'] || reqUrl.searchParams.get('secret') || '').toString().trim();
-        const source = reqUrl.searchParams.get('source') || 'cron';
-        const hasValidSecret = !!secret && providedSecret === secret;
-        const force = reqUrl.searchParams.get('force') === '1' && (hasValidSecret || source === 'frontend');
+        // secret or when explicitly invoked from the frontend.
+        const { source, force } = parseCronAuth(req, reqUrl);
         result = await runAutoBoost(supabase, shopId, { source, force });
+        break;
+      }
+      case 'auto_boost_all': {
+        // Recurring boost for ALL enabled shops at once. Used by the GitHub Actions cron (24/7).
+        const { source, force } = parseCronAuth(req, reqUrl);
+        result = await runAutoBoostAll(supabase, { source, force });
         break;
       }
       default:
         return res.status(200).json({
           ok: false,
           error: `Unknown action: ${action}`,
-          available: ['list', 'create', 'update', 'delete', 'boost', 'boosted_list', 'schedule_get', 'schedule_save', 'auto_boost', 'boost_log'],
+          available: ['list', 'create', 'update', 'delete', 'boost', 'boosted_list', 'list_shops', 'schedule_get', 'schedule_save', 'auto_boost', 'auto_boost_all', 'boost_log'],
         });
     }
 

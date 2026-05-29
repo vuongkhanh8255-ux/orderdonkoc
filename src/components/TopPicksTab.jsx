@@ -45,9 +45,15 @@ const fmtCountdown = (ms) => {
   return `${pad(h)}:${pad(m)}:${pad(s)}`;
 };
 
+// ── Active shop ────────────────────────────────────────────────────────────
+// Mutable module-level value so the stateless API callers below always target the
+// shop the user currently has selected. TopPicksTab updates it on every shop switch.
+let ACTIVE_SHOP_ID = DEFAULT_SHOP_ID;
+function setActiveShopId(id) { ACTIVE_SHOP_ID = id ? String(id) : DEFAULT_SHOP_ID; }
+
 // ── API caller ───────────────────────────────────────────────────────────────
 async function apiCall(action, params = {}, body = null) {
-  const qs = new URLSearchParams({ action, shop_id: DEFAULT_SHOP_ID, ...params });
+  const qs = new URLSearchParams({ action, shop_id: ACTIVE_SHOP_ID, ...params });
   const url = `${API_BASE}?${qs}`;
   const opts = body
     ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
@@ -59,7 +65,7 @@ async function apiCall(action, params = {}, body = null) {
 async function loadProductsApi(offset = 0, pageSize = 50) {
   const qs = new URLSearchParams({
     action: 'products',
-    shop_id: DEFAULT_SHOP_ID,
+    shop_id: ACTIVE_SHOP_ID,
     offset: String(offset),
     page_size: String(pageSize),
   });
@@ -141,6 +147,10 @@ export default function TopPicksTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // ── Multi-shop selector ──
+  const [shops, setShops] = useState([]);
+  const [selectedShopId, setSelectedShopId] = useState(DEFAULT_SHOP_ID);
 
   // ── Product list (shared) ──
   const [products, setProducts] = useState([]);
@@ -250,14 +260,37 @@ export default function TopPicksTab() {
     } catch { /* silent */ }
   }, []);
 
-  // Initial load
+  // Load the list of authorized shops once (independent of the selected shop)
   useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiCall('list_shops');
+        if (res.ok) {
+          const list = safeArray(res.data);
+          setShops(list);
+          // If the primary shop isn't among the authorized shops, fall back to the first one
+          if (list.length && !list.some(s => String(s.shop_id) === String(DEFAULT_SHOP_ID))) {
+            setSelectedShopId(String(list[0].shop_id));
+          }
+        }
+      } catch { /* silent */ }
+    })();
+  }, []);
+
+  // Load all per-shop data on mount and whenever the selected shop changes
+  useEffect(() => {
+    setActiveShopId(selectedShopId);
+    // Reset working selections so they don't bleed across shops
+    setBoostSelected([]);
+    setScheduleItems([]);
+    setScheduleData(null);
+    autoTriggerRef.current = null;
     loadProducts(0);
     loadBoostedList();
     loadCollections();
     loadSchedule();
     loadBoostLog();
-  }, [loadProducts, loadBoostedList, loadCollections, loadSchedule, loadBoostLog]);
+  }, [selectedShopId, loadProducts, loadBoostedList, loadCollections, loadSchedule, loadBoostLog]);
 
   // ── Save schedule config ──────────────────────────────────────────────────
   const saveSchedule = async () => {
@@ -522,6 +555,24 @@ export default function TopPicksTab() {
             <span style={{ margin: '0 0 0 12px', fontSize: '0.7rem', color: '#c4b5a0', fontStyle: 'italic' }}>Built by Quốc Khánh</span>
           </p>
         </div>
+
+        {/* Shop selector */}
+        {shops.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b' }}>🏪 Shop:</span>
+            <select
+              value={selectedShopId}
+              onChange={(e) => setSelectedShopId(e.target.value)}
+              style={{ padding: '9px 14px', borderRadius: 10, border: '2px solid #fed7aa', fontSize: '0.85rem', fontWeight: 700, color: '#0f172a', background: '#fff7ed', cursor: 'pointer', fontFamily: 'inherit', outline: 'none', minWidth: 180 }}
+            >
+              {shops.map(s => (
+                <option key={s.shop_id} value={s.shop_id}>
+                  {s.shop_name || `Shop ${s.shop_id}`}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}

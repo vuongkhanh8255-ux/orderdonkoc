@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       shop_id:
-        description: 'Shop ID (mặc định 341325550)'
+        description: 'Shop ID cụ thể, hoặc "all" để đẩy tất cả shop (mặc định all)'
         required: false
-        default: '341325550'
+        default: 'all'
       force:
         description: 'Bỏ qua bộ đếm 4h, đẩy ngay? yes/no'
         required: false
@@ -24,15 +24,23 @@ jobs:
       - name: Call auto-boost endpoint
         env:
           BOOST_CRON_SECRET: ${{ secrets.BOOST_CRON_SECRET }}
-          SHOP_ID: ${{ github.event.inputs.shop_id || '341325550' }}
+          EVENT_NAME: ${{ github.event_name }}
+          SHOP_ID: ${{ github.event.inputs.shop_id || 'all' }}
           FORCE: ${{ github.event.inputs.force || 'no' }}
         run: |
           BASE="https://koc-tool.vercel.app/api/shopee/top-picks"
           FORCE_PARAM=""
           if [ "$FORCE" = "yes" ]; then FORCE_PARAM="&force=1"; fi
-          URL="${BASE}?action=auto_boost&source=cron&shop_id=${SHOP_ID}${FORCE_PARAM}"
-          echo "Calling auto-boost for shop ${SHOP_ID} (force=${FORCE})..."
-          RESPONSE=$(curl -sS --max-time 60 --retry 2 --retry-delay 5 \
+          # Scheduled runs always boost every enabled shop. Manual runs honor the shop_id input
+          # ("all" => every enabled shop, otherwise just that one).
+          if [ "$EVENT_NAME" = "schedule" ] || [ "$SHOP_ID" = "all" ]; then
+            URL="${BASE}?action=auto_boost_all&source=cron${FORCE_PARAM}"
+            echo "Calling auto_boost_all for ALL enabled shops (force=${FORCE})..."
+          else
+            URL="${BASE}?action=auto_boost&source=cron&shop_id=${SHOP_ID}${FORCE_PARAM}"
+            echo "Calling auto_boost for shop ${SHOP_ID} (force=${FORCE})..."
+          fi
+          RESPONSE=$(curl -sS --max-time 90 --retry 2 --retry-delay 5 \
             -H "x-boost-secret: ${BOOST_CRON_SECRET}" \
             "$URL")
           echo "Response: $RESPONSE"
