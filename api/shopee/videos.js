@@ -79,8 +79,14 @@ export default async function handler(req, res) {
   if (!supabase) return res.status(500).json({ error: 'Supabase not configured' });
 
   const u = new URL(req.url, `https://${req.headers.host || 'localhost'}`);
+  const action = u.searchParams.get('action') || 'list';
   const shopId = u.searchParams.get('shop_id');       // optional: filter 1 shop
   const pageSize = parseInt(u.searchParams.get('page_size') || '20');
+
+  // ── Test livestream/video API endpoints ──
+  if (action === 'test_apis') {
+    return testApis(supabase, shopId || '341325550', res);
+  }
 
   try {
     // Load all video tokens (or single shop)
@@ -130,4 +136,72 @@ export default async function handler(req, res) {
     console.error('Shopee video error:', err);
     return res.status(500).json({ error: err.message });
   }
+}
+
+/* ── Test APIs: check livestream + video endpoints ───────────── */
+async function testApis(supabase, shopId, res) {
+  const APPS = {
+    livestream: { id: 2035172, envKey: 'SHOPEE_LIVESTREAM_PARTNER_KEY', label: 'SK Livestream' },
+    video:      { id: 2035173, envKey: 'SHOPEE_VIDEO_PARTNER_KEY',     label: 'SK Video' },
+  };
+
+  const TESTS = {
+    livestream: [
+      '/api/v2/livestream/get_session_list',
+      '/api/v2/livestream/get_session_detail',
+      '/api/v2/livestream/get_session_metric',
+      '/api/v2/livestream/get_item_list',
+      '/api/v2/livestream/get_item_count',
+      '/api/v2/livestream/get_show_item',
+      '/api/v2/livestream/get_item_set_list',
+      '/api/v2/livestream/get_recent_item_list',
+      '/api/v2/livestream/get_like_item_list',
+      '/api/v2/livestream/get_latest_comment_list',
+    ],
+    video: [
+      '/api/v2/media_space/init_video_upload',
+      '/api/v2/media_space/get_video_upload_result',
+      '/api/v2/media_space/get_video_list',
+      '/api/v2/media_space/get_media_space_list',
+      '/api/v2/video/get_video_list',
+    ],
+  };
+
+  const results = {};
+
+  for (const [appName, app] of Object.entries(APPS)) {
+    const partnerKey = process.env[app.envKey]?.trim();
+    if (!partnerKey) { results[appName] = { label: app.label, error: `Missing ${app.envKey}` }; continue; }
+
+    const { data: tk } = await supabase.from('shopee_tokens').select('*')
+      .eq('shop_id', shopId).eq('app_type', appName).maybeSingle();
+    if (!tk) { results[appName] = { label: app.label, error: `No token for shop ${shopId}` }; continue; }
+
+    let token;
+    try { token = await refreshIfNeeded(supabase, tk, app); }
+    catch (e) { results[appName] = { label: app.label, error: `Refresh: ${e.message}` }; continue; }
+
+    const endpoints = [];
+    for (const path of TESTS[appName]) {
+      const ts = Math.floor(Date.now() / 1000);
+      const sign = makeSign(partnerKey, app.id, path, ts, token.access_token, Number(shopId));
+      const url = `${HOST}${path}?partner_id=${app.id}&timestamp=${ts}&sign=${sign}&access_token=${token.access_token}&shop_id=${shopId}`;
+      try {
+        const r = await fetch(url);
+        const d = await r.json();
+        const ok = d.response !== undefined && d.response !== null && !d.error;
+        endpoints.push({
+          path: path.replace('/api/v2/', ''),
+          status: ok ? '✅' : '❌',
+          error: d.error ? `${d.error}: ${d.message || ''}` : null,
+          sample: d.response ? JSON.stringify(d.response).slice(0, 200) : null,
+        });
+      } catch (e) {
+        endpoints.push({ path: path.replace('/api/v2/', ''), status: '❌', error: e.message });
+      }
+    }
+    results[appName] = { label: app.label, endpoints };
+  }
+
+  return res.json({ shop_id: shopId, results });
 }
