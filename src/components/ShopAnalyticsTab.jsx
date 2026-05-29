@@ -8,6 +8,7 @@ import {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SYNC_API = '/api/tiktok-shop/sync-analytics';
+const SHOPEE_SYNC_API = '/api/shopee/sync-orders';
 const ANALYTICS_APP_KEY = '6k2of554me0j9';
 const AUTH_URL = `https://services.tiktokshop.com/open/authorize?service_id=${ANALYTICS_APP_KEY}`;
 
@@ -254,12 +255,24 @@ const ShopAnalyticsTab = () => {
   const doSync = async (fullSync = false) => {
     setSyncing(true); setSyncResult(null);
     try {
-      const params = new URLSearchParams();
-      if (fullSync) params.set('full_sync', '1');
-      else { params.set('start_date', dateRange.start); params.set('end_date', dateRange.end); }
-      const res = await fetch(`${SYNC_API}?${params}`);
-      const json = await res.json();
-      setSyncResult(json);
+      const tiktokParams = new URLSearchParams();
+      if (fullSync) tiktokParams.set('full_sync', '1');
+      else { tiktokParams.set('start_date', dateRange.start); tiktokParams.set('end_date', dateRange.end); }
+
+      const shopeeParams = new URLSearchParams();
+      if (fullSync) shopeeParams.set('full_sync', '1');
+      else shopeeParams.set('days', '7');
+
+      const [tiktokRes, shopeeRes] = await Promise.allSettled([
+        fetch(`${SYNC_API}?${tiktokParams}`).then(r => r.json()),
+        fetch(`${SHOPEE_SYNC_API}?${shopeeParams}`).then(r => r.json()),
+      ]);
+
+      const result = {
+        tiktok: tiktokRes.status === 'fulfilled' ? tiktokRes.value : { error: tiktokRes.reason?.message },
+        shopee: shopeeRes.status === 'fulfilled' ? shopeeRes.value : { error: shopeeRes.reason?.message },
+      };
+      setSyncResult(result);
       await fetchData();
     } catch (err) { setSyncResult({ error: err.message }); }
     setSyncing(false);
@@ -516,11 +529,19 @@ const ShopAnalyticsTab = () => {
           background: syncResult.error ? '#fef2f2' : '#f0fdf4',
           border: `1px solid ${syncResult.error ? '#fecaca' : '#bbf7d0'}`,
           borderRadius: 12, padding: '10px 16px', marginBottom: 16, fontSize: '0.82rem',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
         }}>
-          <span style={{ color: syncResult.error ? '#dc2626' : '#15803d', fontWeight: 700 }}>
-            {syncResult.error ? `⚠️ Lỗi: ${syncResult.error}` : `✅ Sync thành công: ${syncResult.total_upserted || 0} bản ghi (${syncResult.elapsed_seconds || 0}s)`}
-          </span>
+          <div style={{ color: syncResult.error ? '#dc2626' : '#15803d', fontWeight: 700 }}>
+            {syncResult.error
+              ? `⚠️ Lỗi: ${syncResult.error}`
+              : <>
+                  {syncResult.tiktok && !syncResult.tiktok.error && <div>TikTok: {syncResult.tiktok.total_upserted || 0} bản ghi ({syncResult.tiktok.elapsed_seconds || 0}s)</div>}
+                  {syncResult.shopee && !syncResult.shopee.error && <div>Shopee: {syncResult.shopee.total_synced || 0} đơn ({syncResult.shopee.elapsed_seconds || 0}s)</div>}
+                  {syncResult.tiktok?.error && <div style={{ color: '#dc2626' }}>TikTok: {syncResult.tiktok.error}</div>}
+                  {syncResult.shopee?.error && <div style={{ color: '#dc2626' }}>Shopee: {syncResult.shopee.error}</div>}
+                </>
+            }
+          </div>
           <button onClick={() => setSyncResult(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '1rem', color: '#94a3b8' }}>×</button>
         </div>
       )}
@@ -830,7 +851,7 @@ const ShopAnalyticsTab = () => {
         <div style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 16, padding: '56px 20px', textAlign: 'center', marginBottom: 20 }}>
           <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>📭</div>
           <h3 style={{ margin: '0 0 8px', fontWeight: 800, color: '#374151' }}>Chưa có dữ liệu analytics</h3>
-          <p style={{ color: '#64748b', fontSize: '0.84rem', margin: '0 0 16px' }}>Bấm Full Sync để kéo dữ liệu từ TikTok Analytics API.</p>
+          <p style={{ color: '#64748b', fontSize: '0.84rem', margin: '0 0 16px' }}>Bấm Full Sync để kéo dữ liệu từ TikTok Analytics + Shopee Orders.</p>
           <button onClick={() => doSync(true)} disabled={syncing}
             style={{ padding: '12px 28px', background: '#ea580c', color: '#fff', borderRadius: 12, fontWeight: 700, border: 'none', fontSize: '0.88rem', cursor: syncing ? 'not-allowed' : 'pointer', boxShadow: '0 6px 16px rgba(234,88,12,0.25)' }}>
             {syncing ? '⏳ Đang sync...' : '📥 Full Sync từ 01/04/2026'}
