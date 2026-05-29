@@ -86,6 +86,11 @@ export default async function handler(req, res) {
     return testApis(supabase, shopId || '341325550', res);
   }
 
+  // ── Probe: discover where user_id comes from + test get_video_list variants ──
+  if (action === 'probe') {
+    return probeUser(supabase, shopId || '341325550', res);
+  }
+
   try {
     // Load all video tokens (or single shop)
     let query = supabase.from('shopee_tokens').select('*').eq('app_type', 'video');
@@ -134,6 +139,45 @@ export default async function handler(req, res) {
     console.error('Shopee video error:', err);
     return res.status(500).json({ error: err.message });
   }
+}
+
+/* ── Probe: find the user_id Shopee video API wants ──────────── */
+async function probeUser(supabase, shopId, res) {
+  const partnerKey = process.env[APP.envKey]?.trim();
+  if (!partnerKey) return res.json({ error: `${APP.envKey} not configured` });
+
+  const { data: tk } = await supabase.from('shopee_tokens').select('*')
+    .eq('shop_id', shopId).eq('app_type', 'video').maybeSingle();
+  if (!tk) return res.json({ error: `No video token for shop ${shopId}` });
+
+  let token;
+  try { token = await refreshIfNeeded(supabase, tk, APP); }
+  catch (e) { return res.json({ error: `Refresh: ${e.message}` }); }
+
+  const trunc = (o) => JSON.stringify(o).slice(0, 600);
+  const out = {};
+
+  // A) shop info — does it expose a user_id / merchant_id we can reuse?
+  out.shop_info = trunc(await shopeeGet(partnerKey, APP.id, '/api/v2/shop/get_shop_info',
+    token.access_token, shopId, {}));
+
+  // B) get_video_list with user_id = shop_id (most likely mapping)
+  out.video_userid_eq_shopid = trunc(await shopeeGet(partnerKey, APP.id, '/api/v2/video/get_video_list',
+    token.access_token, shopId, { page_no: 1, page_size: 10, list_type: 2, user_id: shopId }));
+
+  // C) candidate endpoints that may return the video account/user id
+  for (const path of [
+    '/api/v2/video/get_account_info',
+    '/api/v2/video/get_user_info',
+    '/api/v2/media_account/get_account_info',
+    '/api/v2/account_health/get_shop_performance',
+  ]) {
+    out[path.replace('/api/v2/', '')] = trunc(
+      await shopeeGet(partnerKey, APP.id, path, token.access_token, shopId, {})
+    );
+  }
+
+  return res.json({ shop_id: shopId, out });
 }
 
 /* ── Test APIs: check livestream + video endpoints ───────────── */
