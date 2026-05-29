@@ -4,6 +4,11 @@ import { createClient } from '@supabase/supabase-js';
 const HOST = 'https://partner.shopeemobile.com';
 const DEFAULT_SHOP_ID = 341325550;
 
+/* ── Recurring auto-boost config ────────────────────────────────────────── */
+const DEFAULT_INTERVAL_HOURS = 4;            // Shopee boost lasts 4h
+const BOOST_BATCH_SIZE = 5;                  // Shopee max 5 items per boost
+const DUE_GRACE_MS = 5 * 60 * 1000;          // 5-min grace so a cron firing exactly on the boundary still counts as "due"
+
 /* ── Multi-app config ───────────────────────────────────────────────────── */
 const APPS = {
   dashboard: { id: 2035068, envKey: 'SHOPEE_PARTNER_KEY' },
@@ -236,13 +241,11 @@ async function handleDelete(supabase, shopId, body) {
   return { ok: true, data: result.response };
 }
 
-/** 5. Boost items — push to top of search results (max 5 items, 4h duration) */
-async function handleBoost(supabase, shopId, body) {
-  const { item_id_list } = body || {};
-  if (!item_id_list || !Array.isArray(item_id_list) || item_id_list.length === 0) {
-    return { ok: false, error: 'Missing or empty item_id_list in request body' };
-  }
-  if (item_id_list.length > 5) {
+/** Core boost call — push up to 5 items to top of search results (4h duration). Reused by manual boost + auto-boost. */
+async function boostItems(supabase, shopId, itemIds) {
+  const ids = (Array.isArray(itemIds) ? itemIds : []).map(Number).filter(Boolean);
+  if (ids.length === 0) return { ok: false, error: 'Danh sách sản phẩm trống' };
+  if (ids.length > BOOST_BATCH_SIZE) {
     return { ok: false, error: 'Shopee chỉ cho phép đẩy tối đa 5 sản phẩm cùng lúc' };
   }
 
@@ -253,13 +256,22 @@ async function handleBoost(supabase, shopId, body) {
     creds.partnerKey, creds.partnerId,
     '/api/v2/product/boost_item',
     creds.accessToken, creds.shopId,
-    { item_id_list: item_id_list.map(Number) },
+    { item_id_list: ids },
   );
-
-  console.log('[Boost] items:', item_id_list, 'result:', JSON.stringify(result).slice(0, 500));
 
   if (result.error) return { ok: false, error: result.error, message: result.message, detail: result };
   return { ok: true, data: result.response };
+}
+
+/** 5. Boost items — push to top of search results (max 5 items, 4h duration) */
+async function handleBoost(supabase, shopId, body) {
+  const { item_id_list } = body || {};
+  if (!item_id_list || !Array.isArray(item_id_list) || item_id_list.length === 0) {
+    return { ok: false, error: 'Missing or empty item_id_list in request body' };
+  }
+  const result = await boostItems(supabase, shopId, item_id_list);
+  console.log('[Boost] items:', item_id_list, 'result:', JSON.stringify(result).slice(0, 500));
+  return result;
 }
 
 /** 6. Get currently boosted items */
@@ -280,6 +292,177 @@ async function handleBoostedList(supabase, shopId) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   Recurring auto-boost (Đẩy định kỳ)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Load the schedule config row for a shop (or null) */
+async function loadSchedule(supabase, shopId) {
+  const { data, error } = await supabase
+    .from('shopee_boost_schedule')
+    .select('*')
+    .eq('shop_id', String(shopId))
+    .maybeSingle();
+  if (error) throw new Error(`DB error loading schedule: ${error.message}`);
+  return data || null;
+}
+
+/** Compute the next scheduled run time (ISO) from last_run_at + interval */
+function computeNextRun(schedule) {
+  if (!schedule || !schedule.last_run_at) return null;
+  const interval = (schedule.interval_hours || DEFAULT_INTERVAL_HOURS) * 3600 * 1000;
+  return new Date(new Date(schedule.last_run_at).getTime() + interval).toISOString();
+}
+
+/** Select up to BOOST_BATCH_SIZE item_ids starting at rotationIndex, wrapping around the list */
+function selectBatch(itemIds, rotationIndex, batchSize = BOOST_BATCH_SIZE) {
+  const n = itemIds.length;
+  if (n === 0) return [];
+  const take = Math.min(batchSize, n);
+  const batch = [];
+  for (let i = 0; i < take; i++) batch.push(itemIds[(rotationIndex + i) % n]);
+  return batch;
+}
+
+/** 7. schedule_get — return the schedule config (with computed next_run_at) */
+async function handleScheduleGet(supabase, shopId) {
+  const schedule = await loadSchedule(supabase, shopId);
+  if (!schedule) {
+    return {
+      ok: true,
+      data: {
+        exists: false, enabled: false, item_ids: [], items_meta: [],
+        interval_hours: DEFAULT_INTERVAL_HOURS, rotation_index: 0,
+        last_run_at: null, next_run_at: null,
+      },
+    };
+  }
+  return { ok: true, data: { exists: true, ...schedule, next_run_at: computeNextRun(schedule) } };
+}
+
+/** 8. schedule_save — upsert config (enabled, item_ids, items_meta, interval_hours) */
+async function handleScheduleSave(supabase, shopId, body) {
+  const { enabled, item_ids, items_meta, interval_hours } = body || {};
+  const ids = Array.isArray(item_ids) ? item_ids.map(Number).filter(Boolean) : [];
+  const meta = Array.isArray(items_meta) ? items_meta : [];
+  const interval = Number(interval_hours) > 0 ? Number(interval_hours) : DEFAULT_INTERVAL_HOURS;
+
+  const existing = await loadSchedule(supabase, shopId);
+  const payload = {
+    shop_id: String(shopId),
+    enabled: !!enabled,
+    item_ids: ids,
+    items_meta: meta,
+    interval_hours: interval,
+    updated_at: new Date().toISOString(),
+  };
+
+  let result;
+  if (existing) {
+    // Keep rotation in range if the item list shrank
+    payload.rotation_index = (existing.rotation_index >= ids.length) ? 0 : existing.rotation_index;
+    const { data, error } = await supabase
+      .from('shopee_boost_schedule')
+      .update(payload).eq('id', existing.id).select().maybeSingle();
+    if (error) return { ok: false, error: error.message };
+    result = data;
+  } else {
+    payload.rotation_index = 0;
+    const { data, error } = await supabase
+      .from('shopee_boost_schedule')
+      .insert(payload).select().maybeSingle();
+    if (error) return { ok: false, error: error.message };
+    result = data;
+  }
+  return { ok: true, data: { ...result, next_run_at: computeNextRun(result) } };
+}
+
+/** Core recurring-boost run. source: 'cron' | 'frontend' | 'manual' */
+async function runAutoBoost(supabase, shopId, { source = 'cron', force = false } = {}) {
+  const schedule = await loadSchedule(supabase, shopId);
+  if (!schedule) return { ok: true, skipped: true, reason: 'no_schedule', message: 'Chưa cấu hình lịch đẩy' };
+  if (!schedule.enabled) return { ok: true, skipped: true, reason: 'disabled', message: 'Lịch đẩy đang TẮT' };
+
+  const itemIds = Array.isArray(schedule.item_ids) ? schedule.item_ids.map(Number).filter(Boolean) : [];
+  if (itemIds.length === 0) return { ok: true, skipped: true, reason: 'no_items', message: 'Chưa chọn sản phẩm nào' };
+
+  // Due check (skip when not yet due, unless forced)
+  const interval = (schedule.interval_hours || DEFAULT_INTERVAL_HOURS) * 3600 * 1000;
+  const lastRun = schedule.last_run_at ? new Date(schedule.last_run_at).getTime() : 0;
+  const due = !lastRun || (Date.now() - lastRun) >= (interval - DUE_GRACE_MS);
+  if (!due && !force) {
+    return {
+      ok: true, skipped: true, reason: 'not_due',
+      message: 'Chưa tới giờ đẩy',
+      next_run_at: new Date(lastRun + interval).toISOString(),
+    };
+  }
+
+  // Select next batch & boost
+  const rotationIndex = schedule.rotation_index || 0;
+  const batch = selectBatch(itemIds, rotationIndex, BOOST_BATCH_SIZE);
+  let boostResult;
+  try {
+    boostResult = await boostItems(supabase, shopId, batch);
+  } catch (e) {
+    boostResult = { ok: false, error: e.message };
+  }
+
+  // Parse success/fail
+  let successCount = 0, failCount = 0, status = 'ok', message = '';
+  if (boostResult.ok) {
+    failCount = boostResult.data?.failure_count || (boostResult.data?.failure_list?.length || 0);
+    successCount = Math.max(0, batch.length - failCount);
+    if (failCount > 0) {
+      status = successCount > 0 ? 'partial' : 'error';
+      const failures = boostResult.data?.failure_list || [];
+      const detail = failures.map(f => `${f.item_id}:${f.failed_reason || '?'}`).join(', ');
+      message = `Đẩy ${successCount}/${batch.length} SP${detail ? ' — lỗi: ' + detail : ''}`;
+    } else {
+      status = 'ok';
+      message = `Đã đẩy ${batch.length} sản phẩm lên top (hiệu lực 4h)`;
+    }
+  } else {
+    status = 'error';
+    failCount = batch.length;
+    message = boostResult.message || boostResult.error || 'Lỗi đẩy sản phẩm';
+  }
+
+  // Advance rotation + stamp last_run_at (always, when attempted — prevents retry spam; cron retries next cycle)
+  const newRotation = itemIds.length > 0 ? (rotationIndex + batch.length) % itemIds.length : 0;
+  await supabase
+    .from('shopee_boost_schedule')
+    .update({ rotation_index: newRotation, last_run_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('id', schedule.id);
+
+  // Write log
+  await supabase.from('shopee_boost_log').insert({
+    shop_id: String(shopId), source, item_ids: batch,
+    success_count: successCount, fail_count: failCount, status, message,
+  });
+
+  console.log('[AutoBoost]', source, 'batch:', batch, 'status:', status, message);
+
+  return {
+    ok: true, ran: true, status, message,
+    success_count: successCount, fail_count: failCount,
+    item_ids: batch, next_rotation_index: newRotation,
+    next_run_at: new Date(Date.now() + interval).toISOString(),
+  };
+}
+
+/** 9. boost_log — recent run history */
+async function handleBoostLog(supabase, shopId, limit = 20) {
+  const { data, error } = await supabase
+    .from('shopee_boost_log')
+    .select('*')
+    .eq('shop_id', String(shopId))
+    .order('ran_at', { ascending: false })
+    .limit(Math.min(Number(limit) || 20, 100));
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: data || [] };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    Main handler
    ═══════════════════════════════════════════════════════════════════════════ */
 export default async function handler(req, res) {
@@ -296,7 +479,7 @@ export default async function handler(req, res) {
     return res.status(400).json({
       ok: false,
       error: 'Missing ?action= parameter',
-      available: ['list', 'create', 'update', 'delete', 'boost', 'boosted_list'],
+      available: ['list', 'create', 'update', 'delete', 'boost', 'boosted_list', 'schedule_get', 'schedule_save', 'auto_boost', 'boost_log'],
     });
   }
 
@@ -331,11 +514,33 @@ export default async function handler(req, res) {
       case 'boosted_list':
         result = await handleBoostedList(supabase, shopId);
         break;
+      case 'schedule_get':
+        result = await handleScheduleGet(supabase, shopId);
+        break;
+      case 'schedule_save':
+        if (req.method !== 'POST') return res.status(200).json({ ok: false, error: 'POST required for schedule_save' });
+        result = await handleScheduleSave(supabase, shopId, req.body);
+        break;
+      case 'boost_log':
+        result = await handleBoostLog(supabase, shopId, reqUrl.searchParams.get('limit'));
+        break;
+      case 'auto_boost': {
+        // Recurring boost trigger. Used by GitHub Actions cron (24/7) and the frontend countdown.
+        // Due-gated so it never over-boosts. `force` (skip the timer) is honored only with a valid
+        // secret or when explicitly invoked from the frontend "test now" button.
+        const secret = (process.env.BOOST_CRON_SECRET || '').trim();
+        const providedSecret = (req.headers['x-boost-secret'] || reqUrl.searchParams.get('secret') || '').toString().trim();
+        const source = reqUrl.searchParams.get('source') || 'cron';
+        const hasValidSecret = !!secret && providedSecret === secret;
+        const force = reqUrl.searchParams.get('force') === '1' && (hasValidSecret || source === 'frontend');
+        result = await runAutoBoost(supabase, shopId, { source, force });
+        break;
+      }
       default:
         return res.status(200).json({
           ok: false,
           error: `Unknown action: ${action}`,
-          available: ['list', 'create', 'update', 'delete', 'boost', 'boosted_list'],
+          available: ['list', 'create', 'update', 'delete', 'boost', 'boosted_list', 'schedule_get', 'schedule_save', 'auto_boost', 'boost_log'],
         });
     }
 

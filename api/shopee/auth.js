@@ -46,5 +46,11 @@ export default async function handler(req, res) {
 
   const authUrl = `${HOST}${path}?partner_id=${app.id}&timestamp=${timestamp}&sign=${sign}&redirect=${encodeURIComponent(redirect + '?app=' + appName)}`;
 
+  // Prevent browser/CDN from caching this redirect — each click must generate a fresh
+  // timestamp, otherwise Shopee returns error_expire ("Operation Overtime").
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
   res.redirect(302, authUrl);
 }

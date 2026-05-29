@@ -472,16 +472,21 @@ const ListedPriceTab = ({ user }) => {
 
   const importRef = useRef(null);
   const syncTimer = useRef(null);
+  const dbLoadedRef = useRef(false); // Guard: don't sync until initial DB load completes
 
   // Load from Supabase
   useEffect(() => {
     const load = async () => {
-      const { data, error } = await supabase
-        .from('listed_price_rows').select('*').order('sort_order', { ascending: true });
-      if (error || !data?.length) return;
-      const loaded = migrateRows(data.map(dbToRow));
-      setRows(loaded);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
+      try {
+        const { data, error } = await supabase
+          .from('listed_price_rows').select('*').order('sort_order', { ascending: true });
+        if (!error && data?.length) {
+          const loaded = migrateRows(data.map(dbToRow));
+          setRows(loaded);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
+        }
+      } catch { /* network error — keep localStorage data, don't wipe DB */ }
+      dbLoadedRef.current = true; // Mark as loaded (even if empty/error — safe to sync now)
     };
     load();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -492,14 +497,22 @@ const ListedPriceTab = ({ user }) => {
   useEffect(() => { localStorage.setItem(VOUCHERS_KEY,   JSON.stringify(vouchers));   }, [vouchers]);
 
   const syncToSupabase = useCallback((nextRows) => {
+    // SAFETY: Don't sync until initial DB load has completed
+    // This prevents the race condition where default empty rows wipe real data
+    if (!dbLoadedRef.current) return;
+
     if (syncTimer.current) clearTimeout(syncTimer.current);
     syncTimer.current = setTimeout(async () => {
       setSyncing(true);
       try {
         const dbRows = nextRows.map((r, i) => rowToDb(r, i));
         await supabase.from('listed_price_rows').upsert(dbRows, { onConflict: 'id' });
-        const ids = nextRows.map(r => r.id);
-        await supabase.from('listed_price_rows').delete().not('id', 'in', `(${ids.map(id => `"${id}"`).join(',')})`);
+        // SAFETY: Only delete orphan rows if we have meaningful data (>2 rows)
+        // This prevents accidental wipe when only default empty rows exist
+        if (nextRows.length > 2) {
+          const ids = nextRows.map(r => r.id);
+          await supabase.from('listed_price_rows').delete().not('id', 'in', `(${ids.map(id => `"${id}"`).join(',')})`);
+        }
       } finally { setSyncing(false); }
     }, 1500);
   }, []);

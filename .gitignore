@@ -12,6 +12,16 @@ dist
 dist-ssr
 *.local
 
+# Env & secrets (never commit)
+.env
+.env.*
+!.env.example
+scripts/shopee-token-*.json
+
+# Local dev artifacts
+scripts/shopee-test-*.mjs
+koc-identity-*-preview.png
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

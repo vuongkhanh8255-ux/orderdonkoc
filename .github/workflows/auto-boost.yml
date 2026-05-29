@@ -1,0 +1,40 @@
+name: Shopee Auto Boost
+
+on:
+  workflow_dispatch:
+    inputs:
+      shop_id:
+        description: 'Shop ID (mặc định 341325550)'
+        required: false
+        default: '341325550'
+      force:
+        description: 'Bỏ qua bộ đếm 4h, đẩy ngay? yes/no'
+        required: false
+        default: 'no'
+  schedule:
+    # Mỗi 4 tiếng, đầu giờ (giờ UTC). Boost Shopee kéo dài 4h nên mỗi chu kỳ sẽ đẩy lại.
+    - cron: '0 */4 * * *'
+
+jobs:
+  boost:
+    name: Trigger recurring boost
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call auto-boost endpoint
+        env:
+          BOOST_CRON_SECRET: ${{ secrets.BOOST_CRON_SECRET }}
+          SHOP_ID: ${{ github.event.inputs.shop_id || '341325550' }}
+          FORCE: ${{ github.event.inputs.force || 'no' }}
+        run: |
+          BASE="https://koc-tool.vercel.app/api/shopee/top-picks"
+          FORCE_PARAM=""
+          if [ "$FORCE" = "yes" ]; then FORCE_PARAM="&force=1"; fi
+          URL="${BASE}?action=auto_boost&source=cron&shop_id=${SHOP_ID}${FORCE_PARAM}"
+          echo "Calling auto-boost for shop ${SHOP_ID} (force=${FORCE})..."
+          RESPONSE=$(curl -sS --max-time 60 --retry 2 --retry-delay 5 \
+            -H "x-boost-secret: ${BOOST_CRON_SECRET}" \
+            "$URL")
+          echo "Response: $RESPONSE"
+          # Endpoint always returns HTTP 200; treat "ok":true as success (covers ran/skipped both)
+          echo "$RESPONSE" | grep -q '"ok":true' || { echo "::error::Auto-boost call failed"; exit 1; }

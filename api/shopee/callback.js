@@ -83,7 +83,8 @@ async function getShopInfo(partnerKey, partnerId, accessToken, shopId) {
   try {
     const res  = await fetch(url);
     const data = await res.json();
-    return data.response || null;
+    // get_shop_info trả field ở top-level (shop_name, region...), KHÔNG bọc trong `response`
+    return data?.shop_name ? data : null;
   } catch { return null; }
 }
 
