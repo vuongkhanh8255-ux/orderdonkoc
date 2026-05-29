@@ -184,6 +184,20 @@ export default function ShopeeVideoTab() {
             })}
           </div>
 
+          {/* ── DEBUG INFO ── */}
+          {shopData.some(s => s._debug || s.source) && (
+            <div style={{ ...card, marginBottom: 20, background: '#f8fafc', borderColor: '#e2e8f0' }}>
+              <h4 style={{ margin: '0 0 8px', fontSize: '0.82rem', fontWeight: 800, color: '#475569' }}>🔍 API Debug</h4>
+              {shopData.map(s => (
+                <div key={s.shop_id} style={{ fontSize: '0.72rem', color: '#64748b', marginBottom: 4, fontFamily: 'monospace' }}>
+                  <b>{s.shop_name}</b>: source={s.source} | total={s.total} | videos={s.videos?.length}
+                  {s._debug && ` | debug=${JSON.stringify(s._debug)}`}
+                  {s.error && ` | error=${s.error}`}
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* ── SHOP ERRORS ── */}
           {shopData.filter(s => s.error).length > 0 && (
             <div style={{ ...card, marginBottom: 20, background: '#fffbeb', borderColor: '#fde68a' }}>
