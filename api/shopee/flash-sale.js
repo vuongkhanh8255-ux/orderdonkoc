@@ -195,6 +195,19 @@ function sumAdsTotals(daily) {
   return t;
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* Shopee Ads endpoints rate-limit easily across shops — retry on error_rate_limit with backoff */
+async function shopeeGetRetry(partnerKey, partnerId, apiPath, accessToken, shopId, extraParams = {}, tries = 3) {
+  let res;
+  for (let i = 0; i < tries; i++) {
+    res = await shopeeGet(partnerKey, partnerId, apiPath, accessToken, shopId, extraParams);
+    if (res.error !== 'error_rate_limit') return res;
+    await sleep(600 * (i + 1));
+  }
+  return res;
+}
+
 /* Per-campaign breakdown (optional, mode=campaigns) */
 async function fetchAdsCampaigns(partnerKey, partnerId, accessToken, shopId, startDate, endDate) {
   const idRes = await shopeeGet(partnerKey, partnerId,
@@ -236,7 +249,7 @@ async function fetchShopAds(supabase, tk, startDate, endDate, withCampaigns) {
   const [balanceRes, toggleRes, dailyRes] = await Promise.all([
     shopeeGet(partnerKey, app.id, '/api/v2/ads/get_total_balance', at, sid),
     shopeeGet(partnerKey, app.id, '/api/v2/ads/get_shop_toggle_info', at, sid),
-    shopeeGet(partnerKey, app.id, '/api/v2/ads/get_all_cpc_ads_daily_performance', at, sid,
+    shopeeGetRetry(partnerKey, app.id, '/api/v2/ads/get_all_cpc_ads_daily_performance', at, sid,
       { start_date: startDate, end_date: endDate }),
   ]);
 
@@ -245,7 +258,10 @@ async function fetchShopAds(supabase, tk, startDate, endDate, withCampaigns) {
     || toggleRes.response?.campaign_surface_status === 'open'
     || !!toggleRes.response;
 
-  const rawDaily = dailyRes.response?.performance_list || dailyRes.response?.daily_performance_list || [];
+  const dResp = dailyRes.response || {};
+  const rawDaily = dResp.performance_list || dResp.daily_performance_list
+    || dResp.shop_all_cpc_ads_daily_performance || dResp.all_cpc_ads_daily_performance
+    || dResp.cpc_ads_daily_performance || (Array.isArray(dResp) ? dResp : []) || [];
   const daily = rawDaily.map(normalizeDaily).sort((a, b) => (a.date > b.date ? 1 : -1));
   const totals = sumAdsTotals(daily);
 
@@ -261,6 +277,8 @@ async function fetchShopAds(supabase, tk, startDate, endDate, withCampaigns) {
     _debug: {
       balance: balanceRes.error || balanceRes.message || null,
       daily: dailyRes.error || dailyRes.message || null,
+      daily_keys: Object.keys(dResp),
+      daily_raw: rawDaily.length === 0 ? JSON.stringify(dailyRes).slice(0, 400) : undefined,
     },
   };
 }
@@ -290,13 +308,16 @@ async function handleAds(supabase, reqUrl) {
     return { success: true, shops: [], message: 'Chưa shop nào kết nối app Ads. Cấp quyền tại /api/shopee/auth?app=ads' };
   }
 
-  const shops = await Promise.all(tokens.map(async (tk) => {
+  // Sequential (not Promise.all) + small gap: Shopee ads endpoints rate-limit across shops.
+  const shops = [];
+  for (const tk of tokens) {
     try {
-      return await fetchShopAds(supabase, tk, startDate, endDate, withCampaigns);
+      shops.push(await fetchShopAds(supabase, tk, startDate, endDate, withCampaigns));
     } catch (err) {
-      return { shop_id: tk.shop_id, shop_name: tk.shop_name || tk.shop_id, error: err.message };
+      shops.push({ shop_id: tk.shop_id, shop_name: tk.shop_name || tk.shop_id, error: err.message });
     }
-  }));
+    await sleep(250);
+  }
 
   return { success: true, start_date: startDate, end_date: endDate, days, shops };
 }
