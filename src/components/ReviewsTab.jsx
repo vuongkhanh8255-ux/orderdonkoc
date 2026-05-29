@@ -3,6 +3,15 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 const STAR_COLORS = { 5: '#22c55e', 4: '#84cc16', 3: '#eab308', 2: '#f97316', 1: '#ef4444' };
 const PAGE_SIZE = 20;
 
+const SHOP_MAP = {
+  '1031859035': 'Bodymiss', '1243148826': 'Milaganics', '341325550': 'Milaganics FBS',
+  '831509831': 'Milaganics SPA', '1017289279': 'Moaw Moaws',
+  '7495107349171898427': 'Bodymiss', '7494529979361168222': 'eHerb',
+  '7495838925500090511': 'eHerb HCM', '7495831977917385095': 'Moaw Moaws',
+  '7494813818973817115': 'Milaganics', '7494251668499498533': 'Healmii',
+};
+const shopName = (id) => SHOP_MAP[id] || id;
+
 function fmtDate(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -28,6 +37,7 @@ export default function ReviewsTab() {
   const [hasFetched, setHasFetched] = useState(false);
 
   const [starFilter, setStarFilter] = useState(0);
+  const [shopFilter, setShopFilter] = useState('all');
   const [searchText, setSearchText] = useState('');
   const [replyFilter, setReplyFilter] = useState('all');
   const [sortBy, setSortBy] = useState('date_desc');
@@ -68,6 +78,7 @@ export default function ReviewsTab() {
             hasReply: !!r.reply,
             replyText: r.reply?.comment || '',
             sellerId: r.seller_id,
+            shop: shopName(r.seller_id),
           });
         }
       }
@@ -87,6 +98,7 @@ export default function ReviewsTab() {
             hasReply: r.reply_count > 0 || !!r.reply_text,
             replyText: r.reply_text || '',
             sellerId: r.seller_id,
+            shop: shopName(r.seller_id),
           });
         }
       }
@@ -153,9 +165,37 @@ export default function ReviewsTab() {
       .sort((a, b) => b.total - a.total);
   }, [reviews]);
 
+  // ── Shop stats ──
+  const shopStats = useMemo(() => {
+    const map = {};
+    for (const r of reviews) {
+      const key = `${r.platform}-${r.sellerId}`;
+      if (!map[key]) {
+        map[key] = {
+          key, sellerId: r.sellerId, shop: r.shop, platform: r.platform,
+          total: 0, sum: 0, replied: 0,
+          dist: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+        };
+      }
+      map[key].total++;
+      map[key].sum += r.star;
+      map[key].dist[r.star]++;
+      if (r.hasReply) map[key].replied++;
+    }
+    return Object.values(map)
+      .map(s => ({ ...s, avg: (s.sum / s.total).toFixed(1) }))
+      .sort((a, b) => b.total - a.total);
+  }, [reviews]);
+
+  const shopList = useMemo(() => {
+    const set = new Set(reviews.map(r => r.shop));
+    return ['all', ...Array.from(set).sort()];
+  }, [reviews]);
+
   // ── Filtered reviews ──
   const filtered = useMemo(() => {
     let result = [...reviews];
+    if (shopFilter !== 'all') result = result.filter(r => r.shop === shopFilter);
     if (starFilter > 0) result = result.filter(r => r.star === starFilter);
     if (replyFilter === 'replied') result = result.filter(r => r.hasReply);
     if (replyFilter === 'unreplied') result = result.filter(r => !r.hasReply);
@@ -340,6 +380,58 @@ export default function ReviewsTab() {
           </div>
         </div>
 
+        {/* ── SHOP STATS ── */}
+        <div style={{ ...card, marginBottom: 20 }}>
+          <h3 style={{ margin: '0 0 14px', fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>
+            🏪 Thống kê theo Shop ({shopStats.length})
+          </h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+            {shopStats.map(s => {
+              const replyPct = s.total ? ((s.replied / s.total) * 100).toFixed(0) : 0;
+              return (
+                <div key={s.key}
+                  onClick={() => { setShopFilter(shopFilter === s.shop ? 'all' : s.shop); setPage(1); }}
+                  style={{ padding: '14px 16px', borderRadius: 10, background: shopFilter === s.shop ? '#fff7ed' : '#f8fafc', border: `1.5px solid ${shopFilter === s.shop ? '#fed7aa' : '#e5e7eb'}`, cursor: 'pointer', transition: 'all 0.15s' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: '0.72rem', padding: '2px 7px', borderRadius: 5, fontWeight: 700, background: s.platform === 'shopee' ? '#fff7ed' : '#f8fafc', color: s.platform === 'shopee' ? '#ea580c' : '#0f172a', border: `1px solid ${s.platform === 'shopee' ? '#fed7aa' : '#e5e7eb'}` }}>
+                        {s.platform === 'shopee' ? '🟠' : '⬛'}
+                      </span>
+                      <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#0f172a' }}>{s.shop}</span>
+                    </div>
+                    <span style={{ fontSize: '0.76rem', fontWeight: 700, color: parseFloat(s.avg) >= 4.5 ? '#22c55e' : parseFloat(s.avg) >= 3.5 ? '#eab308' : '#ef4444' }}>
+                      {s.avg} ⭐
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 4, height: 6, borderRadius: 3, overflow: 'hidden', background: '#e5e7eb', marginBottom: 8 }}>
+                    {[5, 4, 3, 2, 1].map(star => {
+                      const w = s.total ? (s.dist[star] / s.total) * 100 : 0;
+                      return w > 0 ? <div key={star} style={{ width: `${w}%`, background: STAR_COLORS[star], minWidth: 2 }} title={`${star}★: ${s.dist[star]}`} /> : null;
+                    })}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#64748b' }}>
+                    <span><b style={{ color: '#0f172a' }}>{fmtNum(s.total)}</b> đánh giá</span>
+                    <span>Reply: <b style={{ color: parseInt(replyPct) >= 80 ? '#22c55e' : '#eab308' }}>{replyPct}%</b></span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                    {[5, 4, 3, 2, 1].map(star => (
+                      <span key={star} style={{ fontSize: '0.66rem', color: STAR_COLORS[star], fontWeight: 600 }}>
+                        {star}★{s.dist[star]}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {shopFilter !== 'all' && (
+            <div style={{ marginTop: 10, fontSize: '0.72rem', color: '#ea580c', fontWeight: 600, cursor: 'pointer' }}
+              onClick={() => { setShopFilter('all'); setPage(1); }}>
+              ✕ Bỏ lọc shop "{shopFilter}"
+            </div>
+          )}
+        </div>
+
         {/* ── PRODUCT STATS TABLE ── */}
         <div style={{ ...card, marginBottom: 20, overflow: 'hidden' }}>
           <h3 style={{ margin: '0 0 14px', fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>
@@ -426,6 +518,13 @@ export default function ReviewsTab() {
             ))}
           </div>
 
+          <select value={shopFilter} onChange={e => { setShopFilter(e.target.value); setPage(1); }}
+            style={{ padding: '8px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.82rem', fontFamily: 'inherit', color: '#0f172a', background: '#fff', cursor: 'pointer' }}>
+            {shopList.map(s => (
+              <option key={s} value={s}>{s === 'all' ? 'Shop: Tất cả' : s}</option>
+            ))}
+          </select>
+
           <select value={replyFilter} onChange={e => { setReplyFilter(e.target.value); setPage(1); }}
             style={{ padding: '8px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.82rem', fontFamily: 'inherit', color: '#0f172a', background: '#fff', cursor: 'pointer' }}>
             <option value="all">Reply: Tất cả</option>
@@ -453,6 +552,7 @@ export default function ReviewsTab() {
               <thead>
                 <tr>
                   <th style={{ ...thStyle, width: 50, textAlign: 'center' }}>Sàn</th>
+                  <th style={{ ...thStyle, width: 120 }}>Shop</th>
                   <th style={{ ...thStyle, minWidth: 220 }}>Sản phẩm</th>
                   <th style={{ ...thStyle, width: 50, textAlign: 'center' }}>Sao</th>
                   <th style={{ ...thStyle, minWidth: 200 }}>Nội dung</th>
@@ -473,6 +573,9 @@ export default function ReviewsTab() {
                         <span style={{ fontSize: '0.72rem', padding: '2px 6px', borderRadius: 5, fontWeight: 700, background: r.platform === 'shopee' ? '#fff7ed' : '#f8fafc', color: r.platform === 'shopee' ? '#ea580c' : '#0f172a', border: `1px solid ${r.platform === 'shopee' ? '#fed7aa' : '#e5e7eb'}` }}>
                           {r.platform === 'shopee' ? '🟠' : '⬛'}
                         </span>
+                      </td>
+                      <td style={{ ...tdStyle, fontSize: '0.76rem', fontWeight: 600, color: '#374151' }}>
+                        {r.shop || '—'}
                       </td>
                       <td style={tdStyle}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
