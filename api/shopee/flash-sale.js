@@ -208,9 +208,19 @@ async function shopeeGetRetry(partnerKey, partnerId, apiPath, accessToken, shopI
   return res;
 }
 
+/* Pull the per-campaign daily metrics array, tolerating field-name drift across regions */
+function pickCampaignRows(c) {
+  const cand = c.campaign_daily_performance || c.ads_daily_performance || c.metrics_list
+    || c.performance_list || c.daily_performance_list || c.daily_performance || c.daily;
+  if (Array.isArray(cand)) return cand;
+  // Some regions return a flat per-campaign object (single period) rather than a daily array
+  if (c.impression != null || c.expense != null || c.broad_gmv != null) return [c];
+  return [];
+}
+
 /* Per-campaign breakdown (optional, mode=campaigns) */
 async function fetchAdsCampaigns(partnerKey, partnerId, accessToken, shopId, startDate, endDate) {
-  const idRes = await shopeeGet(partnerKey, partnerId,
+  const idRes = await shopeeGetRetry(partnerKey, partnerId,
     '/api/v2/ads/get_product_level_campaign_id_list',
     accessToken, shopId, { ad_type: 'all', offset: 0, limit: 50 });
 
@@ -220,13 +230,17 @@ async function fetchAdsCampaigns(partnerKey, partnerId, accessToken, shopId, sta
 
   if (idList.length === 0) return { campaigns: [], note: idRes.error || 'no_campaigns' };
 
-  const perfRes = await shopeeGet(partnerKey, partnerId,
+  const perfRes = await shopeeGetRetry(partnerKey, partnerId,
     '/api/v2/ads/get_product_campaign_daily_performance',
     accessToken, shopId, { start_date: startDate, end_date: endDate, campaign_id_list: idList.join(',') });
 
-  const list = perfRes.response?.campaign_list || perfRes.response?.performance_list || [];
+  const pResp = perfRes.response;
+  const list = Array.isArray(pResp)
+    ? pResp
+    : (pResp?.campaign_list || pResp?.performance_list || pResp?.campaign_daily_performance_list || []);
+
   const campaigns = list.map((c) => {
-    const rows = (c.ads_daily_performance || c.performance_list || c.daily_performance_list || []).map(normalizeDaily);
+    const rows = pickCampaignRows(c).map(normalizeDaily);
     return {
       campaign_id: c.campaign_id,
       campaign_name: c.campaign_name || c.ad_name || `#${c.campaign_id}`,
@@ -235,7 +249,16 @@ async function fetchAdsCampaigns(partnerKey, partnerId, accessToken, shopId, sta
     };
   }).sort((a, b) => b.totals.expense - a.totals.expense);
 
-  return { campaigns, note: perfRes.error || null };
+  // Diagnostic: only when campaigns came back but every daily array is empty,
+  // surface the real field names so the mapping can be finalized from a live response.
+  const allEmpty = campaigns.length > 0 && campaigns.every((c) => c.daily.length === 0);
+  return {
+    campaigns,
+    note: perfRes.error || null,
+    _debug: allEmpty
+      ? { campaign_keys: Object.keys(list[0] || {}), sample: JSON.stringify(list[0] || {}).slice(0, 600) }
+      : undefined,
+  };
 }
 
 /* Per-shop fetch: balance + toggle + daily performance (+campaigns) */
@@ -258,10 +281,14 @@ async function fetchShopAds(supabase, tk, startDate, endDate, withCampaigns) {
     || toggleRes.response?.campaign_surface_status === 'open'
     || !!toggleRes.response;
 
-  const dResp = dailyRes.response || {};
-  const rawDaily = dResp.performance_list || dResp.daily_performance_list
-    || dResp.shop_all_cpc_ads_daily_performance || dResp.all_cpc_ads_daily_performance
-    || dResp.cpc_ads_daily_performance || (Array.isArray(dResp) ? dResp : []) || [];
+  // get_all_cpc_ads_daily_performance returns a bare array in `response`;
+  // fall back to wrapped shapes seen in other regions.
+  const dResp = dailyRes.response;
+  const rawDaily = Array.isArray(dResp)
+    ? dResp
+    : (dResp?.performance_list || dResp?.daily_performance_list
+      || dResp?.shop_all_cpc_ads_daily_performance || dResp?.all_cpc_ads_daily_performance
+      || dResp?.cpc_ads_daily_performance || []);
   const daily = rawDaily.map(normalizeDaily).sort((a, b) => (a.date > b.date ? 1 : -1));
   const totals = sumAdsTotals(daily);
 
@@ -277,8 +304,6 @@ async function fetchShopAds(supabase, tk, startDate, endDate, withCampaigns) {
     _debug: {
       balance: balanceRes.error || balanceRes.message || null,
       daily: dailyRes.error || dailyRes.message || null,
-      daily_keys: Object.keys(dResp),
-      daily_raw: rawDaily.length === 0 ? JSON.stringify(dailyRes).slice(0, 400) : undefined,
     },
   };
 }
