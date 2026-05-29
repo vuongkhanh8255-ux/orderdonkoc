@@ -35,6 +35,9 @@
     },
     "api/shopee/sync-orders.js": {
       "maxDuration": 120
+    },
+    "api/erp/reviews.js": {
+      "maxDuration": 30
     }
   },
   "crons": [
