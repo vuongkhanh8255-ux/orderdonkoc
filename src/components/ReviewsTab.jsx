@@ -217,7 +217,7 @@ export default function ReviewsTab() {
       }
     });
     return result;
-  }, [reviews, starFilter, replyFilter, searchText, sortBy]);
+  }, [reviews, shopFilter, starFilter, replyFilter, searchText, sortBy]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
