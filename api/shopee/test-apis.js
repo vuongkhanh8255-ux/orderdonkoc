@@ -39,12 +39,30 @@ const TESTS = {
     { path: '/api/v2/flash_sale/get_time_slot_id', label: 'Flash Sale Slots', params: { start_time: '__now__', end_time: '__30d__' } },
   ],
   livestream: [
-    { path: '/api/v2/video/get_video_list', label: 'Video List', params: { page_no: 1, page_size: 5 } },
+    // Session management
+    { path: '/api/v2/livestream/get_session_list', label: '📺 Session List' },
+    { path: '/api/v2/livestream/get_session_detail', label: '📺 Session Detail' },
+    { path: '/api/v2/livestream/get_session_metric', label: '📊 Session Metrics' },
+    // Item management in live
+    { path: '/api/v2/livestream/get_item_list', label: '🛒 Items in Live' },
+    { path: '/api/v2/livestream/get_item_count', label: '🛒 Item Count' },
+    { path: '/api/v2/livestream/get_show_item', label: '⭐ Featured Item' },
+    { path: '/api/v2/livestream/get_item_set_list', label: '📦 Item Sets' },
+    { path: '/api/v2/livestream/get_recent_item_list', label: '🕐 Recent Items' },
+    { path: '/api/v2/livestream/get_like_item_list', label: '❤️ Liked Items' },
+    // Comments
+    { path: '/api/v2/livestream/get_latest_comment_list', label: '💬 Comments' },
+    // Media
+    { path: '/api/v2/livestream/upload_image', label: '🖼️ Upload Image (check)' },
+    // Fallback general
     { path: '/api/v2/shop/get_shop_info', label: 'Shop Info (via Livestream)' },
   ],
   video: [
-    { path: '/api/v2/video/get_video_list', label: 'Video List', params: { page_no: 1, page_size: 5 } },
-    { path: '/api/v2/video/upload_video', label: 'Upload Video (check permission)' },
+    // Media Space / Video
+    { path: '/api/v2/media_space/init_video_upload', label: '🎬 Init Video Upload' },
+    { path: '/api/v2/media_space/get_video_upload_result', label: '🎬 Video Upload Result' },
+    { path: '/api/v2/video/get_video_list', label: '📹 Video List', params: { page_no: 1, page_size: 5 } },
+    { path: '/api/v2/media_space/get_video_list', label: '📹 Video List (media_space)' },
     { path: '/api/v2/shop/get_shop_info', label: 'Shop Info (via Video)' },
   ],
 };
