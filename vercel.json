@@ -39,7 +39,7 @@
     "api/erp/reviews.js": {
       "maxDuration": 30
     },
-    "api/shopee/ads.js": {
+    "api/shopee/flash-sale.js": {
       "maxDuration": 30
     }
   },

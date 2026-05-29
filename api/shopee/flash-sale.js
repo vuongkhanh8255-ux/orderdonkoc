@@ -8,6 +8,7 @@ const DEFAULT_SHOP_ID = 341325550;
 const APPS = {
   dashboard: { id: 2035068, envKey: 'SHOPEE_PARTNER_KEY' },
   marketing: { id: 2035171, envKey: 'SHOPEE_MARKETING_PARTNER_KEY' },
+  ads: { id: 2035170, envKey: 'SHOPEE_ADS_PARTNER_KEY' },
 };
 
 /* ── CORS headers ───────────────────────────────────────────────────────── */
@@ -146,6 +147,158 @@ async function getCredentials(supabase, shopId, appType) {
   tokenRow = await refreshIfNeeded(supabase, tokenRow, app);
 
   return { partnerKey, partnerId: app.id, accessToken: tokenRow.access_token, shopId };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Shopee Ads (CPC) — merged here to stay within the 12-function Hobby limit.
+   Exposed via action=ads&mode=summary|campaigns&days=N (multi-shop).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Shopee Ads daily-performance API wants dates as DD-MM-YYYY */
+function toShopeeDate(d) {
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${dd}-${mm}-${d.getFullYear()}`;
+}
+
+function adsNum(v) {
+  const n = typeof v === 'string' ? parseFloat(v) : v;
+  return Number.isFinite(n) ? n : 0;
+}
+
+/* Normalize one daily row to a stable shape, tolerating field-name drift across regions */
+function normalizeDaily(row) {
+  const impression = adsNum(row.impression ?? row.impressions);
+  const clicks = adsNum(row.clicks ?? row.click);
+  const expense = adsNum(row.expense ?? row.cost);
+  const gmv = adsNum(row.broad_gmv ?? row.gmv ?? row.broad_order_amount);
+  const orders = adsNum(row.broad_order ?? row.broad_order_count ?? row.order ?? row.checkout);
+  return {
+    date: row.date || row.performance_date || '',
+    impression, clicks, expense, gmv, orders,
+    ctr: impression > 0 ? clicks / impression : adsNum(row.ctr),
+    cpc: clicks > 0 ? expense / clicks : adsNum(row.cpc),
+    roas: expense > 0 ? gmv / expense : adsNum(row.broad_roi ?? row.roi),
+    raw: row,
+  };
+}
+
+function sumAdsTotals(daily) {
+  const t = { impression: 0, clicks: 0, expense: 0, gmv: 0, orders: 0 };
+  for (const d of daily) {
+    t.impression += d.impression; t.clicks += d.clicks;
+    t.expense += d.expense; t.gmv += d.gmv; t.orders += d.orders;
+  }
+  t.ctr = t.impression > 0 ? t.clicks / t.impression : 0;
+  t.cpc = t.clicks > 0 ? t.expense / t.clicks : 0;
+  t.roas = t.expense > 0 ? t.gmv / t.expense : 0;
+  return t;
+}
+
+/* Per-campaign breakdown (optional, mode=campaigns) */
+async function fetchAdsCampaigns(partnerKey, partnerId, accessToken, shopId, startDate, endDate) {
+  const idRes = await shopeeGet(partnerKey, partnerId,
+    '/api/v2/ads/get_product_level_campaign_id_list',
+    accessToken, shopId, { ad_type: 'all', offset: 0, limit: 50 });
+
+  const idList = (idRes.response?.campaign_list || idRes.response?.campaign_id_list || [])
+    .map((c) => (typeof c === 'object' ? c.campaign_id : c))
+    .filter(Boolean);
+
+  if (idList.length === 0) return { campaigns: [], note: idRes.error || 'no_campaigns' };
+
+  const perfRes = await shopeeGet(partnerKey, partnerId,
+    '/api/v2/ads/get_product_campaign_daily_performance',
+    accessToken, shopId, { start_date: startDate, end_date: endDate, campaign_id_list: idList.join(',') });
+
+  const list = perfRes.response?.campaign_list || perfRes.response?.performance_list || [];
+  const campaigns = list.map((c) => {
+    const rows = (c.ads_daily_performance || c.performance_list || c.daily_performance_list || []).map(normalizeDaily);
+    return {
+      campaign_id: c.campaign_id,
+      campaign_name: c.campaign_name || c.ad_name || `#${c.campaign_id}`,
+      totals: sumAdsTotals(rows),
+      daily: rows,
+    };
+  }).sort((a, b) => b.totals.expense - a.totals.expense);
+
+  return { campaigns, note: perfRes.error || null };
+}
+
+/* Per-shop fetch: balance + toggle + daily performance (+campaigns) */
+async function fetchShopAds(supabase, tk, startDate, endDate, withCampaigns) {
+  const app = APPS.ads;
+  const partnerKey = process.env[app.envKey]?.trim();
+  const refreshed = await refreshIfNeeded(supabase, tk, app);
+  const at = refreshed.access_token;
+  const sid = refreshed.shop_id;
+
+  const [balanceRes, toggleRes, dailyRes] = await Promise.all([
+    shopeeGet(partnerKey, app.id, '/api/v2/ads/get_total_balance', at, sid),
+    shopeeGet(partnerKey, app.id, '/api/v2/ads/get_shop_toggle_info', at, sid),
+    shopeeGet(partnerKey, app.id, '/api/v2/ads/get_all_cpc_ads_daily_performance', at, sid,
+      { start_date: startDate, end_date: endDate }),
+  ]);
+
+  const balance = adsNum(balanceRes.response?.total_balance ?? balanceRes.response?.balance);
+  const toggleOn = toggleRes.response?.auto_top_up_status === 'open'
+    || toggleRes.response?.campaign_surface_status === 'open'
+    || !!toggleRes.response;
+
+  const rawDaily = dailyRes.response?.performance_list || dailyRes.response?.daily_performance_list || [];
+  const daily = rawDaily.map(normalizeDaily).sort((a, b) => (a.date > b.date ? 1 : -1));
+  const totals = sumAdsTotals(daily);
+
+  let campaigns = null;
+  if (withCampaigns) {
+    campaigns = await fetchAdsCampaigns(partnerKey, app.id, at, sid, startDate, endDate).catch((e) => ({ error: e.message }));
+  }
+
+  return {
+    shop_id: sid,
+    shop_name: tk.shop_name || sid,
+    balance, toggle_on: toggleOn, totals, daily, campaigns,
+    _debug: {
+      balance: balanceRes.error || balanceRes.message || null,
+      daily: dailyRes.error || dailyRes.message || null,
+    },
+  };
+}
+
+/** action=ads — CPC summary across every shop with an active 'ads' token */
+async function handleAds(supabase, reqUrl) {
+  const app = APPS.ads;
+  const partnerKey = process.env[app.envKey]?.trim();
+  if (!partnerKey) return { success: false, error: `${app.envKey} not configured` };
+
+  const mode = reqUrl.searchParams.get('mode') || 'summary';
+  const shopId = reqUrl.searchParams.get('shop_id');
+  const days = Math.min(Math.max(parseInt(reqUrl.searchParams.get('days') || '7', 10), 1), 60);
+
+  const now = new Date();
+  const start = new Date(now);
+  start.setDate(start.getDate() - (days - 1));
+  const startDate = reqUrl.searchParams.get('start_date') || toShopeeDate(start);
+  const endDate = reqUrl.searchParams.get('end_date') || toShopeeDate(now);
+  const withCampaigns = mode === 'campaigns';
+
+  let query = supabase.from('shopee_tokens').select('*').eq('app_type', 'ads').eq('status', 'active');
+  if (shopId) query = query.eq('shop_id', shopId);
+  const { data: tokens, error: dbErr } = await query;
+  if (dbErr) return { success: false, error: `DB error: ${dbErr.message}` };
+  if (!tokens?.length) {
+    return { success: true, shops: [], message: 'Chưa shop nào kết nối app Ads. Cấp quyền tại /api/shopee/auth?app=ads' };
+  }
+
+  const shops = await Promise.all(tokens.map(async (tk) => {
+    try {
+      return await fetchShopAds(supabase, tk, startDate, endDate, withCampaigns);
+    } catch (err) {
+      return { shop_id: tk.shop_id, shop_name: tk.shop_name || tk.shop_id, error: err.message };
+    }
+  }));
+
+  return { success: true, start_date: startDate, end_date: endDate, days, shops };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -376,7 +529,7 @@ export default async function handler(req, res) {
     return res.status(400).json({
       ok: false,
       error: 'Missing ?action= parameter',
-      available: ['time_slots', 'products', 'product_models', 'create', 'add_items', 'list', 'delete'],
+      available: ['ads', 'time_slots', 'products', 'product_models', 'create', 'add_items', 'list', 'delete'],
     });
   }
 
@@ -392,6 +545,9 @@ export default async function handler(req, res) {
     let result;
 
     switch (action) {
+      case 'ads':
+        result = await handleAds(supabase, reqUrl);
+        break;
       case 'time_slots':
         result = await handleTimeSlots(supabase, shopId);
         break;
@@ -420,7 +576,7 @@ export default async function handler(req, res) {
         return res.status(400).json({
           ok: false,
           error: `Unknown action: ${action}`,
-          available: ['time_slots', 'products', 'product_models', 'create', 'add_items', 'list', 'delete'],
+          available: ['ads', 'time_slots', 'products', 'product_models', 'create', 'add_items', 'list', 'delete'],
         });
     }
 
