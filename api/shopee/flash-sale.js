@@ -161,6 +161,12 @@ function toShopeeDate(d) {
   return `${dd}-${mm}-${d.getFullYear()}`;
 }
 
+/* Parse Shopee's DD-MM-YYYY back to a local-midnight Date (for in-memory window slicing) */
+function parseShopeeDate(s) {
+  const m = /^(\d{2})-(\d{2})-(\d{4})$/.exec(s || '');
+  return m ? new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])) : null;
+}
+
 function adsNum(v) {
   const n = typeof v === 'string' ? parseFloat(v) : v;
   return Number.isFinite(n) ? n : 0;
@@ -251,77 +257,183 @@ function extractCampaignList(pResp) {
   return pResp?.campaign_list || pResp?.performance_list || [];
 }
 
-/* Per-campaign breakdown (mode=campaigns).
-   Most modern Shopee spend sits in GMS (GMV Max / auto ads), NOT the classic
-   product-level campaign list (which is usually hundreds of legacy zero campaigns).
-   So: fetch the GMS aggregate first, then add any manual campaigns that actually ran. */
-async function fetchAdsCampaigns(partnerKey, partnerId, accessToken, shopId, startDate, endDate) {
-  const campaigns = [];
-
-  // 1. GMS / GMV Max auto campaign — single aggregate report for the window.
-  const gmsRes = await shopeeGetRetry(partnerKey, partnerId,
+/* GMS (GMV Max / auto ads) aggregate for a date window — returns a totals row + status. */
+async function fetchGmsAggregate(partnerKey, partnerId, accessToken, shopId, startDate, endDate) {
+  const res = await shopeeGetRetry(partnerKey, partnerId,
     '/api/v2/ads/get_gms_campaign_performance',
     accessToken, shopId, { start_date: startDate, end_date: endDate });
-  const gmsResp = gmsRes.response;
-  const gmsArr = Array.isArray(gmsResp) ? gmsResp : (gmsResp ? [gmsResp] : []);
-  for (const g of gmsArr) {
+  if (/rate_limit/i.test(res.error || '')) return { row: null, status: 'rate_limited', note: res.error };
+  if (res.error) return { row: null, status: 'error', note: res.error };
+
+  const resp = res.response;
+  const arr = Array.isArray(resp) ? resp : (resp ? [resp] : []);
+  const agg = { impression: 0, clicks: 0, expense: 0, gmv: 0, orders: 0 };
+  let found = false;
+  for (const g of arr) {
     const rep = g.report || g;
     const impression = adsNum(rep.impression ?? rep.impressions);
     const clicks = adsNum(rep.clicks);
     const expense = adsNum(rep.expense);
     const gmv = adsNum(rep.gmv ?? rep.broad_gmv);
     const orders = adsNum(rep.orders ?? rep.broad_order);
-    if (expense > 0 || gmv > 0 || clicks > 0) {
-      campaigns.push({
-        campaign_id: g.campaign_id || 'gms',
-        campaign_name: 'GMV Max (Tự động)',
-        ad_type: 'gms',
-        totals: {
-          impression, clicks, expense, gmv, orders,
-          ctr: impression > 0 ? clicks / impression : adsNum(rep.ctr),
-          cpc: clicks > 0 ? expense / clicks : 0,
-          roas: expense > 0 ? gmv / expense : adsNum(rep.roas),
-        },
-        daily: [],
+    if (impression || clicks || expense || gmv) found = true;
+    agg.impression += impression; agg.clicks += clicks;
+    agg.expense += expense; agg.gmv += gmv; agg.orders += orders;
+  }
+  if (!found) return { row: null, status: 'no_data' };
+  return {
+    status: 'ok',
+    row: {
+      ...agg,
+      ctr: agg.impression > 0 ? agg.clicks / agg.impression : 0,
+      cpc: agg.clicks > 0 ? agg.expense / agg.clicks : 0,
+      roas: agg.expense > 0 ? agg.gmv / agg.expense : 0,
+    },
+  };
+}
+
+/* ── Cache sync (cron) ──────────────────────────────────────────────────────
+   GMS is rate-limited (ads_rate_limit_total_api), so we snapshot it ~3x/shop/day
+   here instead of on every page view. One snapshot per 7/14/30-day window. */
+const ADS_WINDOWS = [7, 14, 30];
+
+async function syncShopAdsCache(supabase, tk) {
+  const app = APPS.ads;
+  const partnerKey = process.env[app.envKey]?.trim();
+  const refreshed = await refreshIfNeeded(supabase, tk, app);
+  const at = refreshed.access_token;
+  const sid = String(refreshed.shop_id);
+  const shopName = tk.shop_name || sid;
+  const now = new Date();
+  const maxWin = Math.max(...ADS_WINDOWS);
+
+  // Manual campaigns: pull the first page of ids + their daily rows over the widest window
+  // ONCE, then derive each window in memory (the manual endpoint isn't rate-limited).
+  const ids = await fetchAllCampaignIds(partnerKey, app.id, at, sid, 1);
+  const startMax = new Date(now); startMax.setDate(startMax.getDate() - (maxWin - 1)); startMax.setHours(0, 0, 0, 0);
+  const manual = []; // { id, name, ad_type, rows: [{ t, m }] }
+  for (let i = 0; i < ids.length; i += 50) {
+    const slice = ids.slice(i, i + 50);
+    const perfRes = await shopeeGetRetry(partnerKey, app.id,
+      '/api/v2/ads/get_product_campaign_daily_performance', at, sid,
+      { start_date: toShopeeDate(startMax), end_date: toShopeeDate(now), campaign_id_list: slice.join(',') });
+    for (const c of extractCampaignList(perfRes.response)) {
+      const rows = pickCampaignRows(c)
+        .map((r) => ({ t: parseShopeeDate(r.date)?.getTime() ?? 0, m: normalizeDaily(r) }));
+      manual.push({
+        id: String(c.campaign_id),
+        name: c.campaign_name || c.ad_name || `#${c.campaign_id}`,
+        ad_type: c.ad_type || 'manual',
+        rows,
       });
     }
   }
 
-  // 2. Manual product campaigns that actually ran (scan the first page only — keep it fast).
-  const ids = await fetchAllCampaignIds(partnerKey, partnerId, accessToken, shopId, 1);
-  for (let i = 0; i < ids.length; i += 50) {
-    const slice = ids.slice(i, i + 50);
-    const perfRes = await shopeeGetRetry(partnerKey, partnerId,
-      '/api/v2/ads/get_product_campaign_daily_performance',
-      accessToken, shopId, { start_date: startDate, end_date: endDate, campaign_id_list: slice.join(',') });
-    for (const c of extractCampaignList(perfRes.response)) {
-      const rows = pickCampaignRows(c).map(normalizeDaily);
-      const totals = sumAdsTotals(rows);
+  const cacheRows = [];
+  const metaRows = [];
+  for (const win of ADS_WINDOWS) {
+    const start = new Date(now); start.setDate(start.getDate() - (win - 1)); start.setHours(0, 0, 0, 0);
+    const startD = toShopeeDate(start);
+    const endD = toShopeeDate(now);
+    const winStart = start.getTime();
+
+    const gms = await fetchGmsAggregate(partnerKey, app.id, at, sid, startD, endD);
+    metaRows.push({ shop_id: sid, window_days: win, gms_status: gms.status, note: gms.note || null, synced_at: new Date().toISOString() });
+    if (gms.row) {
+      cacheRows.push({
+        shop_id: sid, window_days: win, campaign_id: 'gms', shop_name: shopName,
+        campaign_name: 'GMV Max (Tự động)', ad_type: 'gms',
+        ...gms.row, start_date: startD, end_date: endD,
+      });
+    }
+
+    for (const c of manual) {
+      const totals = sumAdsTotals(c.rows.filter((x) => x.t >= winStart).map((x) => x.m));
       if (totals.expense > 0 || totals.gmv > 0 || totals.clicks > 0) {
-        campaigns.push({
-          campaign_id: c.campaign_id,
-          campaign_name: c.campaign_name || c.ad_name || `#${c.campaign_id}`,
-          ad_type: c.ad_type || 'manual',
-          totals,
-          daily: rows,
+        cacheRows.push({
+          shop_id: sid, window_days: win, campaign_id: c.id, shop_name: shopName,
+          campaign_name: c.name, ad_type: c.ad_type,
+          impression: totals.impression, clicks: totals.clicks, expense: totals.expense,
+          gmv: totals.gmv, orders: totals.orders, ctr: totals.ctr, cpc: totals.cpc, roas: totals.roas,
+          start_date: startD, end_date: endD,
         });
       }
     }
   }
 
-  campaigns.sort((a, b) => b.totals.expense - a.totals.expense);
-  const gmsRateLimited = /rate_limit/i.test(gmsRes.error || '');
+  // Replace this shop's snapshot wholesale so campaigns that went inactive disappear.
+  await supabase.from('shopee_ads_campaign_cache').delete().eq('shop_id', sid);
+  if (cacheRows.length) await supabase.from('shopee_ads_campaign_cache').insert(cacheRows);
+  await supabase.from('shopee_ads_sync_meta').upsert(metaRows, { onConflict: 'shop_id,window_days' });
+
+  return {
+    shop_id: sid, shop_name: shopName, cached_rows: cacheRows.length,
+    gms: metaRows.map((m) => `${m.window_days}d:${m.gms_status}`).join(' '),
+  };
+}
+
+/** action=ads_sync — cron-driven cache refresh (don't call rate-limited GMS per page view) */
+async function handleAdsSync(supabase, reqUrl, req) {
+  const app = APPS.ads;
+  const partnerKey = process.env[app.envKey]?.trim();
+  if (!partnerKey) return { success: false, error: `${app.envKey} not configured` };
+
+  // Allow Vercel cron, or an explicit manual override (so a random hit can't drain GMS quota).
+  const ua = (req.headers['user-agent'] || '').toLowerCase();
+  const isCron = ua.includes('vercel-cron') || !!req.headers['x-vercel-cron'];
+  if (!isCron && reqUrl.searchParams.get('manual') !== '1') {
+    return { success: false, error: 'Forbidden: cron only (append &manual=1 to force)' };
+  }
+
+  const shopId = reqUrl.searchParams.get('shop_id');
+  let query = supabase.from('shopee_tokens').select('*').eq('app_type', 'ads').eq('status', 'active');
+  if (shopId) query = query.eq('shop_id', shopId);
+  const { data: tokens, error } = await query;
+  if (error) return { success: false, error: `DB error: ${error.message}` };
+  if (!tokens?.length) return { success: true, synced: [], message: 'No ads shops connected' };
+
+  const synced = [];
+  for (const tk of tokens) {
+    try { synced.push(await syncShopAdsCache(supabase, tk)); }
+    catch (e) { synced.push({ shop_id: tk.shop_id, error: e.message }); }
+    await sleep(400);
+  }
+  return { success: true, synced_at: new Date().toISOString(), shops: synced.length, synced };
+}
+
+/* Read the cached campaign breakdown for a shop + window (dashboard campaigns mode). */
+async function loadCachedCampaigns(supabase, shopId, windowDays) {
+  const sid = String(shopId);
+  const [cacheRes, metaRes] = await Promise.all([
+    supabase.from('shopee_ads_campaign_cache').select('*').eq('shop_id', sid).eq('window_days', windowDays),
+    supabase.from('shopee_ads_sync_meta').select('*').eq('shop_id', sid).eq('window_days', windowDays).maybeSingle(),
+  ]);
+  const rows = cacheRes.data || [];
+  const meta = metaRes.data || null;
+
+  const campaigns = rows.map((r) => ({
+    campaign_id: r.campaign_id,
+    campaign_name: r.campaign_name,
+    ad_type: r.ad_type,
+    totals: {
+      impression: Number(r.impression), clicks: Number(r.clicks), expense: Number(r.expense),
+      gmv: Number(r.gmv), orders: Number(r.orders),
+      ctr: Number(r.ctr), cpc: Number(r.cpc), roas: Number(r.roas),
+    },
+    daily: [],
+  })).sort((a, b) => b.totals.expense - a.totals.expense);
+
   let note = null;
   if (campaigns.length === 0) {
-    note = gmsRateLimited
-      ? 'GMV Max tạm bị giới hạn API — thử lại sau ít phút'
-      : 'no_active_campaigns';
+    if (!meta) note = 'Chưa đồng bộ — dữ liệu sẽ có sau lần chạy đồng bộ kế tiếp';
+    else if (meta.gms_status === 'rate_limited') note = 'GMV Max bị giới hạn API khi đồng bộ — sẽ cập nhật lần sau';
+    else note = 'no_active_campaigns';
   }
-  return { campaigns, note, gms_error: gmsRes.error || null };
+  return { campaigns, note, synced_at: meta?.synced_at || null, gms_status: meta?.gms_status || null };
 }
 
 /* Per-shop fetch: balance + toggle + daily performance (+campaigns) */
-async function fetchShopAds(supabase, tk, startDate, endDate, withCampaigns) {
+async function fetchShopAds(supabase, tk, startDate, endDate, withCampaigns, days) {
   const app = APPS.ads;
   const partnerKey = process.env[app.envKey]?.trim();
   const refreshed = await refreshIfNeeded(supabase, tk, app);
@@ -353,7 +465,8 @@ async function fetchShopAds(supabase, tk, startDate, endDate, withCampaigns) {
 
   let campaigns = null;
   if (withCampaigns) {
-    campaigns = await fetchAdsCampaigns(partnerKey, app.id, at, sid, startDate, endDate).catch((e) => ({ error: e.message }));
+    // Campaigns come from the cron-built cache (GMS is rate-limited if called live per view).
+    campaigns = await loadCachedCampaigns(supabase, sid, days).catch((e) => ({ error: e.message }));
   }
 
   return {
@@ -396,7 +509,7 @@ async function handleAds(supabase, reqUrl) {
   const shops = [];
   for (const tk of tokens) {
     try {
-      shops.push(await fetchShopAds(supabase, tk, startDate, endDate, withCampaigns));
+      shops.push(await fetchShopAds(supabase, tk, startDate, endDate, withCampaigns, days));
     } catch (err) {
       shops.push({ shop_id: tk.shop_id, shop_name: tk.shop_name || tk.shop_id, error: err.message });
     }
@@ -634,7 +747,7 @@ export default async function handler(req, res) {
     return res.status(400).json({
       ok: false,
       error: 'Missing ?action= parameter',
-      available: ['ads', 'time_slots', 'products', 'product_models', 'create', 'add_items', 'list', 'delete'],
+      available: ['ads', 'ads_sync', 'time_slots', 'products', 'product_models', 'create', 'add_items', 'list', 'delete'],
     });
   }
 
@@ -652,6 +765,9 @@ export default async function handler(req, res) {
     switch (action) {
       case 'ads':
         result = await handleAds(supabase, reqUrl);
+        break;
+      case 'ads_sync':
+        result = await handleAdsSync(supabase, reqUrl, req);
         break;
       case 'time_slots':
         result = await handleTimeSlots(supabase, shopId);
@@ -681,7 +797,7 @@ export default async function handler(req, res) {
         return res.status(400).json({
           ok: false,
           error: `Unknown action: ${action}`,
-          available: ['ads', 'time_slots', 'products', 'product_models', 'create', 'add_items', 'list', 'delete'],
+          available: ['ads', 'ads_sync', 'time_slots', 'products', 'product_models', 'create', 'add_items', 'list', 'delete'],
         });
     }
 
