@@ -203,7 +203,7 @@ const ShopeeTopSellers = ({ dateRange }) => {
       )}
       {!loading && !error && shops.length === 0 && (
         <div style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 14, padding: '32px', textAlign: 'center', color: '#64748b', fontSize: '0.84rem' }}>
-          Chưa có dữ liệu bán hàng trong {days} ngày qua. Bấm <strong>🔄 Đồng bộ</strong> phía trên để kéo đơn Shopee.
+          Chưa có dữ liệu bán hàng trong khoảng ngày đã chọn. Bấm <strong>🔄 Đồng bộ</strong> phía trên để kéo đơn Shopee.
         </div>
       )}
 
@@ -321,7 +321,7 @@ const TikTokTopSellers = ({ dateRange }) => {
       )}
       {!loading && !error && shops.length === 0 && (
         <div style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 14, padding: '32px', textAlign: 'center', color: '#64748b', fontSize: '0.84rem' }}>
-          Chưa có dữ liệu bán hàng TikTok trong {days} ngày qua.
+          Chưa có dữ liệu bán hàng TikTok trong khoảng ngày đã chọn.
         </div>
       )}
 
