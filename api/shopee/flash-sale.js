@@ -249,14 +249,18 @@ async function fetchAdsCampaigns(partnerKey, partnerId, accessToken, shopId, sta
     };
   }).sort((a, b) => b.totals.expense - a.totals.expense);
 
-  // Diagnostic: only when campaigns came back but every daily array is empty,
-  // surface the real field names so the mapping can be finalized from a live response.
-  const allEmpty = campaigns.length > 0 && campaigns.every((c) => c.daily.length === 0);
+  // Diagnostic: when campaigns came back but every total is zero, surface the real
+  // per-campaign daily field names so the mapping can be finalized from a live response.
+  const allZero = campaigns.length > 0 && campaigns.every((c) => c.totals.expense === 0 && c.totals.gmv === 0);
   return {
     campaigns,
     note: perfRes.error || null,
-    _debug: allEmpty
-      ? { campaign_keys: Object.keys(list[0] || {}), sample: JSON.stringify(list[0] || {}).slice(0, 600) }
+    _debug: allZero
+      ? {
+          campaign_keys: Object.keys(list[0] || {}),
+          daily_row_keys: Object.keys(campaigns[0]?.daily?.[0]?.raw || {}),
+          daily_sample: JSON.stringify(campaigns[0]?.daily?.[0]?.raw || {}).slice(0, 700),
+        }
       : undefined,
   };
 }
