@@ -21,6 +21,13 @@ function fmtDateVN(s) {
   if (m) return `${m[1]}/${m[2]}`;
   return s;
 }
+function fmtSyncTime(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())} ${p(d.getDate())}/${p(d.getMonth() + 1)}`;
+}
 
 const DAYS_OPTIONS = [
   { value: 7, label: '7 ngày' },
@@ -253,7 +260,12 @@ export default function ShopeeAdsTab() {
                   <div key={s.shop_id} style={{ ...card, padding: 0, overflow: 'hidden' }}>
                     <div style={{ padding: '12px 18px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <h3 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>🏪 {s.shop_name}</h3>
-                      <span style={{ fontSize: '0.76rem', color: '#64748b' }}>{camps.length} campaign · Chi phí {fmtVND(s.totals?.expense)}</span>
+                      <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                        {camps.length} campaign · Chi phí {fmtVND(s.totals?.expense)}
+                        {fmtSyncTime(s.campaigns?.synced_at) && (
+                          <span style={{ color: '#94a3b8' }}> · Đồng bộ {fmtSyncTime(s.campaigns.synced_at)}</span>
+                        )}
+                      </span>
                     </div>
                     <div style={{ overflowX: 'auto' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -271,7 +283,7 @@ export default function ShopeeAdsTab() {
                         <tbody>
                           {camps.length === 0 ? (
                             <tr><td colSpan={7} style={{ ...tdL, textAlign: 'center', padding: 24, color: '#94a3b8', fontStyle: 'italic' }}>
-                              {s.campaigns?.note ? `Không có campaign (${s.campaigns.note})` : 'Không có campaign nào đang chạy'}
+                              {s.campaigns?.note || 'Không có campaign nào đang chạy'}
                             </td></tr>
                           ) : camps.map((c) => {
                             const t = c.totals || {};
