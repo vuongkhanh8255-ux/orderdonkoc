@@ -197,13 +197,16 @@ function sumAdsTotals(daily) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/* Shopee Ads endpoints rate-limit easily (error_rate_limit, ads_rate_limit_total_api,
-   etc.) — retry on any *rate_limit* error with growing backoff. */
+/* Shopee Ads endpoints rate-limit easily. error_rate_limit is a transient QPS cap
+   (retry with backoff); ads_rate_limit_total_api is a longer total-quota cap that a
+   short backoff won't clear — retry it once at most so we don't hammer the quota. */
 async function shopeeGetRetry(partnerKey, partnerId, apiPath, accessToken, shopId, extraParams = {}, tries = 4) {
   let res;
   for (let i = 0; i < tries; i++) {
     res = await shopeeGet(partnerKey, partnerId, apiPath, accessToken, shopId, extraParams);
-    if (!/rate_limit/i.test(res.error || '')) return res;
+    const err = res.error || '';
+    if (!/rate_limit/i.test(err)) return res;
+    if (/total_api/i.test(err) && i >= 1) return res;
     await sleep(700 * (i + 1));
   }
   return res;
@@ -307,13 +310,14 @@ async function fetchAdsCampaigns(partnerKey, partnerId, accessToken, shopId, sta
   }
 
   campaigns.sort((a, b) => b.totals.expense - a.totals.expense);
-  return {
-    campaigns,
-    note: campaigns.length ? null : 'no_active_campaigns',
-    _debug: campaigns.length === 0
-      ? { gms_error: gmsRes.error || gmsRes.message || null, gms_sample: JSON.stringify(gmsResp || {}).slice(0, 400) }
-      : undefined,
-  };
+  const gmsRateLimited = /rate_limit/i.test(gmsRes.error || '');
+  let note = null;
+  if (campaigns.length === 0) {
+    note = gmsRateLimited
+      ? 'GMV Max tạm bị giới hạn API — thử lại sau ít phút'
+      : 'no_active_campaigns';
+  }
+  return { campaigns, note, gms_error: gmsRes.error || null };
 }
 
 /* Per-shop fetch: balance + toggle + daily performance (+campaigns) */
