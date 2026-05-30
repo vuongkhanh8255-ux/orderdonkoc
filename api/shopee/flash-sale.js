@@ -197,13 +197,14 @@ function sumAdsTotals(daily) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/* Shopee Ads endpoints rate-limit easily across shops — retry on error_rate_limit with backoff */
-async function shopeeGetRetry(partnerKey, partnerId, apiPath, accessToken, shopId, extraParams = {}, tries = 3) {
+/* Shopee Ads endpoints rate-limit easily (error_rate_limit, ads_rate_limit_total_api,
+   etc.) — retry on any *rate_limit* error with growing backoff. */
+async function shopeeGetRetry(partnerKey, partnerId, apiPath, accessToken, shopId, extraParams = {}, tries = 4) {
   let res;
   for (let i = 0; i < tries; i++) {
     res = await shopeeGet(partnerKey, partnerId, apiPath, accessToken, shopId, extraParams);
-    if (res.error !== 'error_rate_limit') return res;
-    await sleep(600 * (i + 1));
+    if (!/rate_limit/i.test(res.error || '')) return res;
+    await sleep(700 * (i + 1));
   }
   return res;
 }
@@ -283,8 +284,8 @@ async function fetchAdsCampaigns(partnerKey, partnerId, accessToken, shopId, sta
     }
   }
 
-  // 2. Manual product campaigns that actually ran (scan a couple of pages — keep it fast).
-  const ids = await fetchAllCampaignIds(partnerKey, partnerId, accessToken, shopId, 2);
+  // 2. Manual product campaigns that actually ran (scan the first page only — keep it fast).
+  const ids = await fetchAllCampaignIds(partnerKey, partnerId, accessToken, shopId, 1);
   for (let i = 0; i < ids.length; i += 50) {
     const slice = ids.slice(i, i + 50);
     const perfRes = await shopeeGetRetry(partnerKey, partnerId,
@@ -324,8 +325,8 @@ async function fetchShopAds(supabase, tk, startDate, endDate, withCampaigns) {
   const sid = refreshed.shop_id;
 
   const [balanceRes, toggleRes, dailyRes] = await Promise.all([
-    shopeeGet(partnerKey, app.id, '/api/v2/ads/get_total_balance', at, sid),
-    shopeeGet(partnerKey, app.id, '/api/v2/ads/get_shop_toggle_info', at, sid),
+    shopeeGetRetry(partnerKey, app.id, '/api/v2/ads/get_total_balance', at, sid),
+    shopeeGetRetry(partnerKey, app.id, '/api/v2/ads/get_shop_toggle_info', at, sid),
     shopeeGetRetry(partnerKey, app.id, '/api/v2/ads/get_all_cpc_ads_daily_performance', at, sid,
       { start_date: startDate, end_date: endDate }),
   ]);
