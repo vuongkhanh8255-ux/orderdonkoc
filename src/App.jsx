@@ -30,6 +30,7 @@ import FlashSaleTab from './components/FlashSaleTab';
 import TopPicksTab from './components/TopPicksTab';
 import ReviewsTab from './components/ReviewsTab';
 import ShopeeAdsTab from './components/ShopeeAdsTab';
+import ShopeeAdsDashboard from './components/ShopeeAdsDashboard';
 import PublicLandingPage from './components/PublicLandingPage';
 
 const SESSION_KEY = 'sk_session';
@@ -218,6 +219,7 @@ function AppMain({ user, onLogout, allowedViews }) {
             {[
               { key: 'ecom', label: '🛍️ Ecom', emoji: '🛍️', items: [
                 { view: 'shop_analytics',    icon: '📊', name: 'Dashboard Ecom' },
+                { view: 'shopee_ads_dashboard', icon: '📣', name: 'Ads Shopee' },
                 { view: 'listed_price',      icon: '🏷️', name: 'Bảng giá niêm yết' },
                 { view: 'costing',           icon: '💰', name: 'Giá Cost' },
                 { view: 'camp_registration', icon: '🎪', name: 'Đăng Kí Camp' },
@@ -378,6 +380,7 @@ function AppMain({ user, onLogout, allowedViews }) {
             <ComingSoonPlaceholder icon="📺" title="Shopee Livestream" description="Quản lý phiên livestream, theo dõi GMV, đơn hàng, người xem trực tiếp" />
           )}
           {currentView === 'shopee_ads' && <ShopeeAdsTab />}
+          {currentView === 'shopee_ads_dashboard' && <ShopeeAdsDashboard />}
 
           {/* BookingPerformanceTab luôn mounted, chỉ ẩn/hiện bằng display
               → state và data cache không mất khi đổi tab */}

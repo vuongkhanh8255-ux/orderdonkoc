@@ -164,7 +164,7 @@ export const ACCOUNTS = [
 
 // ── ROLE PERMISSIONS ──────────────────────────────────────
 export const ROLE_VIEWS = {
-    admin:      ['shop_analytics','flash_sale','top_picks','shopee_livestream','shopee_video','stella_dashboard','listed_price','costing','tiktok_orders','reviews','crm','cskh','livestream','dashboard','order','booking_performance','contract','airlinks','booking','data_archive','expense','landing_orders','camp_registration','task_notes'],
+    admin:      ['shop_analytics','shopee_ads_dashboard','flash_sale','top_picks','shopee_livestream','shopee_video','shopee_ads','stella_dashboard','listed_price','costing','tiktok_orders','reviews','crm','cskh','livestream','dashboard','order','booking_performance','contract','airlinks','booking','data_archive','expense','landing_orders','camp_registration','task_notes'],
     // BOOKING: chỉ Booking group + Ngân Sách Ecom. KHÔNG Ecom group, KHÔNG Task & Notes.
     booking:    ['dashboard','order','booking_performance','contract','airlinks','booking','expense'],
     cs:         ['crm','cskh','order','airlinks','expense','task_notes'],
@@ -174,7 +174,7 @@ export const ROLE_VIEWS = {
     //       KHÔNG có: Hợp Đồng, Lưu Trữ Data, Task & Notes
     reviewer:   ['shop_analytics','listed_price','reviews'],
     ecom:       [
-        'stella_dashboard','listed_price','tiktok_orders','shop_analytics','flash_sale','top_picks','shopee_livestream','shopee_video','camp_registration','reviews', // Ecom + Shopee + Reviews
+        'stella_dashboard','listed_price','tiktok_orders','shop_analytics','shopee_ads_dashboard','flash_sale','top_picks','shopee_livestream','shopee_video','shopee_ads','camp_registration','reviews', // Ecom + Shopee + Reviews
         'cskh',                                                                // CSKH
         'livestream',                                                          // Livestream
         'dashboard','order','booking_performance','airlinks',                  // Booking (no Hợp Đồng)
