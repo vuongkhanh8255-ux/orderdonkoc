@@ -26,7 +26,6 @@ import TikTokOrdersTab from './components/TikTokOrdersTab';
 import CostingTab from './components/CostingTab';
 import CrmTab from './components/CrmTab';
 import ShopAnalyticsTab from './components/ShopAnalyticsTab';
-import TikTokProductAnalyticsTab from './components/TikTokProductAnalyticsTab';
 import FlashSaleTab from './components/FlashSaleTab';
 import TopPicksTab from './components/TopPicksTab';
 import ReviewsTab from './components/ReviewsTab';
@@ -220,7 +219,6 @@ function AppMain({ user, onLogout, allowedViews }) {
             {[
               { key: 'ecom', label: '🛍️ Ecom', emoji: '🛍️', items: [
                 { view: 'shop_analytics',    icon: '📊', name: 'Dashboard Ecom' },
-                { view: 'tiktok_product_analytics', icon: '🏆', name: 'Top SP TikTok' },
                 { view: 'shopee_ads_dashboard', icon: '📣', name: 'Ads Shopee' },
                 { view: 'listed_price',      icon: '🏷️', name: 'Bảng giá niêm yết' },
                 { view: 'costing',           icon: '💰', name: 'Giá Cost' },
@@ -375,7 +373,6 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'task_notes' && <TaskNoteTab />}
           {currentView === 'crm' && <CrmTab />}
           {currentView === 'shop_analytics' && <ShopAnalyticsTab />}
-          {currentView === 'tiktok_product_analytics' && <TikTokProductAnalyticsTab />}
           {currentView === 'flash_sale' && <FlashSaleTab />}
           {currentView === 'top_picks' && <TopPicksTab />}
           {currentView === 'reviews' && <ReviewsTab />}

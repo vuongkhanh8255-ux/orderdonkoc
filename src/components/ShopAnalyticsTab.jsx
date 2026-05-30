@@ -260,6 +260,132 @@ const ShopeeTopSellers = () => {
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
+// ██  TOP SẢN PHẨM BÁN CHẠY (TikTok) — số liệu từ TikTok Analytics API
+// ══════════════════════════════════════════════════════════════════════════════
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+const TikTokTopSellers = () => {
+  const [days, setDays]       = useState(30);
+  const [shopId, setShopId]   = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState(null);
+  const [shops, setShops]     = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true); setError(null);
+      try {
+        const listRes = await fetch('/api/tiktok-shop/analytics?action=shops');
+        const listJson = await listRes.json();
+        if (cancelled) return;
+        if (!listJson.ok || !Array.isArray(listJson.data)) { setError(listJson.error || 'Không tải được danh sách gian hàng'); setShops([]); setLoading(false); return; }
+
+        const end = new Date(); const start = new Date(); start.setDate(start.getDate() - days);
+        const sd = ymd(start), ed = ymd(end);
+        // Fetch every shop's top-10 in parallel (each is its own serverless call)
+        const results = await Promise.all(listJson.data.map(async (s) => {
+          try {
+            const r = await fetch(`/api/tiktok-shop/analytics?action=products&shop_id=${s.shop_id}&start_date=${sd}&end_date=${ed}&sort_field=units_sold&sort_order=DESC&page_size=10`);
+            const j = await r.json();
+            if (!j.ok || !Array.isArray(j.products)) return null;
+            return { shop_id: String(s.shop_id), shop_name: s.seller_name || `Shop ${s.shop_id}`, items: j.products.map((p, i) => ({ rank: i + 1, ...p })) };
+          } catch { return null; }
+        }));
+        if (cancelled) return;
+        setShops(results.filter(Boolean).filter(s => s.items.length > 0));
+      } catch (e) {
+        if (!cancelled) { setError(e.message); setShops([]); }
+      }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [days]);
+
+  const selectStyle = {
+    padding: '8px 30px 8px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb',
+    fontSize: '0.8rem', fontWeight: 600, fontFamily: 'inherit', color: '#374151',
+    background: '#fff', cursor: 'pointer', appearance: 'none', minWidth: 150,
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+    backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center',
+  };
+
+  const visibleShops = shopId ? shops.filter(s => s.shop_id === shopId) : shops;
+
+  return (
+    <div style={{ marginTop: 8, marginBottom: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+        <div>
+          <h3 style={{ margin: '0 0 2px', fontSize: '1.05rem', fontWeight: 900, color: '#0f172a' }}>🏆 Top sản phẩm bán chạy (TikTok)</h3>
+          <p style={{ margin: 0, fontSize: '0.76rem', color: '#94a3b8' }}>Xếp theo số lượng bán · {days} ngày gần nhất · số liệu TikTok thường trễ ~1–2 ngày</p>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select value={shopId} onChange={e => setShopId(e.target.value)} style={selectStyle}>
+            <option value="">Tất cả gian hàng</option>
+            {shops.map(s => <option key={s.shop_id} value={s.shop_id}>🎵 {s.shop_name}</option>)}
+          </select>
+          <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: 8, padding: 3 }}>
+            {[7, 30, 90].map(d => (
+              <button key={d} onClick={() => setDays(d)}
+                style={{ padding: '6px 14px', borderRadius: 6, fontSize: '0.78rem', fontWeight: 600, border: 'none', cursor: 'pointer',
+                  background: days === d ? '#ea580c' : 'transparent', color: days === d ? '#fff' : '#64748b', transition: 'all 0.15s' }}>
+                {d} ngày
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {loading && (
+        <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8', fontSize: '0.84rem' }}>⏳ Đang tải bảng xếp hạng TikTok...</div>
+      )}
+      {error && !loading && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 12, padding: '12px 16px', fontSize: '0.82rem', fontWeight: 600 }}>⚠️ {error}</div>
+      )}
+      {!loading && !error && shops.length === 0 && (
+        <div style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 14, padding: '32px', textAlign: 'center', color: '#64748b', fontSize: '0.84rem' }}>
+          Chưa có dữ liệu bán hàng TikTok trong {days} ngày qua.
+        </div>
+      )}
+
+      {!loading && !error && visibleShops.length > 0 && (
+        <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fill, minmax(440px, 1fr))' }}>
+          {visibleShops.map(shop => (
+            <div key={shop.shop_id} style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
+              <div style={{ padding: '12px 18px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8, background: '#fdf2f8' }}>
+                <span style={{ fontSize: '0.92rem' }}>🎵</span>
+                <span style={{ fontWeight: 800, fontSize: '0.86rem', color: '#9d174d' }}>{shop.shop_name}</span>
+                <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: '#be185d', fontWeight: 600 }}>{shop.items.length} SP</span>
+              </div>
+              <div>
+                {shop.items.map(it => (
+                  <div key={it.product_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid #f8fafc' }}>
+                    <div style={{ width: 22, textAlign: 'center', fontWeight: 900, fontSize: '0.9rem', flexShrink: 0,
+                      color: it.rank <= 3 ? RANK_COLORS[it.rank - 1] : '#cbd5e1' }}>{it.rank}</div>
+                    <div style={{ width: 46, height: 46, borderRadius: 8, flexShrink: 0, background: 'linear-gradient(135deg,#fdf2f8,#fce7f3)', border: '1px solid #fce7f3', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>🧴</div>
+                    <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={it.product_name}>{it.product_name}</div>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0, minWidth: 52 }}>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#ea580c' }}>{fmtNumber(it.units_sold)}</div>
+                      <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>đã bán</div>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0, minWidth: 64 }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#16a34a' }}>{fmtVnd(it.gmv)}</div>
+                      <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>doanh thu</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
 // ██  MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════════════════
 const ShopAnalyticsTab = () => {
@@ -977,6 +1103,9 @@ const ShopAnalyticsTab = () => {
           </button>
         </div>
       )}
+
+      {/* ── Top sản phẩm bán chạy (TikTok) — ẩn khi đang lọc riêng sàn Shopee ── */}
+      {platformFilter !== 'shopee' && <TikTokTopSellers />}
 
       {/* ── Top sản phẩm bán chạy (Shopee) — chỉ hiện khi đang xem Shopee ──────────
          Ẩn khi lọc sàn TikTok, hoặc khi đang chọn 1 shop TikTok (kể cả "Tất cả sàn"),
