@@ -145,8 +145,7 @@ const SmallLabel = ({ x, y, value, color = '#64748b' }) => {
 // ██  SHOPEE TOP SELLERS — bảng xếp hạng bán chạy theo shop (từ đơn đã đồng bộ)
 // ══════════════════════════════════════════════════════════════════════════════
 const RANK_COLORS = ['#f59e0b', '#9ca3af', '#b45309']; // 🥇🥈🥉
-const ShopeeTopSellers = () => {
-  const [days, setDays]       = useState(30);
+const ShopeeTopSellers = ({ dateRange }) => {
   const [shopId, setShopId]   = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState(null);
@@ -156,6 +155,7 @@ const ShopeeTopSellers = () => {
     let cancelled = false;
     (async () => {
       setLoading(true); setError(null);
+      const days = Math.max(1, daysBetween(dateRange.start, dateRange.end));
       try {
         const res = await fetch(`/api/shopee/top-picks?action=top_sellers&days=${days}&limit=10`);
         const json = await res.json();
@@ -168,7 +168,7 @@ const ShopeeTopSellers = () => {
       if (!cancelled) setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [days]);
+  }, [dateRange.start, dateRange.end]);
 
   const selectStyle = {
     padding: '8px 30px 8px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb',
@@ -186,22 +186,13 @@ const ShopeeTopSellers = () => {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
         <div>
           <h3 style={{ margin: '0 0 2px', fontSize: '1.05rem', fontWeight: 900, color: '#0f172a' }}>🏆 Top sản phẩm bán chạy (Shopee)</h3>
-          <p style={{ margin: 0, fontSize: '0.76rem', color: '#94a3b8' }}>Xếp theo số lượng bán · tính từ đơn hàng đã đồng bộ · {days} ngày gần nhất</p>
+          <p style={{ margin: 0, fontSize: '0.76rem', color: '#94a3b8' }}>Xếp theo số lượng bán · tính từ đơn hàng đã đồng bộ · theo khung thời gian ở trên</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <select value={shopId} onChange={e => setShopId(e.target.value)} style={selectStyle}>
             <option value="">Tất cả shop</option>
             {shops.map(s => <option key={s.shop_id} value={s.shop_id}>🛒 {s.shop_name}</option>)}
           </select>
-          <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: 8, padding: 3 }}>
-            {[7, 30, 90].map(d => (
-              <button key={d} onClick={() => setDays(d)}
-                style={{ padding: '6px 14px', borderRadius: 6, fontSize: '0.78rem', fontWeight: 600, border: 'none', cursor: 'pointer',
-                  background: days === d ? '#ea580c' : 'transparent', color: days === d ? '#fff' : '#64748b', transition: 'all 0.15s' }}>
-                {d} ngày
-              </button>
-            ))}
-          </div>
         </div>
       </div>
 
@@ -262,10 +253,7 @@ const ShopeeTopSellers = () => {
 // ══════════════════════════════════════════════════════════════════════════════
 // ██  TOP SẢN PHẨM BÁN CHẠY (TikTok) — số liệu từ TikTok Analytics API
 // ══════════════════════════════════════════════════════════════════════════════
-const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
-const TikTokTopSellers = () => {
-  const [days, setDays]       = useState(30);
+const TikTokTopSellers = ({ dateRange }) => {
   const [shopId, setShopId]   = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState(null);
@@ -281,8 +269,7 @@ const TikTokTopSellers = () => {
         if (cancelled) return;
         if (!listJson.ok || !Array.isArray(listJson.data)) { setError(listJson.error || 'Không tải được danh sách gian hàng'); setShops([]); setLoading(false); return; }
 
-        const end = new Date(); const start = new Date(); start.setDate(start.getDate() - days);
-        const sd = ymd(start), ed = ymd(end);
+        const sd = dateRange.start, ed = dateRange.end;
         // Fetch every shop's top-10 in parallel (each is its own serverless call)
         const results = await Promise.all(listJson.data.map(async (s) => {
           try {
@@ -300,7 +287,7 @@ const TikTokTopSellers = () => {
       if (!cancelled) setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [days]);
+  }, [dateRange.start, dateRange.end]);
 
   const selectStyle = {
     padding: '8px 30px 8px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb',
@@ -317,22 +304,13 @@ const TikTokTopSellers = () => {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
         <div>
           <h3 style={{ margin: '0 0 2px', fontSize: '1.05rem', fontWeight: 900, color: '#0f172a' }}>🏆 Top sản phẩm bán chạy (TikTok)</h3>
-          <p style={{ margin: 0, fontSize: '0.76rem', color: '#94a3b8' }}>Xếp theo số lượng bán · {days} ngày gần nhất · số liệu TikTok thường trễ ~1–2 ngày</p>
+          <p style={{ margin: 0, fontSize: '0.76rem', color: '#94a3b8' }}>Xếp theo số lượng bán · theo khung thời gian ở trên · số liệu TikTok thường trễ ~1–2 ngày</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <select value={shopId} onChange={e => setShopId(e.target.value)} style={selectStyle}>
             <option value="">Tất cả gian hàng</option>
             {shops.map(s => <option key={s.shop_id} value={s.shop_id}>🎵 {s.shop_name}</option>)}
           </select>
-          <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: 8, padding: 3 }}>
-            {[7, 30, 90].map(d => (
-              <button key={d} onClick={() => setDays(d)}
-                style={{ padding: '6px 14px', borderRadius: 6, fontSize: '0.78rem', fontWeight: 600, border: 'none', cursor: 'pointer',
-                  background: days === d ? '#ea580c' : 'transparent', color: days === d ? '#fff' : '#64748b', transition: 'all 0.15s' }}>
-                {d} ngày
-              </button>
-            ))}
-          </div>
         </div>
       </div>
 
@@ -1109,14 +1087,14 @@ const ShopAnalyticsTab = () => {
       )}
 
       {/* ── Top sản phẩm bán chạy (TikTok) — ẩn khi đang lọc riêng sàn Shopee ── */}
-      {platformFilter !== 'shopee' && <TikTokTopSellers />}
+      {platformFilter !== 'shopee' && <TikTokTopSellers dateRange={dateRange} />}
 
       {/* ── Top sản phẩm bán chạy (Shopee) — chỉ hiện khi đang xem Shopee ──────────
          Ẩn khi lọc sàn TikTok, hoặc khi đang chọn 1 shop TikTok (kể cả "Tất cả sàn"),
          vì dữ liệu bán chạy này là của Shopee, không liên quan tới shop TikTok. */}
       {platformFilter !== 'tiktok'
         && !(shopFilter && connections.some(c => String(c.shop_id) === String(shopFilter)))
-        && <ShopeeTopSellers />}
+        && <ShopeeTopSellers dateRange={dateRange} />}
     </div>
   );
 };
