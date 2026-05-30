@@ -740,8 +740,15 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end();
 
   const reqUrl = new URL(req.url, `https://${req.headers.host || 'koc-tool.vercel.app'}`);
-  const action = reqUrl.searchParams.get('action');
+  let action = reqUrl.searchParams.get('action');
   const shopId = reqUrl.searchParams.get('shop_id') || DEFAULT_SHOP_ID;
+
+  // Vercel cron can't reliably carry a query string in the path, so a cron hit on the
+  // bare function (identified by its header / user-agent) is treated as the ads cache sync.
+  if (!action) {
+    const ua = (req.headers['user-agent'] || '').toLowerCase();
+    if (req.headers['x-vercel-cron'] || ua.includes('vercel-cron')) action = 'ads_sync';
+  }
 
   if (!action) {
     return res.status(400).json({
