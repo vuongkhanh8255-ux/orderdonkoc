@@ -17,12 +17,19 @@ function fmtNum(n) { return (Math.round(Number(n) || 0)).toLocaleString('vi-VN')
 function fmtPct(n) { return ((Number(n) || 0) * 100).toFixed(2) + '%'; }
 function fmtRoas(n) { return (!n || !Number.isFinite(n)) ? '—' : n.toFixed(2) + 'x'; }
 
+/* YYYY-MM-DD <-> Date <-> Shopee DD-MM-YYYY */
+const toYmd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const ymdToShopee = (ymd) => { const p = (ymd || '').split('-'); return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : ymd; };
+const shopeeToYmd = (s) => { const m = /^(\d{2})-(\d{2})-(\d{4})$/.exec(s || ''); return m ? `${m[3]}-${m[2]}-${m[1]}` : s; };
+
 const SHOP_COLORS = ['#ea580c', '#2563eb', '#16a34a', '#8b5cf6', '#db2777', '#0891b2', '#d97706', '#0d9488'];
-const DAYS_OPTIONS = [{ value: 7, label: '7 ngày' }, { value: 14, label: '14 ngày' }, { value: 30, label: '30 ngày' }];
+const PRESETS = [{ label: '7 ngày', days: 7 }, { label: '14 ngày', days: 14 }, { label: '30 ngày', days: 30 }, { label: '60 ngày', days: 60 }];
 
 const card = { background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', padding: '18px 20px', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' };
+const labelStyle = { fontSize: '0.68rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4 };
+const selectStyle = { padding: '8px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.82rem', fontFamily: 'inherit', cursor: 'pointer', fontWeight: 600, background: '#fff' };
+const dateInputStyle = { padding: '7px 10px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.78rem', fontFamily: 'inherit' };
 
-/* sort key for Shopee DD-MM-YYYY dates */
 const dkey = (s) => { const m = /^(\d{2})-(\d{2})-(\d{4})$/.exec(s || ''); return m ? `${m[3]}${m[2]}${m[1]}` : s; };
 
 /* ── Component ───────────────────────────────────────────────────── */
@@ -32,30 +39,51 @@ export default function ShopeeAdsDashboard() {
   const [shops, setShops] = useState([]);
   const [meta, setMeta] = useState(null);
   const [hasFetched, setHasFetched] = useState(false);
-  const [days, setDays] = useState(7);
+  const [shopFilter, setShopFilter] = useState('');           // '' = tất cả shop
+  const [dateRange, setDateRange] = useState(() => {
+    const end = new Date(); const start = new Date(); start.setDate(start.getDate() - 6);
+    return { start: toYmd(start), end: toYmd(end) };
+  });
 
-  const fetchAds = useCallback(async (nextDays = days) => {
+  const fetchAds = useCallback(async (startYmd, endYmd) => {
     setLoading(true); setError('');
     try {
-      const res = await fetch(`/api/shopee/flash-sale?action=ads&mode=summary&days=${nextDays}`);
+      const qs = `start_date=${ymdToShopee(startYmd)}&end_date=${ymdToShopee(endYmd)}`;
+      const res = await fetch(`/api/shopee/flash-sale?action=ads&mode=summary&${qs}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (!data.success) throw new Error(data.error || data.message || 'Lỗi tải dữ liệu');
       setShops(data.shops || []);
-      setMeta({ start_date: data.start_date, end_date: data.end_date, days: data.days });
+      setMeta({ start_date: data.start_date, end_date: data.end_date });
       setHasFetched(true);
     } catch (err) { setError(err.message); } finally { setLoading(false); }
-  }, [days]);
+  }, []);
 
-  useEffect(() => { fetchAds(days); /* eslint-disable-next-line */ }, []);
+  // refetch whenever the date range changes (shop filter is applied client-side)
+  useEffect(() => { fetchAds(dateRange.start, dateRange.end); }, [dateRange.start, dateRange.end, fetchAds]);
+
+  const setPreset = (days) => {
+    const end = new Date(); const start = new Date(); start.setDate(start.getDate() - (days - 1));
+    setDateRange({ start: toYmd(start), end: toYmd(end) });
+  };
+  const activeDays = useMemo(() => {
+    const e = new Date(); e.setHours(0, 0, 0, 0);
+    const ms = new Date(dateRange.end) - new Date(dateRange.start);
+    const isToday = dateRange.end === toYmd(e);
+    return isToday ? Math.round(ms / 86400000) + 1 : null;
+  }, [dateRange]);
 
   const okShops = useMemo(() => shops.filter((s) => !s.error), [shops]);
   const errShops = useMemo(() => shops.filter((s) => s.error), [shops]);
+  const displayShops = useMemo(
+    () => (shopFilter ? okShops.filter((s) => String(s.shop_id) === String(shopFilter)) : okShops),
+    [okShops, shopFilter],
+  );
 
-  /* aggregate KPIs */
+  /* aggregate KPIs over the displayed shops */
   const agg = useMemo(() => {
     const t = { expense: 0, gmv: 0, clicks: 0, impression: 0, orders: 0, balance: 0 };
-    for (const s of okShops) {
+    for (const s of displayShops) {
       t.expense += s.totals?.expense || 0; t.gmv += s.totals?.gmv || 0;
       t.clicks += s.totals?.clicks || 0; t.impression += s.totals?.impression || 0;
       t.orders += s.totals?.orders || 0; t.balance += s.balance || 0;
@@ -63,10 +91,9 @@ export default function ShopeeAdsDashboard() {
     t.roas = t.expense > 0 ? t.gmv / t.expense : 0;
     t.ctr = t.impression > 0 ? t.clicks / t.impression : 0;
     return t;
-  }, [okShops]);
+  }, [displayShops]);
 
-  /* per-shop rows for bar / pie charts (sorted by spend) */
-  const perShop = useMemo(() => okShops.map((s, i) => ({
+  const perShop = useMemo(() => displayShops.map((s, i) => ({
     name: s.shop_name || String(s.shop_id),
     short: (s.shop_name || String(s.shop_id)).length > 14 ? (s.shop_name).slice(0, 13) + '…' : (s.shop_name || String(s.shop_id)),
     expense: Math.round(s.totals?.expense || 0),
@@ -75,12 +102,11 @@ export default function ShopeeAdsDashboard() {
     orders: Math.round(s.totals?.orders || 0),
     clicks: Math.round(s.totals?.clicks || 0),
     color: SHOP_COLORS[i % SHOP_COLORS.length],
-  })).sort((a, b) => b.expense - a.expense), [okShops]);
+  })).sort((a, b) => b.expense - a.expense), [displayShops]);
 
-  /* daily trend merged across all shops */
   const trend = useMemo(() => {
     const map = new Map();
-    for (const s of okShops) for (const d of (s.daily || [])) {
+    for (const s of displayShops) for (const d of (s.daily || [])) {
       if (!d.date) continue;
       const cur = map.get(d.date) || { date: d.date, expense: 0, gmv: 0 };
       cur.expense += d.expense || 0; cur.gmv += d.gmv || 0;
@@ -88,7 +114,7 @@ export default function ShopeeAdsDashboard() {
     }
     return [...map.values()].sort((a, b) => (dkey(a.date) > dkey(b.date) ? 1 : -1))
       .map((d) => ({ label: (d.date || '').slice(0, 5), expense: Math.round(d.expense), gmv: Math.round(d.gmv) }));
-  }, [okShops]);
+  }, [displayShops]);
 
   /* ── small pieces ── */
   const kpi = (label, value, sub, color = '#0f172a') => (
@@ -108,29 +134,63 @@ export default function ShopeeAdsDashboard() {
     </div>
   );
   const axis = { fontSize: 11, fill: '#64748b' };
+  const single = shopFilter && displayShops.length === 1 ? displayShops[0] : null;
 
   return (
     <div style={{ fontFamily: "'Outfit', sans-serif", maxWidth: 1400, margin: '0 auto', padding: '0 24px 48px' }}>
-      {/* HEADER */}
+      {/* HEADER + FILTER BAR */}
       <div style={{ ...card, marginBottom: 18 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
           <div>
             <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 900, color: '#0f172a' }}>📣 Ads Shopee — Dashboard</h2>
             <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#64748b' }}>
-              So sánh hiệu quả quảng cáo {okShops.length} shop Shopee
+              {single ? `Shop: ${single.shop_name}` : `So sánh hiệu quả quảng cáo ${displayShops.length} shop`}
               {meta && <span style={{ marginLeft: 8, color: '#94a3b8' }}>· {meta.start_date} → {meta.end_date}</span>}
+              {loading && <span style={{ marginLeft: 8, color: '#ea580c' }}>· ⏳ đang tải…</span>}
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <select value={days} onChange={(e) => { const d = Number(e.target.value); setDays(d); fetchAds(d); }}
-              style={{ padding: '9px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.84rem', fontFamily: 'inherit', cursor: 'pointer', fontWeight: 600 }}>
-              {DAYS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
+          {/* Shop filter */}
+          <div>
+            <div style={labelStyle}>Shop</div>
+            <select value={shopFilter} onChange={(e) => setShopFilter(e.target.value)} style={selectStyle}>
+              <option value="">🛒 Tất cả shop ({okShops.length})</option>
+              {okShops.map((s) => <option key={s.shop_id} value={s.shop_id}>{s.shop_name || s.shop_id}</option>)}
             </select>
-            <button onClick={() => fetchAds(days)} disabled={loading}
-              style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: loading ? '#d1d5db' : '#ea580c', color: '#fff', fontWeight: 800, fontSize: '0.86rem', cursor: loading ? 'default' : 'pointer', fontFamily: 'inherit' }}>
-              {loading ? '⏳ Đang tải...' : '🔄 Tải lại'}
-            </button>
           </div>
+          <div style={{ width: 1, height: 36, background: '#e5e7eb', alignSelf: 'center' }} />
+          {/* Time presets */}
+          <div>
+            <div style={labelStyle}>Khung thời gian</div>
+            <div style={{ display: 'flex', gap: 0, background: '#f1f5f9', borderRadius: 8, padding: 3 }}>
+              {PRESETS.map((r) => {
+                const isActive = activeDays === r.days;
+                return (
+                  <button key={r.label} onClick={() => setPreset(r.days)}
+                    style={{ padding: '6px 14px', borderRadius: 6, fontSize: '0.78rem', fontWeight: 600, border: 'none', background: isActive ? '#ea580c' : 'transparent', color: isActive ? '#fff' : '#64748b', cursor: 'pointer' }}>
+                    {r.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {/* Custom date range */}
+          <div>
+            <div style={labelStyle}>Tùy chọn ngày</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="date" value={dateRange.start} max={dateRange.end}
+                onChange={(e) => setDateRange((p) => ({ ...p, start: e.target.value }))} style={dateInputStyle} />
+              <span style={{ color: '#cbd5e1' }}>→</span>
+              <input type="date" value={dateRange.end} min={dateRange.start} max={toYmd(new Date())}
+                onChange={(e) => setDateRange((p) => ({ ...p, end: e.target.value }))} style={dateInputStyle} />
+            </div>
+          </div>
+          <button onClick={() => fetchAds(dateRange.start, dateRange.end)} disabled={loading}
+            style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: loading ? '#d1d5db' : '#ea580c', color: '#fff', fontWeight: 800, fontSize: '0.84rem', cursor: loading ? 'default' : 'pointer', fontFamily: 'inherit', alignSelf: 'flex-end' }}>
+            {loading ? '⏳' : '🔄 Tải lại'}
+          </button>
         </div>
       </div>
 
@@ -143,23 +203,29 @@ export default function ShopeeAdsDashboard() {
       {loading && !hasFetched && (
         <div style={{ ...card, textAlign: 'center', padding: 60 }}>
           <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>⏳</div>
-          <div style={{ fontWeight: 700, color: '#64748b' }}>Đang tải dữ liệu quảng cáo 6 shop...</div>
+          <div style={{ fontWeight: 700, color: '#64748b' }}>Đang tải dữ liệu quảng cáo...</div>
         </div>
       )}
 
-      {hasFetched && (
+      {hasFetched && displayShops.length === 0 && !loading && (
+        <div style={{ ...card, textAlign: 'center', padding: 50, color: '#94a3b8', fontWeight: 600 }}>
+          Không có dữ liệu cho lựa chọn này
+        </div>
+      )}
+
+      {hasFetched && displayShops.length > 0 && (
         <>
           {/* KPI cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12, marginBottom: 18 }}>
-            {kpi('Tổng chi phí QC', fmtVND(agg.expense), `${okShops.length} shop`, '#dc2626')}
+            {kpi('Tổng chi phí QC', fmtVND(agg.expense), single ? single.shop_name : `${displayShops.length} shop`, '#dc2626')}
             {kpi('Doanh thu Ads', fmtVND(agg.gmv), 'GMV quy cho QC', '#16a34a')}
             {kpi('ROAS chung', fmtRoas(agg.roas), 'Doanh thu / Chi phí', '#7c3aed')}
             {kpi('Tổng đơn Ads', fmtNum(agg.orders), null, '#0f172a')}
             {kpi('Tổng click', fmtNum(agg.clicks), `CTR ${fmtPct(agg.ctr)}`, '#2563eb')}
-            {kpi('Tổng số dư', fmtVND(agg.balance), 'Ví QC tất cả shop', '#ea580c')}
+            {kpi('Số dư ví QC', fmtVND(agg.balance), single ? 'Shop này' : 'Tất cả shop', '#ea580c')}
           </div>
 
-          {errShops.length > 0 && (
+          {errShops.length > 0 && !shopFilter && (
             <div style={{ ...card, marginBottom: 18, background: '#fffbeb', borderColor: '#fde68a' }}>
               <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#92400e' }}>⚠️ Lỗi {errShops.length} shop: </span>
               <span style={{ fontSize: '0.78rem', color: '#92400e' }}>{errShops.map((s) => s.shop_name || s.shop_id).join(', ')}</span>
@@ -168,7 +234,7 @@ export default function ShopeeAdsDashboard() {
 
           {/* Trend full width */}
           <div style={{ marginBottom: 16 }}>
-            {chartCard('Xu hướng theo ngày', 'Tổng chi phí & doanh thu Ads của tất cả shop', 280,
+            {chartCard('Xu hướng theo ngày', single ? `Chi phí & doanh thu Ads — ${single.shop_name}` : 'Tổng chi phí & doanh thu Ads các shop', 280,
               <AreaChart data={trend} margin={{ top: 8, right: 12, bottom: 0, left: 6 }}>
                 <defs>
                   <linearGradient id="gExp" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#ea580c" stopOpacity={0.3} /><stop offset="95%" stopColor="#ea580c" stopOpacity={0} /></linearGradient>
@@ -185,60 +251,64 @@ export default function ShopeeAdsDashboard() {
             )}
           </div>
 
-          {/* 2-up charts */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 16, marginBottom: 16 }}>
-            {chartCard('Chi phí QC theo shop', 'Shop nào tiêu nhiều nhất', 300,
-              <BarChart data={perShop} margin={{ top: 18, right: 12, bottom: 4, left: 6 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                <XAxis dataKey="short" tick={axis} interval={0} angle={-18} textAnchor="end" height={56} />
-                <YAxis tick={axis} tickFormatter={fmtVND} width={48} />
-                <Tooltip formatter={(v) => fmtVNDfull(v)} labelFormatter={(l, p) => p?.[0]?.payload?.name || l} />
-                <Bar dataKey="expense" radius={[6, 6, 0, 0]}>
-                  <LabelList dataKey="expense" position="top" formatter={fmtVND} style={{ fontSize: 10, fill: '#475569' }} />
-                  {perShop.map((s, i) => <Cell key={i} fill={s.color} />)}
-                </Bar>
-              </BarChart>
-            )}
-            {chartCard('ROAS theo shop', 'Hiệu quả: doanh thu trên mỗi đồng QC', 300,
-              <BarChart data={perShop} margin={{ top: 18, right: 12, bottom: 4, left: 6 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                <XAxis dataKey="short" tick={axis} interval={0} angle={-18} textAnchor="end" height={56} />
-                <YAxis tick={axis} width={36} />
-                <Tooltip formatter={(v) => `${v}x`} labelFormatter={(l, p) => p?.[0]?.payload?.name || l} />
-                <Bar dataKey="roas" radius={[6, 6, 0, 0]} fill="#7c3aed">
-                  <LabelList dataKey="roas" position="top" formatter={(v) => `${v}x`} style={{ fontSize: 10, fill: '#475569' }} />
-                </Bar>
-              </BarChart>
-            )}
-          </div>
+          {/* per-shop comparison only meaningful with >1 shop */}
+          {!single && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 16, marginBottom: 16 }}>
+                {chartCard('Chi phí QC theo shop', 'Shop nào tiêu nhiều nhất', 300,
+                  <BarChart data={perShop} margin={{ top: 18, right: 12, bottom: 4, left: 6 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                    <XAxis dataKey="short" tick={axis} interval={0} angle={-18} textAnchor="end" height={56} />
+                    <YAxis tick={axis} tickFormatter={fmtVND} width={48} />
+                    <Tooltip formatter={(v) => fmtVNDfull(v)} labelFormatter={(l, p) => p?.[0]?.payload?.name || l} />
+                    <Bar dataKey="expense" radius={[6, 6, 0, 0]}>
+                      <LabelList dataKey="expense" position="top" formatter={fmtVND} style={{ fontSize: 10, fill: '#475569' }} />
+                      {perShop.map((s, i) => <Cell key={i} fill={s.color} />)}
+                    </Bar>
+                  </BarChart>
+                )}
+                {chartCard('ROAS theo shop', 'Doanh thu trên mỗi đồng QC', 300,
+                  <BarChart data={perShop} margin={{ top: 18, right: 12, bottom: 4, left: 6 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                    <XAxis dataKey="short" tick={axis} interval={0} angle={-18} textAnchor="end" height={56} />
+                    <YAxis tick={axis} width={36} />
+                    <Tooltip formatter={(v) => `${v}x`} labelFormatter={(l, p) => p?.[0]?.payload?.name || l} />
+                    <Bar dataKey="roas" radius={[6, 6, 0, 0]} fill="#7c3aed">
+                      <LabelList dataKey="roas" position="top" formatter={(v) => `${v}x`} style={{ fontSize: 10, fill: '#475569' }} />
+                    </Bar>
+                  </BarChart>
+                )}
+              </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 16, marginBottom: 16 }}>
-            {chartCard('Chi phí vs Doanh thu theo shop', 'So sánh đầu tư và kết quả', 300,
-              <BarChart data={perShop} margin={{ top: 8, right: 12, bottom: 4, left: 6 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                <XAxis dataKey="short" tick={axis} interval={0} angle={-18} textAnchor="end" height={56} />
-                <YAxis tick={axis} tickFormatter={fmtVND} width={48} />
-                <Tooltip formatter={(v, n) => [fmtVNDfull(v), n === 'expense' ? 'Chi phí' : 'Doanh thu']} labelFormatter={(l, p) => p?.[0]?.payload?.name || l} />
-                <Legend formatter={(v) => (v === 'expense' ? 'Chi phí' : 'Doanh thu Ads')} />
-                <Bar dataKey="expense" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="gmv" fill="#16a34a" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            )}
-            {chartCard('Tỷ trọng chi phí', 'Phần chi phí QC mỗi shop chiếm', 300,
-              <PieChart>
-                <Pie data={perShop.filter((s) => s.expense > 0)} dataKey="expense" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={95} paddingAngle={2}>
-                  {perShop.map((s, i) => <Cell key={i} fill={s.color} />)}
-                </Pie>
-                <Tooltip formatter={(v, n) => [fmtVNDfull(v), n]} />
-                <Legend formatter={(v) => (v.length > 16 ? v.slice(0, 15) + '…' : v)} wrapperStyle={{ fontSize: 11 }} />
-              </PieChart>
-            )}
-          </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 16, marginBottom: 16 }}>
+                {chartCard('Chi phí vs Doanh thu theo shop', 'So sánh đầu tư và kết quả', 300,
+                  <BarChart data={perShop} margin={{ top: 8, right: 12, bottom: 4, left: 6 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                    <XAxis dataKey="short" tick={axis} interval={0} angle={-18} textAnchor="end" height={56} />
+                    <YAxis tick={axis} tickFormatter={fmtVND} width={48} />
+                    <Tooltip formatter={(v, n) => [fmtVNDfull(v), n === 'expense' ? 'Chi phí' : 'Doanh thu']} labelFormatter={(l, p) => p?.[0]?.payload?.name || l} />
+                    <Legend formatter={(v) => (v === 'expense' ? 'Chi phí' : 'Doanh thu Ads')} />
+                    <Bar dataKey="expense" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="gmv" fill="#16a34a" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                )}
+                {chartCard('Tỷ trọng chi phí', 'Phần chi phí QC mỗi shop chiếm', 300,
+                  <PieChart>
+                    <Pie data={perShop.filter((s) => s.expense > 0)} dataKey="expense" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={95} paddingAngle={2}>
+                      {perShop.map((s, i) => <Cell key={i} fill={s.color} />)}
+                    </Pie>
+                    <Tooltip formatter={(v, n) => [fmtVNDfull(v), n]} />
+                    <Legend formatter={(v) => (v.length > 16 ? v.slice(0, 15) + '…' : v)} wrapperStyle={{ fontSize: 11 }} />
+                  </PieChart>
+                )}
+              </div>
+            </>
+          )}
 
-          {/* Ranking table */}
+          {/* Ranking / detail table */}
           <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
             <div style={{ padding: '12px 18px', borderBottom: '1px solid #f1f5f9', fontSize: '0.9rem', fontWeight: 800, color: '#0f172a' }}>
-              🏆 Bảng xếp hạng theo chi phí
+              {single ? '📋 Chi tiết shop' : '🏆 Bảng xếp hạng theo chi phí'}
             </div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
