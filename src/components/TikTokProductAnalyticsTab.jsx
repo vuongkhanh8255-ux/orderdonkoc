@@ -2,7 +2,7 @@
 // Built by Quốc Khánh
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 
-const API = '/api/tiktok-shop/product-analytics';
+const API = '/api/tiktok-shop/analytics';
 const PAGE_SIZE = 30;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
