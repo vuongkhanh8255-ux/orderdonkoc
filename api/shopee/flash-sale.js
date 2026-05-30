@@ -237,43 +237,81 @@ async function fetchAllCampaignIds(partnerKey, partnerId, accessToken, shopId, m
   return ids;
 }
 
-/* Per-campaign breakdown (optional, mode=campaigns) */
-async function fetchAdsCampaigns(partnerKey, partnerId, accessToken, shopId, startDate, endDate) {
-  const ids = await fetchAllCampaignIds(partnerKey, partnerId, accessToken, shopId);
-  if (ids.length === 0) return { campaigns: [], note: 'no_campaigns' };
+/* Unwrap the campaign array from get_product_campaign_daily_performance, which may
+   come back as a flat array of campaigns OR wrapped in [{ shop_id, region, campaign_list }]. */
+function extractCampaignList(pResp) {
+  if (Array.isArray(pResp)) {
+    if (pResp.length && pResp[0]?.campaign_list) return pResp.flatMap((x) => x.campaign_list || []);
+    return pResp;
+  }
+  return pResp?.campaign_list || pResp?.performance_list || [];
+}
 
-  // Pull daily performance for every campaign, batched (the endpoint accepts many ids per call).
-  const all = [];
-  const BATCH = 50;
-  for (let i = 0; i < ids.length; i += BATCH) {
-    const slice = ids.slice(i, i + BATCH);
-    const perfRes = await shopeeGetRetry(partnerKey, partnerId,
-      '/api/v2/ads/get_product_campaign_daily_performance',
-      accessToken, shopId, { start_date: startDate, end_date: endDate, campaign_id_list: slice.join(',') });
-    const pResp = perfRes.response;
-    const list = Array.isArray(pResp)
-      ? pResp
-      : (pResp?.campaign_list || pResp?.performance_list || pResp?.campaign_daily_performance_list || []);
-    for (const c of list) {
-      const rows = pickCampaignRows(c).map(normalizeDaily);
-      all.push({
-        campaign_id: c.campaign_id,
-        campaign_name: c.campaign_name || c.ad_name || `#${c.campaign_id}`,
-        totals: sumAdsTotals(rows),
-        daily: rows,
+/* Per-campaign breakdown (mode=campaigns).
+   Most modern Shopee spend sits in GMS (GMV Max / auto ads), NOT the classic
+   product-level campaign list (which is usually hundreds of legacy zero campaigns).
+   So: fetch the GMS aggregate first, then add any manual campaigns that actually ran. */
+async function fetchAdsCampaigns(partnerKey, partnerId, accessToken, shopId, startDate, endDate) {
+  const campaigns = [];
+
+  // 1. GMS / GMV Max auto campaign — single aggregate report for the window.
+  const gmsRes = await shopeeGetRetry(partnerKey, partnerId,
+    '/api/v2/ads/get_gms_campaign_performance',
+    accessToken, shopId, { start_date: startDate, end_date: endDate });
+  const gmsResp = gmsRes.response;
+  const gmsArr = Array.isArray(gmsResp) ? gmsResp : (gmsResp ? [gmsResp] : []);
+  for (const g of gmsArr) {
+    const rep = g.report || g;
+    const impression = adsNum(rep.impression ?? rep.impressions);
+    const clicks = adsNum(rep.clicks);
+    const expense = adsNum(rep.expense);
+    const gmv = adsNum(rep.gmv ?? rep.broad_gmv);
+    const orders = adsNum(rep.orders ?? rep.broad_order);
+    if (expense > 0 || gmv > 0 || clicks > 0) {
+      campaigns.push({
+        campaign_id: g.campaign_id || 'gms',
+        campaign_name: 'GMV Max (Tự động)',
+        ad_type: 'gms',
+        totals: {
+          impression, clicks, expense, gmv, orders,
+          ctr: impression > 0 ? clicks / impression : adsNum(rep.ctr),
+          cpc: clicks > 0 ? expense / clicks : 0,
+          roas: expense > 0 ? gmv / expense : adsNum(rep.roas),
+        },
+        daily: [],
       });
     }
   }
 
-  // Surface campaigns that actually ran in the window; fall back to all if none did.
-  const active = all.filter((c) => c.totals.expense > 0 || c.totals.gmv > 0 || c.totals.clicks > 0);
-  const campaigns = (active.length ? active : all).sort((a, b) => b.totals.expense - a.totals.expense);
+  // 2. Manual product campaigns that actually ran (scan a couple of pages — keep it fast).
+  const ids = await fetchAllCampaignIds(partnerKey, partnerId, accessToken, shopId, 2);
+  for (let i = 0; i < ids.length; i += 50) {
+    const slice = ids.slice(i, i + 50);
+    const perfRes = await shopeeGetRetry(partnerKey, partnerId,
+      '/api/v2/ads/get_product_campaign_daily_performance',
+      accessToken, shopId, { start_date: startDate, end_date: endDate, campaign_id_list: slice.join(',') });
+    for (const c of extractCampaignList(perfRes.response)) {
+      const rows = pickCampaignRows(c).map(normalizeDaily);
+      const totals = sumAdsTotals(rows);
+      if (totals.expense > 0 || totals.gmv > 0 || totals.clicks > 0) {
+        campaigns.push({
+          campaign_id: c.campaign_id,
+          campaign_name: c.campaign_name || c.ad_name || `#${c.campaign_id}`,
+          ad_type: c.ad_type || 'manual',
+          totals,
+          daily: rows,
+        });
+      }
+    }
+  }
 
+  campaigns.sort((a, b) => b.totals.expense - a.totals.expense);
   return {
     campaigns,
-    note: null,
-    total_campaigns: all.length,
-    active_campaigns: active.length,
+    note: campaigns.length ? null : 'no_active_campaigns',
+    _debug: campaigns.length === 0
+      ? { gms_error: gmsRes.error || gmsRes.message || null, gms_sample: JSON.stringify(gmsResp || {}).slice(0, 400) }
+      : undefined,
   };
 }
 
