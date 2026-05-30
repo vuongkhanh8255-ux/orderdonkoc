@@ -298,10 +298,15 @@ async function handleTopSellers(supabase, params) {
   const days  = Math.min(Math.max(parseInt(params.days, 10)  || 30, 1), 365);
   const limit = Math.min(Math.max(parseInt(params.limit, 10) || 10, 1), 50);
   const shopFilter = params.shop_id ? String(params.shop_id) : null;
+  // Optional exact window (YYYY-MM-DD, VN timezone). When both present it overrides `days`.
+  const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+  const startDate = dateRe.test(params.start_date || '') ? params.start_date : null;
+  const endDate   = dateRe.test(params.end_date || '')   ? params.end_date   : null;
 
   // 1. Ranking from synced orders (DB aggregation)
   const { data: rows, error } = await supabase.rpc('shopee_top_sellers', {
     p_days: days, p_limit: limit, p_shop_id: shopFilter,
+    p_start: startDate, p_end: endDate,
   });
   if (error) return { ok: false, error: error.message };
 
@@ -347,7 +352,7 @@ async function handleTopSellers(supabase, params) {
     } catch { /* leave image/price null — ranking still works without images */ }
   }));
 
-  return { ok: true, data: { days, limit, shops: [...byShop.values()] } };
+  return { ok: true, data: { days, limit, start_date: startDate, end_date: endDate, shops: [...byShop.values()] } };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -646,6 +651,8 @@ export default async function handler(req, res) {
           days: reqUrl.searchParams.get('days'),
           limit: reqUrl.searchParams.get('limit'),
           shop_id: reqUrl.searchParams.get('shop_id'),
+          start_date: reqUrl.searchParams.get('start_date'),
+          end_date: reqUrl.searchParams.get('end_date'),
         });
         break;
       case 'auto_boost': {

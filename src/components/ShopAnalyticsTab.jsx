@@ -155,9 +155,8 @@ const ShopeeTopSellers = ({ dateRange }) => {
     let cancelled = false;
     (async () => {
       setLoading(true); setError(null);
-      const days = Math.max(1, daysBetween(dateRange.start, dateRange.end));
       try {
-        const res = await fetch(`/api/shopee/top-picks?action=top_sellers&days=${days}&limit=10`);
+        const res = await fetch(`/api/shopee/top-picks?action=top_sellers&start_date=${dateRange.start}&end_date=${dateRange.end}&limit=10`);
         const json = await res.json();
         if (cancelled) return;
         if (!json.ok) { setError(json.error || 'Không tải được bảng xếp hạng'); setShops([]); }
