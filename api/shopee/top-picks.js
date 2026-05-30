@@ -291,6 +291,65 @@ async function handleBoostedList(supabase, shopId) {
   return { ok: true, data: result.response };
 }
 
+/** 12. top_sellers — best-selling products per shop (ranking from synced orders) + cover image.
+ *  Ranking is computed in Postgres (RPC shopee_top_sellers) from shopee_orders — no Shopee call.
+ *  Cover image + current price are fetched per shop via get_item_base_info (best-effort). */
+async function handleTopSellers(supabase, params) {
+  const days  = Math.min(Math.max(parseInt(params.days, 10)  || 30, 1), 365);
+  const limit = Math.min(Math.max(parseInt(params.limit, 10) || 10, 1), 50);
+  const shopFilter = params.shop_id ? String(params.shop_id) : null;
+
+  // 1. Ranking from synced orders (DB aggregation)
+  const { data: rows, error } = await supabase.rpc('shopee_top_sellers', {
+    p_days: days, p_limit: limit, p_shop_id: shopFilter,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  const byShop = new Map();
+  for (const r of (rows || [])) {
+    const sid = String(r.shop_id);
+    if (!byShop.has(sid)) byShop.set(sid, { shop_id: sid, shop_name: r.shop_name || sid, items: [] });
+    byShop.get(sid).items.push({
+      item_id: String(r.item_id),
+      item_name: r.item_name || '',
+      qty: Number(r.total_qty) || 0,
+      revenue: Number(r.revenue) || 0,
+      rank: Number(r.rnk) || 0,
+      image: null,
+      price: null,
+    });
+  }
+
+  // 2. Cover image + current price via Product API (per shop, parallel, best-effort)
+  await Promise.all([...byShop.values()].map(async (shop) => {
+    try {
+      const creds = await getCredentials(supabase, shop.shop_id, 'dashboard');
+      const ids = shop.items.map(i => i.item_id).join(',');
+      if (!ids) return;
+      const info = await shopeeGet(
+        creds.partnerKey, creds.partnerId,
+        '/api/v2/product/get_item_base_info',
+        creds.accessToken, creds.shopId,
+        { item_id_list: ids },
+      );
+      const meta = new Map();
+      for (const it of (info.response?.item_list || [])) {
+        meta.set(String(it.item_id), {
+          image: it.image?.image_url_list?.[0] || null,
+          price: Array.isArray(it.price_info) && it.price_info[0]
+            ? Number(it.price_info[0].current_price) : null,
+        });
+      }
+      for (const i of shop.items) {
+        const m = meta.get(i.item_id);
+        if (m) { i.image = m.image; i.price = m.price; }
+      }
+    } catch { /* leave image/price null — ranking still works without images */ }
+  }));
+
+  return { ok: true, data: { days, limit, shops: [...byShop.values()] } };
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Recurring auto-boost (Đẩy định kỳ)
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -534,7 +593,7 @@ export default async function handler(req, res) {
     return res.status(400).json({
       ok: false,
       error: 'Missing ?action= parameter',
-      available: ['list', 'create', 'update', 'delete', 'boost', 'boosted_list', 'list_shops', 'schedule_get', 'schedule_save', 'auto_boost', 'auto_boost_all', 'boost_log'],
+      available: ['list', 'create', 'update', 'delete', 'boost', 'boosted_list', 'list_shops', 'top_sellers', 'schedule_get', 'schedule_save', 'auto_boost', 'auto_boost_all', 'boost_log'],
     });
   }
 
@@ -582,6 +641,13 @@ export default async function handler(req, res) {
       case 'list_shops':
         result = await handleListShops(supabase);
         break;
+      case 'top_sellers':
+        result = await handleTopSellers(supabase, {
+          days: reqUrl.searchParams.get('days'),
+          limit: reqUrl.searchParams.get('limit'),
+          shop_id: reqUrl.searchParams.get('shop_id'),
+        });
+        break;
       case 'auto_boost': {
         // Recurring boost trigger for ONE shop. Used by the frontend countdown / "run now".
         // Due-gated so it never over-boosts. `force` (skip the timer) is honored only with a valid
@@ -600,7 +666,7 @@ export default async function handler(req, res) {
         return res.status(200).json({
           ok: false,
           error: `Unknown action: ${action}`,
-          available: ['list', 'create', 'update', 'delete', 'boost', 'boosted_list', 'list_shops', 'schedule_get', 'schedule_save', 'auto_boost', 'auto_boost_all', 'boost_log'],
+          available: ['list', 'create', 'update', 'delete', 'boost', 'boosted_list', 'list_shops', 'top_sellers', 'schedule_get', 'schedule_save', 'auto_boost', 'auto_boost_all', 'boost_log'],
         });
     }
 

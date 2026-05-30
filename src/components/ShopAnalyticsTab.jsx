@@ -142,6 +142,124 @@ const SmallLabel = ({ x, y, value, color = '#64748b' }) => {
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
+// ██  SHOPEE TOP SELLERS — bảng xếp hạng bán chạy theo shop (từ đơn đã đồng bộ)
+// ══════════════════════════════════════════════════════════════════════════════
+const RANK_COLORS = ['#f59e0b', '#9ca3af', '#b45309']; // 🥇🥈🥉
+const ShopeeTopSellers = () => {
+  const [days, setDays]       = useState(30);
+  const [shopId, setShopId]   = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState(null);
+  const [shops, setShops]     = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true); setError(null);
+      try {
+        const res = await fetch(`/api/shopee/top-picks?action=top_sellers&days=${days}&limit=10`);
+        const json = await res.json();
+        if (cancelled) return;
+        if (!json.ok) { setError(json.error || 'Không tải được bảng xếp hạng'); setShops([]); }
+        else setShops(Array.isArray(json.data?.shops) ? json.data.shops : []);
+      } catch (e) {
+        if (!cancelled) { setError(e.message); setShops([]); }
+      }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [days]);
+
+  const selectStyle = {
+    padding: '8px 30px 8px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb',
+    fontSize: '0.8rem', fontWeight: 600, fontFamily: 'inherit', color: '#374151',
+    background: '#fff', cursor: 'pointer', appearance: 'none', minWidth: 150,
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+    backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center',
+  };
+
+  const visibleShops = shopId ? shops.filter(s => s.shop_id === shopId) : shops;
+
+  return (
+    <div style={{ marginTop: 8, marginBottom: 24 }}>
+      {/* Header + controls */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+        <div>
+          <h3 style={{ margin: '0 0 2px', fontSize: '1.05rem', fontWeight: 900, color: '#0f172a' }}>🏆 Top sản phẩm bán chạy (Shopee)</h3>
+          <p style={{ margin: 0, fontSize: '0.76rem', color: '#94a3b8' }}>Xếp theo số lượng bán · tính từ đơn hàng đã đồng bộ · {days} ngày gần nhất</p>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select value={shopId} onChange={e => setShopId(e.target.value)} style={selectStyle}>
+            <option value="">Tất cả shop</option>
+            {shops.map(s => <option key={s.shop_id} value={s.shop_id}>🛒 {s.shop_name}</option>)}
+          </select>
+          <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: 8, padding: 3 }}>
+            {[7, 30, 90].map(d => (
+              <button key={d} onClick={() => setDays(d)}
+                style={{ padding: '6px 14px', borderRadius: 6, fontSize: '0.78rem', fontWeight: 600, border: 'none', cursor: 'pointer',
+                  background: days === d ? '#ea580c' : 'transparent', color: days === d ? '#fff' : '#64748b', transition: 'all 0.15s' }}>
+                {d} ngày
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {loading && (
+        <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8', fontSize: '0.84rem' }}>⏳ Đang tải bảng xếp hạng...</div>
+      )}
+      {error && !loading && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 12, padding: '12px 16px', fontSize: '0.82rem', fontWeight: 600 }}>⚠️ {error}</div>
+      )}
+      {!loading && !error && shops.length === 0 && (
+        <div style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 14, padding: '32px', textAlign: 'center', color: '#64748b', fontSize: '0.84rem' }}>
+          Chưa có dữ liệu bán hàng trong {days} ngày qua. Bấm <strong>🔄 Đồng bộ</strong> phía trên để kéo đơn Shopee.
+        </div>
+      )}
+
+      {!loading && !error && visibleShops.length > 0 && (
+        <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fill, minmax(440px, 1fr))' }}>
+          {visibleShops.map(shop => (
+            <div key={shop.shop_id} style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
+              <div style={{ padding: '12px 18px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8, background: '#fff7ed' }}>
+                <span style={{ fontSize: '0.92rem' }}>🛒</span>
+                <span style={{ fontWeight: 800, fontSize: '0.86rem', color: '#9a3412' }}>{shop.shop_name}</span>
+                <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: '#c2410c', fontWeight: 600 }}>{shop.items.length} SP</span>
+              </div>
+              <div>
+                {shop.items.map(it => (
+                  <div key={it.item_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid #f8fafc' }}>
+                    <div style={{ width: 22, textAlign: 'center', fontWeight: 900, fontSize: '0.9rem', flexShrink: 0,
+                      color: it.rank <= 3 ? RANK_COLORS[it.rank - 1] : '#cbd5e1' }}>{it.rank}</div>
+                    <div style={{ width: 46, height: 46, borderRadius: 8, overflow: 'hidden', flexShrink: 0, background: '#f1f5f9', border: '1px solid #f1f5f9' }}>
+                      {it.image
+                        ? <img src={it.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
+                        : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1', fontSize: '1rem' }}>📦</div>}
+                    </div>
+                    <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={it.item_name}>{it.item_name}</div>
+                      {it.price ? <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 2 }}>{fmtVndFull(it.price)} đ</div> : null}
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0, minWidth: 52 }}>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#ea580c' }}>{fmtNumber(it.qty)}</div>
+                      <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>đã bán</div>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0, minWidth: 64 }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#16a34a' }}>{fmtVnd(it.revenue)}</div>
+                      <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>doanh thu</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
 // ██  MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════════════════
 const ShopAnalyticsTab = () => {
@@ -859,6 +977,9 @@ const ShopAnalyticsTab = () => {
           </button>
         </div>
       )}
+
+      {/* ── Top sản phẩm bán chạy (Shopee) — luôn hiển thị, độc lập với analytics ── */}
+      <ShopeeTopSellers />
     </div>
   );
 };
