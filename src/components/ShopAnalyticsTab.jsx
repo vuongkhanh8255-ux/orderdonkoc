@@ -978,8 +978,12 @@ const ShopAnalyticsTab = () => {
         </div>
       )}
 
-      {/* ── Top sản phẩm bán chạy (Shopee) — luôn hiển thị, độc lập với analytics ── */}
-      <ShopeeTopSellers />
+      {/* ── Top sản phẩm bán chạy (Shopee) — chỉ hiện khi đang xem Shopee ──────────
+         Ẩn khi lọc sàn TikTok, hoặc khi đang chọn 1 shop TikTok (kể cả "Tất cả sàn"),
+         vì dữ liệu bán chạy này là của Shopee, không liên quan tới shop TikTok. */}
+      {platformFilter !== 'tiktok'
+        && !(shopFilter && connections.some(c => String(c.shop_id) === String(shopFilter)))
+        && <ShopeeTopSellers />}
     </div>
   );
 };
