@@ -218,50 +218,62 @@ function pickCampaignRows(c) {
   return [];
 }
 
+/* Page through every product-level campaign id (the first page is mostly old/paused
+   campaigns with no recent spend — the spending ones live deeper in the list). */
+async function fetchAllCampaignIds(partnerKey, partnerId, accessToken, shopId, maxPages = 6) {
+  const ids = [];
+  const PAGE = 50;
+  for (let p = 0; p < maxPages; p++) {
+    const idRes = await shopeeGetRetry(partnerKey, partnerId,
+      '/api/v2/ads/get_product_level_campaign_id_list',
+      accessToken, shopId, { ad_type: 'all', offset: p * PAGE, limit: PAGE });
+    const batch = (idRes.response?.campaign_list || idRes.response?.campaign_id_list || [])
+      .map((c) => (typeof c === 'object' ? c.campaign_id : c))
+      .filter(Boolean);
+    ids.push(...batch);
+    const hasNext = idRes.response?.has_next_page ?? (batch.length === PAGE);
+    if (!hasNext || batch.length === 0) break;
+  }
+  return ids;
+}
+
 /* Per-campaign breakdown (optional, mode=campaigns) */
 async function fetchAdsCampaigns(partnerKey, partnerId, accessToken, shopId, startDate, endDate) {
-  const idRes = await shopeeGetRetry(partnerKey, partnerId,
-    '/api/v2/ads/get_product_level_campaign_id_list',
-    accessToken, shopId, { ad_type: 'all', offset: 0, limit: 50 });
+  const ids = await fetchAllCampaignIds(partnerKey, partnerId, accessToken, shopId);
+  if (ids.length === 0) return { campaigns: [], note: 'no_campaigns' };
 
-  const idList = (idRes.response?.campaign_list || idRes.response?.campaign_id_list || [])
-    .map((c) => (typeof c === 'object' ? c.campaign_id : c))
-    .filter(Boolean);
+  // Pull daily performance for every campaign, batched (the endpoint accepts many ids per call).
+  const all = [];
+  const BATCH = 50;
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const slice = ids.slice(i, i + BATCH);
+    const perfRes = await shopeeGetRetry(partnerKey, partnerId,
+      '/api/v2/ads/get_product_campaign_daily_performance',
+      accessToken, shopId, { start_date: startDate, end_date: endDate, campaign_id_list: slice.join(',') });
+    const pResp = perfRes.response;
+    const list = Array.isArray(pResp)
+      ? pResp
+      : (pResp?.campaign_list || pResp?.performance_list || pResp?.campaign_daily_performance_list || []);
+    for (const c of list) {
+      const rows = pickCampaignRows(c).map(normalizeDaily);
+      all.push({
+        campaign_id: c.campaign_id,
+        campaign_name: c.campaign_name || c.ad_name || `#${c.campaign_id}`,
+        totals: sumAdsTotals(rows),
+        daily: rows,
+      });
+    }
+  }
 
-  if (idList.length === 0) return { campaigns: [], note: idRes.error || 'no_campaigns' };
+  // Surface campaigns that actually ran in the window; fall back to all if none did.
+  const active = all.filter((c) => c.totals.expense > 0 || c.totals.gmv > 0 || c.totals.clicks > 0);
+  const campaigns = (active.length ? active : all).sort((a, b) => b.totals.expense - a.totals.expense);
 
-  const perfRes = await shopeeGetRetry(partnerKey, partnerId,
-    '/api/v2/ads/get_product_campaign_daily_performance',
-    accessToken, shopId, { start_date: startDate, end_date: endDate, campaign_id_list: idList.join(',') });
-
-  const pResp = perfRes.response;
-  const list = Array.isArray(pResp)
-    ? pResp
-    : (pResp?.campaign_list || pResp?.performance_list || pResp?.campaign_daily_performance_list || []);
-
-  const campaigns = list.map((c) => {
-    const rows = pickCampaignRows(c).map(normalizeDaily);
-    return {
-      campaign_id: c.campaign_id,
-      campaign_name: c.campaign_name || c.ad_name || `#${c.campaign_id}`,
-      totals: sumAdsTotals(rows),
-      daily: rows,
-    };
-  }).sort((a, b) => b.totals.expense - a.totals.expense);
-
-  // Diagnostic: when campaigns came back but every total is zero, surface the real
-  // per-campaign daily field names so the mapping can be finalized from a live response.
-  const allZero = campaigns.length > 0 && campaigns.every((c) => c.totals.expense === 0 && c.totals.gmv === 0);
   return {
     campaigns,
-    note: perfRes.error || null,
-    _debug: allZero
-      ? {
-          campaign_keys: Object.keys(list[0] || {}),
-          daily_row_keys: Object.keys(campaigns[0]?.daily?.[0]?.raw || {}),
-          daily_sample: JSON.stringify(campaigns[0]?.daily?.[0]?.raw || {}).slice(0, 700),
-        }
-      : undefined,
+    note: null,
+    total_campaigns: all.length,
+    active_campaigns: active.length,
   };
 }
 
