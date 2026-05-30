@@ -24,6 +24,64 @@ function truncate(s, max = 60) {
   return s.slice(0, max) + '…';
 }
 
+const MAX_RANGE_DAYS = 62;   // cho phép tới ~2 tháng (tự chia thành các đợt ≤7 ngày khi tải)
+const CHUNK_DAYS = 7;        // ERP proxy tối ưu cho cửa sổ ~1 tuần → range dài chia thành nhiều đợt
+
+const toYmd = (d) => {
+  const dt = d instanceof Date ? d : new Date(d);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+};
+
+// Chuẩn hoá 1 batch dữ liệu ERP (shopee + tiktok) về cùng shape review
+function normalizeChunk(data) {
+  const out = [];
+  if (data.shopee?.data) {
+    for (const r of data.shopee.data) {
+      out.push({
+        id: `s-${r.commentId}`,
+        platform: 'shopee',
+        productId: String(r.productId || r.itemId),
+        productName: r.productName || '',
+        productImage: r.productCover ? `https://cf.shopee.vn/file/${r.productCover}_tn` : '',
+        sku: r.modelName?.split('|')[0]?.trim() || '',
+        star: r.ratingStar,
+        comment: r.comment || '',
+        userName: r.userName || '',
+        date: r.ctime,
+        hasReply: !!r.reply,
+        replyText: r.reply?.comment || '',
+        sellerId: r.seller_id,
+        shop: shopName(r.seller_id),
+        images: Array.isArray(r.images)
+          ? r.images.map(h => (typeof h === 'string' && h.startsWith('http')) ? h : `https://cf.shopee.vn/file/${h}`)
+          : [],
+      });
+    }
+  }
+  if (data.tiktok?.data) {
+    for (const r of data.tiktok.data) {
+      out.push({
+        id: `t-${r.main_review_id}`,
+        platform: 'tiktok',
+        productId: r.product_info?.product_id || '',
+        productName: r.product_info?.product_name || '',
+        productImage: r.product_info?.img?.thumb_url_list?.[0] || '',
+        sku: r.product_info?.sku_specification || '',
+        star: r.star_level,
+        comment: r.only_star ? '' : (r.review_text || ''),
+        userName: r.user_name || '',
+        date: r.review_time,
+        hasReply: r.reply_count > 0 || !!r.reply_text,
+        replyText: r.reply_text || '',
+        sellerId: r.seller_id,
+        shop: shopName(r.seller_id),
+        images: [], // TikTok chỉ trả cờ has_imgs, không kèm URL ảnh review
+      });
+    }
+  }
+  return out;
+}
+
 export default function ReviewsTab() {
   const today = new Date().toISOString().split('T')[0];
   const weekAgo = new Date(Date.now() - 6 * 86400000).toISOString().split('T')[0];
@@ -35,6 +93,7 @@ export default function ReviewsTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [hasFetched, setHasFetched] = useState(false);
+  const [progress, setProgress] = useState('');
 
   const [starFilter, setStarFilter] = useState(0);
   const [shopFilter, setShopFilter] = useState('all');
@@ -51,58 +110,33 @@ export default function ReviewsTab() {
     const end = new Date(endDate);
     const diff = (end - start) / 86400000;
     if (diff < 0) { setError('Ngày bắt đầu phải trước ngày kết thúc'); return; }
-    if (diff > 7) { setError('Khoảng thời gian tối đa là 7 ngày'); return; }
+    if (diff > MAX_RANGE_DAYS) { setError(`Khoảng thời gian tối đa là ${MAX_RANGE_DAYS} ngày`); return; }
 
     setLoading(true);
     setError('');
+    setProgress('');
     try {
-      const res = await fetch(`/api/erp/reviews?platform=${platform}&startDate=${startDate}&endDate=${endDate}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || 'Lỗi tải dữ liệu');
+      // Chia range thành các đợt ≤7 ngày, tải tuần tự rồi gộp (dedupe theo id)
+      const chunks = [];
+      let cs = new Date(start);
+      while (cs <= end) {
+        const ce = new Date(Math.min(cs.getTime() + (CHUNK_DAYS - 1) * 86400000, end.getTime()));
+        chunks.push([toYmd(cs), toYmd(ce)]);
+        cs = new Date(ce.getTime() + 86400000);
+      }
 
-      const normalized = [];
-      if (data.shopee?.data) {
-        for (const r of data.shopee.data) {
-          normalized.push({
-            id: `s-${r.commentId}`,
-            platform: 'shopee',
-            productId: String(r.productId || r.itemId),
-            productName: r.productName || '',
-            productImage: r.productCover ? `https://cf.shopee.vn/file/${r.productCover}_tn` : '',
-            sku: r.modelName?.split('|')[0]?.trim() || '',
-            star: r.ratingStar,
-            comment: r.comment || '',
-            userName: r.userName || '',
-            date: r.ctime,
-            hasReply: !!r.reply,
-            replyText: r.reply?.comment || '',
-            sellerId: r.seller_id,
-            shop: shopName(r.seller_id),
-          });
-        }
+      const byId = new Map();
+      for (let i = 0; i < chunks.length; i++) {
+        if (chunks.length > 1) setProgress(`Đang tải đợt ${i + 1}/${chunks.length}...`);
+        const [cStart, cEnd] = chunks[i];
+        const res = await fetch(`/api/erp/reviews?platform=${platform}&startDate=${cStart}&endDate=${cEnd}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'Lỗi tải dữ liệu');
+        for (const r of normalizeChunk(data)) byId.set(r.id, r);
       }
-      if (data.tiktok?.data) {
-        for (const r of data.tiktok.data) {
-          normalized.push({
-            id: `t-${r.main_review_id}`,
-            platform: 'tiktok',
-            productId: r.product_info?.product_id || '',
-            productName: r.product_info?.product_name || '',
-            productImage: r.product_info?.img?.thumb_url_list?.[0] || '',
-            sku: r.product_info?.sku_specification || '',
-            star: r.star_level,
-            comment: r.only_star ? '' : (r.review_text || ''),
-            userName: r.user_name || '',
-            date: r.review_time,
-            hasReply: r.reply_count > 0 || !!r.reply_text,
-            replyText: r.reply_text || '',
-            sellerId: r.seller_id,
-            shop: shopName(r.seller_id),
-          });
-        }
-      }
-      setReviews(normalized);
+
+      setReviews([...byId.values()]);
       setPage(1);
       setStarFilter(0);
       setHasFetched(true);
@@ -111,6 +145,7 @@ export default function ReviewsTab() {
       setHasFetched(true);
     } finally {
       setLoading(false);
+      setProgress('');
     }
   }, [platform, startDate, endDate]);
 
@@ -259,6 +294,15 @@ export default function ReviewsTab() {
             <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
               style={{ border: 'none', outline: 'none', fontSize: '0.84rem', fontFamily: 'inherit', color: '#0f172a', fontWeight: 600, background: 'transparent' }} />
           </div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[7, 30, 60].map(d => (
+              <button key={d}
+                onClick={() => { setStartDate(toYmd(new Date(Date.now() - (d - 1) * 86400000))); setEndDate(today); }}
+                style={{ ...btnBase, padding: '6px 12px', fontSize: '0.78rem', background: '#fff', color: '#64748b', borderColor: '#e5e7eb' }}>
+                {d} ngày
+              </button>
+            ))}
+          </div>
           <div style={{ display: 'flex', gap: 6 }}>
             <button onClick={() => setPlatform('both')} style={platformBtn('both')}>Tất cả</button>
             <button onClick={() => setPlatform('shopee')} style={platformBtn('shopee')}>🟠 Shopee</button>
@@ -283,7 +327,7 @@ export default function ReviewsTab() {
         <div style={{ textAlign: 'center', padding: '60px 20px' }}>
           <div style={{ fontSize: '2rem', marginBottom: 12 }}>⏳</div>
           <div style={{ fontSize: '0.92rem', color: '#64748b', fontWeight: 600 }}>Đang tải đánh giá từ ERP...</div>
-          <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: 4 }}>Có thể mất 5-10 giây</div>
+          <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: 4 }}>{progress || 'Có thể mất 5-10 giây'}</div>
         </div>
       )}
 
@@ -593,12 +637,26 @@ export default function ReviewsTab() {
                         {isExpanded && (
                           <div style={{ marginTop: 10, padding: '10px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: '0.78rem' }}>
                             {r.comment ? (
-                              <div style={{ marginBottom: r.replyText ? 10 : 0 }}>
+                              <div style={{ marginBottom: 10 }}>
                                 <div style={{ fontWeight: 700, color: '#64748b', fontSize: '0.68rem', textTransform: 'uppercase', marginBottom: 4 }}>Nội dung đánh giá</div>
                                 <div style={{ color: '#0f172a', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{r.comment}</div>
                               </div>
                             ) : (
-                              <div style={{ color: '#94a3b8', fontStyle: 'italic', marginBottom: r.replyText ? 10 : 0 }}>Chỉ đánh giá sao</div>
+                              <div style={{ color: '#94a3b8', fontStyle: 'italic', marginBottom: 10 }}>Chỉ đánh giá sao</div>
+                            )}
+                            {r.images?.length > 0 && (
+                              <div style={{ marginBottom: 10 }}>
+                                <div style={{ fontWeight: 700, color: '#64748b', fontSize: '0.68rem', textTransform: 'uppercase', marginBottom: 6 }}>Ảnh đính kèm ({r.images.length})</div>
+                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                  {r.images.map((src, idx) => (
+                                    <a key={idx} href={src} target="_blank" rel="noopener noreferrer">
+                                      <img src={src} alt="" loading="lazy"
+                                        style={{ width: 64, height: 64, borderRadius: 8, objectFit: 'cover', border: '1px solid #e5e7eb', display: 'block' }}
+                                        onError={e => { e.target.style.display = 'none'; }} />
+                                    </a>
+                                  ))}
+                                </div>
+                              </div>
                             )}
                             {r.replyText && (
                               <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 10 }}>
@@ -616,6 +674,7 @@ export default function ReviewsTab() {
                       </td>
                       <td style={{ ...tdStyle, color: r.comment ? '#374151' : '#c4b5a0', fontStyle: r.comment ? 'normal' : 'italic', fontSize: '0.78rem', lineHeight: 1.4 }}>
                         {r.comment ? truncate(r.comment, 80) : 'Chỉ đánh giá sao'}
+                        {r.images?.length > 0 && <span style={{ marginLeft: 6, color: '#ea580c', fontSize: '0.72rem', fontWeight: 700, fontStyle: 'normal', whiteSpace: 'nowrap' }} title={`${r.images.length} ảnh`}>📷{r.images.length}</span>}
                       </td>
                       <td style={{ ...tdStyle, fontSize: '0.78rem', fontWeight: 600 }}>{r.userName}</td>
                       <td style={{ ...tdStyle, textAlign: 'center', fontSize: '0.76rem', color: '#64748b' }}>{fmtDate(r.date)}</td>
