@@ -225,7 +225,7 @@ function AppMain({ user, onLogout, allowedViews }) {
               { key: 'shopee', label: '🟠 Shopee', emoji: '🟠', items: [
                 { view: 'flash_sale',        icon: '⚡', name: 'Tạo FS' },
                 { view: 'top_picks',         icon: '🚀', name: 'Đẩy SP' },
-                { view: 'shopee_livestream', icon: '📺', name: 'Livestream' },
+                // { view: 'shopee_livestream', icon: '📺', name: 'Livestream' }, // tạm ẩn — chờ setup tài khoản Creator cho Shopee Video/Live
                 { view: 'shopee_ads',        icon: '📣', name: 'Quảng cáo' },
               ]},
               { key: 'crm', label: '👥 CRM', emoji: '👥', items: [
