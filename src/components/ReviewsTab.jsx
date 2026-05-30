@@ -104,10 +104,14 @@ export default function ReviewsTab() {
   const [expandedId, setExpandedId] = useState(null);
 
   const didMount = useRef(false);
+  const reviewsRef = useRef(null);
+  const [productFilter, setProductFilter] = useState(null); // { productId, platform, productName } | null
+  const [showProducts, setShowProducts] = useState(false);   // bảng thống kê SP thu gọn mặc định
+  const focusReviews = () => { setTimeout(() => reviewsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60); };
 
-  const fetchReviews = useCallback(async () => {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+  const fetchReviews = useCallback(async (sOverride, eOverride) => {
+    const start = new Date(sOverride || startDate);
+    const end = new Date(eOverride || endDate);
     const diff = (end - start) / 86400000;
     if (diff < 0) { setError('Ngày bắt đầu phải trước ngày kết thúc'); return; }
     if (diff > MAX_RANGE_DAYS) { setError(`Khoảng thời gian tối đa là ${MAX_RANGE_DAYS} ngày`); return; }
@@ -143,6 +147,7 @@ export default function ReviewsTab() {
       setReviews([...byId.values()]);
       setPage(1);
       setStarFilter(0);
+      setProductFilter(null);
       setHasFetched(true);
     } catch (err) {
       setError(err.message);
@@ -235,6 +240,7 @@ export default function ReviewsTab() {
   const filtered = useMemo(() => {
     let result = [...reviews];
     if (shopFilter !== 'all') result = result.filter(r => r.shop === shopFilter);
+    if (productFilter) result = result.filter(r => r.productId === productFilter.productId && r.platform === productFilter.platform);
     if (starFilter > 0) result = result.filter(r => r.star === starFilter);
     if (replyFilter === 'replied') result = result.filter(r => r.hasReply);
     if (replyFilter === 'unreplied') result = result.filter(r => !r.hasReply);
@@ -256,7 +262,7 @@ export default function ReviewsTab() {
       }
     });
     return result;
-  }, [reviews, shopFilter, starFilter, replyFilter, searchText, sortBy]);
+  }, [reviews, shopFilter, productFilter, starFilter, replyFilter, searchText, sortBy]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -301,7 +307,7 @@ export default function ReviewsTab() {
           <div style={{ display: 'flex', gap: 4 }}>
             {[7, 30, 60].map(d => (
               <button key={d}
-                onClick={() => { setStartDate(toYmd(new Date(Date.now() - (d - 1) * 86400000))); setEndDate(today); }}
+                onClick={() => { const s = toYmd(new Date(Date.now() - (d - 1) * 86400000)); setStartDate(s); setEndDate(today); fetchReviews(s, today); }}
                 style={{ ...btnBase, padding: '6px 12px', fontSize: '0.78rem', background: '#fff', color: '#64748b', borderColor: '#e5e7eb' }}>
                 {d} ngày
               </button>
@@ -438,7 +444,7 @@ export default function ReviewsTab() {
               const replyPct = s.total ? ((s.replied / s.total) * 100).toFixed(0) : 0;
               return (
                 <div key={s.key}
-                  onClick={() => { setShopFilter(shopFilter === s.shop ? 'all' : s.shop); setPage(1); }}
+                  onClick={() => { setShopFilter(shopFilter === s.shop ? 'all' : s.shop); setPage(1); focusReviews(); }}
                   style={{ padding: '14px 16px', borderRadius: 10, background: shopFilter === s.shop ? '#fff7ed' : '#f8fafc', border: `1.5px solid ${shopFilter === s.shop ? '#fed7aa' : '#e5e7eb'}`, cursor: 'pointer', transition: 'all 0.15s' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -480,12 +486,19 @@ export default function ReviewsTab() {
           )}
         </div>
 
-        {/* ── PRODUCT STATS TABLE ── */}
+        {/* ── PRODUCT STATS TABLE (thu gọn mặc định; bấm 1 SP để lọc review SP đó) ── */}
         <div style={{ ...card, marginBottom: 20, overflow: 'hidden' }}>
-          <h3 style={{ margin: '0 0 14px', fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>
-            📦 Thống kê theo sản phẩm ({productStats.length})
-          </h3>
-          <div style={{ overflowX: 'auto' }}>
+          <div onClick={() => setShowProducts(v => !v)}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}>
+            <h3 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>
+              📦 Thống kê theo sản phẩm ({productStats.length})
+            </h3>
+            <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 700 }}>
+              {showProducts ? '▲ Thu gọn' : '▼ Mở rộng — bấm 1 SP để xem review SP đó'}
+            </span>
+          </div>
+          {showProducts && (
+          <div style={{ overflowX: 'auto', marginTop: 14 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
               <thead>
                 <tr>
@@ -504,10 +517,13 @@ export default function ReviewsTab() {
               <tbody>
                 {productStats.map(p => {
                   const replyPct = p.total ? ((p.replied / p.total) * 100).toFixed(0) : 0;
+                  const isActive = productFilter?.productId === p.productId && productFilter?.platform === p.platform;
                   return (
-                    <tr key={p.key} style={{ transition: 'background 0.12s' }}
-                      onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                    <tr key={p.key}
+                      onClick={() => { setProductFilter(isActive ? null : { productId: p.productId, platform: p.platform, productName: p.productName }); setPage(1); focusReviews(); }}
+                      style={{ transition: 'background 0.12s', cursor: 'pointer', background: isActive ? '#fff7ed' : 'transparent' }}
+                      onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#f8fafc'; }}
+                      onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}>
                       <td style={tdStyle}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           {p.productImage && (
@@ -544,10 +560,18 @@ export default function ReviewsTab() {
               </tbody>
             </table>
           </div>
+          )}
         </div>
 
-        {/* ── FILTER BAR ── */}
-        <div style={{ ...card, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        {/* ── FILTER BAR (mốc cuộn tới — ngay trên danh sách review) ── */}
+        <div ref={reviewsRef} style={{ ...card, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          {productFilter && (
+            <div onClick={() => { setProductFilter(null); setPage(1); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, background: '#fff7ed', border: '1px solid #fed7aa', color: '#c2410c', fontSize: '0.76rem', fontWeight: 700, cursor: 'pointer' }}
+              title="Bỏ lọc sản phẩm">
+              📦 {truncate(productFilter.productName, 28)} ✕
+            </div>
+          )}
           <div style={{ position: 'relative', flex: '1 1 200px', maxWidth: 320 }}>
             <input type="text" placeholder="Tìm sản phẩm, nội dung, user..."
               value={searchText} onChange={e => { setSearchText(e.target.value); setPage(1); }}
