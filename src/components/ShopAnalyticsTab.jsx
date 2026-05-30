@@ -362,7 +362,11 @@ const TikTokTopSellers = () => {
                   <div key={it.product_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid #f8fafc' }}>
                     <div style={{ width: 22, textAlign: 'center', fontWeight: 900, fontSize: '0.9rem', flexShrink: 0,
                       color: it.rank <= 3 ? RANK_COLORS[it.rank - 1] : '#cbd5e1' }}>{it.rank}</div>
-                    <div style={{ width: 46, height: 46, borderRadius: 8, flexShrink: 0, background: 'linear-gradient(135deg,#fdf2f8,#fce7f3)', border: '1px solid #fce7f3', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>🧴</div>
+                    <div style={{ width: 46, height: 46, borderRadius: 8, overflow: 'hidden', flexShrink: 0, background: '#fdf2f8', border: '1px solid #fce7f3' }}>
+                      {it.image
+                        ? <img src={it.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
+                        : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>🧴</div>}
+                    </div>
                     <div style={{ flex: '1 1 auto', minWidth: 0 }}>
                       <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={it.product_name}>{it.product_name}</div>
                     </div>

@@ -124,25 +124,31 @@ const fetchProductPerformance = async (ctx) => {
   return { json: safe, code: json?.code, message: json?.message };
 };
 
-const fetchProductMeta = async ({ appKey, appSecret, conn }) => {
-  const map = {}; let pageToken = null, pages = 0; const deadline = Date.now() + 5500;
-  do {
-    const bodyStr = JSON.stringify({ page_size: 100 });
-    const urlParams = { app_key: appKey, timestamp: String(Math.floor(Date.now() / 1000)), page_size: '100' };
-    if (conn.shop_cipher) urlParams.shop_cipher = conn.shop_cipher;
-    if (pageToken) urlParams.page_token = pageToken;
-    urlParams.sign = buildSign(appSecret, PRODUCTS_PATH, urlParams, bodyStr);
-    let json;
-    try { json = JSON.parse(await ttText(`${TIKTOK_BASE}${PRODUCTS_PATH}?${new URLSearchParams(urlParams)}`, { method: 'POST', headers: { 'x-tts-access-token': conn.access_token, 'content-type': 'application/json' }, body: bodyStr })); }
-    catch { break; }
-    if (json?.code !== 0) break;
-    for (const p of (json?.data?.products || [])) {
-      const id = String(p.id ?? p.product_id ?? ''); if (!id) continue;
-      const stock = (p.skus || []).reduce((s, sku) => s + (sku.inventory || []).reduce((a, inv) => a + (Number(inv.quantity) || 0), 0), 0);
-      map[id] = { name: p.title || '', status: p.status || '', stock };
-    }
-    pageToken = json?.data?.next_page_token || null; pages++;
-  } while (pageToken && pages < 6 && Date.now() < deadline);
+// Product detail gives title + main image + status + stock in one call. We fetch it
+// only for the products we actually show (the perf page) — scales with page size,
+// not catalog size, and is the only source that returns product images.
+const fetchProductDetail = async ({ appKey, appSecret, conn, id }) => {
+  const path = `/product/202309/products/${id}`;
+  const urlParams = { app_key: appKey, timestamp: String(Math.floor(Date.now() / 1000)) };
+  if (conn.shop_cipher) urlParams.shop_cipher = conn.shop_cipher;
+  urlParams.sign = buildSign(appSecret, path, urlParams);
+  let json;
+  try { json = JSON.parse(await ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(urlParams)}`, { method: 'GET', headers: { 'x-tts-access-token': conn.access_token, 'content-type': 'application/json' }, body: undefined }, 8000)); }
+  catch { return null; }
+  if (json?.code !== 0 || !json.data) return null;
+  const d = json.data;
+  const img = (d.main_images || [])[0] || {};
+  const image = (img.thumb_urls || [])[0] || (img.urls || [])[0] || '';
+  const stock = (d.skus || []).reduce((s, sku) => s + (sku.inventory || []).reduce((a, inv) => a + (Number(inv.quantity) || 0), 0), 0);
+  return { name: d.title || '', image, status: d.status || d.product_status || '', stock };
+};
+
+const fetchProductDetails = async ({ appKey, appSecret, conn, ids }) => {
+  const map = {};
+  const results = await Promise.all(ids.map(id =>
+    fetchProductDetail({ appKey, appSecret, conn, id }).then(r => [id, r]).catch(() => [id, null])
+  ));
+  for (const [id, r] of results) if (r) map[id] = r;
   return map;
 };
 
@@ -182,13 +188,15 @@ async function handleProductAnalytics({ action, params, appKey, appSecret, supab
 
   const data = perf.json?.data || {};
   const rawList = Array.isArray(data.products) ? data.products : [];
-  let meta = {}; try { meta = await fetchProductMeta({ appKey, appSecret, conn }); } catch { /* names optional */ }
+  const ids = rawList.map(p => String(p.id ?? '')).filter(Boolean);
+  let meta = {}; try { meta = await fetchProductDetails({ appKey, appSecret, conn, ids }); } catch { /* names/images optional */ }
 
   const products = rawList.map(p => {
     const id = String(p.id ?? ''); const m = meta[id] || {};
     return {
       product_id: id,
       product_name: m.name || `SP ${id}`,
+      image: m.image || '',
       status: m.status || '',
       stock: m.stock ?? null,
       gmv: numAmt(p.gmv),
