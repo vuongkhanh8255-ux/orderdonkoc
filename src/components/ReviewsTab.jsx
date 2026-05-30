@@ -116,13 +116,17 @@ export default function ReviewsTab() {
     setError('');
     setProgress('');
     try {
-      // Chia range thành các đợt ≤7 ngày, tải tuần tự rồi gộp (dedupe theo id)
+      // Chia range thành các đợt ~7 ngày. MỐC ĐỢT SAU = mốc đợt trước kết thúc → tile khít
+      // khoảng [start,end] dù ERP hiểu end là inclusive hay exclusive (phần trùng ở ranh giới
+      // đã được dedupe theo id). Tải tuần tự rồi gộp.
       const chunks = [];
-      let cs = new Date(start);
-      while (cs <= end) {
-        const ce = new Date(Math.min(cs.getTime() + (CHUNK_DAYS - 1) * 86400000, end.getTime()));
-        chunks.push([toYmd(cs), toYmd(ce)]);
-        cs = new Date(ce.getTime() + 86400000);
+      const endMs = end.getTime();
+      let cs = start.getTime();
+      while (true) {
+        const ceMs = Math.min(cs + CHUNK_DAYS * 86400000, endMs);
+        chunks.push([toYmd(new Date(cs)), toYmd(new Date(ceMs))]);
+        if (ceMs >= endMs) break;
+        cs = ceMs;
       }
 
       const byId = new Map();
