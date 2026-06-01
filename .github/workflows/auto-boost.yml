@@ -12,8 +12,11 @@ on:
         required: false
         default: 'no'
   schedule:
-    # Mỗi 4 tiếng, đầu giờ (giờ UTC). Boost Shopee kéo dài 4h nên mỗi chu kỳ sẽ đẩy lại.
-    - cron: '0 */4 * * *'
+    # GitHub hay TRỄ/BỎ LỠ lịch ở phút :00 (giờ cao điểm) — chạy 1 lần/4h dễ bị hụt nguyên chu kỳ.
+    # Nên gọi 4 lần/giờ ở các phút lẻ; endpoint tự kiểm tra "đã đủ 4h chưa" (due-check) rồi mới đẩy,
+    # nên thực tế vẫn chỉ đẩy mỗi ~4h — kể cả khi GitHub bỏ lỡ vài lượt thì vẫn không hụt chu kỳ.
+    # (Repo public nên Actions miễn phí không giới hạn phút.)
+    - cron: '9,24,39,54 * * * *'
 
 jobs:
   boost:
