@@ -1,10 +1,51 @@
 // src/components/CrmTab.jsx — Redesigned to match Claude Design mockups
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
+import * as XLSX from 'xlsx';
 import {
   ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
+
+/* ── Bulk Excel import: parse a (messy) exported sheet → customer rows ──────────
+   Tìm dòng tiêu đề (chứa SĐT/TÊN) rồi map cột theo tên (bỏ dấu, không phân biệt hoa thường). */
+const _norm = (s) => String(s ?? '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd');
+const parseCustomerSheet = (rows2d) => {
+  let h = -1;
+  for (let i = 0; i < Math.min(rows2d.length, 20); i++) {
+    const cells = (rows2d[i] || []).map(_norm);
+    const hasPhone = cells.some(c => c.includes('sdt') || c.includes('so dien thoai') || c.includes('dien thoai') || c === 'phone');
+    const hasName  = cells.some(c => c === 'ten' || c.includes('ho ten') || c.includes('ten kh') || c.includes('ten spa') || c.includes('ten khach'));
+    if (hasPhone || hasName) { h = i; break; }
+  }
+  if (h === -1) return { headerRow: -1, customers: [] };
+  const header = (rows2d[h] || []).map(_norm);
+  const findIdx = (pred) => header.findIndex(pred);
+  const has = (...keys) => (c) => keys.some(k => c.includes(k));
+  const idx = {
+    phone:   findIdx(has('sdt', 'so dien thoai', 'dien thoai', 'phone')),
+    name:    findIdx(c => c === 'ten' || c.includes('ho ten') || c.includes('ten kh') || c.includes('ten spa') || c.includes('ten khach') || c === 'name'),
+    province:findIdx(has('tinh', 'province')),
+    biz:     findIdx(has('loai hinh', 'lhkd')),
+    address: findIdx(has('dia chi', 'address')),
+    region:  findIdx(has('khu vuc')),
+    contact: findIdx(c => c === 'dlh' || c.includes('lien he')),
+    email:   findIdx(has('email', 'mail')),
+  };
+  const cleanPhone = (v) => String(v ?? '').replace(/[^\d]/g, '');
+  const customers = [];
+  for (let i = h + 1; i < rows2d.length; i++) {
+    const r = rows2d[i]; if (!r) continue;
+    const phone = cleanPhone(idx.phone >= 0 ? r[idx.phone] : '');
+    if (phone.length < 8 || phone.length > 12) continue;
+    const get = (k) => (idx[k] >= 0 ? String(r[idx[k]] ?? '').trim() : '');
+    customers.push({
+      phone, full_name: get('name'), province: get('province'), business_type: get('biz'),
+      address: get('address'), region: get('region'), email: get('email'), _contact: get('contact'),
+    });
+  }
+  return { headerRow: h, customers };
+};
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Constants
@@ -193,6 +234,14 @@ const CrmTab = () => {
   const [showGroupForm,setShowGroupForm]= useState(false);
   const [showOAForm,   setShowOAForm]   = useState(false);
   const [newCust,   setNewCust]   = useState(EMPTY_CUSTOMER);
+  // Bulk Excel import modal
+  const [showImport, setShowImport] = useState(false);
+  const [impFile,    setImpFile]    = useState('');
+  const [impRows,    setImpRows]    = useState([]);
+  const [impPerson,  setImpPerson]  = useState('');
+  const [impType,    setImpType]    = useState('Mới');
+  const [importing,  setImporting]  = useState(false);
+  const [impMsg,     setImpMsg]     = useState('');
   const [newOrder,  setNewOrder]  = useState(EMPTY_ORDER);
   const [newGroup,  setNewGroup]  = useState({ report_date:today(), group_name:'', total_members:'', new_joins:'' });
   const [editGroupId, setEditGroupId] = useState(null);   // id của group đang sửa (null = thêm mới)
@@ -484,6 +533,53 @@ const CrmTab = () => {
     setSaving(false);
     if (error) return alert('Lỗi: ' + error.message);
     setNewCust(EMPTY_CUSTOMER); setShowCustForm(false); fetchAll();
+  };
+
+  /* ── Bulk Excel import ──────────────────────────────────────────────── */
+  const onPickImportFile = async (file) => {
+    if (!file) return;
+    setImpFile(file.name); setImpMsg('Đang đọc file…'); setImpRows([]);
+    try {
+      const buf = await file.arrayBuffer();
+      const wb  = XLSX.read(buf, { type: 'array' });
+      const ws  = wb.Sheets[wb.SheetNames[0]];
+      const rows2d = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
+      const { headerRow, customers } = parseCustomerSheet(rows2d);
+      if (headerRow === -1) { setImpMsg('⚠️ Không thấy dòng tiêu đề có cột SĐT/TÊN. Kiểm tra lại file.'); return; }
+      setImpRows(customers);
+      setImpMsg(`Đọc được ${customers.length} dòng có SĐT hợp lệ (sheet "${wb.SheetNames[0]}").`);
+    } catch (e) { setImpMsg('⚠️ Lỗi đọc file: ' + e.message); }
+  };
+
+  const runImport = async () => {
+    if (!impRows.length || importing) return;
+    setImporting(true); setImpMsg('Đang nhập vào CRM…');
+    const byPhone = new Map(); // dedupe trong file theo SĐT
+    for (const c of impRows) {
+      const rec = { phone: c.phone, customer_type: impType, data_source: 'Import Excel' };
+      if (c.full_name)     rec.full_name = c.full_name;
+      if (c.province)      rec.province = c.province;
+      if (c.business_type) rec.business_type = c.business_type;
+      if (c.address)       rec.address = c.address;
+      if (c.region)        rec.region = c.region;
+      if (c.email)         rec.email = c.email;
+      if (impPerson)       rec.sales_person = impPerson;
+      if (c._contact !== '') {
+        const cv = _norm(c._contact);
+        rec.contact_status = (cv === 'true' || cv === 'x' || cv === '1' || cv.includes('v') || cv.includes('da lien'))
+          ? 'Đã liên hệ' : 'Chưa liên hệ';
+      }
+      byPhone.set(c.phone, rec);
+    }
+    const records = [...byPhone.values()];
+    let ok = 0, fail = 0;
+    for (let i = 0; i < records.length; i += 500) {
+      const { error } = await supabase.from('crm_customers').upsert(records.slice(i, i + 500), { onConflict: 'phone' });
+      if (error) fail += Math.min(500, records.length - i); else ok += Math.min(500, records.length - i);
+    }
+    setImporting(false);
+    setImpMsg(`✅ Xong! Đã nhập/cập nhật ${ok} khách${fail ? `, lỗi ${fail}` : ''}. ${records.length !== impRows.length ? `(${impRows.length - records.length} SĐT trùng trong file đã gộp)` : ''}`);
+    if (ok) { setImpRows([]); setImpFile(''); fetchAll(); }
   };
 
   const submitOrder = async () => {
@@ -973,6 +1069,10 @@ const CrmTab = () => {
               <option value='Chưa liên hệ'>Chưa liên hệ</option>
             </select>
 
+            <button onClick={()=>setShowImport(true)}
+              style={{ ...S.btnPrimary, background:'#fff', color:'#ea580c', border:'1.5px solid #ea580c' }}>
+              📥 Nhập Excel
+            </button>
             <button onClick={()=>setShowCustForm(true)} style={S.btnPrimary}>
               + Thêm KH
             </button>
@@ -1579,6 +1679,49 @@ const CrmTab = () => {
       {/* ════════════════════════════════════════════════════════════════════
          MODAL: Thêm khách hàng
          ════════════════════════════════════════════════════════════════════ */}
+      {showImport && (
+        <Modal onClose={()=>setShowImport(false)} title='Nhập khách hàng từ Excel'>
+          <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+            <div style={{ fontSize:'0.82rem', color:'#64748b', lineHeight:1.55 }}>
+              Xuất 1 tab khách hàng từ Google Sheet ra Excel/CSV rồi tải lên. Tao tự tìm dòng tiêu đề và đọc các cột:
+              {' '}<b>SĐT, TÊN, TỈNH, LOẠI HÌNH KD, ĐỊA CHỈ, KHU VỰC, ĐLH</b>. Trùng SĐT sẽ được cập nhật (không tạo trùng).
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+              <div>
+                <FieldLabel label='Nhân sự (gán cả file)'/>
+                <select value={impPerson} onChange={e=>setImpPerson(e.target.value)} style={S.select}>
+                  <option value=''>— Không gán —</option>
+                  {SALES_PERSONS.map(s=><option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <FieldLabel label='Loại KH (gán cả file)'/>
+                <select value={impType} onChange={e=>setImpType(e.target.value)} style={S.select}>
+                  <option value='Mới'>Mới</option>
+                  <option value='Cũ'>Cũ</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <FieldLabel label='File Excel / CSV'/>
+              <input type='file' accept='.xlsx,.xls,.csv'
+                onChange={e=>onPickImportFile(e.target.files?.[0])}
+                style={{ ...S.input, padding:'8px' }}/>
+              {impFile && <div style={{ fontSize:'0.78rem', color:'#64748b', marginTop:6 }}>📄 {impFile}</div>}
+            </div>
+            {impMsg && (
+              <div style={{ fontSize:'0.82rem', fontWeight:600, padding:'10px 12px', borderRadius:8,
+                background: impMsg.startsWith('⚠️') ? '#fef2f2' : '#f0fdf4',
+                color: impMsg.startsWith('⚠️') ? '#dc2626' : '#15803d' }}>{impMsg}</div>
+            )}
+            <button onClick={runImport} disabled={!impRows.length || importing}
+              style={{ ...S.btnPrimary, width:'100%', opacity:(!impRows.length || importing) ? 0.5 : 1 }}>
+              {importing ? 'Đang nhập…' : `Nhập ${impRows.length || ''} khách vào CRM`}
+            </button>
+          </div>
+        </Modal>
+      )}
+
       {showCustForm && (
         <Modal onClose={()=>setShowCustForm(false)} title='Thêm khách hàng'>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
