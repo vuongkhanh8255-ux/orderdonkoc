@@ -913,7 +913,9 @@ const ShopAnalyticsTab = () => {
                   }}/>
                   {selectedMetrics.map((k, i) => { const m = METRIC_BY_KEY[k]; return (
                     <Line key={k} yAxisId={i === 0 ? 'left' : 'right'} type="monotone" dataKey={k} name={m.label}
-                      stroke={m.color} strokeWidth={2.5} dot={{ r: 2.5, fill: m.color }} activeDot={{ r: 5, fill: m.color }}/>
+                      stroke={m.color} strokeWidth={2.5} dot={{ r: 2.5, fill: m.color }} activeDot={{ r: 5, fill: m.color }}>
+                      {k === 'GMV' && <LabelList dataKey={k} content={<SmallLabel color="#15803d" />} />}
+                    </Line>
                   ); })}
                 </LineChart>
               </ResponsiveContainer>
