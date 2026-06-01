@@ -607,6 +607,20 @@ const CrmTab = () => {
     if (ok) { setImpRows([]); setImpFile(''); fetchAll(); }
   };
 
+  const downloadTemplate = () => {
+    const headers = ['SĐT', 'TÊN', 'TỈNH', 'LOẠI HÌNH KD', 'ĐỊA CHỈ', 'KHU VỰC', 'ĐLH', 'EMAIL'];
+    const sample = [
+      ['0901234567', 'Spa Mẫu ABC',       'TP. Hồ Chí Minh', 'SPA - CLINIC',        '123 Lê Lợi, Quận 1', 'TP HCM', 'x', ''],
+      ['0987654321', 'Gội Đầu Mẫu XYZ',   'Hà Nội',          'GỘI ĐẦU DƯỠNG SINH',  '45 Cầu Giấy',        'Hà Nội', '',  ''],
+      ['0912000000', 'Mini Mart Mẫu',     'Đà Nẵng',         'MINI MART',           '12 Bạch Đằng',       'Đà Nẵng','x', 'shop@email.com'],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...sample]);
+    ws['!cols'] = headers.map(() => ({ wch: 20 }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Khách hàng');
+    XLSX.writeFile(wb, 'mau-nhap-khach-hang-CRM.xlsx');
+  };
+
   const submitOrder = async () => {
     if (!newOrder.recipient_name || !newOrder.recipient_phone)
       return alert('Vui lòng nhập tên và SĐT!');
@@ -1730,8 +1744,20 @@ const CrmTab = () => {
         <Modal onClose={()=>setShowImport(false)} title='Nhập khách hàng từ Excel'>
           <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
             <div style={{ fontSize:'0.82rem', color:'#64748b', lineHeight:1.55 }}>
-              Xuất 1 tab khách hàng từ Google Sheet ra Excel/CSV rồi tải lên. Tao tự tìm dòng tiêu đề và đọc các cột:
-              {' '}<b>SĐT, TÊN, TỈNH, LOẠI HÌNH KD, ĐỊA CHỈ, KHU VỰC, ĐLH</b>. Trùng SĐT sẽ được cập nhật (không tạo trùng).
+              Tải file mẫu về điền cho đúng, hoặc xuất 1 tab từ Google Sheet ra Excel/CSV rồi tải lên.
+              Tao tự dò dòng tiêu đề + đọc cột: <b>SĐT, TÊN, TỈNH, LOẠI HÌNH KD, ĐỊA CHỈ, KHU VỰC, ĐLH</b>.
+              Trùng SĐT sẽ <b>cập nhật</b> chứ không tạo trùng.
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', padding:'10px 12px',
+              background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:10 }}>
+              <button onClick={downloadTemplate}
+                style={{ ...S.btnPrimary, padding:'8px 16px', fontSize:'0.82rem', whiteSpace:'nowrap' }}>
+                📄 Tải file mẫu (.xlsx)
+              </button>
+              <div style={{ fontSize:'0.74rem', color:'#9a3412', lineHeight:1.5 }}>
+                <b>LOẠI HÌNH KD</b> điền đúng 1 trong: {BUSINESS_TYPES.join(' · ')}.<br/>
+                <b>ĐLH</b> = đã liên hệ → điền <b>x</b> (để trống = chưa). Nhân sự + Loại KH chọn ở dưới (gán cả file).
+              </div>
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
               <div>
