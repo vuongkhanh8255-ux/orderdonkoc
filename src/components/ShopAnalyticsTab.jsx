@@ -38,6 +38,16 @@ const toYmd = (d) => {
 const shortDate = (ymd) => { if (!ymd) return ''; const p = ymd.split('-'); return `${p[2]}/${p[1]}`; };
 const daysBetween = (a, b) => Math.ceil((new Date(b) - new Date(a)) / 86400000);
 
+// Chỉ số chọn được trên biểu đồ tổng hợp (giống chart TikTok). key = dataKey trong chartData.
+const METRICS = [
+  { key: 'Khách truy cập', label: 'Traffic',          color: ACCENT.orange, fmt: (v) => fmtNumber(v),           axisFmt: fmtNumber },
+  { key: 'GMV',            label: 'GMV',               color: ACCENT.green,  fmt: (v) => fmtVnd(v) + ' đ',       axisFmt: fmtVnd },
+  { key: 'Đơn hàng',       label: 'Đơn hàng',          color: ACCENT.amber,  fmt: (v) => fmtNumber(v),           axisFmt: fmtNumber },
+  { key: 'AOV',            label: 'AOV',               color: ACCENT.blue,   fmt: (v) => fmtVnd(v) + ' đ',       axisFmt: fmtVnd },
+  { key: 'CVR',            label: 'Tỷ lệ chuyển đổi',   color: ACCENT.purple, fmt: (v) => Number(v).toFixed(2) + '%', axisFmt: (v) => v + '%' },
+];
+const METRIC_BY_KEY = Object.fromEntries(METRICS.map((m) => [m.key, m]));
+
 // ── Sparkline ─────────────────────────────────────────────────────────────────
 const Sparkline = ({ data, dataKey, color, height = 44 }) => (
   <ResponsiveContainer width="100%" height={height}>
@@ -69,14 +79,25 @@ const ChangeBadge = ({ value }) => {
 };
 
 // ── Stat Card (Stella-style) ──────────────────────────────────────────────────
-const StatCard = ({ icon, label, value, unit, sub, change, sparkData, sparkKey, accentColor = '#ea580c' }) => (
-  <div style={{
+const StatCard = ({ icon, label, value, unit, sub, change, sparkData, sparkKey, accentColor = '#ea580c', selected = false, onClick }) => (
+  <div onClick={onClick} style={{
     background: '#fff', borderRadius: 16, padding: '20px 22px', flex: '1 1 240px', minWidth: 230,
-    boxShadow: '0 1px 4px rgba(15,23,42,0.06)', border: '1px solid #f1f5f9',
+    boxShadow: selected ? `0 2px 14px ${accentColor}40` : '0 1px 4px rgba(15,23,42,0.06)',
+    border: `1px solid ${selected ? accentColor : '#f1f5f9'}`,
     borderLeft: `4px solid ${accentColor}`, position: 'relative', overflow: 'hidden',
+    cursor: onClick ? 'pointer' : 'default',
+    outline: selected ? `2px solid ${accentColor}` : 'none', outlineOffset: -2,
+    transition: 'box-shadow 0.15s, border-color 0.15s',
   }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {onClick && (
+          <span style={{
+            width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+            border: `2px solid ${selected ? accentColor : '#cbd5e1'}`, background: selected ? accentColor : '#fff',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff', fontWeight: 900,
+          }}>{selected ? '✓' : ''}</span>
+        )}
         <span style={{ fontSize: '1rem' }}>{icon}</span>
         <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.6px' }}>{label}</span>
       </div>
@@ -376,6 +397,13 @@ const ShopAnalyticsTab = () => {
   const [syncResult, setSyncResult] = useState(null);
   const [shopFilter, setShopFilter] = useState('');
   const [platformFilter, setPlatformFilter] = useState('');
+  const [selectedMetrics, setSelectedMetrics] = useState(['GMV', 'Đơn hàng']); // tối đa 2 chỉ số trên chart tổng hợp
+  const toggleMetric = (key) => setSelectedMetrics(prev =>
+    prev.includes(key)
+      ? prev.filter(k => k !== key)        // bấm lại → tắt
+      : prev.length >= 2
+        ? [prev[1], key]                   // đã đủ 2 → thay cái cũ nhất
+        : [...prev, key]);
   const [dailyData, setDailyData]   = useState([]);
   const [prevData, setPrevData]     = useState([]);
   const [lastSync, setLastSync]     = useState(null);
@@ -550,6 +578,8 @@ const ShopAnalyticsTab = () => {
       date: shortDate(date), fullDate: date,
       GMV: v.gmv, 'Đơn hàng': v.orders, 'Người mua': v.buyers,
       'Lượt xem': v.pv, 'Khách truy cập': v.visitors,
+      AOV: v.orders > 0 ? Math.round(v.gmv / v.orders) : 0,
+      CVR: v.visitors > 0 ? Number((v.buyers / v.visitors * 100).toFixed(2)) : 0,
     }));
 
     // Sparkline arrays
@@ -804,124 +834,107 @@ const ShopAnalyticsTab = () => {
               value={fmtVnd(computed.cur.visitors)} unit="lượt"
               change={computed.changes.visitors}
               sub={`vs ${periodLabel} trước · ${fmtVndFull(computed.cur.visitors)} lượt`}
-              sparkData={computed.sparkVisitors} sparkKey="v" />
+              sparkData={computed.sparkVisitors} sparkKey="v"
+              selected={selectedMetrics.includes('Khách truy cập')} onClick={() => toggleMetric('Khách truy cập')} />
 
             <StatCard icon="💰" label="Tổng GMV" accentColor={ACCENT.green}
               value={fmtVnd(computed.cur.gmv)} unit="đ"
               change={computed.changes.gmv}
               sub={`vs ${periodLabel} trước · ${fmtVndFull(computed.cur.gmv)} đ`}
-              sparkData={computed.sparkGmv} sparkKey="v" />
+              sparkData={computed.sparkGmv} sparkKey="v"
+              selected={selectedMetrics.includes('GMV')} onClick={() => toggleMetric('GMV')} />
 
             <StatCard icon="📦" label="Đơn hàng" accentColor={ACCENT.amber}
               value={fmtNumber(computed.cur.orders)} unit=""
               change={computed.changes.orders}
               sub={`vs ${periodLabel} trước · ${computed.numDays > 0 ? Math.round(computed.cur.orders / computed.numDays) : 0} đơn / ngày`}
-              sparkData={computed.sparkOrders} sparkKey="v" />
+              sparkData={computed.sparkOrders} sparkKey="v"
+              selected={selectedMetrics.includes('Đơn hàng')} onClick={() => toggleMetric('Đơn hàng')} />
 
             <StatCard icon="💎" label="AOV" accentColor={ACCENT.blue}
               value={fmtVnd(computed.aov)} unit="đ"
               change={computed.changes.aov}
               sub={`vs ${periodLabel} trước · ${fmtVndFull(computed.aov)} đ/đơn`}
-              sparkData={computed.sparkAov} sparkKey="v" />
+              sparkData={computed.sparkAov} sparkKey="v"
+              selected={selectedMetrics.includes('AOV')} onClick={() => toggleMetric('AOV')} />
 
             <StatCard icon="📊" label="Tỷ lệ chuyển đổi" accentColor={ACCENT.purple}
               value={computed.conversionRate.toFixed(2)} unit="%"
               change={computed.changes.conversion}
               sub={`vs ${periodLabel} trước · CVR trung bình`}
-              sparkData={computed.sparkConv} sparkKey="v" />
+              sparkData={computed.sparkConv} sparkKey="v"
+              selected={selectedMetrics.includes('CVR')} onClick={() => toggleMetric('CVR')} />
           </div>
 
-          {/* ── Main Charts: GMV + Channel breakdown ─────────────────────────── */}
-          <div style={{ display: 'grid', gap: 20, gridTemplateColumns: computed.channelTotal > 0 ? '1.5fr 1fr' : '1fr', marginBottom: 24 }}>
-            {/* GMV Area Chart */}
-            <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 16, padding: '20px 22px', boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800 }}>📈 Doanh số theo ngày</h3>
-                  <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: '#94a3b8' }}>Đơn vị: triệu đồng · {computed.numDays} ngày gần nhất</p>
-                </div>
-                <div style={{ display: 'flex', gap: 16, fontSize: '0.74rem', color: '#64748b' }}>
-                  <span>Cao nhất: <strong style={{ color: '#ea580c' }}>{fmtVnd(computed.gmvMax)}</strong></span>
-                  <span>TB: <strong style={{ color: '#0f172a' }}>{fmtVnd(computed.gmvAvg)}</strong></span>
-                </div>
+          {/* ── Biểu đồ tổng hợp: chọn tối đa 2 chỉ số (bấm thẻ phía trên) ──────── */}
+          <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 16, padding: '20px 22px', marginBottom: 24, boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800 }}>📈 Biểu đồ theo ngày</h3>
+                <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: '#94a3b8' }}>
+                  Bấm thẻ chỉ số phía trên để chọn (tối đa 2) · {computed.numDays} ngày gần nhất
+                </p>
               </div>
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={computed.chartData} margin={{ top: 20, right: 10, bottom: 0, left: 0 }}>
-                  <defs>
-                    <linearGradient id="gmvGradMain" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#ea580c" stopOpacity={0.12}/>
-                      <stop offset="95%" stopColor="#ea580c" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
+              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                {selectedMetrics.map(k => { const m = METRIC_BY_KEY[k]; return m ? (
+                  <span key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.76rem', fontWeight: 700, color: '#475569' }}>
+                    <span style={{ width: 11, height: 11, borderRadius: 3, background: m.color }} /> {m.label}
+                  </span>
+                ) : null; })}
+              </div>
+            </div>
+            {selectedMetrics.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '70px 20px', color: '#94a3b8', fontSize: '0.86rem', fontWeight: 600 }}>
+                Bấm 1–2 thẻ chỉ số phía trên (GMV, Traffic, Đơn hàng…) để hiện biểu đồ
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={340}>
+                <LineChart data={computed.chartData} margin={{ top: 20, right: 12, bottom: 0, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/>
                   <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false}/>
-                  <YAxis tickFormatter={fmtVnd} tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false}/>
-                  <Tooltip content={<ChartTooltip valueFormatter={fmtVnd} suffix=" đ"/>}/>
-                  <Area type="monotone" dataKey="GMV" stroke="#ea580c" strokeWidth={2.5} fill="url(#gmvGradMain)" dot={{ r: 3, fill: '#ea580c', strokeWidth: 0 }} activeDot={{ r: 5, fill: '#ea580c' }}>
-                    <LabelList dataKey="GMV" content={<SmallLabel color="#c2410c" />} />
-                  </Area>
-                </AreaChart>
+                  {selectedMetrics.map((k, i) => { const m = METRIC_BY_KEY[k]; return (
+                    <YAxis key={k} yAxisId={i === 0 ? 'left' : 'right'} orientation={i === 0 ? 'left' : 'right'}
+                      tickFormatter={m.axisFmt} tick={{ fontSize: 11, fill: m.color }} width={56} axisLine={false} tickLine={false}/>
+                  ); })}
+                  <Tooltip content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+                    return (
+                      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '10px 14px', fontSize: '0.8rem', boxShadow: '0 4px 16px rgba(15,23,42,0.1)' }}>
+                        <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>{label}</div>
+                        {payload.map(p => { const m = METRIC_BY_KEY[p.dataKey]; return (
+                          <div key={p.dataKey} style={{ display: 'flex', gap: 8, alignItems: 'center', color: m?.color }}>
+                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: m?.color }} />
+                            <span style={{ color: '#64748b' }}>{m?.label}:</span>
+                            <strong style={{ marginLeft: 'auto', color: '#0f172a' }}>{m ? m.fmt(p.value) : p.value}</strong>
+                          </div>
+                        ); })}
+                      </div>
+                    );
+                  }}/>
+                  {selectedMetrics.map((k, i) => { const m = METRIC_BY_KEY[k]; return (
+                    <Line key={k} yAxisId={i === 0 ? 'left' : 'right'} type="monotone" dataKey={k} name={m.label}
+                      stroke={m.color} strokeWidth={2.5} dot={{ r: 2.5, fill: m.color }} activeDot={{ r: 5, fill: m.color }}/>
+                  ); })}
+                </LineChart>
               </ResponsiveContainer>
-            </div>
-
-            {/* Channel Breakdown */}
-            {computed.channelTotal > 0 && (
-              <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 16, padding: '20px 22px', boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
-                <h3 style={{ margin: '0 0 4px', fontSize: '0.92rem', fontWeight: 800 }}>🎯 Doanh thu theo kênh</h3>
-                <p style={{ margin: '0 0 20px', fontSize: '0.72rem', color: '#94a3b8' }}>Tỷ trọng GMV trên tổng {periodLabel}</p>
-                {computed.channelList.map((ch, i) => (
-                  <ChannelBar key={i} name={ch.name} color={ch.color} amount={ch.amount}
-                    percent={ch.percent} maxPercent={computed.channelList[0]?.percent || 100} />
-                ))}
-                <div style={{ marginTop: 18, background: '#f8fafc', borderRadius: 10, padding: '12px 14px', fontSize: '0.78rem', color: '#475569', lineHeight: 1.5 }}>
-                  💡 <strong>{computed.channelList[0]?.name}</strong> đang chiếm <strong>{computed.channelList[0]?.percent.toFixed(1)}%</strong> doanh thu
-                  {computed.channelList[0]?.amount > 0 && <> — <strong style={{ color: '#ea580c' }}>{fmtVnd(computed.channelList[0]?.amount)} đ</strong></>}
-                </div>
-              </div>
             )}
           </div>
 
-          {/* ── Orders + Traffic Charts ───────────────────────────────────────── */}
-          <div style={{ display: 'grid', gap: 20, gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))', marginBottom: 24 }}>
-            {/* Orders */}
-            <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 16, padding: '20px 22px', boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
-              <h3 style={{ margin: '0 0 14px', fontSize: '0.88rem', fontWeight: 800 }}>🛒 Đơn hàng theo ngày</h3>
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={computed.chartData} margin={{ top: 20, right: 10, bottom: 0, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/>
-                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false}/>
-                  <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} width={45} axisLine={false} tickLine={false}/>
-                  <Tooltip content={<ChartTooltip valueFormatter={fmtNumber}/>}/>
-                  <Bar dataKey="Đơn hàng" fill="#3b82f6" radius={[5,5,0,0]}>
-                    <LabelList dataKey="Đơn hàng" position="top" style={{ fontSize: 10, fill: '#3b82f6', fontWeight: 600 }} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+          {/* ── Doanh thu theo kênh (đưa xuống dưới) ───────────────────────────── */}
+          {computed.channelTotal > 0 && (
+            <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 16, padding: '20px 22px', marginBottom: 24, boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
+              <h3 style={{ margin: '0 0 4px', fontSize: '0.92rem', fontWeight: 800 }}>🎯 Doanh thu theo kênh</h3>
+              <p style={{ margin: '0 0 20px', fontSize: '0.72rem', color: '#94a3b8' }}>Tỷ trọng GMV trên tổng {periodLabel}</p>
+              {computed.channelList.map((ch, i) => (
+                <ChannelBar key={i} name={ch.name} color={ch.color} amount={ch.amount}
+                  percent={ch.percent} maxPercent={computed.channelList[0]?.percent || 100} />
+              ))}
+              <div style={{ marginTop: 18, background: '#f8fafc', borderRadius: 10, padding: '12px 14px', fontSize: '0.78rem', color: '#475569', lineHeight: 1.5 }}>
+                💡 <strong>{computed.channelList[0]?.name}</strong> đang chiếm <strong>{computed.channelList[0]?.percent.toFixed(1)}%</strong> doanh thu
+                {computed.channelList[0]?.amount > 0 && <> — <strong style={{ color: '#ea580c' }}>{fmtVnd(computed.channelList[0]?.amount)} đ</strong></>}
+              </div>
             </div>
-
-            {/* Traffic */}
-            <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 16, padding: '20px 22px', boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
-              <h3 style={{ margin: '0 0 14px', fontSize: '0.88rem', fontWeight: 800 }}>👥 Traffic theo ngày</h3>
-              <ResponsiveContainer width="100%" height={260}>
-                <LineChart data={computed.chartData} margin={{ top: 20, right: 10, bottom: 0, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9"/>
-                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false}/>
-                  <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} width={50} axisLine={false} tickLine={false}/>
-                  <Tooltip content={<ChartTooltip valueFormatter={fmtNumber}/>}/>
-                  <Legend wrapperStyle={{ fontSize: '0.75rem' }}/>
-                  <Line type="monotone" dataKey="Lượt xem" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 2.5, fill: '#8b5cf6' }}>
-                    <LabelList dataKey="Lượt xem" content={<SmallLabel color="#7c3aed" />} />
-                  </Line>
-                  <Line type="monotone" dataKey="Khách truy cập" stroke="#0891b2" strokeWidth={2} dot={{ r: 2.5, fill: '#0891b2' }}>
-                    <LabelList dataKey="Khách truy cập" content={<SmallLabel color="#0e7490" />} />
-                  </Line>
-                  <Line type="monotone" dataKey="Người mua" stroke="#16a34a" strokeWidth={2} dot={{ r: 2.5, fill: '#16a34a' }}>
-                    <LabelList dataKey="Người mua" content={<SmallLabel color="#15803d" />} />
-                  </Line>
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+          )}
 
           {/* ── Bảng thống kê chi tiết (paginated) ────────────────────────────── */}
           {computed.dailyTable.length > 0 && (() => {
