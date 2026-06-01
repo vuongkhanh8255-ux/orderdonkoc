@@ -226,6 +226,8 @@ const CrmTab = () => {
   const [fBizType,  setFBizType]  = useState('');
   const [fSearch,   setFSearch]   = useState('');
   const [fOrderType, setFOrderType] = useState('');
+  const [fOrderMonth, setFOrderMonth] = useState('');
+  const [fOrderBiz,   setFOrderBiz]   = useState('');
   const [fContact,  setFContact]  = useState('');   // '', 'Đã liên hệ', 'Chưa liên hệ'
 
   /* ── Forms ──────────────────────────────────────────────────────────── */
@@ -244,6 +246,7 @@ const CrmTab = () => {
   const [impMsg,     setImpMsg]     = useState('');
   const [newOrder,  setNewOrder]  = useState(EMPTY_ORDER);
   const [newGroup,  setNewGroup]  = useState({ report_date:today(), group_name:'', total_members:'', new_joins:'' });
+  const [editOrigMembers, setEditOrigMembers] = useState(0); // số TV cũ khi mở sửa nhóm → tính "mới tham gia"
   const [editGroupId, setEditGroupId] = useState(null);   // id của group đang sửa (null = thêm mới)
   const [newOA,     setNewOA]     = useState({ report_date:today(), oa_scans:'', new_follows:'', menu_interactions:'' });
   const [phoneLoading, setPhoneLoading] = useState(false);
@@ -360,6 +363,28 @@ const CrmTab = () => {
       return true;
     });
   }, [orders, fDateFrom, fDateTo, fPerson]);
+
+  /* ── Derived: tháng có đơn, SĐT→loại hình KD, tổng thành viên nhóm ─── */
+  const orderMonths = useMemo(() => {
+    const set = new Set();
+    orders.forEach(o => { const m = (o.order_date || o.created_at?.slice(0,10) || '').slice(0,7); if (m) set.add(m); });
+    return [...set].sort().reverse();
+  }, [orders]);
+  const custBizByPhone = useMemo(() => {
+    const m = new Map();
+    enriched.forEach(c => { if (c.phone) m.set(c.phone, c.business_type); });
+    return m;
+  }, [enriched]);
+  const groupSummary = useMemo(() => {
+    const nm = {};
+    groups.forEach(g => { if (!nm[g.group_name]) nm[g.group_name] = g; });
+    const arr = Object.values(nm);
+    return {
+      count:   arr.length,
+      members: arr.reduce((s,g)=>s+(Number(g.total_members)||0),0),
+      joins:   arr.reduce((s,g)=>s+(Number(g.new_joins)||0),0),
+    };
+  }, [groups]);
 
   /* ── KPIs with trends (respects filters) ─────────────────────────── */
   const kpis = useMemo(() => {
@@ -613,10 +638,14 @@ const CrmTab = () => {
   const addGroup = async () => {
     if (!newGroup.group_name) return alert('Vui lòng nhập tên group!');
     setSaving(true);
+    const newTotal = Number(newGroup.total_members||0);
     const payload = {
       ...newGroup,
-      total_members:Number(newGroup.total_members||0),
-      new_joins:Number(newGroup.new_joins||0),
+      total_members: newTotal,
+      // Khi SỬA: "mới tham gia" tự tính = số TV mới - số TV cũ (chênh lệch lần cập nhật này),
+      // và đóng dấu ngày cập nhật = hôm nay. Khi THÊM mới: lấy số nhập tay.
+      new_joins: editGroupId ? Math.max(0, newTotal - editOrigMembers) : Number(newGroup.new_joins||0),
+      report_date: editGroupId ? today() : (newGroup.report_date || today()),
     };
     if (editGroupId) {
       await supabase.from('crm_groups').update(payload).eq('id', editGroupId);
@@ -637,6 +666,7 @@ const CrmTab = () => {
       total_members: g.total_members ?? '',
       new_joins:     g.new_joins ?? '',
     });
+    setEditOrigMembers(Number(g.total_members) || 0);
     setEditGroupId(g.id);
     setShowGroupForm(true);
   };
@@ -1321,33 +1351,44 @@ const CrmTab = () => {
 
           {/* RIGHT — Recent orders */}
           <div>
-            {/* Filter chips by order type */}
-            <div style={{ display:'flex', gap:6, marginBottom:12, flexWrap:'wrap' }}>
-              {[['','Tất cả'], ['ĐƠN WEB','Đơn Web'], ['Đơn sỉ','Đơn Sỉ'], ['ZALO SPA','Zalo SPA'],
-                ['Đơn quà tặng','Quà tặng'], ['KHÁCH ZALO','Khách Zalo']].map(([k,l]) => (
-                <button key={k} onClick={()=>setFOrderType(k)} style={{
-                  padding:'5px 12px', borderRadius:20,
-                  border: fOrderType===k ? '2px solid #ea580c' : '1.5px solid #e2e8f0',
-                  background: fOrderType===k ? '#fff7ed' : '#fff',
-                  color: fOrderType===k ? '#ea580c' : '#64748b',
-                  fontWeight:600, fontSize:'0.75rem', cursor:'pointer', fontFamily:S.font,
-                }}>{l}</button>
-              ))}
+            {/* Bộ lọc: tháng + loại hình KD */}
+            <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap' }}>
+              <select value={fOrderMonth} onChange={e=>setFOrderMonth(e.target.value)}
+                style={{ ...S.select, width:'auto', minWidth:140, padding:'7px 10px' }}>
+                <option value=''>Tất cả tháng</option>
+                {orderMonths.map(m => <option key={m} value={m}>Tháng {m.slice(5,7)}/{m.slice(0,4)}</option>)}
+              </select>
+              <select value={fOrderBiz} onChange={e=>setFOrderBiz(e.target.value)}
+                style={{ ...S.select, width:'auto', minWidth:160, padding:'7px 10px' }}>
+                <option value=''>Tất cả loại hình</option>
+                {BUSINESS_TYPES.map(b => <option key={b} value={b}>{b}</option>)}
+              </select>
+              {(fOrderMonth || fOrderBiz) && (
+                <button onClick={()=>{ setFOrderMonth(''); setFOrderBiz(''); }}
+                  style={{ padding:'7px 12px', borderRadius:8, border:'1.5px solid #e2e8f0', background:'#fff',
+                    color:'#64748b', fontWeight:600, fontSize:'0.78rem', cursor:'pointer', fontFamily:S.font }}>
+                  ✕ Bỏ lọc
+                </button>
+              )}
             </div>
 
             {(() => {
-              const filtered = fOrderType
-                ? orders.filter(o => o.order_type === fOrderType)
-                : orders;
-              const totalRev = filtered.reduce((s,o) => s + Number(o.total_amount||0), 0);
+              const odMonth = (o) => (o.order_date || o.created_at?.slice(0,10) || '').slice(0,7);
+              const filtered = orders.filter(o => {
+                if (fOrderMonth && odMonth(o) !== fOrderMonth) return false;
+                if (fOrderBiz && (custBizByPhone.get(o.recipient_phone) || '') !== fOrderBiz) return false;
+                return true;
+              });
+              const revOrders = filtered.filter(o => Number(o.total_amount||0) > 0);
+              const totalRev = revOrders.reduce((s,o) => s + Number(o.total_amount||0), 0);
 
               return (<>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, flexWrap:'wrap', gap:6 }}>
                   <h3 style={{ margin:0, fontSize:'1.05rem', fontWeight:800, color:'#0f172a' }}>
-                    Đơn hàng {fOrderType || ''}
+                    Đơn hàng
                   </h3>
                   <span style={{ fontSize:'0.82rem', color:'#64748b', fontWeight:500 }}>
-                    {filtered.length} đơn {totalRev > 0 ? `· ${fmtMoney(totalRev)}đ` : ''}
+                    {fmtNum(filtered.length)} đơn{revOrders.length>0 ? ` · ${fmtNum(revOrders.length)} có DT · ${fmtMoney(totalRev)}đ` : ''}
                   </span>
                 </div>
 
@@ -1422,7 +1463,7 @@ const CrmTab = () => {
                   {filtered.length === 0 && (
                     <div style={{ textAlign:'center', padding:48, color:'#94a3b8' }}>
                       <div style={{ fontSize:'2rem', marginBottom:8 }}>📋</div>
-                      {fOrderType ? `Không có đơn "${fOrderType}"` : 'Chưa có đơn hàng'}
+                      {(fOrderMonth || fOrderBiz) ? 'Không có đơn khớp bộ lọc' : 'Chưa có đơn hàng'}
                     </div>
                   )}
                 </div>
@@ -1441,9 +1482,15 @@ const CrmTab = () => {
           {/* LEFT — Nhóm khách hàng */}
           <div>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-              <h3 style={{ margin:0, fontSize:'1.05rem', fontWeight:800, color:'#0f172a' }}>
-                Nhóm khách hàng
-              </h3>
+              <div>
+                <h3 style={{ margin:0, fontSize:'1.05rem', fontWeight:800, color:'#0f172a' }}>
+                  Nhóm khách hàng
+                </h3>
+                <div style={{ fontSize:'0.78rem', color:'#64748b', fontWeight:600, marginTop:3 }}>
+                  {groupSummary.count} nhóm · Tổng <b style={{ color:'#7c3aed' }}>{fmtNum(groupSummary.members)}</b> thành viên
+                  {groupSummary.joins > 0 ? <> · <span style={{ color:'#16a34a' }}>+{fmtNum(groupSummary.joins)} mới</span></> : null}
+                </div>
+              </div>
               <button onClick={()=>{ setEditGroupId(null);
                   setNewGroup({ report_date:today(), group_name:'', total_members:'', new_joins:'' });
                   setShowGroupForm(true); }}
@@ -1819,9 +1866,18 @@ const CrmTab = () => {
             </div>
             <div>
               <FieldLabel label='Tham gia mới'/>
-              <input type='number' value={newGroup.new_joins}
-                onChange={e=>setNewGroup(p=>({...p,new_joins:e.target.value}))}
-                placeholder='0' style={S.input}/>
+              {editGroupId ? (
+                <div style={{ ...S.input, display:'flex', alignItems:'center', background:'#f8fafc', color:'#16a34a', fontWeight:700 }}>
+                  +{Math.max(0, Number(newGroup.total_members||0) - editOrigMembers)}
+                  <span style={{ color:'#94a3b8', fontWeight:400, fontSize:'0.76rem', marginLeft:6 }}>
+                    (tự tính: {Number(newGroup.total_members||0)} − {editOrigMembers} cũ)
+                  </span>
+                </div>
+              ) : (
+                <input type='number' value={newGroup.new_joins}
+                  onChange={e=>setNewGroup(p=>({...p,new_joins:e.target.value}))}
+                  placeholder='0' style={S.input}/>
+              )}
             </div>
           </div>
           <button onClick={addGroup} disabled={saving}
