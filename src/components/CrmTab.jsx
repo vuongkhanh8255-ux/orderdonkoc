@@ -343,12 +343,10 @@ const CrmTab = () => {
     });
 
     const totalCust   = fc.length;
-    // KH mới: nếu có filter ngày thì đếm theo created_date trong kỳ; nếu không, đếm theo customer_type='Mới'
-    const newCustCur  = hasDateFilter
-      ? fc.filter(c => c.created_date >= curStart && c.created_date <= curEnd).length
-      : fc.filter(c => c.customer_type === 'Mới').length;
-    const newCustPrev = (hasDateFilter && prevS)
-      ? fc.filter(c => c.created_date >= prevS && c.created_date <= prevE).length : 0;
+    // KH Mới = phân loại customer_type='Mới' (theo bộ lọc tỉnh/nhân sự/loại hình).
+    // KHÔNG đếm theo created_date: ngày tạo là ngày import data (có cả ngày tương lai 12/2026)
+    // nên không phản ánh "khách mới" thật → trước đây ra 726 + ▲12000% + lọc tỉnh ra 0.
+    const newCustCur  = fc.filter(c => c.customer_type === 'Mới').length;
 
     // Đã liên hệ = customers with contact_status = 'Đã liên hệ'
     const contactedCust = fc.filter(c => c.contact_status === 'Đã liên hệ').length;
@@ -372,7 +370,7 @@ const CrmTab = () => {
     const showTrend = hasDateFilter && !!prevS;
     return [
       { label:'Tổng KH',          value: fmtNum(totalCust),        raw: totalCust,        trend: 0 },
-      { label:'KH Mới',           value: fmtNum(newCustCur),       raw: newCustCur,       trend: showTrend ? pctChange(newCustCur, newCustPrev) : 0 },
+      { label:'KH Mới',           value: fmtNum(newCustCur),       raw: newCustCur,       trend: 0 },
       { label:'Đã liên hệ',       value: fmtNum(contactedCust),    raw: contactedCust,    trend: 0 },
       { label:'Đơn',              value: fmtNum(ordersCur.length), raw: ordersCur.length, trend: showTrend ? pctChange(ordersCur.length, ordersPrev.length) : 0 },
       { label:'Doanh thu',        value: fmtMoney(revCur),         raw: revCur,           trend: showTrend ? pctChange(revCur, revPrev) : 0 },
