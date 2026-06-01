@@ -386,6 +386,27 @@ const CrmTab = () => {
     };
   }, [groups]);
 
+  // Chỉ số theo NGÀY: doanh thu + số đơn (order_date thật), theo bộ lọc ngày/nhân sự/loại hình.
+  const dailyChart = useMemo(() => {
+    const hasDate = !!(fDateFrom || fDateTo);
+    const curStart = fDateFrom || '0000-01-01';
+    const curEnd   = fDateTo   || '9999-12-31';
+    const map = {};
+    orders.forEach(o => {
+      if (fPerson && o.sales_person !== fPerson) return;
+      if (fBizType && (custBizByPhone.get(o.recipient_phone) || '') !== fBizType) return;
+      if (Number(o.total_amount||0) <= 0) return;
+      const d = o.order_date || o.created_at?.slice(0,10) || '';
+      if (!d || d < curStart || d > curEnd) return;
+      if (!map[d]) map[d] = { date: d, rev: 0, count: 0 };
+      map[d].rev += Number(o.total_amount||0);
+      map[d].count += 1;
+    });
+    let arr = Object.values(map).sort((a,b) => a.date.localeCompare(b.date));
+    if (!hasDate && arr.length > 45) arr = arr.slice(-45); // không lọc ngày → 45 ngày gần nhất cho dễ đọc
+    return arr;
+  }, [orders, fPerson, fBizType, fDateFrom, fDateTo, custBizByPhone]);
+
   /* ── KPIs with trends (respects filters) ─────────────────────────── */
   const kpis = useMemo(() => {
     const hasDateFilter = !!(fDateFrom || fDateTo);
@@ -894,6 +915,44 @@ const CrmTab = () => {
           {/* KPI Cards */}
           <div style={{ display:'flex', gap:12, marginBottom:24, flexWrap:'wrap' }}>
             {kpis.map((k,i) => <KpiCard key={i} {...k} />)}
+          </div>
+
+          {/* Chỉ số theo ngày — doanh thu + số đơn */}
+          <div style={{ ...S.card, padding:20, marginBottom:24 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14, flexWrap:'wrap', gap:8 }}>
+              <div>
+                <div style={{ fontWeight:800, fontSize:'0.95rem', color:'#0f172a' }}>📈 Chỉ số theo ngày</div>
+                <div style={{ fontSize:'0.78rem', color:'#94a3b8', marginTop:2 }}>
+                  Doanh thu &amp; số đơn theo ngày {(fDateFrom||fDateTo) ? '· theo khoảng ngày đã chọn' : '· 45 ngày gần nhất'}
+                </div>
+              </div>
+              <div style={{ display:'flex', gap:14, fontSize:'0.76rem', fontWeight:600 }}>
+                <span style={{ display:'flex', alignItems:'center', gap:5, color:'#ea580c' }}><span style={{ width:10, height:10, borderRadius:3, background:'#ea580c' }}/>Doanh thu</span>
+                <span style={{ display:'flex', alignItems:'center', gap:5, color:'#2563eb' }}><span style={{ width:10, height:10, borderRadius:3, background:'#2563eb' }}/>Số đơn</span>
+              </div>
+            </div>
+            {dailyChart.length > 0 ? (
+              <ResponsiveContainer width='100%' height={250}>
+                <LineChart data={dailyChart} margin={{ top:4, right:8, bottom:4, left:0 }}>
+                  <CartesianGrid strokeDasharray='3 3' stroke='#f1f5f9'/>
+                  <XAxis dataKey='date' tick={{ fontSize:11, fill:'#94a3b8' }} axisLine={false} tickLine={false}
+                    tickFormatter={d => `${d.slice(8)}/${d.slice(5,7)}`} minTickGap={20}/>
+                  <YAxis yAxisId='rev' tick={{ fontSize:11, fill:'#94a3b8' }} axisLine={false} tickLine={false}
+                    tickFormatter={v => v>=1e6 ? (v/1e6).toFixed(0)+'tr' : (v/1e3).toFixed(0)+'k'}/>
+                  <YAxis yAxisId='cnt' orientation='right' tick={{ fontSize:11, fill:'#94a3b8' }} axisLine={false} tickLine={false} allowDecimals={false}/>
+                  <Tooltip
+                    labelFormatter={d => `Ngày ${d.slice(8)}/${d.slice(5,7)}/${d.slice(0,4)}`}
+                    formatter={(value, name) => name==='Doanh thu' ? [fmtMoney(value)+'đ', name] : [`${value} đơn`, name]}
+                    contentStyle={{ borderRadius:10, border:'1px solid #e5e7eb', boxShadow:'0 4px 12px rgba(0,0,0,0.08)' }}/>
+                  <Line yAxisId='rev' type='monotone' dataKey='rev' name='Doanh thu' stroke='#ea580c' strokeWidth={2.5} dot={{ r:3, fill:'#ea580c' }} activeDot={{ r:6 }}/>
+                  <Line yAxisId='cnt' type='monotone' dataKey='count' name='Số đơn' stroke='#2563eb' strokeWidth={2} dot={{ r:2, fill:'#2563eb' }} strokeDasharray='5 5'/>
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div style={{ height:250, display:'flex', alignItems:'center', justifyContent:'center', color:'#94a3b8', fontSize:'0.85rem' }}>
+                Chưa có đơn có doanh thu trong khoảng/lọc này
+              </div>
+            )}
           </div>
 
           {/* Charts row: line + donut */}
