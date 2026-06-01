@@ -248,7 +248,7 @@ const CrmTab = () => {
   const [newGroup,  setNewGroup]  = useState({ report_date:today(), group_name:'', total_members:'', new_joins:'' });
   const [editOrigMembers, setEditOrigMembers] = useState(0); // số TV cũ khi mở sửa nhóm → tính "mới tham gia"
   const [editGroupId, setEditGroupId] = useState(null);   // id của group đang sửa (null = thêm mới)
-  const [newOA,     setNewOA]     = useState({ report_date:today(), oa_scans:'', new_follows:'', menu_interactions:'' });
+  const [newOA,     setNewOA]     = useState({ report_date:today(), oa_name:'Zalo OA', total_follows:'', oa_scans:'', new_follows:'', menu_interactions:'' });
   const [phoneLoading, setPhoneLoading] = useState(false);
 
   /* ── Fetch (pagination để vượt giới hạn 1000 dòng) ──────────────── */
@@ -406,6 +406,20 @@ const CrmTab = () => {
     if (!hasDate && arr.length > 45) arr = arr.slice(-45); // không lọc ngày → 45 ngày gần nhất cho dễ đọc
     return arr;
   }, [orders, fPerson, fBizType, fDateFrom, fDateTo, custBizByPhone]);
+
+  // Nhiều Zalo OA: gom theo oa_name, lấy bản ghi mới nhất mỗi OA (zaloOA đã sort report_date desc)
+  const zaloOAList = useMemo(() => {
+    const byName = {};
+    zaloOA.forEach(z => {
+      const name = (z.oa_name || 'Zalo OA').toString().trim() || 'Zalo OA';
+      (byName[name] = byName[name] || []).push(z);
+    });
+    return Object.entries(byName).map(([name, rows]) => {
+      const latest = rows[0] || {};
+      const follows = Number(latest.total_follows) || rows.reduce((s,z)=>s+(Number(z.new_follows)||0),0);
+      return { name, follows, msgs30: Number(latest.menu_interactions)||0, report_date: latest.report_date };
+    });
+  }, [zaloOA]);
 
   /* ── KPIs with trends (respects filters) ─────────────────────────── */
   const kpis = useMemo(() => {
@@ -707,13 +721,15 @@ const CrmTab = () => {
   };
 
   const addOA = async () => {
+    if (!newOA.oa_name?.trim()) return alert('Nhập tên OA!');
     setSaving(true);
     await supabase.from('crm_zalo_oa').insert({
-      ...newOA, oa_scans:Number(newOA.oa_scans||0),
+      ...newOA, oa_name:newOA.oa_name.trim(),
+      total_follows:Number(newOA.total_follows||0), oa_scans:Number(newOA.oa_scans||0),
       new_follows:Number(newOA.new_follows||0), menu_interactions:Number(newOA.menu_interactions||0),
     });
     setSaving(false);
-    setNewOA({ report_date:today(), oa_scans:'', new_follows:'', menu_interactions:'' });
+    setNewOA({ report_date:today(), oa_name:'Zalo OA', total_follows:'', oa_scans:'', new_follows:'', menu_interactions:'' });
     setShowOAForm(false); fetchAll();
   };
 
@@ -784,6 +800,34 @@ const CrmTab = () => {
   );
 
   /* ── Filter bar (Dashboard) ─────────────────────────────────────────── */
+  // 1 thẻ kênh OA (dùng cho nhiều Zalo OA + các kênh khác)
+  const renderOACard = ({ key, icon, color, name, sub, connected, follows, msgs30, resp }) => (
+    <div key={key} style={{ ...S.card, padding:'16px 20px', opacity: connected ? 1 : 0.55 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: connected ? 12 : 0 }}>
+        <div style={{ display:'flex', gap:12, alignItems:'center' }}>
+          <div style={{ width:42, height:42, borderRadius:10, display:'flex', alignItems:'center', justifyContent:'center', background:color+'18', fontSize:'1.3rem' }}>{icon}</div>
+          <div>
+            <div style={{ fontWeight:700, fontSize:'0.9rem', color:'#0f172a' }}>{name}</div>
+            <div style={{ fontSize:'0.76rem', color:'#94a3b8' }}>{connected ? (sub || 'Đã kết nối') : 'Chưa kết nối'}</div>
+          </div>
+        </div>
+        <span style={{ fontSize:'0.72rem', fontWeight:700, padding:'3px 10px', borderRadius:20,
+          background: connected ? '#dcfce7' : '#f1f5f9', color: connected ? '#16a34a' : '#94a3b8' }}>
+          {connected ? 'Active' : 'Inactive'}
+        </span>
+      </div>
+      {connected && (
+        <div style={{ display:'flex', gap:16, paddingTop:12, borderTop:'1px solid #f1f5f9' }}>
+          <div style={{ flex:1, textAlign:'center' }}><div style={{ fontSize:'0.7rem', color:'#94a3b8', fontWeight:500, marginBottom:3 }}>THEO DÕI</div><div style={{ fontWeight:800, fontSize:'1rem', color:'#0f172a' }}>{follows!=null ? fmtNum(follows) : '—'}</div></div>
+          <div style={{ width:1, background:'#f1f5f9' }}/>
+          <div style={{ flex:1, textAlign:'center' }}><div style={{ fontSize:'0.7rem', color:'#94a3b8', fontWeight:500, marginBottom:3 }}>TIN 30D</div><div style={{ fontWeight:800, fontSize:'1rem', color:'#0f172a' }}>{msgs30!=null ? fmtNum(msgs30) : '—'}</div></div>
+          <div style={{ width:1, background:'#f1f5f9' }}/>
+          <div style={{ flex:1, textAlign:'center' }}><div style={{ fontSize:'0.7rem', color:'#94a3b8', fontWeight:500, marginBottom:3 }}>PHẢN HỒI %</div><div style={{ fontWeight:800, fontSize:'1rem', color:'#0f172a' }}>{resp || '—'}</div></div>
+        </div>
+      )}
+    </div>
+  );
+
   const FilterBar = () => (
     <div style={{
       display:'flex', gap:10, flexWrap:'wrap', marginBottom:20,
@@ -1681,7 +1725,14 @@ const CrmTab = () => {
             </div>
 
             <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-              {OA_CHANNELS.map(ch => {
+              {/* Nhiều Zalo OA — mỗi OA 1 thẻ */}
+              {zaloOAList.map((oa,i) => renderOACard({
+                key:'zalo-'+i, icon:'💬', color:'#0068ff', name:oa.name, connected:true,
+                follows:oa.follows, msgs30:oa.msgs30, resp:'95%', sub:`Đã kết nối · cập nhật ${oa.report_date||'—'}`,
+              }))}
+              {zaloOAList.length === 0 && renderOACard({ key:'zalo-empty', icon:'💬', color:'#0068ff', name:'Zalo OA', connected:false })}
+              {/* Các kênh khác (không phải Zalo) */}
+              {OA_CHANNELS.filter(c=>c.key!=='zalo').map(ch => {
                 // Use real Zalo OA data for zalo channel
                 const latestOA = ch.key === 'zalo' && zaloOA[0];
                 const totalFollows = ch.key === 'zalo' ? zaloOA.reduce((s,z) => s + (z.new_follows||0), 0) : 0;
@@ -1999,30 +2050,42 @@ const CrmTab = () => {
          MODAL: Nhập liệu Zalo OA
          ════════════════════════════════════════════════════════════════════ */}
       {showOAForm && (
-        <Modal onClose={()=>setShowOAForm(false)} title='Cập nhật kênh OA'>
-          <div style={{ marginBottom:14 }}>
-            <FieldLabel label='Ngày báo cáo'/>
-            <input type='date' value={newOA.report_date}
-              onChange={e=>setNewOA(p=>({...p,report_date:e.target.value}))} style={S.input}/>
+        <Modal onClose={()=>setShowOAForm(false)} title='Cập nhật / Thêm Zalo OA'>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:14 }}>
+            <div>
+              <FieldLabel label='Tên OA' required/>
+              <input value={newOA.oa_name} list='oa-names' placeholder='VD: eHerb OA, Spa OA…'
+                onChange={e=>setNewOA(p=>({...p,oa_name:e.target.value}))} style={S.input}/>
+              <datalist id='oa-names'>{zaloOAList.map(o=><option key={o.name} value={o.name}/>)}</datalist>
+            </div>
+            <div>
+              <FieldLabel label='Ngày báo cáo'/>
+              <input type='date' value={newOA.report_date}
+                onChange={e=>setNewOA(p=>({...p,report_date:e.target.value}))} style={S.input}/>
+            </div>
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:14, marginBottom:18 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:14 }}>
+            <div>
+              <FieldLabel label='Tổng follow (hiện tại)'/>
+              <input type='number' value={newOA.total_follows}
+                onChange={e=>setNewOA(p=>({...p,total_follows:e.target.value}))} placeholder='0' style={S.input}/>
+            </div>
+            <div>
+              <FieldLabel label='Follow mới (trong kỳ)'/>
+              <input type='number' value={newOA.new_follows}
+                onChange={e=>setNewOA(p=>({...p,new_follows:e.target.value}))} placeholder='0' style={S.input}/>
+            </div>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:18 }}>
             <div>
               <FieldLabel label='Lượt quét OA'/>
               <input type='number' value={newOA.oa_scans}
-                onChange={e=>setNewOA(p=>({...p,oa_scans:e.target.value}))}
-                placeholder='0' style={S.input}/>
+                onChange={e=>setNewOA(p=>({...p,oa_scans:e.target.value}))} placeholder='0' style={S.input}/>
             </div>
             <div>
-              <FieldLabel label='Follow mới'/>
-              <input type='number' value={newOA.new_follows}
-                onChange={e=>setNewOA(p=>({...p,new_follows:e.target.value}))}
-                placeholder='0' style={S.input}/>
-            </div>
-            <div>
-              <FieldLabel label='Tương tác menu'/>
+              <FieldLabel label='Tương tác menu (TIN 30D)'/>
               <input type='number' value={newOA.menu_interactions}
-                onChange={e=>setNewOA(p=>({...p,menu_interactions:e.target.value}))}
-                placeholder='0' style={S.input}/>
+                onChange={e=>setNewOA(p=>({...p,menu_interactions:e.target.value}))} placeholder='0' style={S.input}/>
             </div>
           </div>
           <button onClick={addOA} disabled={saving}
