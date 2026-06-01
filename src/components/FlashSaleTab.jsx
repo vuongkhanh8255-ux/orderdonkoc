@@ -25,6 +25,7 @@ const fmtTime = (ts) => {
   return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 };
 const fmtDateTime = (ts) => `${fmtTime(ts)} ${fmtDate(ts)}`;
+const slotKey = (s) => s?.time_slot_id || s?.timeslot_id;
 
 // ── API caller ───────────────────────────────────────────────────────────────
 async function apiCall(action, params = {}, body = null) {
@@ -81,7 +82,9 @@ export default function FlashSaleTab() {
 
   // Creation wizard state
   const [timeSlots, setTimeSlots] = useState([]);
-  const [selectedSlot, setSelectedSlot] = useState(null);
+  const [selectedSlots, setSelectedSlots] = useState([]); // multi-select khung giờ
+  const [submitResults, setSubmitResults] = useState([]); // kết quả tạo từng khung giờ
+  const [submitProgress, setSubmitProgress] = useState(null); // {done,total} khi tạo hàng loạt
   const [products, setProducts] = useState([]);
   const [productPage, setProductPage] = useState(0);
   const [hasMoreProducts, setHasMoreProducts] = useState(true);
@@ -140,7 +143,7 @@ export default function FlashSaleTab() {
     ACTIVE_SHOP_ID = sid;
     setSelectedShopId(sid);
     setStep(0);
-    setSelectedSlot(null); setSelectedProducts([]); setProductConfigs({}); setCreatedFsId(null);
+    setSelectedSlots([]); setSelectedProducts([]); setProductConfigs({}); setCreatedFsId(null);
     setError(''); setSuccess('');
     loadFlashSales();
   }, [selectedShopId, loadFlashSales]);
@@ -202,7 +205,7 @@ export default function FlashSaleTab() {
   // ── Start creation wizard ──────────────────────────────────────────────
   const startCreateWizard = async () => {
     setStep(1);
-    setSelectedSlot(null);
+    setSelectedSlots([]);
     setSelectedProducts([]);
     setProductConfigs({});
     setCreatedFsId(null);
@@ -210,9 +213,27 @@ export default function FlashSaleTab() {
     await loadTimeSlots();
   };
 
-  // ── Select time slot → go to products ──────────────────────────────────
-  const selectSlot = async (slot) => {
-    setSelectedSlot(slot);
+  // ── Multi-select khung giờ ──────────────────────────────────────────────
+  const toggleSlot = (slot) => {
+    const k = slotKey(slot);
+    setSelectedSlots(prev => prev.some(s => slotKey(s) === k)
+      ? prev.filter(s => slotKey(s) !== k)
+      : [...prev, slot]);
+  };
+  // chọn/bỏ tất cả khung giờ trong 1 nhóm (vd cả 1 ngày) cho nhanh
+  const toggleSlotGroup = (groupSlots) => {
+    const keys = groupSlots.map(slotKey);
+    setSelectedSlots(prev => {
+      const have = new Set(prev.map(slotKey));
+      const allIn = keys.every(k => have.has(k));
+      if (allIn) return prev.filter(s => !keys.includes(slotKey(s)));     // bỏ hết nhóm
+      const add = groupSlots.filter(s => !have.has(slotKey(s)));          // thêm phần còn thiếu
+      return [...prev, ...add];
+    });
+  };
+  const goToProducts = async () => {
+    if (selectedSlots.length === 0) { setError('Vui lòng chọn ít nhất 1 khung giờ'); return; }
+    setError('');
     setStep(2);
     await loadProducts(0);
   };
@@ -305,56 +326,63 @@ export default function FlashSaleTab() {
     setStep(4);
   };
 
-  // ── Submit Flash Sale ──────────────────────────────────────────────────
+  // ── Submit: tạo Flash Sale cho TỪNG khung giờ đã chọn (cùng SP + giá) ─────
   const submitFlashSale = async () => {
     setLoading(true);
     setError('');
     setSuccess('');
-    try {
-      // Step 1: Create Flash Sale with time slot
-      const createRes = await apiCall('create', {}, {
-        time_slot_id: selectedSlot.time_slot_id || selectedSlot.timeslot_id,
+    setSubmitResults([]);
+
+    // Build danh sách item 1 lần — dùng chung cho mọi khung giờ
+    const items = [];
+    for (const prod of selectedProducts) {
+      const config = productConfigs[prod.item_id];
+      if (!config) continue;
+      const enabledModels = Object.entries(config).filter(([, c]) => c.enabled);
+      if (enabledModels.length === 0) continue;
+      items.push({
+        item_id: Number(prod.item_id),
+        purchase_limit: 0, // 0 = no limit
+        models: enabledModels.map(([modelId, c]) => ({
+          model_id: modelId === '0' ? 0 : Number(modelId),
+          input_promo_price: Number(c.price),
+          stock: Number(c.stock),
+        })),
       });
-      if (!createRes.ok) {
-        const msg = createRes.message ? `${createRes.error}: ${createRes.message}` : createRes.error;
-        throw new Error(msg || 'Lỗi tạo Flash Sale');
+    }
+
+    const results = [];
+    let lastFsId = null;
+    for (let i = 0; i < selectedSlots.length; i++) {
+      const slot = selectedSlots[i];
+      const label = `${fmtTime(slot.start_time)}–${fmtTime(slot.end_time)} ${fmtDate(slot.start_time)}`;
+      setSubmitProgress({ done: i, total: selectedSlots.length });
+      try {
+        const createRes = await apiCall('create', {}, { time_slot_id: slotKey(slot) });
+        if (!createRes.ok) throw new Error(createRes.message ? `${createRes.error}: ${createRes.message}` : (createRes.error || 'lỗi tạo'));
+        const fsId = createRes.data?.flash_sale_id;
+        if (!fsId) throw new Error('không nhận được flash_sale_id');
+
+        const addRes = await apiCall('add_items', {}, { flash_sale_id: fsId, items });
+        if (!addRes.ok) throw new Error(addRes.message ? `${addRes.error}: ${addRes.message}` : (addRes.error || 'lỗi thêm SP'));
+
+        lastFsId = fsId;
+        results.push({ label, ok: true, fsId });
+      } catch (e) {
+        results.push({ label, ok: false, error: e.message });
       }
-      const fsId = createRes.data?.flash_sale_id;
-      if (!fsId) throw new Error('Không nhận được flash_sale_id');
-      setCreatedFsId(fsId);
+      await new Promise(r => setTimeout(r, 350)); // giãn nhịp tránh rate-limit
+    }
 
-      // Step 2: Add items — Shopee expects items grouped by product with models array
-      const items = [];
-      for (const prod of selectedProducts) {
-        const config = productConfigs[prod.item_id];
-        if (!config) continue;
-        const enabledModels = Object.entries(config).filter(([, c]) => c.enabled);
-        if (enabledModels.length === 0) continue;
-
-        items.push({
-          item_id: Number(prod.item_id),
-          purchase_limit: 0, // 0 = no limit
-          models: enabledModels.map(([modelId, c]) => ({
-            model_id: modelId === '0' ? 0 : Number(modelId),
-            input_promo_price: Number(c.price),
-            stock: Number(c.stock),
-          })),
-        });
-      }
-
-      const addRes = await apiCall('add_items', {}, {
-        flash_sale_id: fsId,
-        items,
-      });
-      if (!addRes.ok) {
-        const msg2 = addRes.message ? `${addRes.error}: ${addRes.message}` : addRes.error;
-        throw new Error(msg2 || 'Lỗi thêm sản phẩm vào Flash Sale');
-      }
-
-      setSuccess(`Tạo Flash Sale thành công! ID: ${fsId}`);
-      setStep(5); // Success step
-    } catch (e) {
-      setError(e.message);
+    setSubmitProgress(null);
+    setSubmitResults(results);
+    setCreatedFsId(lastFsId);
+    const okCount = results.filter(r => r.ok).length;
+    if (okCount === 0) {
+      setError(`Tạo thất bại cả ${results.length} khung giờ. ${results[0]?.error || ''}`);
+    } else {
+      setSuccess(`Đã tạo ${okCount}/${results.length} Flash Sale`);
+      setStep(5);
     }
     setLoading(false);
   };
@@ -515,7 +543,9 @@ export default function FlashSaleTab() {
             borderRadius: '50%', margin: '0 auto 12px',
             animation: 'fsSpin 0.8s linear infinite',
           }} />
-          Đang tải...
+          {submitProgress
+            ? `Đang tạo Flash Sale ${submitProgress.done + 1}/${submitProgress.total}...`
+            : 'Đang tải...'}
           <style>{`@keyframes fsSpin { to { transform: rotate(360deg); } }`}</style>
         </div>
       )}
@@ -529,11 +559,14 @@ export default function FlashSaleTab() {
         />
       )}
 
-      {/* ═══ STEP 1: Select Time Slot ═══ */}
+      {/* ═══ STEP 1: Select Time Slot (multi-select) ═══ */}
       {step === 1 && !loading && (
         <TimeSlotPicker
           slots={timeSlots}
-          onSelect={selectSlot}
+          selectedSlots={selectedSlots}
+          onToggle={toggleSlot}
+          onToggleGroup={toggleSlotGroup}
+          onContinue={goToProducts}
         />
       )}
 
@@ -564,7 +597,7 @@ export default function FlashSaleTab() {
       {/* ═══ STEP 4: Review & Submit ═══ */}
       {step === 4 && !loading && (
         <ReviewStep
-          slot={selectedSlot}
+          slots={selectedSlots}
           selectedProducts={selectedProducts}
           configs={productConfigs}
           onSubmit={submitFlashSale}
@@ -572,27 +605,39 @@ export default function FlashSaleTab() {
         />
       )}
 
-      {/* ═══ STEP 5: Success ═══ */}
+      {/* ═══ STEP 5: Success (kết quả tạo hàng loạt) ═══ */}
       {step === 5 && (
-        <div style={{ ...CARD, textAlign: 'center', padding: '60px 40px' }}>
-          <div style={{ fontSize: '3rem', marginBottom: 16 }}>🎉</div>
-          <h2 style={{ margin: '0 0 8px', fontSize: '1.4rem', fontWeight: 900, color: '#0f172a' }}>
-            Tạo Flash Sale thành công!
-          </h2>
-          <p style={{ color: '#64748b', marginBottom: 24, fontSize: '0.9rem' }}>
-            Flash Sale ID: <strong>{createdFsId}</strong>
-            <br />
-            Khung giờ: <strong>{fmtDateTime(selectedSlot?.start_time)} - {fmtTime(selectedSlot?.end_time)}</strong>
-            <br />
-            Số sản phẩm: <strong>{selectedProducts.length}</strong>
-          </p>
+        <div style={{ ...CARD, padding: '40px' }}>
+          <div style={{ textAlign: 'center', marginBottom: 20 }}>
+            <div style={{ fontSize: '3rem', marginBottom: 12 }}>🎉</div>
+            <h2 style={{ margin: '0 0 6px', fontSize: '1.4rem', fontWeight: 900, color: '#0f172a' }}>
+              Đã tạo {submitResults.filter(r => r.ok).length}/{submitResults.length} Flash Sale
+            </h2>
+            <p style={{ color: '#64748b', fontSize: '0.9rem' }}>
+              {selectedProducts.length} sản phẩm · cùng cấu hình giá cho mọi khung giờ
+            </p>
+          </div>
+
+          <div style={{ maxWidth: 560, margin: '0 auto 24px', display: 'grid', gap: 8 }}>
+            {submitResults.map((r, i) => (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                borderRadius: 10, fontSize: '0.84rem',
+                background: r.ok ? '#f0fdf4' : '#fef2f2',
+                border: `1px solid ${r.ok ? '#bbf7d0' : '#fecaca'}`,
+              }}>
+                <span>{r.ok ? '✅' : '❌'}</span>
+                <strong style={{ color: '#0f172a' }}>{r.label}</strong>
+                <span style={{ marginLeft: 'auto', color: r.ok ? '#15803d' : '#dc2626', fontSize: '0.78rem' }}>
+                  {r.ok ? `FS #${r.fsId}` : r.error}
+                </span>
+              </div>
+            ))}
+          </div>
+
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-            <button style={BTN_PRIMARY} onClick={backToList}>
-              Quay lại danh sách
-            </button>
-            <button style={BTN_SECONDARY} onClick={startCreateWizard}>
-              Tạo Flash Sale mới
-            </button>
+            <button style={BTN_PRIMARY} onClick={backToList}>Quay lại danh sách</button>
+            <button style={BTN_SECONDARY} onClick={startCreateWizard}>Tạo Flash Sale mới</button>
           </div>
         </div>
       )}
@@ -672,8 +717,9 @@ function FlashSaleList({ flashSales, onDelete, onRefresh }) {
 }
 
 // ── Time Slot Picker ─────────────────────────────────────────────────────────
-function TimeSlotPicker({ slots, onSelect }) {
-  // Group slots by date
+function TimeSlotPicker({ slots, selectedSlots, onToggle, onToggleGroup, onContinue }) {
+  const selKeys = useMemo(() => new Set((selectedSlots || []).map(slotKey)), [selectedSlots]);
+
   const grouped = useMemo(() => {
     const map = {};
     (slots || []).forEach(slot => {
@@ -682,7 +728,6 @@ function TimeSlotPicker({ slots, onSelect }) {
       map[date].push(slot);
     });
     return Object.entries(map).sort((a, b) => {
-      // Sort by actual date
       const da = slots.find(s => fmtDate(s.start_time) === a[0]);
       const db = slots.find(s => fmtDate(s.start_time) === b[0]);
       return (da?.start_time || 0) - (db?.start_time || 0);
@@ -701,48 +746,85 @@ function TimeSlotPicker({ slots, onSelect }) {
     );
   }
 
+  const count = selKeys.size;
+
   return (
     <div style={{ ...CARD }}>
       <h3 style={{ margin: '0 0 6px', fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
         📅 Chọn khung giờ Flash Sale
       </h3>
       <p style={{ margin: '0 0 20px', fontSize: '0.82rem', color: '#64748b' }}>
-        Chọn khung giờ bạn muốn tạo Flash Sale. Mỗi khung giờ có thời gian bắt đầu và kết thúc cụ thể.
+        Bấm chọn <strong>nhiều khung giờ</strong> (hoặc “Chọn cả ngày”) — sẽ tạo Flash Sale cho từng khung với cùng sản phẩm &amp; giá.
       </p>
 
-      {grouped.map(([date, dateSlots]) => (
-        <div key={date} style={{ marginBottom: 20 }}>
-          <div style={{
-            fontSize: '0.82rem', fontWeight: 800, color: '#475569',
-            padding: '8px 12px', background: '#f8fafc', borderRadius: 8,
-            marginBottom: 10, border: '1px solid #e5e7eb',
-          }}>
-            📅 {date}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
-            {dateSlots.map(slot => (
-              <div
-                key={slot.time_slot_id || slot.timeslot_id}
-                onClick={() => onSelect(slot)}
+      {grouped.map(([date, dateSlots]) => {
+        const allIn = dateSlots.every(s => selKeys.has(slotKey(s)));
+        return (
+          <div key={date} style={{ marginBottom: 20 }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+              fontSize: '0.82rem', fontWeight: 800, color: '#475569',
+              padding: '6px 8px 6px 12px', background: '#f8fafc', borderRadius: 8,
+              marginBottom: 10, border: '1px solid #e5e7eb',
+            }}>
+              <span>📅 {date}</span>
+              <button onClick={() => onToggleGroup(dateSlots)}
                 style={{
-                  padding: '16px', borderRadius: 12, border: '2px solid #e5e7eb',
-                  cursor: 'pointer', transition: 'all 0.2s', textAlign: 'center',
-                  background: '#fff',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = '#ea580c'; e.currentTarget.style.background = '#fff7ed'; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.background = '#fff'; }}
-              >
-                <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#0f172a' }}>
-                  {fmtTime(slot.start_time)} — {fmtTime(slot.end_time)}
-                </div>
-                <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: 4 }}>
-                  Bấm để chọn khung giờ này
-                </div>
-              </div>
-            ))}
+                  padding: '4px 12px', borderRadius: 14, fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer',
+                  border: '1.5px solid', ...(allIn
+                    ? { borderColor: '#ea580c', background: '#fff7ed', color: '#c2410c' }
+                    : { borderColor: '#e5e7eb', background: '#fff', color: '#64748b' }),
+                }}>
+                {allIn ? '✓ Bỏ chọn cả ngày' : '+ Chọn cả ngày'}
+              </button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+              {dateSlots.map(slot => {
+                const on = selKeys.has(slotKey(slot));
+                return (
+                  <div
+                    key={slotKey(slot)}
+                    onClick={() => onToggle(slot)}
+                    style={{
+                      padding: '16px', borderRadius: 12, cursor: 'pointer', transition: 'all 0.15s',
+                      textAlign: 'center', position: 'relative',
+                      border: `2px solid ${on ? '#ea580c' : '#e5e7eb'}`,
+                      background: on ? '#fff7ed' : '#fff',
+                    }}
+                  >
+                    {on && <span style={{ position: 'absolute', top: 8, right: 10, color: '#ea580c', fontWeight: 900 }}>✓</span>}
+                    <div style={{ fontSize: '1.2rem', fontWeight: 900, color: on ? '#c2410c' : '#0f172a' }}>
+                      {fmtTime(slot.start_time)} — {fmtTime(slot.end_time)}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: on ? '#ea580c' : '#94a3b8', marginTop: 4 }}>
+                      {on ? 'Đã chọn' : 'Bấm để chọn'}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
+
+      {/* Sticky action bar: số khung đã chọn + tiếp tục */}
+      <div style={{
+        position: 'sticky', bottom: 12, marginTop: 18,
+        background: '#fff', border: '1px solid #fed7aa', borderRadius: 12,
+        padding: '12px 18px', boxShadow: '0 6px 18px rgba(15,23,42,0.10)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+      }}>
+        <span style={{ fontSize: '0.85rem', fontWeight: 700, color: count ? '#0f172a' : '#94a3b8' }}>
+          Đã chọn <strong style={{ color: '#ea580c' }}>{count}</strong> khung giờ
+        </span>
+        <button
+          onClick={onContinue}
+          disabled={count === 0}
+          style={{ ...BTN_PRIMARY, ...(count === 0 ? { background: '#d1d5db', boxShadow: 'none', cursor: 'default' } : {}) }}
+        >
+          Tiếp tục → Chọn sản phẩm
+        </button>
+      </div>
     </div>
   );
 }
@@ -1076,7 +1158,7 @@ function PriceConfigurator({ selectedProducts, configs, onUpdateConfig, onNext, 
 }
 
 // ── Review Step ───────────────────────────────────────────────────────────────
-function ReviewStep({ slot, selectedProducts, configs, onSubmit, onBack }) {
+function ReviewStep({ slots, selectedProducts, configs, onSubmit, onBack }) {
   const totalItems = useMemo(() => {
     let count = 0;
     for (const prod of selectedProducts) {
@@ -1100,33 +1182,45 @@ function ReviewStep({ slot, selectedProducts, configs, onSubmit, onBack }) {
         background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12,
         padding: '18px 22px', marginBottom: 20,
       }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 12 }}>
           <div>
             <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#9a3412', textTransform: 'uppercase', marginBottom: 4 }}>
-              Khung giờ
+              Số khung giờ
             </div>
-            <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
-              {fmtTime(slot?.start_time)} — {fmtTime(slot?.end_time)}
+            <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#ea580c' }}>
+              {(slots || []).length} khung
             </div>
-            <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{fmtDate(slot?.start_time)}</div>
+            <div style={{ fontSize: '0.78rem', color: '#64748b' }}>mỗi khung 1 Flash Sale</div>
           </div>
           <div>
             <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#9a3412', textTransform: 'uppercase', marginBottom: 4 }}>
               Số sản phẩm
             </div>
-            <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+            <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#0f172a' }}>
               {selectedProducts.length} sản phẩm
             </div>
             <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{totalItems} variants</div>
           </div>
           <div>
             <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#9a3412', textTransform: 'uppercase', marginBottom: 4 }}>
-              Time Slot ID
+              Tổng FS sẽ tạo
             </div>
-            <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
-              {slot?.time_slot_id || slot?.timeslot_id || 'N/A'}
+            <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#0f172a' }}>
+              {(slots || []).length}
             </div>
+            <div style={{ fontSize: '0.78rem', color: '#64748b' }}>cùng SP &amp; giá</div>
           </div>
+        </div>
+        {/* Danh sách khung giờ đã chọn */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {(slots || []).map(s => (
+            <span key={slotKey(s)} style={{
+              fontSize: '0.74rem', fontWeight: 700, color: '#9a3412',
+              background: '#fff', border: '1px solid #fed7aa', borderRadius: 14, padding: '3px 10px',
+            }}>
+              {fmtTime(s.start_time)}–{fmtTime(s.end_time)} · {fmtDate(s.start_time)}
+            </span>
+          ))}
         </div>
       </div>
 
@@ -1169,7 +1263,7 @@ function ReviewStep({ slot, selectedProducts, configs, onSubmit, onBack }) {
           style={{ ...BTN_PRIMARY, padding: '12px 32px', fontSize: '0.92rem' }}
           onClick={onSubmit}
         >
-          ⚡ Tạo Flash Sale
+          ⚡ Tạo {(slots || []).length} Flash Sale
         </button>
       </div>
     </div>
