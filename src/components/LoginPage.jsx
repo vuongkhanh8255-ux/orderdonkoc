@@ -160,6 +160,8 @@ export const ACCOUNTS = [
     { username: 'dan',        password: 'Dan@SK2025',      role: 'ecom',       name: 'Đan'         },
     { username: 'hieu',       password: 'Hieu@SK2025',     role: 'ecom',       name: 'Hiếu'        },
     { username: 'tamnhu',     password: 'TamNhu@SK2025',   role: 'ecom',       name: 'Tâm Như'     },
+    // ── ABM team (chỉ xem các dashboard/chỉ số được chỉ định) ──
+    { username: 'abm',        password: 'ABM@SK2025',      role: 'abm',        name: 'Team ABM'    },
 ];
 
 // ── ROLE PERMISSIONS ──────────────────────────────────────
@@ -180,6 +182,9 @@ export const ROLE_VIEWS = {
         'dashboard','order','booking_performance','airlinks',                  // Booking (no Hợp Đồng)
         'expense',                                                             // Lưu trữ — Ngân Sách Ecom
     ],
+    // ABM team — chỉ xem: Dashboard Ecom, Ads Shopee, CRM, CSKH, Đánh giá sàn,
+    //   Phân tích SP booking, Dashboard booking, Quản Lý Link Air, Lưu Trữ Data, Ngân Sách Ecom
+    abm: ['shop_analytics','shopee_ads_dashboard','crm','cskh','reviews','dashboard','booking_performance','airlinks','data_archive','expense'],
 };
 
 export default LoginPage;
