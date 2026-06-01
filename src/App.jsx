@@ -1,6 +1,6 @@
 // src/App.jsx
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Component } from 'react';
 import { AppDataProvider } from './context/AppDataContext';
 import { supabase } from './supabaseClient';
 import OrderTab from './components/OrderTab';
@@ -34,6 +34,30 @@ import ShopeeAdsDashboard from './components/ShopeeAdsDashboard';
 import PublicLandingPage from './components/PublicLandingPage';
 
 const SESSION_KEY = 'sk_session';
+
+// Lưới an toàn: lỗi render trong 1 tab chỉ hiện báo lỗi tại chỗ, không kéo trắng cả app.
+class AppErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
+  componentDidCatch(error, info) { console.error('[App ErrorBoundary]', error, info?.componentStack); }
+  render() {
+    if (!this.state.hasError) return this.props.children;
+    return (
+      <div style={{ padding: '48px 24px', textAlign: 'center', fontFamily: "'Outfit', sans-serif", maxWidth: 560, margin: '40px auto' }}>
+        <div style={{ fontSize: '2.6rem', marginBottom: 14 }}>⚠️</div>
+        <h2 style={{ margin: '0 0 8px', fontWeight: 800, color: '#dc2626', fontSize: '1.2rem' }}>Mục này gặp lỗi</h2>
+        <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: 6 }}>Phần còn lại của web vẫn dùng bình thường. Thử lại hoặc tải lại trang.</p>
+        <p style={{ color: '#94a3b8', fontSize: '0.78rem', marginBottom: 20, wordBreak: 'break-word' }}>{this.state.error?.message || 'Unknown error'}</p>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+          <button onClick={() => this.setState({ hasError: false, error: null })}
+            style={{ padding: '9px 20px', borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}>🔄 Thử lại</button>
+          <button onClick={() => window.location.reload()}
+            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: '#ea580c', color: '#fff', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}>↻ Tải lại trang</button>
+        </div>
+      </div>
+    );
+  }
+}
 
 function App() {
   if (window.location.pathname === '/tiktok-shop/callback') {
@@ -353,7 +377,9 @@ function AppMain({ user, onLogout, allowedViews }) {
         {/* --- MAIN CONTENT --- */}
         <div style={mainContentStyle}>
 
-          {/* Tabs render bình thường (mount/unmount theo active) */}
+          {/* Tabs render bình thường (mount/unmount theo active).
+              Bọc Error Boundary key theo view → đổi tab là reset, 1 tab lỗi không kéo trắng cả app. */}
+          <AppErrorBoundary key={currentView}>
           {currentView === 'dashboard' && <DashboardTab />}
           {currentView === 'order' && <OrderTab />}
           {currentView === 'contract' && <ContractTab />}
@@ -381,12 +407,15 @@ function AppMain({ user, onLogout, allowedViews }) {
           )}
           {currentView === 'shopee_ads' && <ShopeeAdsTab />}
           {currentView === 'shopee_ads_dashboard' && <ShopeeAdsDashboard />}
+          </AppErrorBoundary>
 
           {/* BookingPerformanceTab luôn mounted, chỉ ẩn/hiện bằng display
               → state và data cache không mất khi đổi tab */}
           {canView('booking_performance') && (
             <div style={{ display: currentView === 'booking_performance' ? 'block' : 'none' }}>
-              <BookingPerformanceTab currentUser={user} />
+              <AppErrorBoundary>
+                <BookingPerformanceTab currentUser={user} />
+              </AppErrorBoundary>
             </div>
           )}
 
