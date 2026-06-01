@@ -723,6 +723,16 @@ const CrmTab = () => {
     setFContact('');
   };
 
+  // Preset nhanh cho khoảng ngày (Hôm qua / 7 ngày / 30 ngày)
+  const _fmtYmd = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const datePresetRange = (key) => {
+    if (key === 'yesterday') { const y = new Date(); y.setDate(y.getDate()-1); const s = _fmtYmd(y); return [s, s]; }
+    const end = new Date();
+    const start = new Date(); start.setDate(start.getDate() - (key - 1));
+    return [_fmtYmd(start), _fmtYmd(end)];
+  };
+  const applyDatePreset = (key) => { const [s,e] = datePresetRange(key); setFDateFrom(s); setFDateTo(e); };
+
   /* ══════════════════════════════════════════════════════════════════════
      Sub-components (render helpers)
      ══════════════════════════════════════════════════════════════════════ */
@@ -788,6 +798,18 @@ const CrmTab = () => {
       <span style={{ color:'#94a3b8', fontSize:'0.82rem' }}>→</span>
       <input type='date' value={fDateTo} onChange={e=>setFDateTo(e.target.value)}
         style={{ ...S.input, width:140, padding:'7px 10px' }}/>
+
+      {[['yesterday','Hôm qua'],[7,'7 ngày'],[30,'30 ngày']].map(([key,label]) => {
+        const [s,e] = datePresetRange(key);
+        const active = fDateFrom===s && fDateTo===e;
+        return (
+          <button key={label} onClick={()=>applyDatePreset(key)} style={{
+            padding:'7px 12px', borderRadius:8, fontSize:'0.8rem', fontWeight:600, cursor:'pointer', fontFamily:S.font,
+            border: active ? '1.5px solid #ea580c' : '1.5px solid #e2e8f0',
+            background: active ? '#fff7ed' : '#fff', color: active ? '#ea580c' : '#64748b',
+          }}>{label}</button>
+        );
+      })}
 
       <div style={{ width:1, height:24, background:'#e2e8f0', margin:'0 4px' }}/>
 
