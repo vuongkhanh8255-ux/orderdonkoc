@@ -730,6 +730,25 @@ async function handleDelete(supabase, shopId, body) {
   return { ok: true, data: result.response };
 }
 
+/** list_shops — shops with an active marketing token, for the Flash Sale shop selector */
+async function handleListShops(supabase) {
+  const { data, error } = await supabase
+    .from('shopee_tokens')
+    .select('shop_id, shop_name')
+    .eq('app_type', 'marketing')
+    .eq('status', 'active');
+  if (error) return { ok: false, error: error.message };
+  const seen = new Set();
+  const shops = [];
+  for (const r of (data || [])) {
+    const sid = String(r.shop_id);
+    if (seen.has(sid)) continue;
+    seen.add(sid);
+    shops.push({ shop_id: sid, shop_name: r.shop_name || `Shop ${sid}` });
+  }
+  return { ok: true, data: { shops } };
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Main handler
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -754,7 +773,7 @@ export default async function handler(req, res) {
     return res.status(400).json({
       ok: false,
       error: 'Missing ?action= parameter',
-      available: ['ads', 'ads_sync', 'time_slots', 'products', 'product_models', 'create', 'add_items', 'list', 'delete'],
+      available: ['ads', 'ads_sync', 'time_slots', 'products', 'product_models', 'create', 'add_items', 'list', 'list_shops', 'delete'],
     });
   }
 
@@ -796,6 +815,9 @@ export default async function handler(req, res) {
       case 'list':
         result = await handleList(supabase, shopId);
         break;
+      case 'list_shops':
+        result = await handleListShops(supabase);
+        break;
       case 'delete':
         if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST required for delete' });
         result = await handleDelete(supabase, shopId, req.body);
@@ -804,7 +826,7 @@ export default async function handler(req, res) {
         return res.status(400).json({
           ok: false,
           error: `Unknown action: ${action}`,
-          available: ['ads', 'ads_sync', 'time_slots', 'products', 'product_models', 'create', 'add_items', 'list', 'delete'],
+          available: ['ads', 'ads_sync', 'time_slots', 'products', 'product_models', 'create', 'add_items', 'list', 'list_shops', 'delete'],
         });
     }
 

@@ -5,12 +5,8 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 const API_BASE = '/api/shopee/flash-sale';
 const DEFAULT_SHOP_ID = '341325550';
 
-// ── Shop list ───────────────────────────────────────────────────────────────
-const SHOPS = [
-  { id: '341325550', name: 'Milaganics Official', icon: '🌿' },
-  // { id: '...', name: 'eHerb Mall', icon: '🌱' },
-  // { id: '...', name: 'Bodymiss', icon: '💜' },
-];
+// Shop đang chọn cho mọi apiCall — cập nhật khi đổi shop ở selector (shops nạp động từ list_shops).
+let ACTIVE_SHOP_ID = DEFAULT_SHOP_ID;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const fmtVnd = (v) => {
@@ -32,7 +28,7 @@ const fmtDateTime = (ts) => `${fmtTime(ts)} ${fmtDate(ts)}`;
 
 // ── API caller ───────────────────────────────────────────────────────────────
 async function apiCall(action, params = {}, body = null) {
-  const qs = new URLSearchParams({ action, shop_id: DEFAULT_SHOP_ID, ...params });
+  const qs = new URLSearchParams({ action, shop_id: ACTIVE_SHOP_ID, ...params });
   const url = `${API_BASE}?${qs}`;
   const opts = body
     ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
@@ -93,6 +89,10 @@ export default function FlashSaleTab() {
   const [productConfigs, setProductConfigs] = useState({}); // {item_id: {model_id: {price, stock, enabled}}}
   const [createdFsId, setCreatedFsId] = useState(null);
 
+  // ── Multi-shop ──
+  const [shops, setShops] = useState([]);
+  const [selectedShopId, setSelectedShopId] = useState(DEFAULT_SHOP_ID);
+
   // ── Load Flash Sale list ────────────────────────────────────────────────
   const loadFlashSales = useCallback(async () => {
     setLoading(true);
@@ -111,6 +111,39 @@ export default function FlashSaleTab() {
   }, []);
 
   useEffect(() => { loadFlashSales(); }, [loadFlashSales]);
+
+  // keep the module-level shop in sync so every apiCall targets the selected shop
+  useEffect(() => { ACTIVE_SHOP_ID = selectedShopId; }, [selectedShopId]);
+
+  // load the list of connected shops for the selector (once)
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiCall('list_shops');
+        const list = (res.ok && Array.isArray(res.data?.shops)) ? res.data.shops : [];
+        if (list.length) {
+          setShops(list);
+          if (!list.some(s => String(s.shop_id) === String(selectedShopId))) {
+            ACTIVE_SHOP_ID = list[0].shop_id;
+            setSelectedShopId(list[0].shop_id);
+          }
+        }
+      } catch { /* keep default shop */ }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // switch shop → reset the wizard + reload that shop's flash sales
+  const changeShop = useCallback((shopId) => {
+    const sid = String(shopId);
+    if (sid === String(selectedShopId)) return;
+    ACTIVE_SHOP_ID = sid;
+    setSelectedShopId(sid);
+    setStep(0);
+    setSelectedSlot(null); setSelectedProducts([]); setProductConfigs({}); setCreatedFsId(null);
+    setError(''); setSuccess('');
+    loadFlashSales();
+  }, [selectedShopId, loadFlashSales]);
 
   // ── Load time slots ─────────────────────────────────────────────────────
   const loadTimeSlots = useCallback(async () => {
@@ -391,23 +424,28 @@ export default function FlashSaleTab() {
       </div>
 
       {/* Shop Selector */}
-      {step === 0 && SHOPS.length > 1 && (
-        <div style={{ ...CARD, marginBottom: 16, padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
+      {step === 0 && shops.length > 1 && (
+        <div style={{ ...CARD, marginBottom: 16, padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569' }}>🏪 Shop:</span>
-          {SHOPS.map(shop => (
-            <button
-              key={shop.id}
-              style={{
-                padding: '6px 16px', borderRadius: 20, fontSize: '0.78rem', fontWeight: 700,
-                border: '1.5px solid', cursor: 'pointer', transition: 'all 0.2s',
-                ...(DEFAULT_SHOP_ID === shop.id
-                  ? { borderColor: '#ea580c', background: '#fff7ed', color: '#ea580c' }
-                  : { borderColor: '#e5e7eb', background: '#fff', color: '#64748b' }),
-              }}
-            >
-              {shop.icon} {shop.name}
-            </button>
-          ))}
+          {shops.map(shop => {
+            const active = String(selectedShopId) === String(shop.shop_id);
+            return (
+              <button
+                key={shop.shop_id}
+                onClick={() => changeShop(shop.shop_id)}
+                disabled={loading}
+                style={{
+                  padding: '6px 16px', borderRadius: 20, fontSize: '0.78rem', fontWeight: 700,
+                  border: '1.5px solid', cursor: loading ? 'default' : 'pointer', transition: 'all 0.2s',
+                  ...(active
+                    ? { borderColor: '#ea580c', background: '#fff7ed', color: '#ea580c' }
+                    : { borderColor: '#e5e7eb', background: '#fff', color: '#64748b' }),
+                }}
+              >
+                🏪 {shop.shop_name}
+              </button>
+            );
+          })}
         </div>
       )}
 
