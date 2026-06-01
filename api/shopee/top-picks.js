@@ -20,6 +20,8 @@ function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  // API động: cấm cache (tránh Cloudflare/trình duyệt giữ lại lỗi/dữ liệu cũ giữa các bản deploy)
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
 }
 
 /* ── Shopee sign helper ─────────────────────────────────────────────────── */
