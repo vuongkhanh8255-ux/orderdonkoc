@@ -236,10 +236,10 @@ async function handleAffProbe({ params, supabase, res }) {
   const conn = conns.find(c => (c.seller_name || '').toLowerCase().includes(want)) || conns[0];
   const at = conn.access_token;
 
-  const run = async (method, path, body) => {
+  const run = async (method, path, body, queryExtra = {}) => {
     const ts = String(Math.floor(Date.now() / 1000));
     const bodyStr = body ? JSON.stringify(body) : '';
-    const urlParams = { app_key: ck, timestamp: ts };
+    const urlParams = { app_key: ck, timestamp: ts, ...queryExtra };
     if (conn.shop_cipher) urlParams.shop_cipher = conn.shop_cipher;
     urlParams.sign = buildSign(cs, path, urlParams, bodyStr);
     const opts = { method, headers: { 'x-tts-access-token': at, 'content-type': 'application/json' } };
@@ -250,12 +250,9 @@ async function handleAffProbe({ params, supabase, res }) {
   };
 
   const probes = [];
-  // Confirmed from API Test Tool: marketplace_creators/search uses version 202508, shop_cipher optional
-  probes.push(await run('POST', '/affiliate_seller/202508/marketplace_creators/search', { page_size: 5 }));
-  // affiliate orders (KOC-attributed orders for the shop) — try near versions
-  for (const v of ['202508', '202509', '202507', '202506']) {
-    probes.push(await run('POST', `/affiliate_seller/${v}/orders/search`, { page_size: 5 }));
-  }
+  // page_size goes in the QUERY string (not body). Try empty body and a minimal filter body.
+  probes.push(await run('POST', '/affiliate_seller/202508/marketplace_creators/search', {}, { page_size: '10' }));
+  probes.push(await run('POST', '/affiliate_seller/202508/marketplace_creators/search', null, { page_size: '10' }));
 
   return res.status(200).json({
     ok: true, shop: conn.seller_name, open_id: conn.open_id,
