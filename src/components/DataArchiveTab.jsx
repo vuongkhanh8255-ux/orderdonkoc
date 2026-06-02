@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
 
@@ -149,6 +150,154 @@ const DataTable = ({ columns, data = [], title }) => {
                 </div>
             </div>
         </div>
+    );
+};
+
+// --- FILE NHANH: upload sản phẩm export từ Nhanh.vn, chỉ giữ 3 cột (Mã SP / Tên SP / Giá bán + VAT) ---
+const NhanhProductsSection = () => {
+    const [rows, setRows] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [status, setStatus] = useState('');
+    const fileRef = useRef(null);
+
+    const loadRows = async () => {
+        try {
+            let all = [];
+            let from = 0;
+            const step = 1000;
+            while (true) {
+                const { data, error } = await supabase
+                    .from('nhanh_products')
+                    .select('*')
+                    .order('ten_san_pham', { ascending: true })
+                    .range(from, from + step - 1);
+                if (error) throw error;
+                if (!data || data.length === 0) break;
+                all = [...all, ...data];
+                if (data.length < step) break;
+                from += step;
+            }
+            setRows(all);
+        } catch (err) {
+            console.error('Load nhanh_products failed:', err);
+        }
+    };
+
+    useEffect(() => { loadRows(); }, []);
+
+    const parseNum = (v) => {
+        if (typeof v === 'number') return Math.round(v);
+        const s = String(v ?? '').replace(/[^\d]/g, '');
+        return s ? parseInt(s, 10) : 0;
+    };
+
+    const handleFile = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setLoading(true);
+        setStatus('⏳ Đang đọc file...');
+        try {
+            const buf = await file.arrayBuffer();
+            const wb = XLSX.read(buf, { type: 'array' });
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
+            if (!grid.length) throw new Error('File rỗng');
+
+            const headers = (grid[0] || []).map(h => String(h).trim().toLowerCase());
+            const findIdx = (...preds) => {
+                for (const p of preds) { const i = headers.findIndex(p); if (i !== -1) return i; }
+                return -1;
+            };
+            let iMa  = findIdx(h => h === 'mã sản phẩm', h => h.includes('mã sản phẩm'));
+            let iTen = findIdx(h => h === 'tên sản phẩm', h => h.includes('tên sản phẩm'));
+            let iGia = findIdx(
+                h => h.includes('giá bán') && h.includes('+') && h.includes('vat'),
+                h => h === 'giá bán + vat',
+                h => h.includes('giá bán'),
+            );
+            // Fallback vị trí cột E / F / P nếu không khớp tên header
+            if (iMa  === -1) iMa  = 4;   // E
+            if (iTen === -1) iTen = 5;   // F
+            if (iGia === -1) iGia = 15;  // P
+
+            const map = new Map();
+            for (let i = 1; i < grid.length; i++) {
+                const r = grid[i];
+                if (!r) continue;
+                const ma = String(r[iMa] ?? '').replace(/^'+/, '').trim();
+                if (!ma) continue;
+                map.set(ma, {
+                    ma_san_pham: ma,
+                    ten_san_pham: String(r[iTen] ?? '').trim(),
+                    gia_ban_vat: parseNum(r[iGia]),
+                });
+            }
+            const list = [...map.values()];
+            if (!list.length) throw new Error('Không thấy dòng sản phẩm nào — kiểm tra cột "Mã sản phẩm".');
+
+            setStatus(`💾 Đang lưu ${list.length.toLocaleString('vi-VN')} sản phẩm...`);
+            const BATCH = 1000;
+            for (let i = 0; i < list.length; i += BATCH) {
+                const { error } = await supabase
+                    .from('nhanh_products')
+                    .upsert(list.slice(i, i + BATCH), { onConflict: 'ma_san_pham' });
+                if (error) throw error;
+            }
+            setStatus(`✅ Đã lưu ${list.length.toLocaleString('vi-VN')} sản phẩm từ file Nhanh.`);
+            await loadRows();
+        } catch (err) {
+            setStatus(`❌ Lỗi: ${err.message}`);
+        } finally {
+            setLoading(false);
+            if (fileRef.current) fileRef.current.value = '';
+        }
+    };
+
+    const clearAll = async () => {
+        if (!window.confirm('Xóa HẾT dữ liệu file Nhanh đã lưu?')) return;
+        setLoading(true);
+        try {
+            const { error } = await supabase.from('nhanh_products').delete().gt('id', 0);
+            if (error) throw error;
+            setRows([]);
+            setStatus('🗑️ Đã xóa hết dữ liệu file Nhanh.');
+        } catch (err) {
+            setStatus(`❌ Lỗi xóa: ${err.message}`);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const columns = [
+        { header: 'Mã sản phẩm', accessor: 'ma_san_pham', isBold: true },
+        { header: 'Tên sản phẩm', accessor: 'ten_san_pham' },
+        { header: 'Giá bán + VAT', accessor: 'gia_ban_vat', formatter: (v) => `${formatNumber(v)} đ` },
+    ];
+
+    return (
+        <>
+            <div style={cardStyle}>
+                <h3 className="section-title">📦 FILE NHANH (Sản phẩm)</h3>
+                <p style={{ fontSize: '0.85rem', color: '#666', margin: '0 0 14px' }}>
+                    Upload file export sản phẩm từ <b>Nhanh.vn</b> (.xlsx). Hệ thống chỉ lưu <b>3 cột</b>: Mã sản phẩm · Tên sản phẩm · Giá bán + VAT.
+                </p>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <label className="btn-primary" style={{ padding: '12px 24px', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1 }}>
+                        {loading ? 'ĐANG XỬ LÝ...' : '📥 UPLOAD FILE NHANH'}
+                        <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleFile} disabled={loading} style={{ display: 'none' }} />
+                    </label>
+                    <button onClick={clearAll} disabled={loading} className="btn-secondary" style={{ padding: '12px 24px', color: '#ef4444', borderColor: '#ef4444', background: '#fff' }}>
+                        🗑️ XÓA HẾT
+                    </button>
+                    <span style={{ fontSize: '0.9rem', color: '#666' }}>Đang lưu: <b style={{ color: '#ea580c' }}>{formatNumber(rows.length)}</b> sản phẩm</span>
+                </div>
+                {status && <div style={{ marginTop: '12px', fontSize: '0.88rem', fontWeight: 600, color: status.startsWith('❌') ? '#ef4444' : status.startsWith('✅') ? '#10b981' : '#ea580c' }}>{status}</div>}
+            </div>
+
+            {rows.length > 0 && (
+                <DataTable title="DANH SÁCH SẢN PHẨM (FILE NHANH)" columns={columns} data={rows} />
+            )}
+        </>
     );
 };
 
@@ -537,6 +686,9 @@ const DataArchiveTab = () => {
     return (
         <div style={{ padding: '20px', maxWidth: '1600px', margin: '0 auto', fontFamily: 'Outfit, sans-serif' }}>
             <h1 className="page-header">LƯU TRỮ & KIỂM TRA DATA</h1>
+
+            {/* ── FILE NHANH (sản phẩm từ Nhanh.vn) ── */}
+            <NhanhProductsSection />
 
             {/* COMPONENT IMPORT */}
             <div style={{ ...cardStyle }}>
