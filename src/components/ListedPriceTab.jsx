@@ -117,7 +117,8 @@ const parseVoucher = (voucher) => {
   if (num > 0) return { type: 'fixed', value: num };
   return { type: 'none', value: 0 };
 };
-const calcFinalPrice = (row, promoStr) => {
+// Giá/đơn vị SAU khi áp voucher + promotion (combo mua giảm). Phí AFF/ADS/sàn tính trên giá này.
+const calcNetUnit = (row, promoStr) => {
   const fs = parseNumber(row.fsPrice);
   if (!fs || fs <= 0) return null;
   const promo   = parsePromotion(promoStr !== undefined ? promoStr : row.promotion);
@@ -136,13 +137,16 @@ const calcFinalPrice = (row, promoStr) => {
   } else {
     total = base - voucher.value;
   }
+  return total / unitCount;
+};
+const calcFinalPrice = (row, promoStr) => {
+  const netUnit = calcNetUnit(row, promoStr);
+  if (netUnit === null) return null;
   const aff = parseFloat(row.affPercent) || 0;
   const ads = parseFloat(row.adsPercent) || 0;
   const platformRate = row.platform === 'Shopee' ? 0.285 : 0.28;
-  const affDeduction      = fs * aff / 100;
-  const adsDeduction      = fs * ads / 100;
-  const platformDeduction = fs * platformRate;
-  const final = total / unitCount - affDeduction - adsDeduction - platformDeduction;
+  // Phí AFF/ADS/sàn đều tính trên GIÁ ĐÃ GIẢM (netUnit), KHÔNG phải FS gốc
+  const final = netUnit - netUnit * aff / 100 - netUnit * ads / 100 - netUnit * platformRate;
   return Number.isFinite(final) && final >= 0 ? Math.round(final) : null;
 };
 const getFormulaHint = (row, promoStr) => {
@@ -171,11 +175,11 @@ const getFormulaHint = (row, promoStr) => {
   const aff = parseFloat(row.affPercent) || 0;
   const ads = parseFloat(row.adsPercent) || 0;
   const platformPct = isTikTok ? 28 : 28.5;
-  const parts = [perUnit];
-  if (aff) parts.push(`FS×${aff}%`);
-  if (ads) parts.push(`FS×${ads}%`);
-  parts.push(`FS×${platformPct}%`);
-  return parts.length > 1 ? `${parts[0]} − ${parts.slice(1).join(' − ')}` : parts[0];
+  // Phí tính trên giá đã giảm (perUnit): final = (perUnit) × (100 − sàn − aff − ads)%
+  const feeNums = [platformPct];
+  if (aff) feeNums.push(aff);
+  if (ads) feeNums.push(ads);
+  return `(${perUnit}) × (100${feeNums.map(n => `−${n}`).join('')})%`;
 };
 
 // ── Data model ────────────────────────────────────────────────────────────────
@@ -1115,8 +1119,8 @@ const ListedPriceTab = ({ user }) => {
                             if (col.key === 'finalPrice') {
                               const platform = product?.platform || 'TikTok';
                               const platformRate = platform === 'Shopee' ? 28.5 : 28;
-                              const fs = parseNumber(variant.fsPrice);
-                              const feeAmt = fs && fs > 0 ? Math.round(fs * platformRate / 100) : null;
+                              const netUnit = calcNetUnit({ ...variant, platform }, product?.promotion);
+                              const feeAmt = netUnit !== null ? Math.round(netUnit * platformRate / 100) : null;
                               const result = [
                                 <td key="phi-san" style={{ padding: '5px 8px', borderBottom: '1px solid #e5e7eb', borderRight: '1px solid #e5e7eb', textAlign: 'center', whiteSpace: 'nowrap', background: '#f0f9ff' }}>
                                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
