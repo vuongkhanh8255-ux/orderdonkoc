@@ -215,73 +215,120 @@ async function handleProductAnalytics({ action, params, appKey, appSecret, supab
   });
 }
 
-// ── Affiliate discovery probe (TEMP) ─────────────────────────────────────────
-// Calls candidate affiliate endpoints with a shop's CREATOR-app token to learn:
-//  (1) whether we can get a shop_cipher (seller context), and
-//  (2) which affiliate endpoint path/version actually returns data.
-// Remove once the real affiliate endpoints are confirmed.
-async function handleAffProbe({ params, supabase, res }) {
+// ════════════════════════════════════════════════════════════════════════════
+// KOC / Creator performance (action=koc_creators)
+//   POST /affiliate_seller/202508/marketplace_creators/search
+//   → TikTok Creator Marketplace: creators + their overall TikTok-Shop performance
+//     (followers, GMV tier, live/video GMV, avg live UV, demographics, categories).
+//   Uses the CREATOR-app token. That app can't list its own shop_cipher, so we
+//   borrow the shop_cipher of the same shop from the orders/analytics apps.
+// ════════════════════════════════════════════════════════════════════════════
+const AFFILIATE_VERSION = '202508';
+
+const refreshCreatorToken = async ({ ck, cs, conn, supabase }) => {
+  if (!conn.refresh_token) return false;
+  const u = new URL(`${TIKTOK_AUTH_BASE}/api/v2/token/refresh`);
+  u.searchParams.set('app_key', ck); u.searchParams.set('app_secret', cs);
+  u.searchParams.set('refresh_token', conn.refresh_token); u.searchParams.set('grant_type', 'refresh_token');
+  let payload; try { payload = JSON.parse(await ttText(u.toString(), {}, 8000)); } catch { return false; }
+  const d = payload?.data; if (payload?.code !== 0 || !d?.access_token) return false;
+  conn.access_token = d.access_token; if (d.refresh_token) conn.refresh_token = d.refresh_token;
+  try {
+    await supabase.from('tiktok_creator_connections').update({
+      access_token: d.access_token,
+      refresh_token: d.refresh_token || conn.refresh_token,
+      access_token_expires_at: toIso(d.access_token_expire_in),
+    }).eq('open_id', conn.open_id);
+  } catch { /* best-effort */ }
+  return true;
+};
+
+// Borrow a shop_cipher for `conn`'s shop from the orders/analytics apps.
+const resolveShopCipher = async ({ conn, want, supabase }) => {
+  if (conn.shop_cipher) return conn.shop_cipher;
+  for (const tbl of ['tiktok_analytics_connections', 'tiktok_shop_connections']) {
+    try {
+      const { data } = await supabase.from(tbl).select('shop_cipher, shop_id, seller_name').not('shop_cipher', 'is', null);
+      const hit = (data || []).find(r => want && (r.seller_name || '').toLowerCase().includes(want))
+               || (data || []).find(r => conn.shop_id && String(r.shop_id) === String(conn.shop_id));
+      if (hit?.shop_cipher) return hit.shop_cipher;
+    } catch { /* ignore */ }
+  }
+  return null;
+};
+
+const mapCreator = (c) => ({
+  open_id: c.creator_open_id || '',
+  nickname: c.nickname || c.username || '',
+  username: c.username || '',
+  avatar: c.avatar?.url || '',
+  followers: Number(c.follower_count) || 0,
+  avg_live_uv: Number(c.avg_ec_live_uv) || 0,
+  avg_video_views: Number(c.avg_ec_video_view_count) || 0,
+  gmv_tier: c.gmv_range?.formatted_range || '',
+  gmv: Number(c.gmv?.amount) || 0,
+  gmv_currency: c.gmv?.currency || 'USD',
+  live_gmv: Number(c.live_gmv?.amount) || 0,
+  video_gmv: Number(c.video_gmv?.amount) || 0,
+  region: c.selection_region || '',
+  categories: Array.isArray(c.category_ids) ? c.category_ids : [],
+  gender: c.top_follower_demographics?.major_gender?.gender || '',
+  gender_pct: (Number(c.top_follower_demographics?.major_gender?.percentage) || 0) / 100,
+  age_ranges: c.top_follower_demographics?.age_ranges || [],
+});
+
+async function handleKocCreators({ params, supabase, res }) {
   const ck = process.env.TIKTOK_CREATOR_APP_KEY?.trim();
   const cs = process.env.TIKTOK_CREATOR_APP_SECRET?.trim();
-  if (!ck || !cs) return res.status(200).json({ ok: false, error: 'TIKTOK_CREATOR_APP_KEY/SECRET missing' });
-  if (params.go !== '1') return res.status(200).json({ ok: false, error: 'add &go=1 to run the probe' });
+  if (!ck || !cs) return res.status(200).json({ ok: false, error: 'Chưa cấu hình app TikTok Creator (TIKTOK_CREATOR_APP_KEY/SECRET).' });
 
   const { data: conns } = await supabase
     .from('tiktok_creator_connections')
     .select('open_id, shop_id, shop_cipher, seller_name, access_token, refresh_token')
     .not('access_token', 'is', null);
-  if (!conns?.length) return res.status(200).json({ ok: false, error: 'no creator connections' });
+  if (!conns?.length) return res.status(200).json({ ok: false, error: 'Chưa có shop nào kết nối app Creator.' });
+
+  const shopList = conns.map(c => ({ seller_name: c.seller_name || `Shop ${c.shop_id || ''}`, shop_id: c.shop_id, open_id: c.open_id }));
+  if (params.list === '1') return res.status(200).json({ ok: true, shops: shopList });
 
   const want = String(params.seller || 'body').toLowerCase();
   const conn = conns.find(c => (c.seller_name || '').toLowerCase().includes(want)) || conns[0];
-  const at = conn.access_token;
 
-  // The creator app couldn't list its own shop_cipher (105005). Borrow Bodymiss's
-  // shop_cipher from the orders/analytics apps (same shop, already authorized).
-  const cipherCandidates = [];
-  if (conn.shop_cipher) cipherCandidates.push({ src: 'creator', cipher: conn.shop_cipher });
-  for (const tbl of ['tiktok_analytics_connections', 'tiktok_shop_connections']) {
-    try {
-      const { data } = await supabase.from(tbl).select('shop_cipher, shop_id, seller_name').not('shop_cipher', 'is', null);
-      const hit = (data || []).find(r => (r.seller_name || '').toLowerCase().includes(want))
-               || (data || []).find(r => String(r.shop_id) === String(conn.shop_id));
-      if (hit?.shop_cipher) cipherCandidates.push({ src: tbl, cipher: hit.shop_cipher });
-    } catch { /* ignore */ }
-  }
+  const cipher = await resolveShopCipher({ conn, want, supabase });
+  if (!cipher) return res.status(200).json({ ok: false, error: `Không tìm được shop_cipher cho "${conn.seller_name}". Hãy kết nối shop này ở app Orders/Analytics trước.` });
 
-  const run = async (method, path, body, queryExtra = {}, cipher = null) => {
-    const ts = String(Math.floor(Date.now() / 1000));
-    const bodyStr = body ? JSON.stringify(body) : '';
-    const urlParams = { app_key: ck, timestamp: ts, ...queryExtra };
-    if (cipher) urlParams.shop_cipher = cipher;
+  const pageSize = String(params.page_size) === '12' ? '12' : '20';
+  const pageToken = params.page_token || '';
+  const path = `/affiliate_seller/${AFFILIATE_VERSION}/marketplace_creators/search`;
+  const bodyStr = '{}';
+
+  const doCall = () => {
+    const urlParams = { app_key: ck, timestamp: String(Math.floor(Date.now() / 1000)), page_size: pageSize, shop_cipher: cipher };
+    if (pageToken) urlParams.page_token = pageToken;
     urlParams.sign = buildSign(cs, path, urlParams, bodyStr);
-    const opts = { method, headers: { 'x-tts-access-token': at, 'content-type': 'application/json' } };
-    if (body) opts.body = bodyStr;
-    const t = await ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(urlParams)}`, opts, 10000);
-    let j; try { j = JSON.parse(t); } catch { j = { _raw: t.slice(0, 200) }; }
-    return { code: j?.code, message: j?.message, sample: JSON.stringify(j?.data ?? j).slice(0, 400) };
+    return ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(urlParams)}`, {
+      method: 'POST',
+      headers: { 'x-tts-access-token': conn.access_token, 'content-type': 'application/json' },
+      body: bodyStr,
+    }, 12000);
   };
 
-  // Use only the cipher that worked (orders app) to avoid rate-limits.
-  const cc = cipherCandidates.find(c => c.src === 'tiktok_shop_connections') || cipherCandidates[0];
-  const ts = String(Math.floor(Date.now() / 1000));
-  const path = '/affiliate_seller/202508/marketplace_creators/search';
-  const urlParams = { app_key: ck, timestamp: ts, page_size: '20', shop_cipher: cc.cipher };
-  urlParams.sign = buildSign(cs, path, urlParams, '{}');
-  const t = await ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(urlParams)}`, { method: 'POST', headers: { 'x-tts-access-token': at, 'content-type': 'application/json' }, body: '{}' }, 12000);
-  let j; try { j = JSON.parse(t); } catch { j = { _raw: t.slice(0, 300) }; }
-  const data = j?.data || {};
-  const first = (data.creators || [])[0] || null;
+  let raw = await doCall();
+  let j; try { j = JSON.parse(raw); } catch { j = { code: -1, message: 'Parse error' }; }
+  if (j?.code === 105002 && await refreshCreatorToken({ ck, cs, conn, supabase })) {
+    raw = await doCall(); try { j = JSON.parse(raw); } catch { j = { code: -1 }; }
+  }
+  if (j?.code !== 0) {
+    const rateLimited = j?.code === 36009002;
+    return res.status(200).json({ ok: false, code: j?.code, error: rateLimited ? 'TikTok đang giới hạn tần suất (quá nhiều request). Thử lại sau ~1 phút.' : (j?.message || `TikTok code ${j?.code}`) });
+  }
 
+  const d = j.data || {};
+  const creators = (d.creators || []).map(mapCreator);
   return res.status(200).json({
-    ok: true, shop: conn.seller_name, cipher_src: cc.src,
-    code: j?.code, message: j?.message,
-    envelope_keys: Object.keys(data),
-    total: data.total_count ?? data.total ?? null,
-    next_page_token: data.next_page_token || null,
-    creator_count: (data.creators || []).length,
-    creator_fields: first ? Object.keys(first) : [],
-    first_creator: first,
+    ok: true, shop: conn.seller_name, shop_id: conn.shop_id,
+    count: creators.length, creators, shops: shopList,
+    next_page_token: d.next_page_token || null, search_key: d.search_key || null,
   });
 }
 
@@ -321,8 +368,8 @@ export default async function handler(req, res) {
     catch (err) { return res.status(200).json({ ok: false, error: err.message || 'Internal error' }); }
   }
 
-  if (action === 'aff_probe') {
-    try { return await handleAffProbe({ params, supabase, res }); }
+  if (action === 'koc_creators') {
+    try { return await handleKocCreators({ params, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 
