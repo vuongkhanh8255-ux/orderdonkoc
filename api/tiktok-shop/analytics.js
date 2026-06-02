@@ -625,8 +625,8 @@ async function handleKocProducts({ params, appKey, appSecret, supabase, res }) {
   return res.status(200).json({ ok: true, creator, shop_id: shopId, count: products.length, products });
 }
 
-// Drill-down: từng video của 1 KOC + mốc thời gian (đơn đầu ≈ ngày lên video).
-async function handleKocVideos({ params, supabase, res }) {
+// Drill-down: từng video của 1 KOC + mốc thời gian (đơn đầu ≈ ngày lên video) + SP chính.
+async function handleKocVideos({ params, appKey, appSecret, supabase, res }) {
   const norm = (s) => (s || '').toLowerCase().trim();
   const creator = params.creator;
   if (!creator) return res.status(200).json({ ok: false, error: 'missing creator' });
@@ -643,11 +643,26 @@ async function handleKocVideos({ params, supabase, res }) {
   const { data: rows, error } = await supabase.rpc('koc_video_breakdown', { p_shop_id: shopId, p_start: start, p_end: end, p_creator: creator });
   if (error) return res.status(200).json({ ok: false, error: error.message });
 
-  const videos = (rows || []).map(r => ({
+  let videos = (rows || []).map(r => ({
     content_id: String(r.content_id), content_type: r.content_type || '',
     first_order: Number(r.first_order) || 0, last_order: Number(r.last_order) || 0,
     orders: Number(r.orders) || 0, gmv: Number(r.gmv) || 0, qty: Number(r.qty) || 0,
+    top_product_id: String(r.top_product_id || ''), product_count: Number(r.product_count) || 0,
   }));
+
+  // Resolve product name/image for the dominant product of each video (distinct, top 30)
+  try {
+    const ids = [...new Set(videos.map(v => v.top_product_id).filter(Boolean))].slice(0, 30);
+    if (ids.length) {
+      const { data: aconns } = await supabase.from('tiktok_analytics_connections').select('access_token, shop_cipher, shop_id').not('access_token', 'is', null);
+      const conn = (aconns || []).find(c => String(c.shop_id) === String(shopId));
+      if (conn) {
+        const meta = await fetchProductDetails({ appKey, appSecret, conn, ids });
+        videos = videos.map(v => ({ ...v, product_name: meta[v.top_product_id]?.name || '', product_image: meta[v.top_product_id]?.image || '' }));
+      }
+    }
+  } catch { /* names optional */ }
+
   return res.status(200).json({ ok: true, creator, shop_id: shopId, count: videos.length, videos });
 }
 
@@ -764,7 +779,7 @@ export default async function handler(req, res) {
   }
 
   if (action === 'koc_videos') {
-    try { return await handleKocVideos({ params, supabase, res }); }
+    try { return await handleKocVideos({ params, appKey, appSecret, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 
