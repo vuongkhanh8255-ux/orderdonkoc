@@ -215,6 +215,54 @@ async function handleProductAnalytics({ action, params, appKey, appSecret, supab
   });
 }
 
+// ── Affiliate discovery probe (TEMP) ─────────────────────────────────────────
+// Calls candidate affiliate endpoints with a shop's CREATOR-app token to learn:
+//  (1) whether we can get a shop_cipher (seller context), and
+//  (2) which affiliate endpoint path/version actually returns data.
+// Remove once the real affiliate endpoints are confirmed.
+async function handleAffProbe({ params, supabase, res }) {
+  const ck = process.env.TIKTOK_CREATOR_APP_KEY?.trim();
+  const cs = process.env.TIKTOK_CREATOR_APP_SECRET?.trim();
+  if (!ck || !cs) return res.status(200).json({ ok: false, error: 'TIKTOK_CREATOR_APP_KEY/SECRET missing' });
+  if (params.go !== '1') return res.status(200).json({ ok: false, error: 'add &go=1 to run the probe' });
+
+  const { data: conns } = await supabase
+    .from('tiktok_creator_connections')
+    .select('open_id, shop_id, shop_cipher, seller_name, access_token, refresh_token')
+    .not('access_token', 'is', null);
+  if (!conns?.length) return res.status(200).json({ ok: false, error: 'no creator connections' });
+
+  const want = String(params.seller || 'body').toLowerCase();
+  const conn = conns.find(c => (c.seller_name || '').toLowerCase().includes(want)) || conns[0];
+  const at = conn.access_token;
+
+  const run = async (method, path, body) => {
+    const ts = String(Math.floor(Date.now() / 1000));
+    const bodyStr = body ? JSON.stringify(body) : '';
+    const urlParams = { app_key: ck, timestamp: ts };
+    if (conn.shop_cipher) urlParams.shop_cipher = conn.shop_cipher;
+    urlParams.sign = buildSign(cs, path, urlParams, bodyStr);
+    const opts = { method, headers: { 'x-tts-access-token': at, 'content-type': 'application/json' } };
+    if (body) opts.body = bodyStr;
+    const t = await ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(urlParams)}`, opts, 10000);
+    let j; try { j = JSON.parse(t); } catch { j = { _raw: t.slice(0, 200) }; }
+    return { path, method, code: j?.code, message: j?.message, sample: JSON.stringify(j?.data ?? j).slice(0, 300) };
+  };
+
+  const probes = [];
+  probes.push(await run('GET', '/authorization/202309/shops'));
+  for (const v of ['202405', '202409']) {
+    probes.push(await run('GET', `/affiliate_creator/${v}/creator/profile`));
+    probes.push(await run('POST', `/affiliate_creator/${v}/marketplace_creators/search`, { page_size: 5 }));
+    probes.push(await run('POST', `/affiliate_seller/${v}/orders/search`, { page_size: 5 }));
+  }
+
+  return res.status(200).json({
+    ok: true, shop: conn.seller_name, open_id: conn.open_id,
+    has_shop_cipher: !!conn.shop_cipher, probes,
+  });
+}
+
 // ── Main handler ─────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   // Allow GET and POST
@@ -249,6 +297,11 @@ export default async function handler(req, res) {
   if (action === 'shops' || action === 'products') {
     try { return await handleProductAnalytics({ action, params, appKey, appSecret, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message || 'Internal error' }); }
+  }
+
+  if (action === 'aff_probe') {
+    try { return await handleAffProbe({ params, supabase, res }); }
+    catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 
   if (!startDate || !endDate) {
