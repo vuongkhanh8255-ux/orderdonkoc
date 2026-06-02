@@ -402,7 +402,17 @@ const fetchAffOrdersPage = ({ ck, cs, accessToken, cipher, pageToken, pageSize =
 
 const syncOneAffShop = async ({ ck, cs, conn, supabase }) => {
   const ctx = await resolveShopContext({ conn, supabase });
-  if (!ctx) return { shop: conn.seller_name, skipped: 'no shop_cipher' };
+  if (!ctx) {
+    // No shop_cipher (shop not authorized on the Orders/Analytics apps). Write a
+    // marker meta row so the rotation deprioritizes it instead of re-picking it.
+    const skipId = conn.shop_id ? String(conn.shop_id) : `noc:${conn.open_id}`;
+    await supabase.from('tiktok_affiliate_sync_meta').upsert({
+      shop_id: skipId, seller_name: conn.seller_name, backfill_done: true,
+      last_run_at: new Date().toISOString(),
+      last_status: 'no shop_cipher — chưa kết nối app Orders/Analytics',
+    }, { onConflict: 'shop_id' });
+    return { shop: conn.seller_name, skipped: 'no shop_cipher' };
+  }
   const { cipher, shop_id, seller_name } = ctx;
 
   let accessToken = conn.access_token;
