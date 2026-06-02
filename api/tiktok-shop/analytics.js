@@ -625,6 +625,32 @@ async function handleKocProducts({ params, appKey, appSecret, supabase, res }) {
   return res.status(200).json({ ok: true, creator, shop_id: shopId, count: products.length, products });
 }
 
+// Drill-down: từng video của 1 KOC + mốc thời gian (đơn đầu ≈ ngày lên video).
+async function handleKocVideos({ params, supabase, res }) {
+  const norm = (s) => (s || '').toLowerCase().trim();
+  const creator = params.creator;
+  if (!creator) return res.status(200).json({ ok: false, error: 'missing creator' });
+
+  let shopId = params.shop_id ? String(params.shop_id) : null;
+  if (!shopId) {
+    const { data: metas } = await supabase.from('tiktok_affiliate_sync_meta').select('shop_id, seller_name');
+    const want = norm(params.seller || 'body');
+    shopId = (metas || []).find(m => norm(m.seller_name).includes(want))?.shop_id || null;
+  }
+  const start = params.start_date || AFF_SYNC_FLOOR_DATE;
+  const end = params.end_date || null;
+
+  const { data: rows, error } = await supabase.rpc('koc_video_breakdown', { p_shop_id: shopId, p_start: start, p_end: end, p_creator: creator });
+  if (error) return res.status(200).json({ ok: false, error: error.message });
+
+  const videos = (rows || []).map(r => ({
+    content_id: String(r.content_id), content_type: r.content_type || '',
+    first_order: Number(r.first_order) || 0, last_order: Number(r.last_order) || 0,
+    orders: Number(r.orders) || 0, gmv: Number(r.gmv) || 0, qty: Number(r.qty) || 0,
+  }));
+  return res.status(200).json({ ok: true, creator, shop_id: shopId, count: videos.length, videos });
+}
+
 // ── KOC avatars (best-effort) ────────────────────────────────────────────────
 // orders/search không trả avatar → tra cứu qua marketplace_creators/search với
 // body {keyword: username} (kết quả khớp username đứng đầu). Endpoint này bị rate
@@ -734,6 +760,11 @@ export default async function handler(req, res) {
 
   if (action === 'koc_products') {
     try { return await handleKocProducts({ params, appKey, appSecret, supabase, res }); }
+    catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
+  }
+
+  if (action === 'koc_videos') {
+    try { return await handleKocVideos({ params, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 

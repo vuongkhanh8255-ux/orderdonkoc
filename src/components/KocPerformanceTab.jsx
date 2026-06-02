@@ -94,6 +94,37 @@ const ProductBreakdown = ({ state }) => {
   );
 };
 
+// ── Drill-down: từng video của KOC + ngày lên (≈ đơn đầu tiên) ─────────────────
+const VID_GRID = '22px 1fr 116px 64px 100px';
+const VideoBreakdown = ({ state, username }) => {
+  if (!state || state.loading) return <div style={{ padding: 14, color: '#94a3b8', fontSize: '0.82rem' }}>⏳ Đang tải video…</div>;
+  if (state.error) return <div style={{ padding: 14, color: '#b91c1c', fontSize: '0.82rem' }}>❌ {state.error}</div>;
+  const vs = state.videos || [];
+  if (!vs.length) return <div style={{ padding: 14, color: '#94a3b8', fontSize: '0.82rem' }}>Không có video kéo đơn trong khoảng này.</div>;
+  const cell = { fontSize: '0.8rem', whiteSpace: 'nowrap' };
+  return (
+    <div style={{ padding: '4px 16px 14px' }}>
+      <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>🎬 Video KOC đã lên ({vs.length}) — mới nhất trước · "lên ~ngày" = ngày đơn đầu tiên</div>
+      <div style={{ display: 'grid', gridTemplateColumns: VID_GRID, gap: 8, alignItems: 'center', padding: '0 10px 4px', fontSize: '0.66rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>
+        <span></span><span>Video</span><span>Lên ~ngày</span><span style={{ textAlign: 'right' }}>Đơn</span><span style={{ textAlign: 'right' }}>GMV</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {vs.map((v, i) => (
+          <div key={v.content_id || i} style={{ display: 'grid', gridTemplateColumns: VID_GRID, gap: 8, alignItems: 'center', background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #f1f5f9' }}>
+            <span style={{ fontWeight: 800, color: '#94a3b8', fontSize: '0.78rem' }}>{i + 1}</span>
+            {v.content_type === 'VIDEO'
+              ? <a href={`https://www.tiktok.com/@${username}/video/${v.content_id}`} target="_blank" rel="noreferrer" style={{ color: '#7c3aed', fontWeight: 700, textDecoration: 'none', fontSize: '0.82rem' }}>🎬 Xem video ↗</a>
+              : <span style={{ color: '#dc2626', fontWeight: 700, fontSize: '0.82rem' }}>🔴 {v.content_type || 'Khác'}</span>}
+            <span style={{ ...cell, color: '#0f172a', fontWeight: 700 }}>{fromUnix(v.first_order)}</span>
+            <span style={{ ...cell, color: '#64748b', textAlign: 'right' }}>{fmtNum(v.orders)}</span>
+            <span style={{ ...cell, color: ACCENT, fontWeight: 800, textAlign: 'right' }}>{fmtVnd(v.gmv)} đ</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 // ════════════════════════════════════════════════════════════════════════════
 export default function KocPerformanceTab() {
   const [shops, setShops]   = useState([]);
@@ -106,7 +137,9 @@ export default function KocPerformanceTab() {
   const [sortKey, setSortKey] = useState('gmv');
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState(null);
+  const [drillTab, setDrillTab] = useState('products'); // 'products' | 'videos'
   const [prodCache, setProdCache] = useState({});
+  const [vidCache, setVidCache] = useState({});
   const [avatarMap, setAvatarMap] = useState({});
 
   useEffect(() => {
@@ -125,7 +158,7 @@ export default function KocPerformanceTab() {
   }, []);
 
   const fetchSales = useCallback(async () => {
-    setLoading(true); setError(null); setExpanded(null); setProdCache({});
+    setLoading(true); setError(null); setExpanded(null); setProdCache({}); setVidCache({}); setDrillTab('products');
     try {
       const qs = new URLSearchParams({ action: 'koc_orders', seller, start_date: start, end_date: end });
       const r = await fetch(`${API}?${qs}`);
@@ -149,16 +182,29 @@ export default function KocPerformanceTab() {
 
   // Drill-down dùng đúng khoảng ngày đang chọn (start/end). prodCache bị xoá mỗi lần
   // đổi ngày/shop (trong fetchSales) nên dữ liệu sản phẩm luôn khớp filter hiện tại.
+  const loadProducts = (username) => {
+    if (prodCache[username]) return;
+    setProdCache(p => ({ ...p, [username]: { loading: true } }));
+    const qs = new URLSearchParams({ action: 'koc_products', seller, creator: username, start_date: start, end_date: end });
+    fetch(`${API}?${qs}`).then(r => r.json())
+      .then(j => setProdCache(p => ({ ...p, [username]: j.ok ? { products: j.products || [] } : { error: j.error || 'Lỗi' } })))
+      .catch(e => setProdCache(p => ({ ...p, [username]: { error: e.message } })));
+  };
+  const loadVideos = (username) => {
+    if (vidCache[username]) return;
+    setVidCache(p => ({ ...p, [username]: { loading: true } }));
+    const qs = new URLSearchParams({ action: 'koc_videos', seller, creator: username, start_date: start, end_date: end });
+    fetch(`${API}?${qs}`).then(r => r.json())
+      .then(j => setVidCache(p => ({ ...p, [username]: j.ok ? { videos: j.videos || [] } : { error: j.error || 'Lỗi' } })))
+      .catch(e => setVidCache(p => ({ ...p, [username]: { error: e.message } })));
+  };
   const toggleExpand = (username) => {
     if (expanded === username) { setExpanded(null); return; }
-    setExpanded(username);
-    if (!prodCache[username]) {
-      setProdCache(p => ({ ...p, [username]: { loading: true } }));
-      const qs = new URLSearchParams({ action: 'koc_products', seller, creator: username, start_date: start, end_date: end });
-      fetch(`${API}?${qs}`).then(r => r.json()).then(j => {
-        setProdCache(p => ({ ...p, [username]: j.ok ? { products: j.products || [] } : { error: j.error || 'Lỗi' } }));
-      }).catch(e => setProdCache(p => ({ ...p, [username]: { error: e.message } })));
-    }
+    setExpanded(username); setDrillTab('products'); loadProducts(username);
+  };
+  const switchDrill = (username, tab) => {
+    setDrillTab(tab);
+    if (tab === 'products') loadProducts(username); else loadVideos(username);
   };
 
   const rows = useMemo(() => {
@@ -178,6 +224,7 @@ export default function KocPerformanceTab() {
   ];
   const activePreset = presets.find(p => p.s === start && p.e === end)?.key;
   const presetBtn = (active) => ({ padding: '7px 14px', borderRadius: 9, border: `1px solid ${active ? ACCENT : '#e5e7eb'}`, background: active ? ACCENT : '#fff', color: active ? '#fff' : '#475569', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' });
+  const drillTabBtn = (active) => ({ padding: '5px 12px', borderRadius: 8, border: `1px solid ${active ? ACCENT : '#e5e7eb'}`, background: active ? '#fff7ed' : '#fff', color: active ? ACCENT : '#64748b', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' });
 
   const th = { padding: '10px 12px', fontSize: '0.7rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', textAlign: 'right', whiteSpace: 'nowrap' };
   const td = { padding: '9px 12px', fontSize: '0.86rem', color: '#0f172a', textAlign: 'right', whiteSpace: 'nowrap', borderTop: '1px solid #f1f5f9' };
@@ -279,7 +326,15 @@ export default function KocPerformanceTab() {
                         <td style={{ ...td, color: '#94a3b8', fontSize: '0.78rem' }}>{fromUnix(c.last_order)}</td>
                       </tr>
                       {open && (
-                        <tr><td colSpan={7} style={{ padding: 0, borderTop: `2px solid ${ACCENT}` }}><ProductBreakdown state={prodCache[c.username]} /></td></tr>
+                        <tr><td colSpan={7} style={{ padding: 0, borderTop: `2px solid ${ACCENT}`, background: '#fafafa' }}>
+                          <div style={{ display: 'flex', gap: 6, padding: '10px 16px 4px' }}>
+                            <button onClick={() => switchDrill(c.username, 'products')} style={drillTabBtn(drillTab === 'products')}>📦 Sản phẩm</button>
+                            <button onClick={() => switchDrill(c.username, 'videos')} style={drillTabBtn(drillTab === 'videos')}>🎬 Video</button>
+                          </div>
+                          {drillTab === 'products'
+                            ? <ProductBreakdown state={prodCache[c.username]} />
+                            : <VideoBreakdown state={vidCache[c.username]} username={c.username} />}
+                        </td></tr>
                       )}
                     </React.Fragment>
                   );
