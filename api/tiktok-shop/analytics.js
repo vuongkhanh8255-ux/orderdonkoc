@@ -618,6 +618,39 @@ async function handleKocProducts({ params, appKey, appSecret, supabase, res }) {
   return res.status(200).json({ ok: true, creator, shop_id: shopId, count: products.length, products });
 }
 
+// ── TEMP: probe for creator-avatar-by-username ───────────────────────────────
+async function handleAvProbe({ params, supabase, res }) {
+  const ck = process.env.TIKTOK_CREATOR_APP_KEY?.trim();
+  const cs = process.env.TIKTOK_CREATOR_APP_SECRET?.trim();
+  const { data: conns } = await supabase.from('tiktok_creator_connections').select('open_id, shop_id, shop_cipher, seller_name, access_token, refresh_token').not('access_token', 'is', null);
+  const conn = (conns || []).find(c => (c.seller_name || '').toLowerCase().includes('body')) || (conns || [])[0];
+  if (!conn) return res.status(200).json({ ok: false, error: 'no conn' });
+  const ctx = await resolveShopContext({ conn, supabase });
+  const cipher = ctx?.cipher;
+  const uname = params.uname || 'nganbambi99';
+
+  const run = async (path, body) => {
+    const bodyStr = JSON.stringify(body);
+    const urlParams = { app_key: ck, timestamp: String(Math.floor(Date.now() / 1000)), page_size: '12', shop_cipher: cipher };
+    urlParams.sign = buildSign(cs, path, urlParams, bodyStr);
+    const t = await ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(urlParams)}`, { method: 'POST', headers: { 'x-tts-access-token': conn.access_token, 'content-type': 'application/json' }, body: bodyStr }, 10000);
+    let j; try { j = JSON.parse(t); } catch { j = { _raw: t.slice(0, 150) }; }
+    const cr = (j?.data?.creators || [])[0] || null;
+    return { path, body: JSON.stringify(body).slice(0, 60), code: j?.code, message: (j?.message || '').slice(0, 90), n: (j?.data?.creators || []).length, first_user: cr?.username, first_av: cr?.avatar?.url ? 'YES' : 'no' };
+  };
+
+  const MP = '/affiliate_seller/202508/marketplace_creators/search';
+  const probes = [];
+  probes.push(await run(MP, { keyword: uname }));
+  probes.push(await run(MP, { username: uname }));
+  probes.push(await run(MP, { creator_username: uname }));
+  probes.push(await run(MP, { filter: { username: uname } }));
+  probes.push(await run(MP, { search_key: uname }));
+  probes.push(await run('/affiliate_seller/202410/collaborations/search', {}));
+  probes.push(await run('/affiliate_seller/202410/creators/search', {}));
+  return res.status(200).json({ ok: true, uname, probes });
+}
+
 // ── Main handler ─────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   // Allow GET and POST
@@ -666,6 +699,11 @@ export default async function handler(req, res) {
 
   if (action === 'koc_products') {
     try { return await handleKocProducts({ params, appKey, appSecret, supabase, res }); }
+    catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
+  }
+
+  if (action === 'av_probe') {
+    try { return await handleAvProbe({ params, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 
