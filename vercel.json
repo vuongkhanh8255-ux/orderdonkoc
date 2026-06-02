@@ -27,6 +27,9 @@
     }
   ],
   "functions": {
+    "api/tiktok-shop/analytics.js": {
+      "maxDuration": 60
+    },
     "api/tiktok-shop/sync-analytics.js": {
       "maxDuration": 120
     },

@@ -332,59 +332,234 @@ async function handleKocCreators({ params, supabase, res }) {
   });
 }
 
-// ── TEMP: affiliate-orders discovery probe ───────────────────────────────────
-// Discovers required params for Search Seller Affiliate Orders
-//   POST /affiliate_seller/202410/orders/search   (per-creator sales for the shop)
-// Drive via: ?action=aff_orders&seller=body&version=202410&body=empty|time|both
-// Remove once the real per-KOC sales action is built.
-async function handleAffOrdersProbe({ params, supabase, res }) {
+// ════════════════════════════════════════════════════════════════════════════
+// KOC affiliate ORDERS — real per-creator sales for the shop
+//   POST /affiliate_seller/202410/orders/search  (creator_username + price + commission)
+// Synced into Supabase by a cron (action=sync_aff_orders), read+aggregated by
+// action=koc_orders. Only data from AFF_SYNC_FLOOR_DATE onward is kept (lighter).
+// ════════════════════════════════════════════════════════════════════════════
+const AFF_ORDERS_VERSION = '202410';
+const AFF_SYNC_FLOOR_DATE = '2026-04-01';
+const AFF_SYNC_FLOOR_TS   = Math.floor(new Date('2026-04-01T00:00:00+07:00').getTime() / 1000);
+const AFF_PAGE_SIZE = '100';
+const AFF_FWD_PAGES  = 6;   // pages from top each run (refresh recent + settlement status)
+const AFF_BACK_PAGES = 26;  // deeper backfill pages each run (resumes via saved cursor)
+
+const vnDate = (ct) => { const n = Number(ct) || 0; return n ? new Date((n + 7 * 3600) * 1000).toISOString().slice(0, 10) : null; };
+
+const affRowsFromOrder = (order, shop_id) => (order.skus || []).map(s => ({
+  shop_id,
+  order_id: String(order.id || ''),
+  sku_id: String(s.sku_id || ''),
+  product_id: String(s.product_id || ''),
+  creator_username: s.creator_username || '',
+  content_id: String(s.content_id || ''),
+  content_type: s.content_type || '',
+  commission_model: s.commission_model || '',
+  price_amount: numAmt(s.price),
+  currency: (s.price && typeof s.price === 'object' && s.price.currency) || 'VND',
+  quantity: Number(s.quantity) || 0,
+  est_commission_base: numAmt(s.estimated_commission_base),
+  est_commission: numAmt(s.estimated_paid_commission),
+  actual_commission: numAmt(s.actual_paid_commission),
+  settlement_status: s.settlement_status || '',
+  fully_return: s.fully_return || '',
+  create_time: Number(order.create_time) || 0,
+  order_date: vnDate(order.create_time),
+  campaign_id: s.campaign_id || '',
+  target_collaboration_id: String(s.target_collaboration_id || ''),
+  open_collaboration_id: String(s.open_collaboration_id || ''),
+})).filter(r => r.order_id && r.sku_id);
+
+// Resolve { cipher, shop_id, seller_name } for a creator connection (borrow cipher
+// + real shop_id from the orders/analytics apps when the creator app lacks them).
+const resolveShopContext = async ({ conn, supabase }) => {
+  const norm = (s) => (s || '').toLowerCase().trim();
+  if (conn.shop_cipher && conn.shop_id) return { cipher: conn.shop_cipher, shop_id: String(conn.shop_id), seller_name: conn.seller_name };
+  for (const tbl of ['tiktok_analytics_connections', 'tiktok_shop_connections']) {
+    try {
+      const { data } = await supabase.from(tbl).select('shop_cipher, shop_id, seller_name').not('shop_cipher', 'is', null);
+      const rows = data || [];
+      const hit = rows.find(r => norm(r.seller_name) === norm(conn.seller_name))
+               || (conn.shop_id && rows.find(r => String(r.shop_id) === String(conn.shop_id)))
+               || (norm(conn.seller_name) && rows.find(r => norm(r.seller_name).includes(norm(conn.seller_name).split(' ')[0])));
+      if (hit?.shop_cipher) return { cipher: hit.shop_cipher, shop_id: String(hit.shop_id), seller_name: conn.seller_name || hit.seller_name };
+    } catch { /* ignore */ }
+  }
+  return null;
+};
+
+const fetchAffOrdersPage = ({ ck, cs, accessToken, cipher, pageToken, pageSize = AFF_PAGE_SIZE }) => {
+  const path = `/affiliate_seller/${AFF_ORDERS_VERSION}/orders/search`;
+  const bodyStr = '{}';
+  const urlParams = { app_key: ck, timestamp: String(Math.floor(Date.now() / 1000)), page_size: pageSize, shop_cipher: cipher };
+  if (pageToken) urlParams.page_token = pageToken;
+  urlParams.sign = buildSign(cs, path, urlParams, bodyStr);
+  return ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(urlParams)}`, {
+    method: 'POST', headers: { 'x-tts-access-token': accessToken, 'content-type': 'application/json' }, body: bodyStr,
+  }, 12000).then(t => { try { return JSON.parse(t); } catch { return { code: -1, message: 'parse error' }; } });
+};
+
+const syncOneAffShop = async ({ ck, cs, conn, supabase }) => {
+  const ctx = await resolveShopContext({ conn, supabase });
+  if (!ctx) return { shop: conn.seller_name, skipped: 'no shop_cipher' };
+  const { cipher, shop_id, seller_name } = ctx;
+
+  let accessToken = conn.access_token;
+  const fetchPage = async (pageToken) => {
+    let j = await fetchAffOrdersPage({ ck, cs, accessToken, cipher, pageToken });
+    if (j?.code === 105002 && await refreshCreatorToken({ ck, cs, conn, supabase })) {
+      accessToken = conn.access_token;
+      j = await fetchAffOrdersPage({ ck, cs, accessToken, cipher, pageToken });
+    }
+    return j;
+  };
+
+  const ingest = async (orders) => {
+    const rows = []; let minCt = Infinity, maxCt = 0, hitFloor = false;
+    for (const o of orders) {
+      const ct = Number(o.create_time) || 0;
+      if (ct && ct < AFF_SYNC_FLOOR_TS) { hitFloor = true; continue; }
+      if (ct) { maxCt = Math.max(maxCt, ct); minCt = Math.min(minCt, ct); }
+      rows.push(...affRowsFromOrder(o, shop_id));
+    }
+    for (let i = 0; i < rows.length; i += 500) {
+      await supabase.from('tiktok_affiliate_orders').upsert(rows.slice(i, i + 500), { onConflict: 'order_id,sku_id' });
+    }
+    return { count: rows.length, minCt: minCt === Infinity ? null : minCt, maxCt: maxCt || null, hitFloor };
+  };
+
+  const { data: metaRow } = await supabase.from('tiktok_affiliate_sync_meta').select('*').eq('shop_id', shop_id).maybeSingle();
+  const meta = metaRow || { high_water_create_time: 0, backfill_token: null, backfill_done: false, oldest_create_time: null, total_synced: 0 };
+
+  let totalUp = 0, newest = Number(meta.high_water_create_time) || 0, oldest = meta.oldest_create_time || null, status = 'ok';
+
+  // PHASE A — refresh from top
+  let token = null;
+  for (let p = 0; p < AFF_FWD_PAGES; p++) {
+    const j = await fetchPage(token);
+    if (j?.code !== 0) { status = `forward ${j?.code}: ${j?.message || ''}`.slice(0, 120); break; }
+    const orders = j.data?.orders || [];
+    const ing = await ingest(orders);
+    totalUp += ing.count; if (ing.maxCt) newest = Math.max(newest, ing.maxCt);
+    if (ing.minCt) oldest = oldest ? Math.min(oldest, ing.minCt) : ing.minCt;
+    token = j.data?.next_page_token;
+    if (ing.hitFloor || !token || !orders.length) break;
+  }
+
+  // PHASE B — backfill deeper (resume from saved cursor; else continue where forward stopped)
+  let backfillDone = meta.backfill_done;
+  let cur = meta.backfill_token || token;
+  if (!backfillDone) {
+    let bdone = false;
+    for (let p = 0; p < AFF_BACK_PAGES; p++) {
+      if (!cur) { bdone = true; break; }
+      const j = await fetchPage(cur);
+      if (j?.code !== 0) { status = `backfill ${j?.code}: ${j?.message || ''}`.slice(0, 120); break; }
+      const orders = j.data?.orders || [];
+      const ing = await ingest(orders);
+      totalUp += ing.count;
+      if (ing.maxCt) newest = Math.max(newest, ing.maxCt);
+      if (ing.minCt) oldest = oldest ? Math.min(oldest, ing.minCt) : ing.minCt;
+      cur = j.data?.next_page_token;
+      if (ing.hitFloor) { bdone = true; break; }
+      if (!cur || !orders.length) { bdone = true; break; }
+    }
+    backfillDone = bdone;
+  }
+
+  await supabase.from('tiktok_affiliate_sync_meta').upsert({
+    shop_id, seller_name,
+    high_water_create_time: newest,
+    backfill_token: backfillDone ? null : cur,
+    backfill_done: backfillDone,
+    oldest_create_time: oldest,
+    total_synced: (Number(meta.total_synced) || 0) + totalUp,
+    last_run_at: new Date().toISOString(),
+    last_status: status,
+  }, { onConflict: 'shop_id' });
+
+  return { shop: seller_name, shop_id, upserted: totalUp, newest_date: vnDate(newest), oldest_date: vnDate(oldest), backfill_done: backfillDone, status };
+};
+
+// Cron / manual sync. No ?seller → picks ONE shop per run (never-synced or oldest),
+// keeping each invocation within the function time budget. ?all=1 → every shop.
+async function handleSyncAffOrders({ params, supabase, res }) {
   const ck = process.env.TIKTOK_CREATOR_APP_KEY?.trim();
   const cs = process.env.TIKTOK_CREATOR_APP_SECRET?.trim();
   if (!ck || !cs) return res.status(200).json({ ok: false, error: 'creator app keys missing' });
 
-  const { data: conns } = await supabase
-    .from('tiktok_creator_connections')
+  const { data: conns } = await supabase.from('tiktok_creator_connections')
     .select('open_id, shop_id, shop_cipher, seller_name, access_token, refresh_token')
     .not('access_token', 'is', null);
   if (!conns?.length) return res.status(200).json({ ok: false, error: 'no creator connections' });
 
-  const want = String(params.seller || 'body').toLowerCase();
-  const conn = conns.find(c => (c.seller_name || '').toLowerCase().includes(want)) || conns[0];
-  const cipher = await resolveShopCipher({ conn, want, supabase });
-  if (!cipher) return res.status(200).json({ ok: false, error: 'no shop_cipher' });
+  const norm = (s) => (s || '').toLowerCase().trim();
+  let targets;
+  if (params.seller) {
+    const w = norm(params.seller);
+    targets = conns.filter(c => norm(c.seller_name).includes(w));
+  } else if (params.all === '1') {
+    targets = conns;
+  } else {
+    const { data: metas } = await supabase.from('tiktok_affiliate_sync_meta').select('seller_name, last_run_at, backfill_done');
+    const metaBy = {}; (metas || []).forEach(m => { metaBy[norm(m.seller_name)] = m; });
+    const score = (m) => !m ? 0 : (!m.backfill_done ? 1 : 2);
+    targets = [...conns].sort((a, b) => {
+      const ma = metaBy[norm(a.seller_name)], mb = metaBy[norm(b.seller_name)];
+      const sa = score(ma), sb = score(mb);
+      if (sa !== sb) return sa - sb;
+      return (ma?.last_run_at ? new Date(ma.last_run_at).getTime() : 0) - (mb?.last_run_at ? new Date(mb.last_run_at).getTime() : 0);
+    }).slice(0, 1);
+  }
+  if (!targets.length) return res.status(200).json({ ok: false, error: 'no matching shop' });
 
-  const version  = String(params.version || '202410');
-  const path     = `/affiliate_seller/${version}/orders/search`;
-  const pageSize = String(params.page_size || '20');
-  const now = Math.floor(Date.now() / 1000);
+  const results = [];
+  for (const conn of targets) {
+    try { results.push(await syncOneAffShop({ ck, cs, conn, supabase })); }
+    catch (e) { results.push({ shop: conn.seller_name, error: e.message }); }
+  }
+  return res.status(200).json({ ok: true, floor: AFF_SYNC_FLOOR_DATE, synced: results.length, results });
+}
 
-  const variants = [];
-  const mode = String(params.body || 'both');
-  if (mode === 'empty' || mode === 'both') variants.push({ label: 'empty', body: {} });
-  if (mode === 'time'  || mode === 'both') variants.push({ label: 'time30d', body: { create_time_ge: now - 30 * 86400, create_time_lt: now } });
+// Read + aggregate per-KOC sales from the synced table.
+async function handleKocOrders({ params, supabase, res }) {
+  const norm = (s) => (s || '').toLowerCase().trim();
+  const { data: conns } = await supabase.from('tiktok_creator_connections').select('seller_name, shop_id, open_id').not('access_token', 'is', null);
+  const { data: metas } = await supabase.from('tiktok_affiliate_sync_meta').select('*');
 
-  const run = async ({ label, body }) => {
-    const bodyStr = JSON.stringify(body);
-    const urlParams = { app_key: ck, timestamp: String(Math.floor(Date.now() / 1000)), page_size: pageSize, shop_cipher: cipher };
-    urlParams.sign = buildSign(cs, path, urlParams, bodyStr);
-    const t = await ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(urlParams)}`, {
-      method: 'POST', headers: { 'x-tts-access-token': conn.access_token, 'content-type': 'application/json' }, body: bodyStr,
-    }, 12000);
-    let j; try { j = JSON.parse(t); } catch { j = { _raw: t.slice(0, 200) }; }
-    const data = j?.data || {};
-    const first = (data.orders || [])[0] || null;
-    const firstSku = first?.skus?.[0] || null;
-    return {
-      label, code: j?.code, message: j?.message, total: data.total_count ?? null,
-      order_fields: first ? Object.keys(first) : [],
-      sku_fields: firstSku ? Object.keys(firstSku) : [],
-      first_order: first,
-    };
-  };
+  const shopList = (conns || []).map(c => {
+    const m = (metas || []).find(mm => norm(mm.seller_name) === norm(c.seller_name));
+    return { seller_name: c.seller_name, shop_id: m?.shop_id || c.shop_id || null, synced: !!m,
+             last_run_at: m?.last_run_at || null, total_synced: m?.total_synced || 0, backfill_done: m?.backfill_done || false };
+  });
+  if (params.list === '1') return res.status(200).json({ ok: true, shops: shopList, floor: AFF_SYNC_FLOOR_DATE });
 
-  const probes = [];
-  for (const v of variants) probes.push(await run(v));
-  return res.status(200).json({ ok: true, version, path, shop: conn.seller_name, probes });
+  const want = norm(params.seller || 'body');
+  const meta = (metas || []).find(m => norm(m.seller_name).includes(want)) || null;
+  const shopId = params.shop_id ? String(params.shop_id) : (meta?.shop_id || null);
+  const start = params.start_date || AFF_SYNC_FLOOR_DATE;
+  const end = params.end_date || null;
+
+  const { data: stats, error } = await supabase.rpc('koc_order_stats', { p_shop_id: shopId, p_start: start, p_end: end });
+  if (error) return res.status(200).json({ ok: false, error: error.message });
+
+  const creators = (stats || []).map(s => ({
+    username: s.creator_username,
+    orders: Number(s.orders) || 0,
+    gmv: Number(s.gmv) || 0,
+    qty: Number(s.qty) || 0,
+    commission: Number(s.commission) || 0,
+    last_order: Number(s.last_order) || 0,
+  }));
+  const totals = creators.reduce((a, c) => ({ gmv: a.gmv + c.gmv, orders: a.orders + c.orders, commission: a.commission + c.commission, qty: a.qty + c.qty }), { gmv: 0, orders: 0, commission: 0, qty: 0 });
+
+  return res.status(200).json({
+    ok: true, shop: meta?.seller_name || params.seller, shop_id: shopId,
+    start_date: start, end_date: end, floor: AFF_SYNC_FLOOR_DATE,
+    sync: meta ? { last_run_at: meta.last_run_at, total_synced: meta.total_synced, backfill_done: meta.backfill_done, oldest_date: vnDate(meta.oldest_create_time), newest_date: vnDate(meta.high_water_create_time), status: meta.last_status } : null,
+    count: creators.length, totals, creators, shops: shopList,
+  });
 }
 
 // ── Main handler ─────────────────────────────────────────────────────────────
@@ -428,8 +603,13 @@ export default async function handler(req, res) {
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 
-  if (action === 'aff_orders') {
-    try { return await handleAffOrdersProbe({ params, supabase, res }); }
+  if (action === 'koc_orders') {
+    try { return await handleKocOrders({ params, supabase, res }); }
+    catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
+  }
+
+  if (action === 'sync_aff_orders') {
+    try { return await handleSyncAffOrders({ params, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 

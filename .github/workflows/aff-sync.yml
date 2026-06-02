@@ -1,0 +1,38 @@
+name: TikTok Affiliate Orders Sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      seller:
+        description: 'Shop cụ thể (vd "body"); để trống = tự xoay vòng 1 shop/lần; "all" = tất cả (chỉ dùng thủ công)'
+        required: false
+        default: ''
+  schedule:
+    # Mỗi 20 phút, xoay vòng 1 shop/lần — endpoint tự chọn shop chưa sync / cũ nhất.
+    # 6 shop → mỗi shop được sync ~2h/lần. Backfill từ 01/04/2026 hoàn tất trong ~1 ngày.
+    # (Repo public nên Actions miễn phí; Vercel Hobby không cho cron < 1 ngày nên đặt ở đây.)
+    - cron: '5,25,45 * * * *'
+
+jobs:
+  sync:
+    name: Sync affiliate orders
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call sync endpoint
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          SELLER: ${{ github.event.inputs.seller || '' }}
+        run: |
+          BASE="https://koc-tool.vercel.app/api/tiktok-shop/analytics"
+          if [ "$EVENT_NAME" = "schedule" ] || [ -z "$SELLER" ]; then
+            URL="${BASE}?action=sync_aff_orders"
+          elif [ "$SELLER" = "all" ]; then
+            URL="${BASE}?action=sync_aff_orders&all=1"
+          else
+            URL="${BASE}?action=sync_aff_orders&seller=${SELLER}"
+          fi
+          echo "Calling: $URL"
+          RESPONSE=$(curl -sS --max-time 90 --retry 2 --retry-delay 5 "$URL")
+          echo "Response: ${RESPONSE:0:600}"
+          echo "$RESPONSE" | grep -q '"ok":true' || { echo "::error::Sync call failed"; exit 1; }
