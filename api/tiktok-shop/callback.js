@@ -101,7 +101,7 @@ export default async function handler(req, res) {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   if (callbackErr) {
-    return res.status(400).send(html({ title: 'TikTok Shop authorization failed', status: callbackErr, tone: 'error', details: Array.from(reqUrl.searchParams.entries()) }));
+    return res.status(200).send(html({ title: 'TikTok Shop authorization failed', status: callbackErr, tone: 'error', details: Array.from(reqUrl.searchParams.entries()) }));
   }
   if (!authCode) {
     return res.status(200).send(html({ title: 'TikTok Shop Callback', status: 'Callback URL hoạt động, chưa có authorization code.', details: Array.from(reqUrl.searchParams.entries()) }));
@@ -119,7 +119,7 @@ export default async function handler(req, res) {
   const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY)?.trim();
 
   if (apps.length === 0 || !supabaseUrl || !supabaseKey) {
-    return res.status(500).send(html({
+    return res.status(200).send(html({
       title: 'Thiếu cấu hình', tone: 'error',
       status: 'Cần set TIKTOK_SHOP_APP_KEY/SECRET hoặc TIKTOK_ANALYTICS_APP_KEY/SECRET + Supabase env trên Vercel.',
       details: [
@@ -158,7 +158,7 @@ export default async function handler(req, res) {
 
     if (!matchedApp) {
       const lastPayload = lastError?.payload;
-      return res.status(502).send(html({
+      return res.status(200).send(html({
         title: 'Không đổi được TikTok token', tone: 'error',
         status: `Auth code không thành công với app nào. ${lastPayload?.message || ''}`,
         details: [
@@ -240,7 +240,7 @@ export default async function handler(req, res) {
     }));
 
   } catch (err) {
-    return res.status(500).send(html({
+    return res.status(200).send(html({
       title: 'Lỗi callback TikTok Shop', tone: 'error',
       status: err?.message || 'Unknown error',
       details: [['code', err?.code || '-'], ['details', err?.details || '-'], ['hint', err?.hint || '-']]
