@@ -112,6 +112,7 @@ export default async function handler(req, res) {
     { key: process.env.TIKTOK_SHOP_APP_KEY?.trim(),      secret: process.env.TIKTOK_SHOP_APP_SECRET?.trim(),      type: 'orders',    table: 'tiktok_shop_connections' },
     { key: process.env.TIKTOK_ANALYTICS_APP_KEY?.trim(),  secret: process.env.TIKTOK_ANALYTICS_APP_SECRET?.trim(), type: 'analytics', table: 'tiktok_analytics_connections' },
     { key: process.env.TIKTOK_REVIEWS_APP_KEY?.trim(),    secret: process.env.TIKTOK_REVIEWS_APP_SECRET?.trim(),   type: 'reviews',   table: 'tiktok_reviews_connections' },
+    { key: process.env.TIKTOK_CREATOR_APP_KEY?.trim(),    secret: process.env.TIKTOK_CREATOR_APP_SECRET?.trim(),   type: 'creator',   table: 'tiktok_creator_connections' },
   ].filter(a => a.key && a.secret);
 
   const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL)?.trim();
