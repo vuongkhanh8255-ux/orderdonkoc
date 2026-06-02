@@ -332,6 +332,54 @@ async function handleKocCreators({ params, supabase, res }) {
   });
 }
 
+// ── TEMP: affiliate-orders discovery probe ───────────────────────────────────
+// Discovers required params for Search Seller Affiliate Orders
+//   POST /affiliate_seller/202410/orders/search   (per-creator sales for the shop)
+// Drive via: ?action=aff_orders&seller=body&version=202410&body=empty|time|both
+// Remove once the real per-KOC sales action is built.
+async function handleAffOrdersProbe({ params, supabase, res }) {
+  const ck = process.env.TIKTOK_CREATOR_APP_KEY?.trim();
+  const cs = process.env.TIKTOK_CREATOR_APP_SECRET?.trim();
+  if (!ck || !cs) return res.status(200).json({ ok: false, error: 'creator app keys missing' });
+
+  const { data: conns } = await supabase
+    .from('tiktok_creator_connections')
+    .select('open_id, shop_id, shop_cipher, seller_name, access_token, refresh_token')
+    .not('access_token', 'is', null);
+  if (!conns?.length) return res.status(200).json({ ok: false, error: 'no creator connections' });
+
+  const want = String(params.seller || 'body').toLowerCase();
+  const conn = conns.find(c => (c.seller_name || '').toLowerCase().includes(want)) || conns[0];
+  const cipher = await resolveShopCipher({ conn, want, supabase });
+  if (!cipher) return res.status(200).json({ ok: false, error: 'no shop_cipher' });
+
+  const version  = String(params.version || '202410');
+  const path     = `/affiliate_seller/${version}/orders/search`;
+  const pageSize = String(params.page_size || '20');
+  const now = Math.floor(Date.now() / 1000);
+
+  const variants = [];
+  const mode = String(params.body || 'both');
+  if (mode === 'empty' || mode === 'both') variants.push({ label: 'empty', body: {} });
+  if (mode === 'time'  || mode === 'both') variants.push({ label: 'time30d', body: { create_time_ge: now - 30 * 86400, create_time_lt: now } });
+
+  const run = async ({ label, body }) => {
+    const bodyStr = JSON.stringify(body);
+    const urlParams = { app_key: ck, timestamp: String(Math.floor(Date.now() / 1000)), page_size: pageSize, shop_cipher: cipher };
+    urlParams.sign = buildSign(cs, path, urlParams, bodyStr);
+    const t = await ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(urlParams)}`, {
+      method: 'POST', headers: { 'x-tts-access-token': conn.access_token, 'content-type': 'application/json' }, body: bodyStr,
+    }, 12000);
+    let j; try { j = JSON.parse(t); } catch { j = { _raw: t.slice(0, 200) }; }
+    const data = j?.data || {};
+    return { label, code: j?.code, message: j?.message, data_keys: Object.keys(data), sample: JSON.stringify(data).slice(0, 500) };
+  };
+
+  const probes = [];
+  for (const v of variants) probes.push(await run(v));
+  return res.status(200).json({ ok: true, version, path, shop: conn.seller_name, probes });
+}
+
 // ── Main handler ─────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   // Allow GET and POST
@@ -370,6 +418,11 @@ export default async function handler(req, res) {
 
   if (action === 'koc_creators') {
     try { return await handleKocCreators({ params, supabase, res }); }
+    catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
+  }
+
+  if (action === 'aff_orders') {
+    try { return await handleAffOrdersProbe({ params, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 
