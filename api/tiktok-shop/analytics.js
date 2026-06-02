@@ -560,6 +560,9 @@ async function handleKocOrders({ params, supabase, res }) {
     gmv: Number(s.gmv) || 0,
     qty: Number(s.qty) || 0,
     commission: Number(s.commission) || 0,
+    videos: Number(s.videos) || 0,
+    lives: Number(s.lives) || 0,
+    products: Number(s.products) || 0,
     last_order: Number(s.last_order) || 0,
   }));
   const totals = creators.reduce((a, c) => ({ gmv: a.gmv + c.gmv, orders: a.orders + c.orders, commission: a.commission + c.commission, qty: a.qty + c.qty }), { gmv: 0, orders: 0, commission: 0, qty: 0 });
@@ -570,6 +573,44 @@ async function handleKocOrders({ params, supabase, res }) {
     sync: meta ? { last_run_at: meta.last_run_at, total_synced: meta.total_synced, backfill_done: meta.backfill_done, oldest_date: vnDate(meta.oldest_create_time), newest_date: vnDate(meta.high_water_create_time), status: meta.last_status } : null,
     count: creators.length, totals, creators, shops: shopList,
   });
+}
+
+// Drill-down: which products one KOC drove (+ videos per product). Product names
+// resolved best-effort via the Analytics app connection for the shop.
+async function handleKocProducts({ params, appKey, appSecret, supabase, res }) {
+  const norm = (s) => (s || '').toLowerCase().trim();
+  const creator = params.creator;
+  if (!creator) return res.status(200).json({ ok: false, error: 'missing creator' });
+
+  let shopId = params.shop_id ? String(params.shop_id) : null;
+  if (!shopId) {
+    const { data: metas } = await supabase.from('tiktok_affiliate_sync_meta').select('shop_id, seller_name');
+    const want = norm(params.seller || 'body');
+    shopId = (metas || []).find(m => norm(m.seller_name).includes(want))?.shop_id || null;
+  }
+  const start = params.start_date || AFF_SYNC_FLOOR_DATE;
+  const end = params.end_date || null;
+
+  const { data: rows, error } = await supabase.rpc('koc_product_breakdown', { p_shop_id: shopId, p_start: start, p_end: end, p_creator: creator });
+  if (error) return res.status(200).json({ ok: false, error: error.message });
+
+  let products = (rows || []).map(r => ({
+    product_id: String(r.product_id), orders: Number(r.orders) || 0, gmv: Number(r.gmv) || 0,
+    qty: Number(r.qty) || 0, videos: Number(r.videos) || 0, content_types: r.content_types || '',
+  }));
+
+  // Resolve product names/images (top 30) via the shop's Analytics connection
+  try {
+    const { data: aconns } = await supabase.from('tiktok_analytics_connections').select('access_token, shop_cipher, shop_id').not('access_token', 'is', null);
+    const conn = (aconns || []).find(c => String(c.shop_id) === String(shopId));
+    if (conn) {
+      const ids = products.slice(0, 30).map(p => p.product_id);
+      const meta = await fetchProductDetails({ appKey, appSecret, conn, ids });
+      products = products.map(p => ({ ...p, name: meta[p.product_id]?.name || '', image: meta[p.product_id]?.image || '' }));
+    }
+  } catch { /* names optional */ }
+
+  return res.status(200).json({ ok: true, creator, shop_id: shopId, count: products.length, products });
 }
 
 // ── Main handler ─────────────────────────────────────────────────────────────
@@ -615,6 +656,11 @@ export default async function handler(req, res) {
 
   if (action === 'koc_orders') {
     try { return await handleKocOrders({ params, supabase, res }); }
+    catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
+  }
+
+  if (action === 'koc_products') {
+    try { return await handleKocProducts({ params, appKey, appSecret, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 
