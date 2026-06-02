@@ -208,11 +208,12 @@ const DashboardTab = () => {
             setLoading(true);
 
             // Calculate Date Range for Server-Side Filtering
-            // This prevents fetching 11k+ rows and hitting the 1000 limit (which hides recent data).
-            const startDate = `${airReportYear}-${String(airReportMonth).padStart(2, '0')}-01T00:00:00.000Z`;
-            // Calculate end date (last day of month)
-            const nextMonth = airReportMonth === 12 ? 1 : airReportMonth + 1;
-            const nextYear = airReportMonth === 12 ? airReportYear + 1 : airReportYear;
+            // [FIX] airReportMonth/Year từ dropdown là CHUỖI → phải ép Number, nếu không
+            //       "5" + 1 = "51" → endDate "2026-51-01" (tháng 51 vô lệ) → query lỗi → trống.
+            const m = Number(airReportMonth), y = Number(airReportYear);
+            const startDate = `${y}-${String(m).padStart(2, '0')}-01T00:00:00.000Z`;
+            const nextMonth = m === 12 ? 1 : m + 1;
+            const nextYear  = m === 12 ? y + 1 : y;
             const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01T00:00:00.000Z`;
 
             // [REFACTOR] Fetch from 'chitiettonguis' with Server-Side Filtering
@@ -248,40 +249,52 @@ const DashboardTab = () => {
         fetchBookings();
     }, [airReportMonth, airReportYear]);
 
-    // [OPTIMIZATION] FETCH ALL AIR LINKS ONCE (Prevent Refetch on Month Change)
+    // [FIX] Chỉ load air_links CỦA THÁNG ĐANG XEM (lọc server-side theo ngay_air).
+    // Trước đây load toàn bộ ~50k dòng select('*') 1 lần lúc mount → nặng/dễ fail, lại cap 50k
+    // (air_links đã 74k dòng) nên charts hay trống. Giờ chỉ ~vài nghìn dòng/tháng → nhanh & chắc.
     useEffect(() => {
-        const fetchAllAirLinks = async () => {
-            let allAirLinks = [];
-            let from = 0;
-            const size = 1000; // Increased chunk size
-            let more = true;
+        const fetchAirLinksForMonth = async () => {
+            const m = Number(airReportMonth), y = Number(airReportYear);
+            const startDate = `${y}-${String(m).padStart(2, '0')}-01`;
+            const nextMonth = m === 12 ? 1 : m + 1;
+            const nextYear  = m === 12 ? y + 1 : y;
+            const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
 
+            let all = [];
+            let from = 0;
+            const size = 1000;
+            let more = true;
             while (more) {
                 const { data, error } = await supabase
                     .from('air_links')
-                    .select('*')
-                    .order('created_at', { ascending: false })
+                    .select('id, link_air_koc, id_kenh, id_video, "cast", brand_id, nhansu_id, ngay_air, ngay_booking, san_pham, created_at')
+                    .gte('ngay_air', startDate)
+                    .lt('ngay_air', endDate)
+                    .order('ngay_air', { ascending: false })
                     .range(from, from + size - 1);
 
                 if (error || !data || data.length === 0) {
                     more = false;
                 } else {
-                    allAirLinks = [...allAirLinks, ...data];
+                    all = [...all, ...data];
                     from += size;
                     if (data.length < size) more = false;
                 }
-                if (allAirLinks.length > 50000) more = false;
+                if (all.length > 30000) more = false; // an toàn cho 1 tháng
             }
-            console.log("Loaded All AirLinks:", allAirLinks.length);
-            setRawAirLinks(allAirLinks);
+            console.log(`Loaded AirLinks for ${m}/${y}:`, all.length);
+            setRawAirLinks(all);
+        };
+        fetchAirLinksForMonth();
+    }, [airReportMonth, airReportYear]); // refetch khi đổi tháng
 
-            // Load products for filtering
+    // Load danh sách sản phẩm 1 lần (cho dropdown lọc)
+    useEffect(() => {
+        (async () => {
             const { data: spData } = await supabase.from('sanphams').select('id, ten_sanpham, brand_id');
             if (spData) setDashboardSanPhams(spData);
-        };
-
-        fetchAllAirLinks();
-    }, []); // Empty dependency = Run once on mount
+        })();
+    }, []);
 
     // --- HELPER FORMAT ---
     const getBrandName = (id) => brands.find(b => String(b.id) === String(id))?.ten_brand || 'Khác';
