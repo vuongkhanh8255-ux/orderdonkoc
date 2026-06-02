@@ -250,11 +250,13 @@ async function handleAffProbe({ params, supabase, res }) {
   };
 
   const probes = [];
-  probes.push(await run('GET', '/authorization/202309/shops'));
-  for (const v of ['202405', '202409']) {
-    probes.push(await run('GET', `/affiliate_creator/${v}/creator/profile`));
-    probes.push(await run('POST', `/affiliate_creator/${v}/marketplace_creators/search`, { page_size: 5 }));
+  // affiliate_seller/orders/search is path-recognized (returned "invalid version") — sweep versions
+  for (const v of ['202406', '202407', '202408', '202410', '202411', '202412', '202501', '202502', '202503', '202505']) {
     probes.push(await run('POST', `/affiliate_seller/${v}/orders/search`, { page_size: 5 }));
+  }
+  // seller creator marketplace search (scope seller.creator_marketplace.read)
+  for (const v of ['202405', '202412', '202501']) {
+    probes.push(await run('POST', `/affiliate_seller/${v}/marketplace_creators/search`, { page_size: 5 }));
   }
 
   return res.status(200).json({
