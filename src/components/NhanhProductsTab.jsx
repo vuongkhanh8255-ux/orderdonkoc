@@ -78,7 +78,8 @@ export default function NhanhProductsTab() {
         for (const p of preds) { const i = H.findIndex(p); if (i !== -1) return i; }
         return -1;
       };
-      let iMa  = find(h => h === 'mã sản phẩm', h => h.includes('mã sản phẩm'));      if (iMa  < 0) iMa  = 0;
+      // Ưu tiên "Mã vạch" (barcode thật, để map với Bảng giá niêm yết), fallback "Mã sản phẩm"
+      let iMa  = find(h => h === 'mã vạch', h => h.includes('mã vạch'), h => h === 'mã sản phẩm', h => h.includes('mã sản phẩm')); if (iMa < 0) iMa = 0;
       let iTen = find(h => h === 'tên sản phẩm', h => h.includes('tên sản phẩm'));     if (iTen < 0) iTen = 1;
       let iGia = find(h => h.includes('giá bán') && h.includes('vat'), h => h.includes('giá bán')); if (iGia < 0) iGia = 2;
 
