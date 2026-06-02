@@ -372,7 +372,14 @@ async function handleAffOrdersProbe({ params, supabase, res }) {
     }, 12000);
     let j; try { j = JSON.parse(t); } catch { j = { _raw: t.slice(0, 200) }; }
     const data = j?.data || {};
-    return { label, code: j?.code, message: j?.message, data_keys: Object.keys(data), sample: JSON.stringify(data).slice(0, 500) };
+    const first = (data.orders || [])[0] || null;
+    const firstSku = first?.skus?.[0] || null;
+    return {
+      label, code: j?.code, message: j?.message, total: data.total_count ?? null,
+      order_fields: first ? Object.keys(first) : [],
+      sku_fields: firstSku ? Object.keys(firstSku) : [],
+      first_order: first,
+    };
   };
 
   const probes = [];
