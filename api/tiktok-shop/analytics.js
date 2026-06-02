@@ -250,9 +250,8 @@ async function handleAffProbe({ params, supabase, res }) {
   };
 
   const probes = [];
-  // page_size goes in the QUERY string (not body). Try empty body and a minimal filter body.
-  probes.push(await run('POST', '/affiliate_seller/202508/marketplace_creators/search', {}, { page_size: '10' }));
-  probes.push(await run('POST', '/affiliate_seller/202508/marketplace_creators/search', null, { page_size: '10' }));
+  // page_size in QUERY, only 12 or 20 allowed
+  probes.push(await run('POST', '/affiliate_seller/202508/marketplace_creators/search', {}, { page_size: '20' }));
 
   return res.status(200).json({
     ok: true, shop: conn.seller_name, open_id: conn.open_id,
