@@ -42,6 +42,9 @@ const formulaAliases = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const newId = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
 
+// Chuẩn hoá barcode để map với file nhanh (bỏ chấm/space, viết hoa)
+const normBC = (v) => String(v ?? '').replace(/[.\s]/g, '').trim().toUpperCase();
+
 const loadArray = (key, def) => {
   try {
     const r = localStorage.getItem(key);
@@ -450,6 +453,36 @@ const ListedPriceTab = ({ user }) => {
   }, [isAdmin]);
 
   const [rows, setRows]             = useState(loadRows);
+  const [nhanhMap, setNhanhMap]     = useState(() => new Map()); // barcode → {ten, gia} từ file nhanh
+
+  // Load "file nhanh" (nhanh_products) để auto-map khi nhập barcode
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        let all = []; let from = 0; const step = 1000;
+        while (true) {
+          const { data, error } = await supabase
+            .from('nhanh_products')
+            .select('ma_san_pham,ten_san_pham,gia_ban_vat')
+            .range(from, from + step - 1);
+          if (error) throw error;
+          if (!data || !data.length) break;
+          all = all.concat(data);
+          if (data.length < step) break;
+          from += step;
+        }
+        if (cancelled) return;
+        const m = new Map();
+        for (const p of all) {
+          const k = normBC(p.ma_san_pham);
+          if (k) m.set(k, { ten: p.ten_san_pham || '', gia: p.gia_ban_vat });
+        }
+        setNhanhMap(m);
+      } catch (e) { console.error('load nhanh map', e); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
   const [brands, setBrands]         = useState(() => loadArray(BRANDS_KEY, DEFAULT_BRANDS));
   const [promotions, setPromotions] = useState(() => loadArray(PROMOTIONS_KEY, DEFAULT_PROMOTIONS));
   const [vouchers, setVouchers]     = useState(() => loadArray(VOUCHERS_KEY, DEFAULT_VOUCHERS));
@@ -604,7 +637,20 @@ const ListedPriceTab = ({ user }) => {
     }));
 
   const updateVariantCell = (id, key, value) =>
-    setRows(prev => prev.map(r => r.id === id ? { ...r, [key]: value } : r));
+    setRows(prev => prev.map(r => {
+      if (r.id !== id) return r;
+      const updated = { ...r, [key]: value };
+      // Auto-map từ file nhanh: nhập barcode khớp → tự điền Phân loại + Giá niêm yết
+      if (key === 'barcode') {
+        const hit = nhanhMap.get(normBC(value));
+        if (hit) {
+          if (hit.ten) updated.productName = hit.ten;
+          const g = Number(hit.gia);
+          if (g > 0) updated.listedPrice = String(Math.round(g));
+        }
+      }
+      return updated;
+    }));
 
   const deleteProduct = (productId) => setRows(prev => {
     const filtered = prev.filter(r => r.id !== productId && r.groupId !== productId);
