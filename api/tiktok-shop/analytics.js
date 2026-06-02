@@ -236,26 +236,41 @@ async function handleAffProbe({ params, supabase, res }) {
   const conn = conns.find(c => (c.seller_name || '').toLowerCase().includes(want)) || conns[0];
   const at = conn.access_token;
 
-  const run = async (method, path, body, queryExtra = {}) => {
+  // The creator app couldn't list its own shop_cipher (105005). Borrow Bodymiss's
+  // shop_cipher from the orders/analytics apps (same shop, already authorized).
+  const cipherCandidates = [];
+  if (conn.shop_cipher) cipherCandidates.push({ src: 'creator', cipher: conn.shop_cipher });
+  for (const tbl of ['tiktok_analytics_connections', 'tiktok_shop_connections']) {
+    try {
+      const { data } = await supabase.from(tbl).select('shop_cipher, shop_id, seller_name').not('shop_cipher', 'is', null);
+      const hit = (data || []).find(r => (r.seller_name || '').toLowerCase().includes(want))
+               || (data || []).find(r => String(r.shop_id) === String(conn.shop_id));
+      if (hit?.shop_cipher) cipherCandidates.push({ src: tbl, cipher: hit.shop_cipher });
+    } catch { /* ignore */ }
+  }
+
+  const run = async (method, path, body, queryExtra = {}, cipher = null) => {
     const ts = String(Math.floor(Date.now() / 1000));
     const bodyStr = body ? JSON.stringify(body) : '';
     const urlParams = { app_key: ck, timestamp: ts, ...queryExtra };
-    if (conn.shop_cipher) urlParams.shop_cipher = conn.shop_cipher;
+    if (cipher) urlParams.shop_cipher = cipher;
     urlParams.sign = buildSign(cs, path, urlParams, bodyStr);
     const opts = { method, headers: { 'x-tts-access-token': at, 'content-type': 'application/json' } };
     if (body) opts.body = bodyStr;
     const t = await ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(urlParams)}`, opts, 10000);
     let j; try { j = JSON.parse(t); } catch { j = { _raw: t.slice(0, 200) }; }
-    return { path, method, code: j?.code, message: j?.message, sample: JSON.stringify(j?.data ?? j).slice(0, 300) };
+    return { code: j?.code, message: j?.message, sample: JSON.stringify(j?.data ?? j).slice(0, 400) };
   };
 
   const probes = [];
-  // page_size in QUERY, only 12 or 20 allowed
-  probes.push(await run('POST', '/affiliate_seller/202508/marketplace_creators/search', {}, { page_size: '20' }));
+  for (const cc of cipherCandidates) {
+    const r = await run('POST', '/affiliate_seller/202508/marketplace_creators/search', {}, { page_size: '20' }, cc.cipher);
+    probes.push({ cipher_src: cc.src, ...r });
+  }
 
   return res.status(200).json({
     ok: true, shop: conn.seller_name, open_id: conn.open_id,
-    has_shop_cipher: !!conn.shop_cipher, probes,
+    shop_id: conn.shop_id, cipher_candidates: cipherCandidates.map(c => c.src), probes,
   });
 }
 
