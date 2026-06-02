@@ -551,7 +551,10 @@ async function handleKocOrders({ params, supabase, res }) {
   const start = params.start_date || AFF_SYNC_FLOOR_DATE;
   const end = params.end_date || null;
 
-  const { data: stats, error } = await supabase.rpc('koc_order_stats', { p_shop_id: shopId, p_start: start, p_end: end });
+  const [{ data: stats, error }, { data: totRows }] = await Promise.all([
+    supabase.rpc('koc_order_stats', { p_shop_id: shopId, p_start: start, p_end: end }),
+    supabase.rpc('koc_order_totals', { p_shop_id: shopId, p_start: start, p_end: end }),
+  ]);
   if (error) return res.status(200).json({ ok: false, error: error.message });
 
   const creators = (stats || []).map(s => ({
@@ -565,13 +568,15 @@ async function handleKocOrders({ params, supabase, res }) {
     products: Number(s.products) || 0,
     last_order: Number(s.last_order) || 0,
   }));
-  const totals = creators.reduce((a, c) => ({ gmv: a.gmv + c.gmv, orders: a.orders + c.orders, commission: a.commission + c.commission, qty: a.qty + c.qty }), { gmv: 0, orders: 0, commission: 0, qty: 0 });
+  const t = (totRows || [])[0] || {};
+  const totals = { gmv: Number(t.gmv) || 0, orders: Number(t.orders) || 0, commission: Number(t.commission) || 0, qty: Number(t.qty) || 0 };
+  const totalCreators = Number(t.creators) || creators.length;
 
   return res.status(200).json({
     ok: true, shop: meta?.seller_name || params.seller, shop_id: shopId,
     start_date: start, end_date: end, floor: AFF_SYNC_FLOOR_DATE,
     sync: meta ? { last_run_at: meta.last_run_at, total_synced: meta.total_synced, backfill_done: meta.backfill_done, oldest_date: vnDate(meta.oldest_create_time), newest_date: vnDate(meta.high_water_create_time), status: meta.last_status } : null,
-    count: creators.length, totals, creators, shops: shopList,
+    count: totalCreators, shown: creators.length, totals, creators, shops: shopList,
   });
 }
 

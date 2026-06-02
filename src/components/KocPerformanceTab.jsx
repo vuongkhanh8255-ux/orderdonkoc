@@ -461,7 +461,10 @@ function SalesView() {
               </tbody>
             </table>
           </div>
-          <div style={{ padding: '8px 14px', fontSize: '0.72rem', color: '#94a3b8', borderTop: '1px solid #f1f5f9' }}>💡 Bấm vào 1 KOC để xem sản phẩm họ làm video / kéo đơn.</div>
+          <div style={{ padding: '8px 14px', fontSize: '0.72rem', color: '#94a3b8', borderTop: '1px solid #f1f5f9' }}>
+            💡 Bấm vào 1 KOC để xem sản phẩm họ làm video / kéo đơn.
+            {data && data.count > (data.shown || 0) && <span> · Bảng hiển thị top {fmtNum(data.shown)}/{fmtNum(data.count)} KOC theo GMV (tổng số liệu phía trên vẫn tính đủ).</span>}
+          </div>
         </div>
       )}
     </>
