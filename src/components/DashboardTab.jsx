@@ -561,7 +561,7 @@ const DashboardTab = () => {
             {/* HÀNG 1 */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '25px', marginBottom: '25px' }}>
                 <ChartBox data={chart1Data} title="🔥 Top Sản Phẩm (Air Links)" unit="Air" showLegend={false} />
-                <ChartBox data={chart2Data} title="🏷️ Tỷ trọng Brand (Booking)" unit="Job" />
+                <ChartBox data={chart2Data} title="📦 Số lượng đơn đã gửi" unit="Đơn" />
                 <ChartBox data={chart3Data} title="🏆 Top Nhân Sự (Air Links)" unit="Link" />
             </div>
 
