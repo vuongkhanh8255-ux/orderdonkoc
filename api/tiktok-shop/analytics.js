@@ -262,15 +262,26 @@ async function handleAffProbe({ params, supabase, res }) {
     return { code: j?.code, message: j?.message, sample: JSON.stringify(j?.data ?? j).slice(0, 400) };
   };
 
-  const probes = [];
-  for (const cc of cipherCandidates) {
-    const r = await run('POST', '/affiliate_seller/202508/marketplace_creators/search', {}, { page_size: '20' }, cc.cipher);
-    probes.push({ cipher_src: cc.src, ...r });
-  }
+  // Use only the cipher that worked (orders app) to avoid rate-limits.
+  const cc = cipherCandidates.find(c => c.src === 'tiktok_shop_connections') || cipherCandidates[0];
+  const ts = String(Math.floor(Date.now() / 1000));
+  const path = '/affiliate_seller/202508/marketplace_creators/search';
+  const urlParams = { app_key: ck, timestamp: ts, page_size: '20', shop_cipher: cc.cipher };
+  urlParams.sign = buildSign(cs, path, urlParams, '{}');
+  const t = await ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(urlParams)}`, { method: 'POST', headers: { 'x-tts-access-token': at, 'content-type': 'application/json' }, body: '{}' }, 12000);
+  let j; try { j = JSON.parse(t); } catch { j = { _raw: t.slice(0, 300) }; }
+  const data = j?.data || {};
+  const first = (data.creators || [])[0] || null;
 
   return res.status(200).json({
-    ok: true, shop: conn.seller_name, open_id: conn.open_id,
-    shop_id: conn.shop_id, cipher_candidates: cipherCandidates.map(c => c.src), probes,
+    ok: true, shop: conn.seller_name, cipher_src: cc.src,
+    code: j?.code, message: j?.message,
+    envelope_keys: Object.keys(data),
+    total: data.total_count ?? data.total ?? null,
+    next_page_token: data.next_page_token || null,
+    creator_count: (data.creators || []).length,
+    creator_fields: first ? Object.keys(first) : [],
+    first_creator: first,
   });
 }
 
