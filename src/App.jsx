@@ -103,7 +103,7 @@ function App() {
 function AppMain({ user, onLogout, allowedViews }) {
   const defaultView = allowedViews[0] || 'dashboard';
   const [currentView, setCurrentView]   = useState(defaultView);
-  const [openGroups, setOpenGroups]     = useState({ shopee: true, ecom: true, crm: true, cskh: true, livestream: true, booking: true, archive: true, camp: true, tools: true });
+  const [openGroups, setOpenGroups]     = useState({ shopee: true, tiktok: true, ecom: true, crm: true, cskh: true, livestream: true, booking: true, archive: true, camp: true, tools: true });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarHovered,   setSidebarHovered]   = useState(false);
   const [pwModalOpen, setPwModalOpen]   = useState(false);
@@ -247,13 +247,15 @@ function AppMain({ user, onLogout, allowedViews }) {
                 { view: 'shopee_ads_dashboard', icon: '📣', name: 'Ads Shopee' },
                 { view: 'listed_price',      icon: '🏷️', name: 'Bảng giá niêm yết' },
                 { view: 'costing',           icon: '💰', name: 'Giá Cost' },
-                { view: 'camp_registration', icon: '🎪', name: 'Đăng Kí Camp' },
               ]},
               { key: 'shopee', label: '🟠 Shopee', emoji: '🟠', items: [
                 { view: 'flash_sale',        icon: '⚡', name: 'Tạo FS' },
                 { view: 'top_picks',         icon: '🚀', name: 'Đẩy SP' },
                 // { view: 'shopee_livestream', icon: '📺', name: 'Livestream' }, // tạm ẩn — chờ setup tài khoản Creator cho Shopee Video/Live
                 { view: 'shopee_ads',        icon: '📣', name: 'Quảng cáo' },
+              ]},
+              { key: 'tiktok', label: '🎵 TikTok', emoji: '🎵', items: [
+                { view: 'camp_registration', icon: '🎪', name: 'Đăng Kí Camp' },
               ]},
               { key: 'crm', label: '👥 CRM', emoji: '👥', items: [
                 { view: 'crm', icon: '👥', name: 'CRM' },
