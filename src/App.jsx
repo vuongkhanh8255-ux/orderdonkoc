@@ -11,6 +11,7 @@ import BookingManagerTab from './components/BookingManagerTab';
 import DashboardTab from './components/DashboardTab';
 import BookingPerformanceTab from './components/BookingPerformanceTab';
 import DataArchiveTab from './components/DataArchiveTab';
+import NhanhProductsTab from './components/NhanhProductsTab';
 import GmvRealtimeTab from './components/GmvRealtimeTab';
 import StellaDashboardTab from './components/StellaDashboardTab';
 import CSKHTab from './components/CSKHTab';
@@ -273,6 +274,7 @@ function AppMain({ user, onLogout, allowedViews }) {
               ]},
               { key: 'archive', label: '🗄️ Lưu trữ', emoji: '🗄️', items: [
                 { view: 'data_archive', icon: '🗄️', name: 'Lưu Trữ Data' },
+                { view: 'nhanh_products', icon: '📦', name: 'File Nhanh' },
                 { view: 'expense',      icon: '💸', name: 'Ngân Sách Ecom' },
               ]},
               { key: 'tools', label: '🛠️ Công Cụ', emoji: '🛠️', items: [
@@ -387,6 +389,7 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'expense' && <ExpenseEcomTab />}
           {currentView === 'booking' && <BookingManagerTab />}
           {currentView === 'data_archive' && <DataArchiveTab />}
+          {currentView === 'nhanh_products' && <NhanhProductsTab />}
           {currentView === 'gmv_realtime' && <GmvRealtimeTab />}
           {currentView === 'stella_dashboard' && <StellaDashboardTab />}
           {currentView === 'listed_price' && <ListedPriceTab user={user} />}

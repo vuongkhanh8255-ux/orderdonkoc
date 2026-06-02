@@ -166,7 +166,7 @@ export const ACCOUNTS = [
 
 // ── ROLE PERMISSIONS ──────────────────────────────────────
 export const ROLE_VIEWS = {
-    admin:      ['shop_analytics','shopee_ads_dashboard','flash_sale','top_picks','shopee_livestream','shopee_video','shopee_ads','stella_dashboard','listed_price','costing','tiktok_orders','reviews','crm','cskh','livestream','dashboard','order','booking_performance','contract','airlinks','booking','data_archive','expense','landing_orders','camp_registration','task_notes'],
+    admin:      ['shop_analytics','shopee_ads_dashboard','flash_sale','top_picks','shopee_livestream','shopee_video','shopee_ads','stella_dashboard','listed_price','costing','tiktok_orders','reviews','crm','cskh','livestream','dashboard','order','booking_performance','contract','airlinks','booking','data_archive','nhanh_products','expense','landing_orders','camp_registration','task_notes'],
     // BOOKING: chỉ Booking group + Ngân Sách Ecom. KHÔNG Ecom group, KHÔNG Task & Notes.
     booking:    ['dashboard','order','booking_performance','contract','airlinks','booking','expense'],
     cs:         ['crm','cskh','order','airlinks','expense','task_notes'],
@@ -184,7 +184,7 @@ export const ROLE_VIEWS = {
     ],
     // ABM team — chỉ xem: Dashboard Ecom, Ads Shopee, CRM, CSKH, Đánh giá sàn,
     //   Phân tích SP booking, Dashboard booking, Quản Lý Link Air, Lưu Trữ Data, Ngân Sách Ecom
-    abm: ['shop_analytics','shopee_ads_dashboard','crm','cskh','reviews','dashboard','booking_performance','airlinks','data_archive','expense'],
+    abm: ['shop_analytics','shopee_ads_dashboard','crm','cskh','reviews','dashboard','booking_performance','airlinks','data_archive','nhanh_products','expense'],
 };
 
 export default LoginPage;
