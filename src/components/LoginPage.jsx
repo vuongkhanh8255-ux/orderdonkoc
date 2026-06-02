@@ -166,9 +166,9 @@ export const ACCOUNTS = [
 
 // ── ROLE PERMISSIONS ──────────────────────────────────────
 export const ROLE_VIEWS = {
-    admin:      ['shop_analytics','shopee_ads_dashboard','flash_sale','top_picks','shopee_livestream','shopee_video','shopee_ads','stella_dashboard','listed_price','costing','tiktok_orders','reviews','crm','cskh','livestream','dashboard','order','booking_performance','contract','airlinks','booking','data_archive','nhanh_products','expense','landing_orders','camp_registration','task_notes'],
+    admin:      ['shop_analytics','shopee_ads_dashboard','flash_sale','top_picks','shopee_livestream','shopee_video','shopee_ads','stella_dashboard','listed_price','costing','tiktok_orders','reviews','crm','cskh','livestream','dashboard','order','koc_performance','booking_performance','contract','airlinks','booking','data_archive','nhanh_products','expense','landing_orders','camp_registration','task_notes'],
     // BOOKING: chỉ Booking group + Ngân Sách Ecom. KHÔNG Ecom group, KHÔNG Task & Notes.
-    booking:    ['dashboard','order','booking_performance','contract','airlinks','booking','expense'],
+    booking:    ['dashboard','order','koc_performance','booking_performance','contract','airlinks','booking','expense'],
     cs:         ['crm','cskh','order','airlinks','expense','task_notes'],
     livestream: ['stella_dashboard','livestream','expense','task_notes'],
     // ECOM: full Ecom group + CSKH + Livestream + Booking group (trừ Hợp Đồng) + Ngân Sách Ecom
@@ -179,7 +179,7 @@ export const ROLE_VIEWS = {
         'stella_dashboard','listed_price','tiktok_orders','shop_analytics','shopee_ads_dashboard','flash_sale','top_picks','shopee_livestream','shopee_video','shopee_ads','camp_registration','reviews', // Ecom + Shopee + Reviews
         'cskh',                                                                // CSKH
         'livestream',                                                          // Livestream
-        'dashboard','order','booking_performance','airlinks',                  // Booking (no Hợp Đồng)
+        'dashboard','order','koc_performance','booking_performance','airlinks', // Booking (no Hợp Đồng)
         'expense',                                                             // Lưu trữ — Ngân Sách Ecom
     ],
     // ABM team — chỉ xem: Dashboard Ecom, Ads Shopee, CRM, CSKH, Đánh giá sàn,
