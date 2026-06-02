@@ -250,13 +250,11 @@ async function handleAffProbe({ params, supabase, res }) {
   };
 
   const probes = [];
-  // affiliate_seller/orders/search is path-recognized (returned "invalid version") — sweep versions
-  for (const v of ['202406', '202407', '202408', '202410', '202411', '202412', '202501', '202502', '202503', '202505']) {
+  // Confirmed from API Test Tool: marketplace_creators/search uses version 202508, shop_cipher optional
+  probes.push(await run('POST', '/affiliate_seller/202508/marketplace_creators/search', { page_size: 5 }));
+  // affiliate orders (KOC-attributed orders for the shop) — try near versions
+  for (const v of ['202508', '202509', '202507', '202506']) {
     probes.push(await run('POST', `/affiliate_seller/${v}/orders/search`, { page_size: 5 }));
-  }
-  // seller creator marketplace search (scope seller.creator_marketplace.read)
-  for (const v of ['202405', '202412', '202501']) {
-    probes.push(await run('POST', `/affiliate_seller/${v}/marketplace_creators/search`, { page_size: 5 }));
   }
 
   return res.status(200).json({
