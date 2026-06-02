@@ -489,6 +489,13 @@ const syncOneAffShop = async ({ ck, cs, conn, supabase }) => {
     last_status: status,
   }, { onConflict: 'shop_id' });
 
+  // Gentle avatar harvest: a few top-KOC avatars per run (fills cache over time).
+  try {
+    const { data: top } = await supabase.rpc('koc_order_stats', { p_shop_id: shop_id, p_start: AFF_SYNC_FLOOR_DATE, p_end: null });
+    const topUsers = (top || []).slice(0, 40).map(r => r.creator_username).filter(Boolean);
+    await harvestAvatars({ ck, cs, conn, cipher, supabase, usernames: topUsers, max: 4 });
+  } catch { /* avatars optional */ }
+
   return { shop: seller_name, shop_id, upserted: totalUp, newest_date: vnDate(newest), oldest_date: vnDate(oldest), backfill_done: backfillDone, status };
 };
 
@@ -618,37 +625,65 @@ async function handleKocProducts({ params, appKey, appSecret, supabase, res }) {
   return res.status(200).json({ ok: true, creator, shop_id: shopId, count: products.length, products });
 }
 
-// ── TEMP: probe for creator-avatar-by-username ───────────────────────────────
-async function handleAvProbe({ params, supabase, res }) {
+// ── KOC avatars (best-effort) ────────────────────────────────────────────────
+// orders/search không trả avatar → tra cứu qua marketplace_creators/search với
+// body {keyword: username} (kết quả khớp username đứng đầu). Endpoint này bị rate
+// limit gắt nên cache vào tiktok_creator_avatars + chỉ fetch vài cái mỗi lượt.
+const fetchCreatorAvatar = async ({ ck, cs, accessToken, cipher, username }) => {
+  const path = '/affiliate_seller/202508/marketplace_creators/search';
+  const bodyStr = JSON.stringify({ keyword: username });
+  const urlParams = { app_key: ck, timestamp: String(Math.floor(Date.now() / 1000)), page_size: '12', shop_cipher: cipher };
+  urlParams.sign = buildSign(cs, path, urlParams, bodyStr);
+  let j;
+  try { j = JSON.parse(await ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(urlParams)}`, { method: 'POST', headers: { 'x-tts-access-token': accessToken, 'content-type': 'application/json' }, body: bodyStr }, 10000)); }
+  catch { return { rateLimited: false, found: null }; }
+  if (j?.code === 36009002) return { rateLimited: true, found: null };
+  if (j?.code !== 0) return { rateLimited: false, found: null };
+  const u = username.toLowerCase();
+  const c = (j.data?.creators || []).find(x => (x.username || '').toLowerCase() === u) || null;
+  return { rateLimited: false, found: c ? { username: c.username, avatar_url: c.avatar?.url || '', nickname: c.nickname || '' } : null };
+};
+
+// Returns { username: {avatar_url, nickname} } for cached + newly fetched. Stops
+// fetching on rate limit. Caches negatives (empty) to avoid re-hammering.
+const harvestAvatars = async ({ ck, cs, conn, cipher, supabase, usernames, max = 6 }) => {
+  const out = {};
+  if (!usernames?.length || !cipher || !ck || !cs) return out;
+  const { data: cached } = await supabase.from('tiktok_creator_avatars').select('username, avatar_url, nickname, updated_at').in('username', usernames);
+  const freshUntil = Date.now() - 2 * 86400 * 1000;
+  const fresh = new Set();
+  (cached || []).forEach(r => { out[r.username] = { avatar_url: r.avatar_url, nickname: r.nickname }; if (new Date(r.updated_at).getTime() > freshUntil) fresh.add(r.username); });
+  let accessToken = conn.access_token, fetched = 0;
+  for (const u of usernames) {
+    if (fetched >= max) break;
+    if (fresh.has(u)) continue;
+    const r = await fetchCreatorAvatar({ ck, cs, accessToken, cipher, username: u });
+    if (r.rateLimited) break;
+    fetched++;
+    const row = { username: u, avatar_url: r.found?.avatar_url || '', nickname: r.found?.nickname || '', updated_at: new Date().toISOString() };
+    out[u] = { avatar_url: row.avatar_url, nickname: row.nickname };
+    try { await supabase.from('tiktok_creator_avatars').upsert(row, { onConflict: 'username' }); } catch { /* ignore */ }
+  }
+  return out;
+};
+
+async function handleKocAvatars({ params, supabase, res }) {
   const ck = process.env.TIKTOK_CREATOR_APP_KEY?.trim();
   const cs = process.env.TIKTOK_CREATOR_APP_SECRET?.trim();
+  const users = String(params.users || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 80);
+  if (!users.length) return res.status(200).json({ ok: true, avatars: {} });
+
   const { data: conns } = await supabase.from('tiktok_creator_connections').select('open_id, shop_id, shop_cipher, seller_name, access_token, refresh_token').not('access_token', 'is', null);
-  const conn = (conns || []).find(c => (c.seller_name || '').toLowerCase().includes('body')) || (conns || [])[0];
-  if (!conn) return res.status(200).json({ ok: false, error: 'no conn' });
-  const ctx = await resolveShopContext({ conn, supabase });
-  const cipher = ctx?.cipher;
-  const uname = params.uname || 'nganbambi99';
+  const want = String(params.seller || 'body').toLowerCase();
+  const conn = (conns || []).find(c => (c.seller_name || '').toLowerCase().includes(want)) || (conns || [])[0];
+  let cipher = null;
+  if (conn) cipher = (await resolveShopContext({ conn, supabase }))?.cipher;
 
-  const run = async (path, body) => {
-    const bodyStr = JSON.stringify(body);
-    const urlParams = { app_key: ck, timestamp: String(Math.floor(Date.now() / 1000)), page_size: '12', shop_cipher: cipher };
-    urlParams.sign = buildSign(cs, path, urlParams, bodyStr);
-    const t = await ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(urlParams)}`, { method: 'POST', headers: { 'x-tts-access-token': conn.access_token, 'content-type': 'application/json' }, body: bodyStr }, 10000);
-    let j; try { j = JSON.parse(t); } catch { j = { _raw: t.slice(0, 150) }; }
-    const cr = (j?.data?.creators || [])[0] || null;
-    return { path, body: JSON.stringify(body).slice(0, 60), code: j?.code, message: (j?.message || '').slice(0, 90), n: (j?.data?.creators || []).length, first_user: cr?.username, first_av: cr?.avatar?.url ? 'YES' : 'no' };
-  };
-
-  const MP = '/affiliate_seller/202508/marketplace_creators/search';
-  const probes = [];
-  probes.push(await run(MP, { keyword: uname }));
-  probes.push(await run(MP, { username: uname }));
-  probes.push(await run(MP, { creator_username: uname }));
-  probes.push(await run(MP, { filter: { username: uname } }));
-  probes.push(await run(MP, { search_key: uname }));
-  probes.push(await run('/affiliate_seller/202410/collaborations/search', {}));
-  probes.push(await run('/affiliate_seller/202410/creators/search', {}));
-  return res.status(200).json({ ok: true, uname, probes });
+  const max = Math.min(Math.max(Number(params.max) || 8, 0), 12);
+  const map = await harvestAvatars({ ck, cs, conn, cipher, supabase, usernames: users, max });
+  const avatars = {};
+  for (const [u, v] of Object.entries(map)) if (v.avatar_url) avatars[u] = { avatar: v.avatar_url, nickname: v.nickname };
+  return res.status(200).json({ ok: true, avatars });
 }
 
 // ── Main handler ─────────────────────────────────────────────────────────────
@@ -702,8 +737,8 @@ export default async function handler(req, res) {
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 
-  if (action === 'av_probe') {
-    try { return await handleAvProbe({ params, supabase, res }); }
+  if (action === 'koc_avatars') {
+    try { return await handleKocAvatars({ params, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 

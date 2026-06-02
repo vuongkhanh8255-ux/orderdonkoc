@@ -36,6 +36,12 @@ const LetterAva = ({ name, size = 30 }) => {
   const ch = ((name || '?').replace(/^@/, '').charAt(0) || '?').toUpperCase();
   return <span style={{ width: size, height: size, borderRadius: '50%', background: avaColor(name), color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: size * 0.42, flexShrink: 0 }}>{ch}</span>;
 };
+// Avatar thật (từ cache) — lỗi tải thì fallback về chữ cái
+const KocAvatar = ({ username, url, size = 30 }) => {
+  const [err, setErr] = useState(false);
+  if (url && !err) return <img src={url} referrerPolicy="no-referrer" onError={() => setErr(true)} alt="" style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '1px solid #f1f5f9' }} />;
+  return <LetterAva name={username} size={size} />;
+};
 
 // ── Search box ─────────────────────────────────────────────────────────────────
 const SearchBox = ({ value, onChange }) => (
@@ -101,6 +107,7 @@ export default function KocPerformanceTab() {
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState(null);
   const [prodCache, setProdCache] = useState({});
+  const [avatarMap, setAvatarMap] = useState({});
 
   useEffect(() => {
     let cancelled = false;
@@ -129,6 +136,16 @@ export default function KocPerformanceTab() {
   }, [seller, start, end]);
 
   useEffect(() => { fetchSales(); }, [fetchSales]);
+
+  // Lấy avatar thật (cache + fetch dần) cho top 60 KOC mỗi lần đổi data/shop
+  useEffect(() => {
+    const users = (data?.creators || []).slice(0, 60).map(r => r.username).filter(Boolean);
+    if (!users.length) return;
+    let cancelled = false;
+    fetch(`${API}?action=koc_avatars&seller=${encodeURIComponent(seller)}&users=${encodeURIComponent(users.join(','))}&max=8`)
+      .then(r => r.json()).then(j => { if (!cancelled && j?.ok && j.avatars) setAvatarMap(prev => ({ ...prev, ...j.avatars })); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [data, seller]);
 
   // Drill-down dùng đúng khoảng ngày đang chọn (start/end). prodCache bị xoá mỗi lần
   // đổi ngày/shop (trong fetchSales) nên dữ liệu sản phẩm luôn khớp filter hiện tại.
@@ -251,7 +268,7 @@ export default function KocPerformanceTab() {
                         <td style={{ ...td, textAlign: 'left' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                             <span style={{ color: '#cbd5e1', fontSize: '0.7rem', width: 10 }}>{open ? '▼' : '▶'}</span>
-                            <LetterAva name={c.username} size={30} />
+                            <KocAvatar username={c.username} url={avatarMap[c.username]?.avatar} size={30} />
                             <a href={`https://www.tiktok.com/@${c.username}`} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: ACCENT, textDecoration: 'none', fontWeight: 700 }}>@{c.username}</a>
                           </div>
                         </td>
