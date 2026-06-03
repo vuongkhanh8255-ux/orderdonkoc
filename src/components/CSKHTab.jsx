@@ -495,7 +495,7 @@ const METRICS = [
   ]},
   { section: 'HIỆU SUẤT CỬA HÀNG', metrics: [
     { key: 'return_refund_rate',   label: 'Tỷ lệ trả hàng/hoàn tiền',       target: '≤1.50%',  unit: '%',   good: 'lte', targetVal: 1.50 },
-    { key: 'seller_cancel_rate',   label: 'Tỷ lệ hủy do lỗi của người bán', target: '≤2.50%',  unit: '%',   good: 'lte', targetVal: 2.50 },
+    { key: 'seller_cancel_rate',   label: 'Điểm tình trạng nhà sáng tạo',   target: '',        unit: '',    good: null,  targetVal: null },
     { key: 'late_shipping_rate',   label: 'Tỷ lệ gửi hàng muộn',            target: '≤4.00%',  unit: '%',   good: 'lte', targetVal: 4.00 },
     { key: 'fast_shipping_rate',   label: 'Tỷ lệ gửi hàng nhanh',           target: '≥98%',    unit: '%',   good: 'gte', targetVal: 98 },
     { key: 'shop_rating',          label: 'Đánh giá Shop',                   target: '≥4.00/5', unit: '/5',  good: 'gte', targetVal: 4.00 },
