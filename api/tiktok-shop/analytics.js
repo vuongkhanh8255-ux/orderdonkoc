@@ -793,6 +793,27 @@ async function handleKocAvatars({ params, supabase, res }) {
   return res.status(200).json({ ok: true, avatars });
 }
 
+// ── TEMP: check if views are period-bound or lifetime ────────────────────────
+async function handleVa3Probe({ params, appKey, appSecret, supabase, res }) {
+  const { data: aconns } = await supabase.from('tiktok_analytics_connections').select('access_token, shop_cipher, shop_id, seller_name').not('access_token', 'is', null);
+  const conn = (aconns || []).find(c => (c.seller_name || '').toLowerCase().includes('body')) || (aconns || [])[0];
+  if (!conn) return res.status(200).json({ ok: false, error: 'no analytics conn' });
+  const path = '/analytics/202409/shop_videos/performance';
+  const run = async (sd, ed) => {
+    const urlParams = { app_key: appKey, timestamp: String(Math.floor(Date.now() / 1000)), start_date_ge: sd, end_date_lt: ed, sort_field: 'gmv', sort_order: 'DESC', page_size: '5', currency: 'LOCAL' };
+    if (conn.shop_cipher) urlParams.shop_cipher = conn.shop_cipher;
+    urlParams.sign = buildSign(appSecret, path, urlParams);
+    let j; try { j = JSON.parse(await ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(urlParams)}`, { method: 'GET', headers: { 'x-tts-access-token': conn.access_token, 'content-type': 'application/json' } }, 10000)); } catch { j = {}; }
+    return (j?.data?.videos || []).map(v => ({ id: String(v.id), views: v.views, gmv: v.gmv?.amount }));
+  };
+  const narrow = await run('2026-05-01', '2026-05-08');   // 1 tuần
+  const wide   = await run('2026-04-01', '2026-06-04');   // ~2 tháng
+  // so view cùng 1 video id ở 2 khoảng
+  const wmap = {}; wide.forEach(v => wmap[v.id] = v.views);
+  const cmp = narrow.filter(v => wmap[v.id] != null).map(v => ({ id: v.id.slice(-8), week_views: v.views, wide_views: wmap[v.id], same: String(v.views) === String(wmap[v.id]) }));
+  return res.status(200).json({ ok: true, narrow_week: narrow, wide_2mo: wide, compare: cmp });
+}
+
 // ── Main handler ─────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   // Allow GET and POST
@@ -846,6 +867,11 @@ export default async function handler(req, res) {
 
   if (action === 'koc_videos') {
     try { return await handleKocVideos({ params, appKey, appSecret, supabase, res }); }
+    catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
+  }
+
+  if (action === 'va3_probe') {
+    try { return await handleVa3Probe({ params, appKey, appSecret, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 
