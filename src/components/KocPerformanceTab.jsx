@@ -97,24 +97,26 @@ const ProductBreakdown = ({ state }) => {
   );
 };
 
-// ── Drill-down: từng video của KOC + sản phẩm + ngày đăng + lượt xem ────────────
-const VID_GRID = '22px 70px 1fr 90px 76px 44px 86px';
+// ── Drill-down: từng video của KOC + sản phẩm + ngày đăng + tổng view + view tháng ─
+const VID_GRID = '20px 60px 1fr 82px 64px 70px 38px 78px';
+const ymShort = (ym) => ym ? 'T' + Number(ym.split('-')[1]) : 'Tháng';
 const VideoBreakdown = ({ state, username }) => {
   if (!state || state.loading) return <div style={{ padding: 14, color: '#94a3b8', fontSize: '0.82rem' }}>⏳ Đang tải video…</div>;
   if (state.error) return <div style={{ padding: 14, color: '#b91c1c', fontSize: '0.82rem' }}>❌ {state.error}</div>;
   const vs = state.videos || [];
   if (!vs.length) return <div style={{ padding: 14, color: '#94a3b8', fontSize: '0.82rem' }}>Không có video kéo đơn trong khoảng này.</div>;
   const cell = { fontSize: '0.8rem', whiteSpace: 'nowrap' };
+  const mlabel = ymShort(state.ym);
   return (
     <div style={{ padding: '4px 16px 14px' }}>
-      <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>🎬 Video KOC đã lên ({vs.length}) — mới nhất trước · 👁 view & ngày đăng lấy từ TikTok Analytics</div>
-      <div style={{ display: 'grid', gridTemplateColumns: VID_GRID, gap: 8, alignItems: 'center', padding: '0 10px 4px', fontSize: '0.66rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>
-        <span></span><span>Video</span><span>Sản phẩm</span><span>Ngày đăng</span><span style={{ textAlign: 'right' }}>👁 View</span><span style={{ textAlign: 'right' }}>Đơn</span><span style={{ textAlign: 'right' }}>GMV</span>
+      <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>🎬 Video KOC đã lên ({vs.length}) — mới nhất trước · 👁 Tổng = view toàn bộ · 👁 {mlabel} = view trong tháng được chọn</div>
+      <div style={{ display: 'grid', gridTemplateColumns: VID_GRID, gap: 8, alignItems: 'center', padding: '0 10px 4px', fontSize: '0.64rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>
+        <span></span><span>Video</span><span>Sản phẩm</span><span>Ngày đăng</span><span style={{ textAlign: 'right' }}>👁 Tổng</span><span style={{ textAlign: 'right', color: '#0891b2' }}>👁 {mlabel}</span><span style={{ textAlign: 'right' }}>Đơn</span><span style={{ textAlign: 'right' }}>GMV</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {vs.map((v, i) => (
           <div key={v.content_id || i} style={{ display: 'grid', gridTemplateColumns: VID_GRID, gap: 8, alignItems: 'center', background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #f1f5f9' }}>
-            <span style={{ fontWeight: 800, color: '#94a3b8', fontSize: '0.78rem' }}>{i + 1}</span>
+            <span style={{ fontWeight: 800, color: '#94a3b8', fontSize: '0.76rem' }}>{i + 1}</span>
             {v.content_type === 'VIDEO'
               ? <a href={`https://www.tiktok.com/@${username}/video/${v.content_id}`} target="_blank" rel="noreferrer" title={v.title || ''} style={{ color: '#7c3aed', fontWeight: 700, textDecoration: 'none', fontSize: '0.8rem' }}>🎬 Xem ↗</a>
               : <span style={{ color: '#dc2626', fontWeight: 700, fontSize: '0.8rem' }}>🔴 {v.content_type || 'Khác'}</span>}
@@ -125,7 +127,8 @@ const VideoBreakdown = ({ state, username }) => {
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.8rem', color: '#0f172a' }}>{shortName(v.product_name) || `SP ${v.top_product_id || '—'}`}{v.product_count > 1 ? ` +${v.product_count - 1}` : ''}</span>
             </span>
             <span style={{ ...cell, color: '#0f172a', fontWeight: 700 }}>{postLabel(v)}</span>
-            <span style={{ ...cell, color: '#0891b2', fontWeight: 800, textAlign: 'right' }}>{fmtViews(v.views)}</span>
+            <span style={{ ...cell, color: '#475569', fontWeight: 800, textAlign: 'right' }}>{fmtViews(v.views)}</span>
+            <span style={{ ...cell, color: '#0891b2', fontWeight: 800, textAlign: 'right' }}>{fmtViews(v.month_views)}</span>
             <span style={{ ...cell, color: '#64748b', textAlign: 'right' }}>{fmtNum(v.orders)}</span>
             <span style={{ ...cell, color: ACCENT, fontWeight: 800, textAlign: 'right' }}>{fmtVnd(v.gmv)} đ</span>
           </div>
@@ -205,7 +208,7 @@ export default function KocPerformanceTab() {
     setVidCache(p => ({ ...p, [username]: { loading: true } }));
     const qs = new URLSearchParams({ action: 'koc_videos', seller, creator: username, start_date: start, end_date: end });
     fetch(`${API}?${qs}`).then(r => r.json())
-      .then(j => setVidCache(p => ({ ...p, [username]: j.ok ? { videos: j.videos || [] } : { error: j.error || 'Lỗi' } })))
+      .then(j => setVidCache(p => ({ ...p, [username]: j.ok ? { videos: j.videos || [], ym: j.ym_selected } : { error: j.error || 'Lỗi' } })))
       .catch(e => setVidCache(p => ({ ...p, [username]: { error: e.message } })));
   };
   const toggleExpand = (username) => {
