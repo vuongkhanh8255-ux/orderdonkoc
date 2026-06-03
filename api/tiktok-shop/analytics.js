@@ -400,7 +400,49 @@ const fetchAffOrdersPage = ({ ck, cs, accessToken, cipher, pageToken, pageSize =
   }, 12000).then(t => { try { return JSON.parse(t); } catch { return { code: -1, message: 'parse error' }; } });
 };
 
-const syncOneAffShop = async ({ ck, cs, conn, supabase }) => {
+// Sync shop video analytics (views, post time, title, product) into tiktok_shop_videos.
+// Uses the ANALYTICS app (shop_videos/performance). Pages top videos by GMV each run.
+const VIDEO_PERF_VERSION = '202409';
+const syncShopVideos = async ({ appKey, appSecret, shop_id, supabase, maxPages = 10 }) => {
+  const { data: aconns } = await supabase.from('tiktok_analytics_connections').select('access_token, refresh_token, shop_cipher, shop_id').not('access_token', 'is', null);
+  const conn = (aconns || []).find(c => String(c.shop_id) === String(shop_id));
+  if (!conn) return { videos: 0, skipped: 'no analytics conn' };
+  const path = `/analytics/${VIDEO_PERF_VERSION}/shop_videos/performance`;
+  const sd = AFF_SYNC_FLOOR_DATE;
+  const ed = vnDate(Math.floor(Date.now() / 1000) + 86400);
+  const doCall = (pageToken) => {
+    const urlParams = { app_key: appKey, timestamp: String(Math.floor(Date.now() / 1000)), start_date_ge: sd, end_date_lt: ed, sort_field: 'gmv', sort_order: 'DESC', page_size: '50', currency: 'LOCAL' };
+    if (conn.shop_cipher) urlParams.shop_cipher = conn.shop_cipher;
+    if (pageToken) urlParams.page_token = pageToken;
+    urlParams.sign = buildSign(appSecret, path, urlParams);
+    return ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(urlParams)}`, { method: 'GET', headers: { 'x-tts-access-token': conn.access_token, 'content-type': 'application/json' } }, 12000);
+  };
+  let token = null, pages = 0, up = 0;
+  while (pages < maxPages) {
+    let raw = await doCall(token);
+    let j; try { j = JSON.parse(raw); } catch { break; }
+    if (j?.code === 105002 && await refreshAnalyticsToken({ appKey, appSecret, conn, supabase, table: 'tiktok_analytics_connections' })) { raw = await doCall(token); try { j = JSON.parse(raw); } catch { break; } }
+    if (j?.code !== 0) break;
+    const vids = j.data?.videos || [];
+    if (!vids.length) break;
+    const rows = vids.map(v => {
+      const pt = v.video_post_time || '';
+      const prod = (v.products || [])[0] || {};
+      return { id: String(v.id), shop_id: String(shop_id), username: v.username || '', title: v.title || '',
+        views: Number(v.views) || 0, gmv: numAmt(v.gmv), units_sold: Number(v.units_sold) || 0, sku_orders: Number(v.sku_orders) || 0,
+        ctr: Number(v.click_through_rate) || 0, video_post_time: pt, post_date: pt ? pt.slice(0, 10) : null,
+        product_id: String(prod.id || ''), product_name: prod.name || '', product_count: (v.products || []).length, synced_at: new Date().toISOString() };
+    }).filter(r => r.id);
+    for (let i = 0; i < rows.length; i += 200) await supabase.from('tiktok_shop_videos').upsert(rows.slice(i, i + 200), { onConflict: 'id' });
+    up += rows.length;
+    token = j.data?.next_page_token;
+    pages++;
+    if (!token) break;
+  }
+  return { videos: up };
+};
+
+const syncOneAffShop = async ({ ck, cs, conn, supabase, appKey, appSecret }) => {
   const ctx = await resolveShopContext({ conn, supabase });
   if (!ctx) {
     // No shop_cipher (shop not authorized on the Orders/Analytics apps). Write a
@@ -496,12 +538,17 @@ const syncOneAffShop = async ({ ck, cs, conn, supabase }) => {
     await harvestAvatars({ ck, cs, conn, cipher, supabase, usernames: topUsers, max: 4 });
   } catch { /* avatars optional */ }
 
-  return { shop: seller_name, shop_id, upserted: totalUp, newest_date: vnDate(newest), oldest_date: vnDate(oldest), backfill_done: backfillDone, status };
+  // Sync this shop's video analytics (views, post time, title) into tiktok_shop_videos.
+  let videoSync = null;
+  try { videoSync = await syncShopVideos({ appKey, appSecret, shop_id, supabase, maxPages: 10 }); }
+  catch (e) { videoSync = { error: e.message }; }
+
+  return { shop: seller_name, shop_id, upserted: totalUp, newest_date: vnDate(newest), oldest_date: vnDate(oldest), backfill_done: backfillDone, status, videos: videoSync };
 };
 
 // Cron / manual sync. No ?seller → picks ONE shop per run (never-synced or oldest),
 // keeping each invocation within the function time budget. ?all=1 → every shop.
-async function handleSyncAffOrders({ params, supabase, res }) {
+async function handleSyncAffOrders({ params, appKey, appSecret, supabase, res }) {
   const ck = process.env.TIKTOK_CREATOR_APP_KEY?.trim();
   const cs = process.env.TIKTOK_CREATOR_APP_SECRET?.trim();
   if (!ck || !cs) return res.status(200).json({ ok: false, error: 'creator app keys missing' });
@@ -533,7 +580,7 @@ async function handleSyncAffOrders({ params, supabase, res }) {
 
   const results = [];
   for (const conn of targets) {
-    try { results.push(await syncOneAffShop({ ck, cs, conn, supabase })); }
+    try { results.push(await syncOneAffShop({ ck, cs, conn, supabase, appKey, appSecret })); }
     catch (e) { results.push({ shop: conn.seller_name, error: e.message }); }
   }
   return res.status(200).json({ ok: true, floor: AFF_SYNC_FLOOR_DATE, synced: results.length, results });
@@ -663,6 +710,19 @@ async function handleKocVideos({ params, appKey, appSecret, supabase, res }) {
     }
   } catch { /* names optional */ }
 
+  // Enrich with views / real post time / title from synced video analytics
+  try {
+    const ids = videos.map(v => v.content_id).filter(Boolean);
+    if (ids.length) {
+      const { data: vrows } = await supabase.from('tiktok_shop_videos').select('id, views, video_post_time, title').in('id', ids);
+      const vmap = {}; (vrows || []).forEach(r => { vmap[r.id] = r; });
+      videos = videos.map(v => {
+        const a = vmap[v.content_id];
+        return a ? { ...v, views: Number(a.views) || 0, video_post_time: a.video_post_time || '', title: a.title || '' } : { ...v, views: null };
+      });
+    }
+  } catch { /* views optional */ }
+
   return res.status(200).json({ ok: true, creator, shop_id: shopId, count: videos.length, videos });
 }
 
@@ -727,27 +787,6 @@ async function handleKocAvatars({ params, supabase, res }) {
   return res.status(200).json({ ok: true, avatars });
 }
 
-// ── TEMP: probe for video analytics (per-video views) ────────────────────────
-async function handleVaProbe({ params, appKey, appSecret, supabase, res }) {
-  const { data: aconns } = await supabase.from('tiktok_analytics_connections').select('access_token, shop_cipher, shop_id, seller_name').not('access_token', 'is', null);
-  const conn = (aconns || []).find(c => (c.seller_name || '').toLowerCase().includes('body')) || (aconns || [])[0];
-  if (!conn) return res.status(200).json({ ok: false, error: 'no analytics conn' });
-
-  const run = async (path, extra = {}) => {
-    const urlParams = { app_key: appKey, timestamp: String(Math.floor(Date.now() / 1000)), start_date_ge: '2026-05-01', end_date_lt: '2026-06-03', page_size: '10', currency: 'LOCAL', ...extra };
-    if (conn.shop_cipher) urlParams.shop_cipher = conn.shop_cipher;
-    urlParams.sign = buildSign(appSecret, path, urlParams);
-    let j; try { j = JSON.parse(await ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(urlParams)}`, { method: 'GET', headers: { 'x-tts-access-token': conn.access_token, 'content-type': 'application/json' } }, 10000)); } catch { j = { code: -1 }; }
-    const data = j?.data || {};
-    const list = data.videos || data.video_list || data.list || [];
-    return { path, code: j?.code, message: (j?.message || '').slice(0, 80), data_keys: Object.keys(data), n: Array.isArray(list) ? list.length : 0, first_keys: (list[0] ? Object.keys(list[0]) : []), sample: list[0] ? JSON.stringify(list[0]).slice(0, 600) : '' };
-  };
-
-  const probes = [];
-  probes.push(await run('/analytics/202409/shop_videos/performance', { sort_field: 'gmv', sort_order: 'DESC' }));
-  return res.status(200).json({ ok: true, shop: conn.seller_name, probes });
-}
-
 // ── Main handler ─────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   // Allow GET and POST
@@ -804,18 +843,13 @@ export default async function handler(req, res) {
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 
-  if (action === 'va_probe') {
-    try { return await handleVaProbe({ params, appKey, appSecret, supabase, res }); }
-    catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
-  }
-
   if (action === 'koc_avatars') {
     try { return await handleKocAvatars({ params, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 
   if (action === 'sync_aff_orders') {
-    try { return await handleSyncAffOrders({ params, supabase, res }); }
+    try { return await handleSyncAffOrders({ params, appKey, appSecret, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 
