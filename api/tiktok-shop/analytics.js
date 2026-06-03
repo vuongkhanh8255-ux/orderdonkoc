@@ -740,14 +740,11 @@ async function handleVaProbe({ params, appKey, appSecret, supabase, res }) {
     let j; try { j = JSON.parse(await ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(urlParams)}`, { method: 'GET', headers: { 'x-tts-access-token': conn.access_token, 'content-type': 'application/json' } }, 10000)); } catch { j = { code: -1 }; }
     const data = j?.data || {};
     const list = data.videos || data.video_list || data.list || [];
-    return { path, code: j?.code, message: (j?.message || '').slice(0, 80), data_keys: Object.keys(data), n: Array.isArray(list) ? list.length : 0, first_keys: (list[0] ? Object.keys(list[0]) : []) };
+    return { path, code: j?.code, message: (j?.message || '').slice(0, 80), data_keys: Object.keys(data), n: Array.isArray(list) ? list.length : 0, first_keys: (list[0] ? Object.keys(list[0]) : []), sample: list[0] ? JSON.stringify(list[0]).slice(0, 600) : '' };
   };
 
   const probes = [];
-  for (const v of ['202405', '202406', '202407', '202409', '202501']) {
-    probes.push(await run(`/analytics/${v}/shop_videos/performance`, { sort_field: 'gmv', sort_order: 'DESC' }));
-  }
-  probes.push(await run('/analytics/202405/videos/performance', { sort_field: 'gmv', sort_order: 'DESC' }));
+  probes.push(await run('/analytics/202409/shop_videos/performance', { sort_field: 'gmv', sort_order: 'DESC' }));
   return res.status(200).json({ ok: true, shop: conn.seller_name, probes });
 }
 
