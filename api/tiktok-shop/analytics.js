@@ -727,6 +727,30 @@ async function handleKocAvatars({ params, supabase, res }) {
   return res.status(200).json({ ok: true, avatars });
 }
 
+// ── TEMP: probe for video analytics (per-video views) ────────────────────────
+async function handleVaProbe({ params, appKey, appSecret, supabase, res }) {
+  const { data: aconns } = await supabase.from('tiktok_analytics_connections').select('access_token, shop_cipher, shop_id, seller_name').not('access_token', 'is', null);
+  const conn = (aconns || []).find(c => (c.seller_name || '').toLowerCase().includes('body')) || (aconns || [])[0];
+  if (!conn) return res.status(200).json({ ok: false, error: 'no analytics conn' });
+
+  const run = async (path, extra = {}) => {
+    const urlParams = { app_key: appKey, timestamp: String(Math.floor(Date.now() / 1000)), start_date_ge: '2026-05-01', end_date_lt: '2026-06-03', page_size: '10', currency: 'LOCAL', ...extra };
+    if (conn.shop_cipher) urlParams.shop_cipher = conn.shop_cipher;
+    urlParams.sign = buildSign(appSecret, path, urlParams);
+    let j; try { j = JSON.parse(await ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(urlParams)}`, { method: 'GET', headers: { 'x-tts-access-token': conn.access_token, 'content-type': 'application/json' } }, 10000)); } catch { j = { code: -1 }; }
+    const data = j?.data || {};
+    const list = data.videos || data.video_list || data.list || [];
+    return { path, code: j?.code, message: (j?.message || '').slice(0, 80), data_keys: Object.keys(data), n: Array.isArray(list) ? list.length : 0, first_keys: (list[0] ? Object.keys(list[0]) : []) };
+  };
+
+  const probes = [];
+  for (const v of ['202405', '202406', '202407', '202409', '202501']) {
+    probes.push(await run(`/analytics/${v}/shop_videos/performance`, { sort_field: 'gmv', sort_order: 'DESC' }));
+  }
+  probes.push(await run('/analytics/202405/videos/performance', { sort_field: 'gmv', sort_order: 'DESC' }));
+  return res.status(200).json({ ok: true, shop: conn.seller_name, probes });
+}
+
 // ── Main handler ─────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   // Allow GET and POST
@@ -780,6 +804,11 @@ export default async function handler(req, res) {
 
   if (action === 'koc_videos') {
     try { return await handleKocVideos({ params, appKey, appSecret, supabase, res }); }
+    catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
+  }
+
+  if (action === 'va_probe') {
+    try { return await handleVaProbe({ params, appKey, appSecret, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 
