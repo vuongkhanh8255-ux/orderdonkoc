@@ -31,7 +31,6 @@ import ShopAnalyticsTab from './components/ShopAnalyticsTab';
 import FlashSaleTab from './components/FlashSaleTab';
 import TopPicksTab from './components/TopPicksTab';
 import ReviewsTab from './components/ReviewsTab';
-import ShopeeAdsTab from './components/ShopeeAdsTab';
 import ShopeeAdsDashboard from './components/ShopeeAdsDashboard';
 import PublicLandingPage from './components/PublicLandingPage';
 
@@ -245,7 +244,6 @@ function AppMain({ user, onLogout, allowedViews }) {
             {[
               { key: 'ecom', label: '🛍️ Ecom', emoji: '🛍️', items: [
                 { view: 'shop_analytics',    icon: '📊', name: 'Dashboard Ecom' },
-                { view: 'shopee_ads_dashboard', icon: '📣', name: 'Ads Shopee' },
                 { view: 'listed_price',      icon: '🏷️', name: 'Bảng giá niêm yết' },
                 { view: 'costing',           icon: '💰', name: 'Giá Cost' },
               ]},
@@ -253,7 +251,7 @@ function AppMain({ user, onLogout, allowedViews }) {
                 { view: 'flash_sale',        icon: '⚡', name: 'Tạo FS' },
                 { view: 'top_picks',         icon: '🚀', name: 'Đẩy SP' },
                 // { view: 'shopee_livestream', icon: '📺', name: 'Livestream' }, // tạm ẩn — chờ setup tài khoản Creator cho Shopee Video/Live
-                { view: 'shopee_ads',        icon: '📣', name: 'Quảng cáo' },
+                { view: 'shopee_ads_dashboard', icon: '📣', name: 'Quảng cáo' },
               ]},
               { key: 'tiktok', label: '🎵 TikTok', emoji: '🎵', items: [
                 { view: 'camp_registration', icon: '🎪', name: 'Đăng Kí Camp' },
@@ -413,7 +411,6 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'shopee_livestream' && (
             <ComingSoonPlaceholder icon="📺" title="Shopee Livestream" description="Quản lý phiên livestream, theo dõi GMV, đơn hàng, người xem trực tiếp" />
           )}
-          {currentView === 'shopee_ads' && <ShopeeAdsTab />}
           {currentView === 'shopee_ads_dashboard' && <ShopeeAdsDashboard />}
           </AppErrorBoundary>
 
