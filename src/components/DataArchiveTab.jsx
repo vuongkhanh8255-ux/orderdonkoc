@@ -423,17 +423,34 @@ const DataArchiveTab = () => {
 
             setImportProgress({ current: 0, total: uniqueData.length });
 
-            // Batch upsert to database
-            const BATCH_SIZE = 5000;
+            // Batch upsert to database. Client dùng role anon (statement_timeout ~8s),
+            // nên batch nhỏ (1000) + tự retry/giảm batch khi gặp timeout để không đứt giữa chừng.
+            const BATCH_SIZE = 1000;
             let imported = 0;
+
+            const upsertChunk = async (chunk, depth = 0) => {
+                const { error } = await supabase
+                    .from('tiktok_performance')
+                    .upsert(chunk, { onConflict: 'video_id,month,year' });
+                if (!error) return;
+                const isTimeout = /timeout|canceling statement/i.test(error.message || '');
+                // Timeout → chia đôi chunk và thử lại (tối đa vài cấp), rồi mới chịu thua
+                if (isTimeout && chunk.length > 100 && depth < 4) {
+                    const mid = Math.ceil(chunk.length / 2);
+                    await upsertChunk(chunk.slice(0, mid), depth + 1);
+                    await upsertChunk(chunk.slice(mid), depth + 1);
+                    return;
+                }
+                if (isTimeout && depth < 6) { // chunk đã nhỏ → chờ chút rồi thử lại
+                    await new Promise(r => setTimeout(r, 1000));
+                    return upsertChunk(chunk, depth + 1);
+                }
+                throw error;
+            };
 
             for (let i = 0; i < uniqueData.length; i += BATCH_SIZE) {
                 const batch = uniqueData.slice(i, i + BATCH_SIZE);
-                const { error } = await supabase
-                    .from('tiktok_performance')
-                    .upsert(batch, { onConflict: 'video_id,month,year' });
-
-                if (error) throw error;
+                await upsertChunk(batch);
                 imported += batch.length;
                 setImportProgress({ current: imported, total: uniqueData.length });
             }
