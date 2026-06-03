@@ -806,12 +806,9 @@ async function handleVa3Probe({ params, appKey, appSecret, supabase, res }) {
     let j; try { j = JSON.parse(await ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(urlParams)}`, { method: 'GET', headers: { 'x-tts-access-token': conn.access_token, 'content-type': 'application/json' } }, 10000)); } catch { j = {}; }
     return (j?.data?.videos || []).map(v => ({ id: String(v.id), views: v.views, gmv: v.gmv?.amount }));
   };
-  const narrow = await run('2026-05-01', '2026-05-08');   // 1 tuần
-  const wide   = await run('2026-04-01', '2026-06-04');   // ~2 tháng
-  // so view cùng 1 video id ở 2 khoảng
-  const wmap = {}; wide.forEach(v => wmap[v.id] = v.views);
-  const cmp = narrow.filter(v => wmap[v.id] != null).map(v => ({ id: v.id.slice(-8), week_views: v.views, wide_views: wmap[v.id], same: String(v.views) === String(wmap[v.id]) }));
-  return res.status(200).json({ ok: true, narrow_week: narrow, wide_2mo: wide, compare: cmp });
+  const lifetime = await run('2024-01-01', '2026-06-04');  // rộng → ~tổng đời
+  const month5   = await run('2026-05-01', '2026-06-01');  // riêng tháng 5
+  return res.status(200).json({ ok: true, lifetime_wide: lifetime, month_may: month5 });
 }
 
 // ── Main handler ─────────────────────────────────────────────────────────────
