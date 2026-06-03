@@ -491,7 +491,7 @@ const METRICS = [
     { key: 'satisfaction_rate',            label: 'Tỷ lệ hài lòng',                  target: '≥70%',    unit: '%',   good: 'gte', targetVal: 70 },
     { key: 'monthly_conversations',        label: 'Số cuộc trò chuyện 1 tháng',      target: '',        unit: '',    good: null,  targetVal: null },
     { key: 'negative_review_rate',         label: 'Tỷ lệ đánh giá tiêu cực',        target: '≤0.50%',  unit: '%',   good: 'lte', targetVal: 0.50 },
-    { key: 'negative_service_review_rate', label: 'Tỷ lệ đánh giá tiêu cực dịch vụ',target: '≤0.50%', unit: '%',   good: 'lte', targetVal: 0.50 },
+    { key: 'negative_service_review_rate', label: 'Điểm tình trạng tài khoản',        target: '1000 điểm', unit: '', good: null, targetVal: null },
   ]},
   { section: 'HIỆU SUẤT CỬA HÀNG', metrics: [
     { key: 'return_refund_rate',   label: 'Tỷ lệ trả hàng/hoàn tiền',       target: '≤1.50%',  unit: '%',   good: 'lte', targetVal: 1.50 },
