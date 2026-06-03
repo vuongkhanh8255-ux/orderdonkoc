@@ -948,6 +948,10 @@ export const AppDataProvider = ({ children }) => {
     setIsLoadingAirLinks(false);
   };
   const handleDeleteAirLink = async (linkId, linkUrl) => {
+    // 🔒 Xóa link air đã bị khoá trên web — chỉ xóa qua lệnh nội bộ (SQL/code).
+    alert('🔒 Tính năng xóa link air đã bị khoá trên web.\nViệc xóa chỉ thực hiện qua lệnh nội bộ.');
+    return;
+    // eslint-disable-next-line no-unreachable
     if (window.confirm(`Bạn có chắc muốn XÓA link này không?\n\n${linkUrl}`)) {
       setIsLoadingAirLinks(true);
       const { error } = await supabase.from('air_links').delete().eq('id', linkId);

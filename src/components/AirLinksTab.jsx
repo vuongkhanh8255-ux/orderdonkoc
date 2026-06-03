@@ -6,6 +6,15 @@ import { read, utils, writeFile } from 'xlsx';
 import SearchableDropdown from './SearchableDropdown';
 import { normalizeProductName } from '../utils/productMapping';
 
+// 🔒 Xóa link air bị KHOÁ trên web — chỉ xóa qua lệnh nội bộ (SQL/code).
+//    Đổi thành true nếu muốn mở lại nút xóa trên web.
+const AIR_DELETE_ENABLED = false;
+const blockAirDelete = () => {
+  if (AIR_DELETE_ENABLED) return false;
+  alert('🔒 Tính năng xóa link air đã bị khoá trên web.\nViệc xóa chỉ thực hiện qua lệnh nội bộ.');
+  return true;
+};
+
 const COLORS = ['#ea580c', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#f43f5e', '#14b8a6'];
 const CHART_HEIGHT = 500;
 const PIE_CY = "45%";
@@ -183,6 +192,7 @@ const AirLinksTab = () => {
 
     // Auto xử lý tất cả video trùng: xóa khỏi air_links + lưu vào video_blacklist
     const handleAutoDeduplicate = async () => {
+        if (blockAirDelete()) return;
         const dupMap = {};
         airLinks.forEach(item => {
             const key = (item.id_video ? item.id_video.trim() : null) || (item.link_air_koc ? item.link_air_koc.trim() : null);
@@ -237,6 +247,7 @@ const AirLinksTab = () => {
     };
 
     const handleConfirmSecureDelete = () => {
+        if (blockAirDelete()) { setPasswordModal({ isOpen: false, type: null, data: null, input: '' }); return; }
         let isAuthorized = false;
 
         // Master Admin Password
@@ -515,6 +526,7 @@ const AirLinksTab = () => {
     };
 
     const handleBulkDeleteInternal = async () => {
+        if (blockAirDelete()) return;
         if (!window.confirm(`Bạn có chắc chắn muốn xóa ${selectedRowIds.length} dòng đã chọn?`)) return;
 
         try {
@@ -1165,12 +1177,14 @@ const AirLinksTab = () => {
                                 </h3>
                             </div>
                             <div style={{ display: 'flex', gap: 10 }}>
+                                {AIR_DELETE_ENABLED && (
                                 <button
                                     onClick={handleAutoDeduplicate}
                                     style={{ padding: '10px 20px', background: 'linear-gradient(90deg, #ef4444, #dc2626)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.95rem' }}
                                 >
                                     🚫 Tự động xử lý trùng
                                 </button>
+                                )}
                                 <button
                                     onClick={handleExportDuplicates}
                                     style={{ padding: '10px 20px', background: 'linear-gradient(90deg, #10B981, #059669)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.95rem' }}
@@ -1290,7 +1304,7 @@ const AirLinksTab = () => {
                                                         </div>
                                                     </td>
                                                     <td style={{ padding: '10px 14px', textAlign: 'center' }}>
-                                                        <button
+                                                        {AIR_DELETE_ENABLED && <button
                                                             onClick={() => {
                                                                 const allSamePerson = group.every(g => g.nhansu_id && g.nhansu_id === group[0].nhansu_id);
                                                                 if (allSamePerson) {
@@ -1313,7 +1327,7 @@ const AirLinksTab = () => {
                                                             }}
                                                         >
                                                             🗑️ Xóa
-                                                        </button>
+                                                        </button>}
                                                     </td>
                                                 </tr>
                                             ))}
@@ -1658,7 +1672,7 @@ const AirLinksTab = () => {
             <div className="mirinda-card" style={{ marginBottom: '2rem', padding: '1.5rem', position: 'relative', zIndex: 20, overflow: 'visible', transform: 'none' }}>
                 <h2 className="section-title" style={{ textAlign: 'left' }}>DANH SÁCH LINK ĐÃ NHẬP</h2>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', marginBottom: '1.5rem', alignItems: 'center' }}>
-                    {selectedRowIds.length > 0 && (
+                    {AIR_DELETE_ENABLED && selectedRowIds.length > 0 && (
                         <button onClick={handleBulkDelete} className="btn-danger" style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '10px 20px' }}>
                             🗑️ XÓA {selectedRowIds.length} MỤC ĐÃ CHỌN
                         </button>
@@ -1836,7 +1850,7 @@ const AirLinksTab = () => {
                                                         ) : (
                                                             <>
                                                                 <button onClick={() => handleEditClick(link)} style={{ padding: '6px 12px', backgroundColor: '#fff', border: '1px solid #1976D2', color: '#1976D2', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Sửa</button>
-                                                                <button onClick={() => openDeleteModal('single', { id: link.id, link: link.link_air_koc, brandName: link.brands?.ten_brand })} style={{ padding: '6px 12px', backgroundColor: '#fff', border: '1px solid #D42426', color: '#D42426', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Xóa</button>
+                                                                {AIR_DELETE_ENABLED && <button onClick={() => openDeleteModal('single', { id: link.id, link: link.link_air_koc, brandName: link.brands?.ten_brand })} style={{ padding: '6px 12px', backgroundColor: '#fff', border: '1px solid #D42426', color: '#D42426', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Xóa</button>}
                                                             </>
                                                         )}
                                                     </div>
