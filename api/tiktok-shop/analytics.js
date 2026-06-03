@@ -460,10 +460,14 @@ const syncShopVideosAllMonths = async ({ appKey, appSecret, shop_id, supabase, m
   out.push(await syncShopVideoMonth({ appKey, appSecret, aconn, shop_id, ym: cur, supabase, maxPages: Math.max(4, Math.floor(maxPages / 2)) }));
   const past = months.slice(0, -1);
   if (past.length) {
-    const { data: sms } = await supabase.from('tiktok_video_month_sync').select('ym, done').eq('shop_id', shop_id).in('ym', past);
-    const doneSet = new Set((sms || []).filter(x => x.done).map(x => x.ym));
-    const todo = past.filter(ym => !doneSet.has(ym));
-    if (todo.length) out.push(await syncShopVideoMonth({ appKey, appSecret, aconn, shop_id, ym: todo[0], supabase, maxPages }));
+    const { data: sms } = await supabase.from('tiktok_video_month_sync').select('ym, done, updated_at').eq('shop_id', shop_id).in('ym', past);
+    const byYm = {}; (sms || []).forEach(x => { byYm[x.ym] = x; });
+    const todo = past.filter(ym => !byYm[ym]?.done);
+    if (todo.length) {
+      // Rotate: never-synced first, then oldest-updated → các tháng cũ tiến song song
+      todo.sort((a, b) => (byYm[a]?.updated_at ? new Date(byYm[a].updated_at).getTime() : 0) - (byYm[b]?.updated_at ? new Date(byYm[b].updated_at).getTime() : 0));
+      out.push(await syncShopVideoMonth({ appKey, appSecret, aconn, shop_id, ym: todo[0], supabase, maxPages }));
+    }
   }
   return out;
 };
