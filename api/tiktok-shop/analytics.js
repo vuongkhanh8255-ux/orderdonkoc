@@ -786,20 +786,35 @@ async function handleKocVideos({ params, appKey, appSecret, supabase, res }) {
     })();
     const ids = videos.map(v => v.content_id).filter(Boolean);
     if (ids.length) {
-      // Tổng view (1/4→nay) từ tiktok_shop_videos; view tháng được chọn từ bảng monthly
+      // Metadata (tiêu đề, ngày đăng) từ API video sync
       const { data: vrows } = await supabase.from('tiktok_shop_videos').select('id, views, video_post_time, title').in('id', ids);
       const meta = {}; (vrows || []).forEach(r => { meta[r.id] = r; });
-      let monthById = {};
+
+      // VIEW: ưu tiên data IMPORT (tiktok_performance — đầy đủ theo tháng). Tổng = cộng các tháng đã import.
+      let selM = null, selY = null; if (ymSel) { const [y, m] = ymSel.split('-').map(Number); selY = y; selM = m; }
+      const { data: perf } = await supabase.from('tiktok_performance').select('video_id, month, year, views, air_date').in('video_id', ids);
+      const totById = {}, monthById = {}, airById = {};
+      (perf || []).forEach(r => {
+        totById[r.video_id] = (totById[r.video_id] || 0) + (Number(r.views) || 0);
+        if (selM && r.month === selM && r.year === selY) monthById[r.video_id] = Number(r.views) || 0;
+        if (r.air_date && !airById[r.video_id]) airById[r.video_id] = String(r.air_date).slice(0, 10);
+      });
+      // Fallback view tháng từ API monthly (nếu video chưa có trong import)
+      let monFallback = {};
       if (ymSel) {
         const { data: mrows } = await supabase.from('tiktok_video_monthly_views').select('id, views').eq('ym', ymSel).in('id', ids);
-        (mrows || []).forEach(r => { monthById[r.id] = Number(r.views) || 0; });
+        (mrows || []).forEach(r => { monFallback[r.id] = Number(r.views) || 0; });
       }
-      videos = videos.map(v => ({ ...v,
-        video_post_time: meta[v.content_id]?.video_post_time || v.video_post_time || '',
-        title: meta[v.content_id]?.title || v.title || '',
-        views: meta[v.content_id] ? (Number(meta[v.content_id].views) || 0) : null,
-        month_views: (v.content_id in monthById) ? monthById[v.content_id] : null,
-      }));
+      videos = videos.map(v => {
+        const id = v.content_id;
+        const hasImport = id in totById;
+        return { ...v,
+          title: meta[id]?.title || v.title || '',
+          video_post_time: meta[id]?.video_post_time || airById[id] || v.video_post_time || '',
+          views: hasImport ? totById[id] : (meta[id] ? (Number(meta[id].views) || 0) : null),
+          month_views: (id in monthById) ? monthById[id] : ((id in monFallback) ? monFallback[id] : null),
+        };
+      });
     }
   } catch { /* views optional */ }
 
