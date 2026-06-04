@@ -48,6 +48,31 @@ const METRICS = [
 ];
 const METRIC_BY_KEY = Object.fromEntries(METRICS.map((m) => [m.key, m]));
 
+// ── Logo sàn (Shopee / TikTok) — SVG inline, hiện theo sàn của shop ─────────────
+const ShopeeLogo = ({ size = 20 }) => (
+  <svg width={size} height={size} viewBox="0 0 48 48" style={{ flexShrink: 0, display: 'block' }} aria-label="Shopee">
+    <rect width="48" height="48" rx="11" fill="#ee4d2d" />
+    <path d="M12.5 18h23l-1.5 17.4a3 3 0 0 1-3 2.7H17a3 3 0 0 1-3-2.7L12.5 18z" fill="#fff" />
+    <path d="M17 18a7 7 0 0 1 14 0" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" />
+    <text x="24" y="34" fontSize="16" fontWeight="900" fill="#ee4d2d" textAnchor="middle" fontFamily="Arial, Helvetica, sans-serif">S</text>
+  </svg>
+);
+const TT_NOTE = "M16.6 5.82s.51.5 0 0A4.278 4.278 0 0 1 15.54 3h-3.09v12.4a2.592 2.592 0 0 1-2.59 2.5c-1.42 0-2.6-1.16-2.6-2.6 0-1.72 1.66-3.01 3.37-2.48V9.66c-3.45-.46-6.47 2.22-6.47 5.64 0 3.33 2.76 5.7 5.69 5.7 3.14 0 5.69-2.55 5.69-5.7V9.01a7.35 7.35 0 0 0 4.3 1.38V7.3s-1.88.09-3.24-1.48z";
+const TikTokLogo = ({ size = 20 }) => (
+  <svg width={size} height={size} viewBox="0 0 48 48" style={{ flexShrink: 0, display: 'block' }} aria-label="TikTok">
+    <rect width="48" height="48" rx="11" fill="#000" />
+    <g transform="translate(12 11.5)">
+      <path d={TT_NOTE} fill="#25f4ee" transform="translate(-1 -1)" />
+      <path d={TT_NOTE} fill="#fe2c55" transform="translate(1 1)" />
+      <path d={TT_NOTE} fill="#fff" />
+    </g>
+  </svg>
+);
+const PlatformLogo = ({ platform, size = 20 }) =>
+  platform === 'shopee' ? <ShopeeLogo size={size} />
+    : platform === 'tiktok' ? <TikTokLogo size={size} />
+      : <span style={{ width: size, height: size, borderRadius: 6, background: '#e5e7eb', flexShrink: 0, display: 'inline-block' }} />;
+
 // ── Sparkline ─────────────────────────────────────────────────────────────────
 const Sparkline = ({ data, dataKey, color, height = 44 }) => (
   <ResponsiveContainer width="100%" height={height}>
@@ -233,7 +258,7 @@ const ShopeeTopSellers = ({ dateRange }) => {
           {visibleShops.map(shop => (
             <div key={shop.shop_id} style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
               <div style={{ padding: '12px 18px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8, background: '#fff7ed' }}>
-                <span style={{ fontSize: '0.92rem' }}>🛒</span>
+                <ShopeeLogo size={18} />
                 <span style={{ fontWeight: 800, fontSize: '0.86rem', color: '#9a3412' }}>{shop.shop_name}</span>
                 <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: '#c2410c', fontWeight: 600 }}>{shop.items.length} SP</span>
               </div>
@@ -351,7 +376,7 @@ const TikTokTopSellers = ({ dateRange }) => {
           {visibleShops.map(shop => (
             <div key={shop.shop_id} style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
               <div style={{ padding: '12px 18px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8, background: '#fdf2f8' }}>
-                <span style={{ fontSize: '0.92rem' }}>🎵</span>
+                <TikTokLogo size={18} />
                 <span style={{ fontWeight: 800, fontSize: '0.86rem', color: '#9d174d' }}>{shop.shop_name}</span>
                 <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: '#be185d', fontWeight: 600 }}>{shop.items.length} SP</span>
               </div>
@@ -622,7 +647,7 @@ const ShopAnalyticsTab = () => {
     const byShop = {};
     dailyData.forEach(row => {
       const sid = row.shop_id;
-      if (!byShop[sid]) byShop[sid] = { shop_id: sid, seller_name: row.seller_name || sid, gmv: 0, orders: 0, buyers: 0, pv: 0, visitors: 0 };
+      if (!byShop[sid]) byShop[sid] = { shop_id: sid, seller_name: row.seller_name || sid, platform: row.platform, gmv: 0, orders: 0, buyers: 0, pv: 0, visitors: 0 };
       byShop[sid].gmv      += Number(row.payment_amount) || 0;
       byShop[sid].orders   += Number(row.order_count) || 0;
       byShop[sid].buyers   += Number(row.buyer_count) || 0;
@@ -1060,7 +1085,7 @@ const ShopAnalyticsTab = () => {
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                         <td style={{ ...td, fontWeight: 700 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.color, flexShrink: 0 }}/>
+                            <PlatformLogo platform={s.platform} size={20} />
                             {s.seller_name}
                           </div>
                         </td>
