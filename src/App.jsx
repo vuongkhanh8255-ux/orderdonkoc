@@ -327,13 +327,13 @@ function AppMain({ user, onLogout, allowedViews }) {
                     <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#475569', letterSpacing: 0 }}>{group.label}</span>
                     <span style={{ fontSize: '0.7rem', color: '#f97316', transition: 'transform 0.2s', display: 'inline-block', transform: openGroups[group.key] ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
                   </div>
-                  {openGroups[group.key] && visibleItems.map(({ view, icon, name }) => (
+                  {openGroups[group.key] && visibleItems.map(({ view, name }) => (
                     <div key={view}
                       style={menuItemStyle(currentView === view)}
                       onClick={() => setCurrentView(view)}
                       onMouseEnter={(e) => { if (currentView !== view) { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.color = '#c2410c'; e.currentTarget.style.borderColor = '#e5e7eb'; } }}
                       onMouseLeave={(e) => { if (currentView !== view) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#64748b'; e.currentTarget.style.borderColor = 'transparent'; } }}>
-                      <span>{icon}</span>
+                      <span style={{ display: 'inline-block', width: 16, textAlign: 'center', opacity: 0.4, flexShrink: 0 }}>•</span>
                       <span>{name}</span>
                     </div>
                   ))}
