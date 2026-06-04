@@ -52,9 +52,12 @@ const METRIC_BY_KEY = Object.fromEntries(METRICS.map((m) => [m.key, m]));
 const ShopeeLogo = ({ size = 20 }) => (
   <svg width={size} height={size} viewBox="0 0 48 48" style={{ flexShrink: 0, display: 'block' }} aria-label="Shopee">
     <rect width="48" height="48" rx="11" fill="#ee4d2d" />
-    <path d="M12.5 18h23l-1.5 17.4a3 3 0 0 1-3 2.7H17a3 3 0 0 1-3-2.7L12.5 18z" fill="#fff" />
-    <path d="M17 18a7 7 0 0 1 14 0" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" />
-    <text x="24" y="34" fontSize="16" fontWeight="900" fill="#ee4d2d" textAnchor="middle" fontFamily="Arial, Helvetica, sans-serif">S</text>
+    {/* quai túi — vẽ trước, phần dưới bị thân túi che → chỉ còn vòng quai thò lên trên miệng túi */}
+    <path d="M18 20.5a6 6 0 0 1 12 0" fill="none" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" />
+    {/* thân túi rộng, miệng phẳng */}
+    <path d="M12 20.5h24l-1.4 15.1a2.8 2.8 0 0 1-2.8 2.5H16.2a2.8 2.8 0 0 1-2.8-2.5L12 20.5z" fill="#fff" />
+    {/* chữ S to, in nghiêng */}
+    <text x="24" y="34.6" fontSize="17" fontWeight="900" fontStyle="italic" fill="#ee4d2d" textAnchor="middle" fontFamily="Arial, Helvetica, sans-serif">S</text>
   </svg>
 );
 const TT_NOTE = "M16.6 5.82s.51.5 0 0A4.278 4.278 0 0 1 15.54 3h-3.09v12.4a2.592 2.592 0 0 1-2.59 2.5c-1.42 0-2.6-1.16-2.6-2.6 0-1.72 1.66-3.01 3.37-2.48V9.66c-3.45-.46-6.47 2.22-6.47 5.64 0 3.33 2.76 5.7 5.69 5.7 3.14 0 5.69-2.55 5.69-5.7V9.01a7.35 7.35 0 0 0 4.3 1.38V7.3s-1.88.09-3.24-1.48z";
