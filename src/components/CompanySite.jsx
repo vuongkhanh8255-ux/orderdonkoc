@@ -229,6 +229,10 @@ const Terms = () => (
 // ── Router đơn giản theo pathname ───────────────────────────────────────────────
 export default function CompanySite() {
   const path = window.location.pathname.replace(/\/+$/, '');
+  React.useEffect(() => {
+    const titles = { '/privacy': 'Privacy Policy', '/terms': 'Terms of Service' };
+    document.title = `${titles[path] ? titles[path] + ' — ' : ''}${COMPANY} · ${BRAND}`;
+  }, [path]);
   if (path === '/privacy') return <Privacy />;
   if (path === '/terms') return <Terms />;
   return <Landing />;
