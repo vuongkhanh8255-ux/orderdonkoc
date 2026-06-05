@@ -33,6 +33,7 @@ import TopPicksTab from './components/TopPicksTab';
 import ReviewsTab from './components/ReviewsTab';
 import ShopeeAdsDashboard from './components/ShopeeAdsDashboard';
 import PublicLandingPage from './components/PublicLandingPage';
+import CompanySite from './components/CompanySite';
 
 const SESSION_KEY = 'sk_session';
 
@@ -61,6 +62,11 @@ class AppErrorBoundary extends Component {
 }
 
 function App() {
+  // Domain công ty (appcash.app) → web doanh nghiệp công khai (cho TikTok Business API),
+  // tách hẳn tool nội bộ ở stellakinetics.space / koc-tool.vercel.app.
+  if (typeof window !== 'undefined' && window.location.hostname.endsWith('appcash.app')) {
+    return <CompanySite />;
+  }
   if (window.location.pathname === '/tiktok-shop/callback') {
     return <TikTokShopCallback />;
   }
