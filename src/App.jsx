@@ -28,6 +28,7 @@ import TikTokOrdersTab from './components/TikTokOrdersTab';
 import CostingTab from './components/CostingTab';
 import CrmTab from './components/CrmTab';
 import ShopAnalyticsTab from './components/ShopAnalyticsTab';
+import ReportTab from './components/ReportTab';
 import FlashSaleTab from './components/FlashSaleTab';
 import TopPicksTab from './components/TopPicksTab';
 import ReviewsTab from './components/ReviewsTab';
@@ -250,6 +251,7 @@ function AppMain({ user, onLogout, allowedViews }) {
             {[
               { key: 'ecom', label: '🛍️ Ecom', emoji: '🛍️', items: [
                 { view: 'shop_analytics',    icon: '📊', name: 'Dashboard Ecom' },
+                { view: 'overview_report',   icon: '📈', name: 'Báo cáo tổng quan' },
                 { view: 'listed_price',      icon: '🏷️', name: 'Bảng giá niêm yết' },
                 { view: 'costing',           icon: '💰', name: 'Giá Cost' },
               ]},
@@ -411,6 +413,7 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'crm' && <CrmTab />}
           {currentView === 'koc_performance' && <KocPerformanceTab />}
           {currentView === 'shop_analytics' && <ShopAnalyticsTab />}
+          {currentView === 'overview_report' && <ReportTab />}
           {currentView === 'flash_sale' && <FlashSaleTab />}
           {currentView === 'top_picks' && <TopPicksTab />}
           {currentView === 'reviews' && <ReviewsTab />}
