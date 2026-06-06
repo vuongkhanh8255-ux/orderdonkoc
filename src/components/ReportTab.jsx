@@ -123,11 +123,12 @@ export default function ReportTab() {
         return out;
       };
       const [curRev, prevRev] = await Promise.all([rev(start, end), rev(prevStart, prevEnd)]);
-      const shopRows = brand.shops.map(s => { const d = curRev[String(s.id)] || { gmv: 0, orders: 0 }; return { ...s, gmv: d.gmv, orders: d.orders, aov: d.orders > 0 ? d.gmv / d.orders : 0 }; });
+      const shopRows = brand.shops.map(s => { const d = curRev[String(s.id)] || { gmv: 0, orders: 0 }; const pd = prevRev[String(s.id)] || { gmv: 0, orders: 0 }; return { ...s, gmv: d.gmv, orders: d.orders, aov: d.orders > 0 ? d.gmv / d.orders : 0, prevGmv: pd.gmv }; });
       const totGmv = shopRows.reduce((a, r) => a + r.gmv, 0);
       const totOrders = shopRows.reduce((a, r) => a + r.orders, 0);
       const totAov = totOrders > 0 ? totGmv / totOrders : 0;
       const pTot = Object.values(prevRev).reduce((a, d) => ({ gmv: a.gmv + d.gmv, orders: a.orders + d.orders }), { gmv: 0, orders: 0 });
+      const prevAov = pTot.orders > 0 ? pTot.gmv / pTot.orders : 0;
 
       // 2) SẢN PHẨM (theo từng shop)
       const productSections = [];
@@ -158,9 +159,11 @@ export default function ReportTab() {
         booking.total = (orders || []).length;
         booking.byStaff = brand.staff.map(st => ({ name: st.name, count: cnt[st.id] || 0 })).sort((a, b) => b.count - a.count);
         booking.byShip = ship;
+        const { data: prevOrders } = await supabase.from('donguis').select('id').eq('trang_thai', 'Đã đóng đơn').in('nhansu_id', staffIds).gte('ngay_gui', prevStart).lte('ngay_gui', prevEnd + 'T23:59:59');
+        booking.prevTotal = (prevOrders || []).length;
       }
 
-      setReport({ brand, start, end, shopRows, totGmv, totOrders, totAov, pTot, productSections, booking });
+      setReport({ brand, start, end, prevStart, prevEnd, shopRows, totGmv, totOrders, totAov, prevAov, pTot, productSections, booking });
     } catch (e) { setError(e.message || 'Lỗi tạo báo cáo'); }
     finally { setLoading(false); }
   };
@@ -250,7 +253,7 @@ export default function ReportTab() {
             {[
               { l: 'Tổng GMV', v: `${fmtVnd(report.totGmv)} đ`, c: pct(report.totGmv, report.pTot.gmv) },
               { l: 'Tổng đơn', v: fmtNum(report.totOrders), c: pct(report.totOrders, report.pTot.orders) },
-              { l: 'AOV', v: `${fmtVnd(report.totAov)} đ`, c: null },
+              { l: 'AOV', v: `${fmtVnd(report.totAov)} đ`, c: pct(report.totAov, report.prevAov) },
               { l: 'Số gian hàng', v: fmtNum(report.shopRows.length), c: null },
             ].map(k => (
               <Card key={k.l} style={{ borderLeft: `4px solid ${ACCENT}` }}>
@@ -261,6 +264,31 @@ export default function ReportTab() {
             ))}
           </div>
 
+          {/* So sánh kỳ trước */}
+          <Card style={{ marginTop: 14, padding: 0, overflow: 'hidden' }}>
+            <div style={{ padding: '10px 16px', borderBottom: '1px solid #f1f5f9', fontSize: '0.84rem', fontWeight: 800, color: '#475569' }}>
+              📊 So sánh với kỳ trước <span style={{ fontWeight: 500, color: '#94a3b8' }}>({report.prevStart} → {report.prevEnd})</span>
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
+              <thead><tr style={{ background: '#f8fafc' }}>{['Chỉ số', 'Kỳ này', 'Kỳ trước', 'Thay đổi'].map((h, i) => <th key={h} style={{ padding: '8px 16px', textAlign: i === 0 ? 'left' : 'right', fontWeight: 800, color: '#64748b', fontSize: '0.7rem', textTransform: 'uppercase' }}>{h}</th>)}</tr></thead>
+              <tbody>
+                {[
+                  { l: 'GMV', cur: `${fmtVnd(report.totGmv)} đ`, prev: `${fmtVnd(report.pTot.gmv)} đ`, c: pct(report.totGmv, report.pTot.gmv) },
+                  { l: 'Đơn hàng', cur: fmtNum(report.totOrders), prev: fmtNum(report.pTot.orders), c: pct(report.totOrders, report.pTot.orders) },
+                  { l: 'AOV', cur: `${fmtVnd(report.totAov)} đ`, prev: `${fmtVnd(report.prevAov)} đ`, c: pct(report.totAov, report.prevAov) },
+                  ...(report.brand.staff.length ? [{ l: 'Đơn booking gửi', cur: fmtNum(report.booking.total), prev: fmtNum(report.booking.prevTotal || 0), c: pct(report.booking.total, report.booking.prevTotal || 0) }] : []),
+                ].map(r => (
+                  <tr key={r.l} style={{ borderTop: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '9px 16px', fontWeight: 600 }}>{r.l}</td>
+                    <td style={{ padding: '9px 16px', textAlign: 'right', fontWeight: 800 }}>{r.cur}</td>
+                    <td style={{ padding: '9px 16px', textAlign: 'right', color: '#94a3b8' }}>{r.prev}</td>
+                    <td style={{ padding: '9px 16px', textAlign: 'right' }}><Change v={r.c} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+
           {/* Doanh thu theo gian hàng */}
           {report.shopRows.length > 0 && (<>
             <SectionTitle>Doanh thu theo gian hàng</SectionTitle>
@@ -268,13 +296,14 @@ export default function ReportTab() {
               <Card style={{ padding: 0, overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
                   <thead><tr style={{ background: '#f8fafc' }}>
-                    {['Gian hàng', 'GMV', 'Đơn', 'AOV'].map(h => <th key={h} style={{ padding: '10px 12px', textAlign: h === 'Gian hàng' ? 'left' : 'right', fontWeight: 800, color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase' }}>{h}</th>)}
+                    {['Gian hàng', 'GMV', 'vs trước', 'Đơn', 'AOV'].map(h => <th key={h} style={{ padding: '10px 12px', textAlign: h === 'Gian hàng' ? 'left' : 'right', fontWeight: 800, color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase' }}>{h}</th>)}
                   </tr></thead>
                   <tbody>
                     {report.shopRows.map((s, i) => (
                       <tr key={i} style={{ borderTop: '1px solid #f1f5f9' }}>
                         <td style={{ padding: '10px 12px' }}><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><PlatformBadge p={s.platform} /><span style={{ fontWeight: 600 }}>{s.name}</span></div></td>
                         <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: ACCENT }}>{fmtVnd(s.gmv)} đ</td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right' }}><Change v={pct(s.gmv, s.prevGmv)} /></td>
                         <td style={{ padding: '10px 12px', textAlign: 'right' }}>{fmtNum(s.orders)}</td>
                         <td style={{ padding: '10px 12px', textAlign: 'right', color: '#475569' }}>{fmtVnd(s.aov)} đ</td>
                       </tr>
@@ -282,6 +311,7 @@ export default function ReportTab() {
                     <tr style={{ borderTop: '2px solid #e5e7eb', background: '#fff7ed' }}>
                       <td style={{ padding: '10px 12px', fontWeight: 900 }}>TỔNG</td>
                       <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 900, color: ACCENT }}>{fmtVnd(report.totGmv)} đ</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right' }}><Change v={pct(report.totGmv, report.pTot.gmv)} /></td>
                       <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 900 }}>{fmtNum(report.totOrders)}</td>
                       <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800 }}>{fmtVnd(report.totAov)} đ</td>
                     </tr>
@@ -348,6 +378,7 @@ export default function ReportTab() {
                 <Card style={{ borderLeft: `4px solid ${ACCENT}`, marginBottom: 12 }}>
                   <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>Tổng đơn đã gửi</div>
                   <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#0f172a' }}>{fmtNum(report.booking.total)}</div>
+                  <div style={{ fontSize: '0.74rem', marginTop: 2 }}>so kỳ trước <Change v={pct(report.booking.total, report.booking.prevTotal || 0)} /></div>
                   <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: 4 }}>
                     {Object.entries(report.booking.byShip).map(([k, v]) => `${k}: ${v}`).join(' · ') || '—'}
                   </div>
