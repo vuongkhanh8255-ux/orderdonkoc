@@ -596,15 +596,9 @@ const syncOneAffShop = async ({ ck, cs, conn, supabase, appKey, appSecret, video
     await harvestAvatars({ ck, cs, conn, cipher, supabase, usernames: topUsers, max: 4 });
   } catch { /* avatars optional */ }
 
-  // Sync this shop's video analytics (views, post time, title) into tiktok_shop_videos.
-  let videoSync = null;
-  try {
-    const win = await syncShopVideos({ appKey, appSecret, shop_id, supabase, maxPages: 6 });
-    const mon = await syncShopVideosAllMonths({ appKey, appSecret, shop_id, supabase, maxPages: videoPages });
-    videoSync = { total: win, monthly: mon };
-  } catch (e) { videoSync = { error: e.message }; }
-
-  return { shop: seller_name, shop_id, upserted: totalUp, newest_date: vnDate(newest), oldest_date: vnDate(oldest), backfill_done: backfillDone, status, videos: videoSync };
+  // Video analytics đã TÁCH sang action=sync_aff_videos (chạy riêng, tránh làm
+  // run sync đơn quá nặng → timeout 60s → GitHub Action fail).
+  return { shop: seller_name, shop_id, upserted: totalUp, newest_date: vnDate(newest), oldest_date: vnDate(oldest), backfill_done: backfillDone, status };
 };
 
 // Cron / manual sync. No ?seller → picks ONE shop per run (never-synced or oldest),
@@ -639,13 +633,39 @@ async function handleSyncAffOrders({ params, appKey, appSecret, supabase, res })
   }
   if (!targets.length) return res.status(200).json({ ok: false, error: 'no matching shop' });
 
-  const videoPages = Math.min(Math.max(Number(params.vpages) || 12, 1), 50);
   const results = [];
   for (const conn of targets) {
-    try { results.push(await syncOneAffShop({ ck, cs, conn, supabase, appKey, appSecret, videoPages })); }
+    try { results.push(await syncOneAffShop({ ck, cs, conn, supabase, appKey, appSecret })); }
     catch (e) { results.push({ shop: conn.seller_name, error: e.message }); }
   }
   return res.status(200).json({ ok: true, floor: AFF_SYNC_FLOOR_DATE, synced: results.length, results });
+}
+
+// Video analytics sync — TÁCH riêng khỏi sync đơn (tránh timeout). 1 shop/run, xoay theo video_last_run_at.
+async function handleSyncAffVideos({ params, appKey, appSecret, supabase, res }) {
+  const norm = (s) => (s || '').toLowerCase().trim();
+  const { data: metas } = await supabase.from('tiktok_affiliate_sync_meta').select('shop_id, seller_name, video_last_run_at').not('shop_id', 'is', null);
+  const real = (metas || []).filter(m => m.shop_id && !String(m.shop_id).startsWith('noc:'));
+  if (!real.length) return res.status(200).json({ ok: true, synced: 0, results: [] });
+
+  let targets;
+  if (params.seller) { const w = norm(params.seller); targets = real.filter(m => norm(m.seller_name).includes(w)); }
+  else if (params.all === '1') { targets = real; }
+  else {
+    targets = [...real].sort((a, b) => (a.video_last_run_at ? new Date(a.video_last_run_at).getTime() : 0) - (b.video_last_run_at ? new Date(b.video_last_run_at).getTime() : 0)).slice(0, 1);
+  }
+
+  const vpages = Math.min(Math.max(Number(params.vpages) || 12, 1), 40);
+  const results = [];
+  for (const m of targets) {
+    try {
+      const win = await syncShopVideos({ appKey, appSecret, shop_id: m.shop_id, supabase, maxPages: 6 });
+      const mon = await syncShopVideosAllMonths({ appKey, appSecret, shop_id: m.shop_id, supabase, maxPages: vpages });
+      await supabase.from('tiktok_affiliate_sync_meta').update({ video_last_run_at: new Date().toISOString() }).eq('shop_id', m.shop_id);
+      results.push({ shop: m.seller_name, total: win, monthly: mon });
+    } catch (e) { results.push({ shop: m.seller_name, error: e.message }); }
+  }
+  return res.status(200).json({ ok: true, synced: results.length, results });
 }
 
 // Read + aggregate per-KOC sales from the synced table.
@@ -945,6 +965,11 @@ export default async function handler(req, res) {
 
   if (action === 'sync_aff_orders') {
     try { return await handleSyncAffOrders({ params, appKey, appSecret, supabase, res }); }
+    catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
+  }
+
+  if (action === 'sync_aff_videos') {
+    try { return await handleSyncAffVideos({ params, appKey, appSecret, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 

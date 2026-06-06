@@ -15,11 +15,12 @@ on:
 
 jobs:
   sync:
-    name: Sync affiliate orders
+    name: Sync affiliate orders + videos
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
-      - name: Call sync endpoint
+      # 1) Sync ĐƠN affiliate — nhẹ (~15s), là data chính → fatal nếu fail.
+      - name: Sync affiliate orders (critical)
         env:
           EVENT_NAME: ${{ github.event_name }}
           SELLER: ${{ github.event.inputs.seller || '' }}
@@ -32,7 +33,27 @@ jobs:
           else
             URL="${BASE}?action=sync_aff_orders&seller=${SELLER}"
           fi
-          echo "Calling: $URL"
-          RESPONSE=$(curl -sS --max-time 90 --retry 2 --retry-delay 5 "$URL")
+          echo "Orders: $URL"
+          RESPONSE=$(curl -sS --max-time 75 --retry 1 --retry-delay 5 "$URL")
           echo "Response: ${RESPONSE:0:600}"
-          echo "$RESPONSE" | grep -q '"ok":true' || { echo "::error::Sync call failed"; exit 1; }
+          echo "$RESPONSE" | grep -q '"ok":true' || { echo "::error::Orders sync failed"; exit 1; }
+
+      # 2) Sync VIDEO analytics (view/ngày đăng) — nặng hơn, phụ → best-effort, KHÔNG fail workflow.
+      - name: Sync video analytics (best-effort)
+        if: always()
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          SELLER: ${{ github.event.inputs.seller || '' }}
+        run: |
+          BASE="https://koc-tool.vercel.app/api/tiktok-shop/analytics"
+          if [ "$EVENT_NAME" = "schedule" ] || [ -z "$SELLER" ]; then
+            URL="${BASE}?action=sync_aff_videos"
+          elif [ "$SELLER" = "all" ]; then
+            URL="${BASE}?action=sync_aff_videos&all=1"
+          else
+            URL="${BASE}?action=sync_aff_videos&seller=${SELLER}"
+          fi
+          echo "Videos: $URL"
+          RESPONSE=$(curl -sS --max-time 90 "$URL" || echo '{"note":"video sync timed out — non-fatal"}')
+          echo "Response: ${RESPONSE:0:400}"
+          echo "Video sync step done (non-fatal)."
