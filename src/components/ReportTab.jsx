@@ -177,6 +177,25 @@ export default function ReportTab() {
   };
 
   const selStyle = { padding: '8px 12px', borderRadius: 10, border: '1px solid #e5e7eb', background: '#fff', fontSize: '0.85rem', fontWeight: 600, color: '#334155', cursor: 'pointer' };
+  const presetBtn = (active) => ({ padding: '7px 13px', borderRadius: 9, border: `1px solid ${active ? ACCENT : '#e5e7eb'}`, background: active ? ACCENT : '#fff', color: active ? '#fff' : '#475569', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' });
+
+  // Preset nhanh + chọn tháng
+  const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return toYmd(d); };
+  const now0 = new Date();
+  const presets = [
+    { label: 'Hôm qua', s: daysAgo(1), e: daysAgo(1) },
+    { label: '7 ngày', s: daysAgo(6), e: today },
+    { label: '30 ngày', s: daysAgo(29), e: today },
+    { label: 'Tháng này', s: toYmd(new Date(now0.getFullYear(), now0.getMonth(), 1)), e: today },
+    { label: 'Tháng trước', s: toYmd(new Date(now0.getFullYear(), now0.getMonth() - 1, 1)), e: toYmd(new Date(now0.getFullYear(), now0.getMonth(), 0)) },
+  ];
+  const monthOpts = [];
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now0.getFullYear(), now0.getMonth() - i, 1);
+    const y = d.getFullYear(), m = d.getMonth();
+    monthOpts.push({ key: `${y}-${m + 1}`, label: `Tháng ${m + 1}/${y}`, s: toYmd(new Date(y, m, 1)), e: i === 0 ? today : toYmd(new Date(y, m + 1, 0)) });
+  }
+  const activeMonth = monthOpts.find(o => o.s === start && o.e === end)?.key || '';
 
   return (
     <div style={{ padding: '20px 24px', maxWidth: 1200, margin: '0 auto' }}>
@@ -186,18 +205,30 @@ export default function ReportTab() {
       <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: '0 0 16px' }}>Chọn brand + khoảng ngày → tổng hợp doanh thu, sản phẩm, booking. Xuất PDF/Excel cho sếp.</p>
 
       {/* Toolbar */}
-      <div className="no-print" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 18 }}>
-        <select value={brandKey} onChange={e => setBrandKey(e.target.value)} style={{ ...selStyle, fontWeight: 800 }}>
-          {BRANDS.map(b => <option key={b.key} value={b.key}>{b.name}</option>)}
-        </select>
-        <input type="date" value={start} onChange={e => setStart(e.target.value)} style={selStyle} />
-        <span style={{ color: '#94a3b8' }}>→</span>
-        <input type="date" value={end} onChange={e => setEnd(e.target.value)} style={selStyle} />
-        <button onClick={generate} disabled={loading} style={{ ...selStyle, background: ACCENT, color: '#fff', border: 'none', fontWeight: 800, opacity: loading ? 0.6 : 1 }}>{loading ? '⏳ Đang tạo…' : '📊 Tạo báo cáo'}</button>
-        {report && <>
-          <button onClick={() => window.print()} style={{ ...selStyle, fontWeight: 700 }}>🖨️ Xuất PDF</button>
-          <button onClick={exportExcel} style={{ ...selStyle, fontWeight: 700 }}>📥 Xuất Excel</button>
-        </>}
+      <div className="no-print" style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
+        {/* Hàng 1: brand + preset nhanh + chọn tháng */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select value={brandKey} onChange={e => setBrandKey(e.target.value)} style={{ ...selStyle, fontWeight: 800 }}>
+            {BRANDS.map(b => <option key={b.key} value={b.key}>{b.name}</option>)}
+          </select>
+          <span style={{ width: 1, height: 22, background: '#e5e7eb' }} />
+          {presets.map(p => <button key={p.label} onClick={() => { setStart(p.s); setEnd(p.e); }} style={presetBtn(start === p.s && end === p.e)}>{p.label}</button>)}
+          <select value={activeMonth} onChange={e => { const o = monthOpts.find(x => x.key === e.target.value); if (o) { setStart(o.s); setEnd(o.e); } }} style={selStyle}>
+            <option value="">📅 Chọn tháng…</option>
+            {monthOpts.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+          </select>
+        </div>
+        {/* Hàng 2: khoảng ngày tùy chọn + nút */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input type="date" value={start} onChange={e => setStart(e.target.value)} style={selStyle} />
+          <span style={{ color: '#94a3b8' }}>→</span>
+          <input type="date" value={end} onChange={e => setEnd(e.target.value)} style={selStyle} />
+          <button onClick={generate} disabled={loading} style={{ ...selStyle, background: ACCENT, color: '#fff', border: 'none', fontWeight: 800, opacity: loading ? 0.6 : 1 }}>{loading ? '⏳ Đang tạo…' : '📊 Tạo báo cáo'}</button>
+          {report && <>
+            <button onClick={() => window.print()} style={{ ...selStyle, fontWeight: 700 }}>🖨️ Xuất PDF</button>
+            <button onClick={exportExcel} style={{ ...selStyle, fontWeight: 700 }}>📥 Xuất Excel</button>
+          </>}
+        </div>
       </div>
 
       {error && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, padding: 16, color: '#b91c1c', fontSize: '0.86rem' }}>❌ {error}</div>}
