@@ -15,7 +15,7 @@ import {
 
 // ── Map brand ↔ gian hàng + nhân sự ────────────────────────────────────────────
 const BRANDS = [
-  { key: 'bodymiss', name: 'Bodymiss', shops: [
+  { key: 'bodymiss', name: 'Bodymiss', brandIds: ['cd3b3c68-d339-4650-9a85-d1fef705b7d6'], shops: [
       { platform: 'tiktok', id: '7495107349171898427', name: 'Body Miss Việt Nam' },
       { platform: 'shopee', id: '1031859035', name: 'Bodymiss Việt Nam' },
     ], staff: [
@@ -23,14 +23,14 @@ const BRANDS = [
       { id: '82ead434-8627-45d3-9783-f98ea750b8f3', name: 'Thu Thảo' },
       { id: '0f880376-b2f8-497b-9298-9e9736421c4e', name: 'Minh Thảo' },
     ] },
-  { key: 'moaw', name: 'Moaw Moaws', shops: [
+  { key: 'moaw', name: 'Moaw Moaws', brandIds: ['8a8641a8-9dad-4a87-8dd4-9e15dbac460b'], shops: [
       { platform: 'tiktok', id: '7495831977917385095', name: 'Moaw Moaws Việt Nam' },
       { platform: 'shopee', id: '1017289279', name: 'Moaw Moaws' },
     ], staff: [
       { id: '8588bf31-317f-4bb1-bb0a-0a51f72a023d', name: 'Trúc Quỳnh' },
       { id: 'b8948774-a283-48f4-b0ed-1532dd36f55d', name: 'Nguyên Bảo' },
     ] },
-  { key: 'mila', name: 'Milaganics', shops: [
+  { key: 'mila', name: 'Milaganics', brandIds: ['31826e73-2688-44e6-bc56-4c31477a7b59'], shops: [
       { platform: 'tiktok', id: '7494813818973817115', name: 'Milaganics Việt Nam' },
       { platform: 'shopee', id: '1243148826', name: 'Milaganics' },
     ], staff: [
@@ -38,7 +38,7 @@ const BRANDS = [
       { id: '9eb572cd-e4a5-4dab-bb78-4b16a8bcf85b', name: 'Tường Vi' },
       { id: 'd6b54949-8e05-42dc-865c-3c9f6bfbef78', name: 'Ngọc Mai' },
     ] },
-  { key: 'eherb', name: 'eHerb', shops: [
+  { key: 'eherb', name: 'eHerb', brandIds: ['1d7af825-e6e0-4a5e-b2d3-2965141441ee', '43c2c06c-b55b-498a-b93c-0d5eb7c09c32'], shops: [
       { platform: 'tiktok', id: '7495838925500090511', name: 'eHerb Hồ Chí Minh' },
       { platform: 'tiktok', id: '7494529979361168222', name: 'eHerb Việt Nam' },
       { platform: 'shopee', id: '831509831', name: 'eHerb Hồ Chí Minh' },
@@ -48,7 +48,7 @@ const BRANDS = [
       { id: '55e44ceb-b81a-4c09-97a9-040bd1a9b4d4', name: 'Lưu Hằng' },
       { id: '240ed700-d1e0-4d75-b6ab-60a29cfdbdcd', name: 'Hoàng Vũ' },
     ] },
-  { key: 'healmi', name: 'Healmi', shops: [], staff: [
+  { key: 'healmi', name: 'Healmi', brandIds: ['0de3c90e-1a9d-44fa-b667-396122cf6e88'], shops: [], staff: [
       { id: 'dd7061dd-871f-4d11-89e4-6b3c1e217511', name: 'Hữu Đan' },
     ] },
 ];
@@ -149,18 +149,19 @@ export default function ReportTab() {
         } catch { /* shopee optional */ }
       }
 
-      // 3) BOOKING (gửi đơn theo nhân sự)
-      let booking = { total: 0, byStaff: [], byShip: {} };
-      if (brand.staff.length) {
-        const staffIds = brand.staff.map(s => s.id);
-        const { data: orders } = await supabase.from('donguis').select('nhansu_id, loai_ship').eq('trang_thai', 'Đã đóng đơn').in('nhansu_id', staffIds).gte('ngay_gui', start).lte('ngay_gui', end + 'T23:59:59');
-        const cnt = {}, ship = {};
-        (orders || []).forEach(o => { cnt[o.nhansu_id] = (cnt[o.nhansu_id] || 0) + 1; const ls = o.loai_ship || 'Khác'; ship[ls] = (ship[ls] || 0) + 1; });
-        booking.total = (orders || []).length;
-        booking.byStaff = brand.staff.map(st => ({ name: st.name, count: cnt[st.id] || 0 })).sort((a, b) => b.count - a.count);
-        booking.byShip = ship;
-        const { data: prevOrders } = await supabase.from('donguis').select('id').eq('trang_thai', 'Đã đóng đơn').in('nhansu_id', staffIds).gte('ngay_gui', prevStart).lte('ngay_gui', prevEnd + 'T23:59:59');
-        booking.prevTotal = (prevOrders || []).length;
+      // 3) BOOKING — theo BRAND của sản phẩm (đầy đủ nhân sự, kể cả ngoài team) + danh sách SP
+      let booking = { total: 0, totalQty: 0, byStaff: [], products: [], prevTotal: 0 };
+      if (brand.brandIds?.length) {
+        const [staffR, prodR, prevR] = await Promise.all([
+          supabase.rpc('brand_booking_staff', { p_brand_ids: brand.brandIds, p_start: start, p_end: end }),
+          supabase.rpc('brand_booking_products', { p_brand_ids: brand.brandIds, p_start: start, p_end: end }),
+          supabase.rpc('brand_booking_staff', { p_brand_ids: brand.brandIds, p_start: prevStart, p_end: prevEnd }),
+        ]);
+        booking.byStaff = (staffR.data || []).map(r => ({ name: r.ten_nhansu, count: Number(r.so_don) || 0, qty: Number(r.so_luong) || 0 }));
+        booking.products = (prodR.data || []).map(r => ({ name: r.sanpham, qty: Number(r.so_luong) || 0, orders: Number(r.so_don) || 0 }));
+        booking.total = booking.byStaff.reduce((a, s) => a + s.count, 0);
+        booking.totalQty = booking.byStaff.reduce((a, s) => a + s.qty, 0);
+        booking.prevTotal = (prevR.data || []).reduce((a, r) => a + (Number(r.so_don) || 0), 0);
       }
 
       setReport({ brand, start, end, prevStart, prevEnd, shopRows, totGmv, totOrders, totAov, prevAov, pTot, productSections, booking });
@@ -172,7 +173,8 @@ export default function ReportTab() {
     if (!report) return;
     const wb = utils.book_new();
     utils.book_append_sheet(wb, utils.json_to_sheet(report.shopRows.map(s => ({ 'Gian hàng': s.name, 'Sàn': s.platform, 'GMV': Math.round(s.gmv), 'Đơn': s.orders, 'AOV': Math.round(s.aov) }))), 'Doanh thu');
-    if (report.booking.byStaff.length) utils.book_append_sheet(wb, utils.json_to_sheet(report.booking.byStaff.map(s => ({ 'Nhân sự': s.name, 'Đơn đã gửi': s.count }))), 'Booking');
+    if (report.booking.byStaff.length) utils.book_append_sheet(wb, utils.json_to_sheet(report.booking.byStaff.map(s => ({ 'Nhân sự': s.name, 'Đơn đã gửi': s.count, 'SL sản phẩm': s.qty }))), 'Booking-Nhân sự');
+    if (report.booking.products.length) utils.book_append_sheet(wb, utils.json_to_sheet(report.booking.products.map(p => ({ 'Sản phẩm': p.name, 'SL gửi': p.qty, 'Số đơn': p.orders }))), 'Booking-Sản phẩm');
     const prodRows = [];
     report.productSections.forEach(ps => ps.items.forEach((it, i) => prodRows.push({ 'Gian hàng': ps.shop.name, 'Hạng': i + 1, 'Sản phẩm': it.name, 'SL bán': it.qty, 'Doanh thu': Math.round(it.gmv) })));
     if (prodRows.length) utils.book_append_sheet(wb, utils.json_to_sheet(prodRows), 'Sản phẩm');
@@ -181,6 +183,8 @@ export default function ReportTab() {
 
   const selStyle = { padding: '8px 12px', borderRadius: 10, border: '1px solid #e5e7eb', background: '#fff', fontSize: '0.85rem', fontWeight: 600, color: '#334155', cursor: 'pointer' };
   const presetBtn = (active) => ({ padding: '7px 13px', borderRadius: 9, border: `1px solid ${active ? ACCENT : '#e5e7eb'}`, background: active ? ACCENT : '#fff', color: active ? '#fff' : '#475569', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' });
+  const thL = { padding: '9px 12px', textAlign: 'left', fontWeight: 800, color: '#64748b', fontSize: '0.7rem', textTransform: 'uppercase' };
+  const thR = { ...thL, textAlign: 'right' };
 
   // Preset nhanh + chọn tháng
   const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return toYmd(d); };
@@ -276,7 +280,7 @@ export default function ReportTab() {
                   { l: 'GMV', cur: `${fmtVnd(report.totGmv)} đ`, prev: `${fmtVnd(report.pTot.gmv)} đ`, c: pct(report.totGmv, report.pTot.gmv) },
                   { l: 'Đơn hàng', cur: fmtNum(report.totOrders), prev: fmtNum(report.pTot.orders), c: pct(report.totOrders, report.pTot.orders) },
                   { l: 'AOV', cur: `${fmtVnd(report.totAov)} đ`, prev: `${fmtVnd(report.prevAov)} đ`, c: pct(report.totAov, report.prevAov) },
-                  ...(report.brand.staff.length ? [{ l: 'Đơn booking gửi', cur: fmtNum(report.booking.total), prev: fmtNum(report.booking.prevTotal || 0), c: pct(report.booking.total, report.booking.prevTotal || 0) }] : []),
+                  ...(report.brand.brandIds?.length ? [{ l: 'Đơn booking gửi', cur: fmtNum(report.booking.total), prev: fmtNum(report.booking.prevTotal || 0), c: pct(report.booking.total, report.booking.prevTotal || 0) }] : []),
                 ].map(r => (
                   <tr key={r.l} style={{ borderTop: '1px solid #f1f5f9' }}>
                     <td style={{ padding: '9px 16px', fontWeight: 600 }}>{r.l}</td>
@@ -370,42 +374,81 @@ export default function ReportTab() {
             </div>
           </>)}
 
-          {/* Booking */}
-          {report.brand.staff.length > 0 && (<>
-            <SectionTitle>Hiệu suất gửi đơn (Booking)</SectionTitle>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: 16, alignItems: 'start' }}>
-              <div>
-                <Card style={{ borderLeft: `4px solid ${ACCENT}`, marginBottom: 12 }}>
-                  <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>Tổng đơn đã gửi</div>
-                  <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#0f172a' }}>{fmtNum(report.booking.total)}</div>
-                  <div style={{ fontSize: '0.74rem', marginTop: 2 }}>so kỳ trước <Change v={pct(report.booking.total, report.booking.prevTotal || 0)} /></div>
-                  <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: 4 }}>
-                    {Object.entries(report.booking.byShip).map(([k, v]) => `${k}: ${v}`).join(' · ') || '—'}
-                  </div>
-                </Card>
-                <Card style={{ padding: 0, overflow: 'hidden' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
-                    <thead><tr style={{ background: '#f8fafc' }}><th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 800, color: '#64748b', fontSize: '0.72rem' }}>NHÂN SỰ</th><th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#64748b', fontSize: '0.72rem' }}>ĐƠN GỬI</th></tr></thead>
-                    <tbody>
-                      {report.booking.byStaff.map((s, i) => (
-                        <tr key={i} style={{ borderTop: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '10px 12px', fontWeight: 600 }}>{i < 3 && <span style={{ color: ACCENT, fontWeight: 900 }}>#{i + 1} </span>}{s.name}</td>
-                          <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: ACCENT }}>{fmtNum(s.count)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </Card>
-              </div>
+          {/* Booking — theo brand của sản phẩm (đầy đủ nhân sự + danh sách SP) */}
+          {report.brand.brandIds?.length > 0 && (<>
+            <SectionTitle>Booking — sản phẩm brand được gửi</SectionTitle>
+            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 16 }}>
+              <Card style={{ flex: '1 1 200px', borderLeft: `4px solid ${ACCENT}` }}>
+                <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>Tổng đơn đã gửi</div>
+                <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#0f172a' }}>{fmtNum(report.booking.total)}</div>
+                <div style={{ fontSize: '0.74rem' }}>so kỳ trước <Change v={pct(report.booking.total, report.booking.prevTotal)} /></div>
+              </Card>
+              <Card style={{ flex: '1 1 200px', borderLeft: '4px solid #3b82f6' }}>
+                <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>Tổng SL sản phẩm gửi</div>
+                <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#0f172a' }}>{fmtNum(report.booking.totalQty)}</div>
+                <div style={{ fontSize: '0.74rem', color: '#94a3b8' }}>{report.booking.products.length} loại SP · {report.booking.byStaff.length} nhân sự gửi</div>
+              </Card>
+            </div>
+
+            {/* Nhân sự gửi — ĐẦY ĐỦ */}
+            <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#475569', margin: '4px 0 8px' }}>👥 Nhân sự đã gửi sản phẩm brand này <span style={{ fontWeight: 500, color: '#94a3b8' }}>(đầy đủ, kể cả ngoài team)</span></div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: 16, alignItems: 'start', marginBottom: 20 }}>
+              <Card style={{ padding: 0, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
+                  <thead><tr style={{ background: '#f8fafc' }}><th style={thL}>Nhân sự</th><th style={thR}>Đơn</th><th style={thR}>SL</th></tr></thead>
+                  <tbody>
+                    {report.booking.byStaff.map((s, i) => (
+                      <tr key={i} style={{ borderTop: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '9px 12px', fontWeight: 600 }}>{i < 3 && <span style={{ color: ACCENT, fontWeight: 900 }}>#{i + 1} </span>}{s.name}</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 800, color: ACCENT }}>{fmtNum(s.count)}</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'right', color: '#475569' }}>{fmtNum(s.qty)}</td>
+                      </tr>
+                    ))}
+                    {!report.booking.byStaff.length && <tr><td colSpan={3} style={{ padding: 14, color: '#94a3b8' }}>Không có dữ liệu.</td></tr>}
+                  </tbody>
+                </table>
+              </Card>
               <Card>
                 <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b', marginBottom: 6 }}>Đơn gửi theo nhân sự</div>
-                <ResponsiveContainer width="100%" height={Math.max(200, report.booking.byStaff.length * 46)}>
+                <ResponsiveContainer width="100%" height={Math.max(180, report.booking.byStaff.length * 38)}>
                   <BarChart data={report.booking.byStaff.map(s => ({ name: s.name, 'Đơn': s.count }))} layout="vertical" margin={{ left: 10, right: 30 }}>
                     <CartesianGrid horizontal={false} stroke="#f1f5f9" />
                     <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
                     <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 11 }} />
                     <Tooltip />
                     <Bar dataKey="Đơn" fill="#3b82f6" radius={[0, 6, 6, 0]}><LabelList dataKey="Đơn" position="right" style={{ fontSize: 11, fontWeight: 700 }} /></Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </Card>
+            </div>
+
+            {/* Sản phẩm được gửi */}
+            <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#475569', margin: '4px 0 8px' }}>📦 Sản phẩm của brand được gửi</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: 16, alignItems: 'start' }}>
+              <Card style={{ padding: 0, overflow: 'hidden', maxHeight: 380, overflowY: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                  <thead><tr style={{ background: '#f8fafc' }}><th style={thL}>Sản phẩm</th><th style={thR}>SL gửi</th><th style={thR}>Đơn</th></tr></thead>
+                  <tbody>
+                    {report.booking.products.map((p, i) => (
+                      <tr key={i} style={{ borderTop: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '8px 12px' }} title={p.name}>{p.name}</td>
+                        <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, color: ACCENT }}>{fmtNum(p.qty)}</td>
+                        <td style={{ padding: '8px 12px', textAlign: 'right', color: '#475569' }}>{fmtNum(p.orders)}</td>
+                      </tr>
+                    ))}
+                    {!report.booking.products.length && <tr><td colSpan={3} style={{ padding: 14, color: '#94a3b8' }}>Không có sản phẩm gửi trong kỳ.</td></tr>}
+                  </tbody>
+                </table>
+              </Card>
+              <Card>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b', marginBottom: 6 }}>Top sản phẩm gửi nhiều (số lượng)</div>
+                <ResponsiveContainer width="100%" height={Math.max(180, Math.min(report.booking.products.length, 12) * 34)}>
+                  <BarChart data={report.booking.products.slice(0, 12).map(p => ({ name: p.name.length > 24 ? p.name.slice(0, 24) + '…' : p.name, 'SL': p.qty }))} layout="vertical" margin={{ left: 10, right: 34 }}>
+                    <CartesianGrid horizontal={false} stroke="#f1f5f9" />
+                    <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 10 }} />
+                    <Tooltip />
+                    <Bar dataKey="SL" fill={ACCENT} radius={[0, 6, 6, 0]}><LabelList dataKey="SL" position="right" style={{ fontSize: 11, fontWeight: 700 }} /></Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </Card>
