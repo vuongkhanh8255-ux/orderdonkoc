@@ -156,7 +156,7 @@ function AppMain({ user, onLogout, allowedViews }) {
   // --- STYLES ---
   const sidebarStyle = {
     width: isExpanded ? SIDEBAR_WIDTH : COLLAPSED_WIDTH,
-    background: '#ffffff',
+    background: '#15161d',
     display: 'flex',
     flexDirection: 'column',
     height: '100vh',
@@ -165,7 +165,7 @@ function AppMain({ user, onLogout, allowedViews }) {
     top: 0,
     zIndex: 1000,
     fontFamily: "'Outfit', sans-serif",
-    borderRight: '1px solid #e5e7eb',
+    borderRight: '1px solid #2a2c38',
     overflow: 'hidden',
     whiteSpace: 'nowrap',
     transition: 'width 0.22s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -182,14 +182,14 @@ function AppMain({ user, onLogout, allowedViews }) {
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
-    background: isActive ? '#fff7ed' : 'transparent',
+    background: isActive ? 'rgba(249,115,22,0.13)' : 'transparent',
     borderRadius: '8px',
-    color: isActive ? '#c2410c' : '#64748b',
+    color: isActive ? '#fb923c' : '#cbd5e1',
     fontWeight: isActive ? '700' : '500',
     transition: 'background 0.18s ease, color 0.18s ease, border-color 0.18s ease',
     fontSize: '0.83rem',
-    border: isActive ? '1px solid #fed7aa' : '1px solid transparent',
-    borderLeft: isActive ? '3px solid #ea580c' : '3px solid transparent',
+    border: isActive ? '1px solid rgba(249,115,22,0.4)' : '1px solid transparent',
+    borderLeft: isActive ? '3px solid #f97316' : '3px solid transparent',
     boxShadow: 'none',
     letterSpacing: 0,
   });
@@ -222,7 +222,7 @@ function AppMain({ user, onLogout, allowedViews }) {
           onMouseLeave={() => setSidebarHovered(false)}
         >
           {/* Header — logo + toggle button */}
-          <div style={{ padding: isExpanded ? '20px 0' : '20px 0', textAlign: 'center', minHeight: isExpanded ? '110px' : '72px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid #e5e7eb', background: '#fff', position: 'relative', transition: 'min-height 0.22s', flexShrink: 0 }}>
+          <div style={{ padding: isExpanded ? '20px 0' : '20px 0', textAlign: 'center', minHeight: isExpanded ? '110px' : '72px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid #2a2c38', background: '#15161d', position: 'relative', transition: 'min-height 0.22s', flexShrink: 0 }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: isExpanded ? '8px' : '0' }}>
               {/* Logo icon — nút toggle collapse */}
               <div
@@ -237,8 +237,8 @@ function AppMain({ user, onLogout, allowedViews }) {
               {/* Text — ẩn khi collapsed */}
               {isExpanded && (
                 <>
-                  <span style={{ fontSize: '0.75rem', color: '#999', fontStyle: 'italic', letterSpacing: '2px', textTransform: 'uppercase' }}>powered by</span>
-                  <h2 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#111827', letterSpacing: '1.4px', textTransform: 'uppercase', lineHeight: '1.1', fontFamily: "'Outfit', sans-serif" }}>
+                  <span style={{ fontSize: '0.75rem', color: '#7b8494', fontStyle: 'italic', letterSpacing: '2px', textTransform: 'uppercase' }}>powered by</span>
+                  <h2 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#f1f5f9', letterSpacing: '1.4px', textTransform: 'uppercase', lineHeight: '1.1', fontFamily: "'Outfit', sans-serif" }}>
                     STELLA KINETICS
                   </h2>
                 </>
@@ -312,12 +312,12 @@ function AppMain({ user, onLogout, allowedViews }) {
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           margin: '2px 8px', padding: '9px 0',
                           borderRadius: 8, cursor: 'pointer',
-                          background: currentView === view ? '#fff7ed' : 'transparent',
-                          border: currentView === view ? '1px solid #fed7aa' : '1px solid transparent',
+                          background: currentView === view ? 'rgba(249,115,22,0.13)' : 'transparent',
+                          border: currentView === view ? '1px solid rgba(249,115,22,0.4)' : '1px solid transparent',
                           fontSize: '1.1rem',
                           transition: 'background 0.15s, border-color 0.15s',
                         }}
-                        onMouseEnter={e => { if (currentView !== view) e.currentTarget.style.background = '#f8fafc'; }}
+                        onMouseEnter={e => { if (currentView !== view) e.currentTarget.style.background = '#1f2129'; }}
                         onMouseLeave={e => { if (currentView !== view) e.currentTarget.style.background = 'transparent'; }}
                       >
                         {icon}
@@ -331,16 +331,16 @@ function AppMain({ user, onLogout, allowedViews }) {
               return (
                 <div key={group.key} style={{ marginBottom: 4 }}>
                   <div onClick={() => toggleGroup(group.key)}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '10px 14px 4px', padding: '10px 12px', cursor: 'pointer', userSelect: 'none', borderRadius: 8, background: '#f8fafc', border: '1px solid #e5e7eb' }}>
-                    <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#475569', letterSpacing: 0 }}>{group.label}</span>
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '10px 14px 4px', padding: '10px 12px', cursor: 'pointer', userSelect: 'none', borderRadius: 8, background: '#1f2129', border: '1px solid #2a2c38' }}>
+                    <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#e2e8f0', letterSpacing: 0 }}>{group.label}</span>
                     <span style={{ fontSize: '0.7rem', color: '#f97316', transition: 'transform 0.2s', display: 'inline-block', transform: openGroups[group.key] ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
                   </div>
                   {openGroups[group.key] && visibleItems.map(({ view, name }) => (
                     <div key={view}
                       style={menuItemStyle(currentView === view)}
                       onClick={() => setCurrentView(view)}
-                      onMouseEnter={(e) => { if (currentView !== view) { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.color = '#c2410c'; e.currentTarget.style.borderColor = '#e5e7eb'; } }}
-                      onMouseLeave={(e) => { if (currentView !== view) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#64748b'; e.currentTarget.style.borderColor = 'transparent'; } }}>
+                      onMouseEnter={(e) => { if (currentView !== view) { e.currentTarget.style.background = '#1f2129'; e.currentTarget.style.color = '#fb923c'; e.currentTarget.style.borderColor = '#2a2c38'; } }}
+                      onMouseLeave={(e) => { if (currentView !== view) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#cbd5e1'; e.currentTarget.style.borderColor = 'transparent'; } }}>
                       <span style={{ display: 'inline-block', width: 16, textAlign: 'center', opacity: 0.4, flexShrink: 0 }}>•</span>
                       <span>{name}</span>
                     </div>
@@ -351,21 +351,21 @@ function AppMain({ user, onLogout, allowedViews }) {
           </div>
 
           {/* User info + logout */}
-          <div style={{ padding: isExpanded ? '12px 14px' : '10px 8px', borderTop: '1px solid #e5e7eb', background: '#fff', flexShrink: 0 }}>
+          <div style={{ padding: isExpanded ? '12px 14px' : '10px 8px', borderTop: '1px solid #2a2c38', background: '#15161d', flexShrink: 0 }}>
             {isExpanded ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', borderRadius: 8, padding: '10px 12px', border: '1px solid #e5e7eb' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#1f2129', borderRadius: 8, padding: '10px 12px', border: '1px solid #2a2c38' }}>
                 <div>
-                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#ea580c' }}>👤 {user.name}</div>
-                  <div style={{ fontSize: '0.68rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{user.role}</div>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#fb923c' }}>👤 {user.name}</div>
+                  <div style={{ fontSize: '0.68rem', color: '#8a93a3', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{user.role}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   {user.role === 'admin' && (
                     <button onClick={() => setPwModalOpen(true)} title="Đổi mật khẩu (sẽ thu hồi phiên của các tài khoản khác)"
-                      style={{ padding: '5px 9px', background: '#fff', border: '1px solid #fed7aa', borderRadius: 7, color: '#c2410c', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>
+                      style={{ padding: '5px 9px', background: 'transparent', border: '1px solid rgba(249,115,22,0.4)', borderRadius: 7, color: '#fb923c', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>
                       🔐
                     </button>
                   )}
-                  <button onClick={onLogout} style={{ padding: '5px 10px', background: '#fff', border: '1px solid #fecaca', borderRadius: 7, color: '#dc2626', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>
+                  <button onClick={onLogout} style={{ padding: '5px 10px', background: 'transparent', border: '1px solid rgba(248,113,113,0.4)', borderRadius: 7, color: '#f87171', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>
                     Đăng xuất
                   </button>
                 </div>
@@ -374,11 +374,11 @@ function AppMain({ user, onLogout, allowedViews }) {
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                 {user.role === 'admin' && (
                   <button onClick={() => setPwModalOpen(true)} title="Đổi mật khẩu"
-                    style={{ width: 36, height: 36, borderRadius: 8, background: '#fff', border: '1px solid #fed7aa', color: '#c2410c', fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    style={{ width: 36, height: 36, borderRadius: 8, background: 'transparent', border: '1px solid rgba(249,115,22,0.4)', color: '#fb923c', fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     🔐
                   </button>
                 )}
-                <button onClick={onLogout} title="Đăng xuất" style={{ width: 36, height: 36, borderRadius: 8, background: '#fff', border: '1px solid #fecaca', color: '#dc2626', fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <button onClick={onLogout} title="Đăng xuất" style={{ width: 36, height: 36, borderRadius: 8, background: 'transparent', border: '1px solid rgba(248,113,113,0.4)', color: '#f87171', fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   ⏻
                 </button>
               </div>
