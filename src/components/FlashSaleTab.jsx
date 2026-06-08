@@ -480,8 +480,38 @@ export default function FlashSaleTab() {
   }, [selectedShopId]);
   useEffect(() => { loadSavedTemplates(); }, [loadSavedTemplates]);
 
+  // Lưu (hoặc cập nhật nếu trùng tên) 1 mẫu file cho shop hiện tại.
+  const upsertTemplate = async (name, rows) => {
+    const nm = String(name || '').trim();
+    if (!nm) return;
+    const existing = savedTpls.find(t => t.name === nm);
+    if (existing) {
+      const { error: e1 } = await supabase.from('flash_sale_templates')
+        .update({ rows, created_at: new Date().toISOString() }).eq('id', existing.id);
+      if (e1) throw e1;
+    } else {
+      const { error: e2 } = await supabase.from('flash_sale_templates')
+        .insert({ name: nm, shop_id: String(selectedShopId), rows });
+      if (e2) throw e2;
+    }
+    await loadSavedTemplates();
+  };
+
+  const deleteTemplate = async (id, name) => {
+    if (!confirm(`Xóa mẫu "${name}"?`)) return;
+    setImpBusy(true);
+    try {
+      const { error: dbErr } = await supabase.from('flash_sale_templates').delete().eq('id', id);
+      if (dbErr) throw dbErr;
+      await loadSavedTemplates();
+      setImpMsg({ ok: true, text: `🗑️ Đã xóa mẫu "${name}".` });
+    } catch (e) { setError('Lỗi xóa mẫu: ' + e.message); }
+    finally { setImpBusy(false); }
+  };
+
   // Khớp các dòng (item_id + model_id) → tự tick SP + điền giá → nhảy tới bước cấu hình.
-  const importFromRows = async (rows, srcName) => {
+  // autosave=true (khi upload file) → tự lưu lại để lần sau chọn nhanh.
+  const importFromRows = async (rows, srcName, autosave = false) => {
     setImpBusy(true); setImpMsg(null); setError('');
     try {
       const byItem = new Map();
@@ -517,8 +547,13 @@ export default function FlashSaleTab() {
       setSelectedProducts(newSelected);
       setProductConfigs(newConfigs);
       setImpRows(rows);
+      let savedNote = '';
+      if (autosave && srcName) {
+        try { await upsertTemplate(srcName, rows); savedNote = ' 💾 Đã lưu để lần sau chọn lại.'; }
+        catch { /* lưu lỗi không chặn việc nhập */ }
+      }
       const skuCount = Object.values(newConfigs).reduce((a, c) => a + Object.keys(c).length, 0);
-      setImpMsg({ ok: true, text: `✅ Đã nhập ${newSelected.length} SP · ${skuCount} phân loại từ ${srcName}.${missing.length ? ` ⚠️ ${missing.length} dòng không khớp.` : ''}` });
+      setImpMsg({ ok: true, text: `✅ Đã nhập ${newSelected.length} SP · ${skuCount} phân loại từ ${srcName}.${missing.length ? ` ⚠️ ${missing.length} dòng không khớp.` : ''}${savedNote}` });
       setStep(3);
     } catch (e) {
       setError('Lỗi nhập file: ' + e.message);
@@ -536,7 +571,7 @@ export default function FlashSaleTab() {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = parseSheetRows(ws);
       if (!rows.length) { setError('File trống hoặc thiếu cột "Giá Flash Sale". Tải file mẫu để đối chiếu.'); setImpBusy(false); return; }
-      await importFromRows(rows, file.name);
+      await importFromRows(rows, file.name, true); // tự lưu lại theo tên file
     } catch (err) { setError('Không đọc được file: ' + err.message); setImpBusy(false); }
   };
 
@@ -601,11 +636,8 @@ export default function FlashSaleTab() {
     if (!name) return;
     setImpBusy(true);
     try {
-      const { error: dbErr } = await supabase.from('flash_sale_templates')
-        .insert({ name: name.trim(), shop_id: String(selectedShopId), rows: impRows });
-      if (dbErr) throw dbErr;
+      await upsertTemplate(name, impRows);
       setImpMsg({ ok: true, text: `💾 Đã lưu mẫu "${name.trim()}".` });
-      await loadSavedTemplates();
     } catch (e) { setError('Lỗi lưu mẫu: ' + e.message); }
     finally { setImpBusy(false); }
   };
@@ -798,17 +830,27 @@ export default function FlashSaleTab() {
                 📤 Nhập file Excel
                 <input type="file" accept=".xlsx,.xls" disabled={impBusy} onChange={handleExcelFile} style={{ display: 'none' }} />
               </label>
-              {savedTpls.length > 0 && (
-                <select disabled={impBusy} defaultValue="" onChange={e => applySavedTemplate(e.target.value)}
-                  style={{ ...INPUT, width: 'auto', minWidth: 190, padding: '9px 12px' }}>
-                  <option value="">📁 Chọn mẫu đã lưu…</option>
-                  {savedTpls.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-              )}
               {impRows?.length > 0 && (
-                <button style={{ ...BTN_SECONDARY, opacity: impBusy ? 0.6 : 1 }} disabled={impBusy} onClick={saveCurrentTemplate}>💾 Lưu mẫu này</button>
+                <button style={{ ...BTN_SECONDARY, opacity: impBusy ? 0.6 : 1 }} disabled={impBusy} onClick={saveCurrentTemplate}>💾 Lưu (đặt tên khác)</button>
               )}
             </div>
+            {savedTpls.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginTop: 12 }}>
+                <span style={{ fontSize: '0.76rem', color: '#64748b', fontWeight: 700 }}>📁 File đã lưu (shop này):</span>
+                {savedTpls.map(t => (
+                  <span key={t.id} style={{ display: 'inline-flex', alignItems: 'center', background: '#fff', border: '1px solid #fed7aa', borderRadius: 16, overflow: 'hidden' }}>
+                    <button disabled={impBusy} onClick={() => applySavedTemplate(t.id)} title="Bấm để nhập lại file này"
+                      style={{ border: 'none', background: 'none', padding: '5px 7px 5px 12px', cursor: impBusy ? 'default' : 'pointer', color: '#ea580c', fontWeight: 700, fontSize: '0.76rem', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {t.name}
+                    </button>
+                    <button disabled={impBusy} onClick={() => deleteTemplate(t.id, t.name)} title="Xóa mẫu"
+                      style={{ border: 'none', borderLeft: '1px solid #fed7aa', background: 'none', padding: '5px 9px', cursor: 'pointer', color: '#94a3b8', fontSize: '0.72rem' }}>
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
             {expProg && (
               <div style={{ marginTop: 10, fontSize: '0.78rem', color: '#ff6a2c', fontWeight: 700 }}>
                 ⏳ {expProg.phase || 'Đang xử lý…'} {expProg.total ? `(${expProg.done}/${expProg.total})` : ''}
