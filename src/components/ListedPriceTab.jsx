@@ -411,9 +411,9 @@ const AddOptionInline = ({ placeholder, onAdd, onClose }) => {
       <input autoFocus value={val} onChange={e => setVal(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter' && val.trim()) { onAdd(val.trim()); onClose(); } if (e.key === 'Escape') onClose(); }}
         placeholder={placeholder}
-        style={{ flex: 1, padding: '4px 8px', borderRadius: 6, border: '1.5px solid #ea580c', fontSize: 12, outline: 'none' }} />
+        style={{ flex: 1, padding: '4px 8px', borderRadius: 6, border: '1.5px solid #ff6a2c', fontSize: 12, outline: 'none' }} />
       <button onClick={() => { if (val.trim()) { onAdd(val.trim()); onClose(); } }}
-        style={{ padding: '4px 10px', background: '#ea580c', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 700 }}>+</button>
+        style={{ padding: '4px 10px', background: '#ff6a2c', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 700 }}>+</button>
       <button onClick={onClose}
         style={{ padding: '4px 8px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>✕</button>
     </div>
@@ -425,7 +425,7 @@ const FillHandle = ({ onMouseDown, active }) => (
   <div onMouseDown={onMouseDown} title="Kéo xuống để áp dụng"
     style={{
       position: 'absolute', bottom: 1, right: 1, width: 9, height: 9,
-      background: active ? '#c2410c' : '#ea580c', border: '1.5px solid #fff',
+      background: active ? '#e85518' : '#ff6a2c', border: '1.5px solid #fff',
       borderRadius: 2, cursor: 'crosshair', zIndex: 10, opacity: 0.85,
     }}
     onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'scale(1.3)'; }}
@@ -755,9 +755,9 @@ const ListedPriceTab = ({ user }) => {
     color: '#374151', minWidth: 130,
   };
   const addBtnStyle = (active) => ({
-    padding: '6px 10px', background: active ? '#ea580c' : '#fff7ed',
+    padding: '6px 10px', background: active ? '#ff6a2c' : '#fff7ed',
     border: '1.5px solid #fed7aa', borderRadius: 8,
-    color: active ? '#fff' : '#ea580c', fontWeight: 700, cursor: 'pointer', fontSize: 14,
+    color: active ? '#fff' : '#ff6a2c', fontWeight: 700, cursor: 'pointer', fontSize: 14,
   });
 
   // ── Fill drag helpers ──────────────────────────────────────────────────────
@@ -812,7 +812,7 @@ const ListedPriceTab = ({ user }) => {
     const displayFinal = (autoFinal !== null && !isNaN(adminCostNum)) ? Math.round(autoFinal - adminCostNum) : autoFinal;
 
     return (
-      <td key={col.key} style={{ position: 'relative', outline: isDragSrc ? '2px solid #ea580c' : undefined }}
+      <td key={col.key} style={{ position: 'relative', outline: isDragSrc ? '2px solid #ff6a2c' : undefined }}
         onMouseEnter={() => { if (fillDrag) setFillOver(index); }}>
         {autoFinal !== null && !isEditing ? (
           <div onClick={() => setEditingCell({ id: row.id, key: col.key })} title="Click để ghi đè"
@@ -898,7 +898,7 @@ const ListedPriceTab = ({ user }) => {
             <button
               onClick={() => setSortBrand(s => s === 'none' ? 'asc' : s === 'asc' ? 'desc' : 'none')}
               title={sortBrand === 'none' ? 'Sắp xếp theo brand A→Z' : sortBrand === 'asc' ? 'Đang A→Z, click để Z→A' : 'Đang Z→A, click để tắt'}
-              style={{ padding: '7px 9px', borderRadius: 8, border: `1.5px solid ${sortBrand !== 'none' ? '#fed7aa' : '#e5e7eb'}`, background: sortBrand !== 'none' ? '#fff7ed' : '#fff', color: sortBrand !== 'none' ? '#ea580c' : '#94a3b8', fontWeight: 900, cursor: 'pointer', fontSize: 13, lineHeight: 1 }}>
+              style={{ padding: '7px 9px', borderRadius: 8, border: `1.5px solid ${sortBrand !== 'none' ? '#fed7aa' : '#e5e7eb'}`, background: sortBrand !== 'none' ? '#fff7ed' : '#fff', color: sortBrand !== 'none' ? '#ff6a2c' : '#94a3b8', fontWeight: 900, cursor: 'pointer', fontSize: 13, lineHeight: 1 }}>
               {sortBrand === 'none' ? '↕' : sortBrand === 'asc' ? '↑' : '↓'}
             </button>
             <button onClick={() => setAddingBrand(v => !v)} style={addBtnStyle(addingBrand)}>+</button>
@@ -949,7 +949,7 @@ const ListedPriceTab = ({ user }) => {
         )}
 
         <div style={{ marginLeft: 'auto', fontSize: '0.78rem', color: '#94a3b8', whiteSpace: 'nowrap' }}>
-          <strong style={{ color: '#ea580c' }}>{groupedProducts.length}</strong> sản phẩm &middot; <strong style={{ color: '#6366f1' }}>{totalVariants}</strong> phân loại
+          <strong style={{ color: '#ff6a2c' }}>{groupedProducts.length}</strong> sản phẩm &middot; <strong style={{ color: '#6366f1' }}>{totalVariants}</strong> phân loại
         </div>
       </div>
 
@@ -1010,7 +1010,7 @@ const ListedPriceTab = ({ user }) => {
                         onClick={() => toggleExpand(product.id)}
                         style={{ cursor: 'pointer', verticalAlign: 'middle', userSelect: 'none' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-                          <span style={{ fontSize: '0.65rem', color: '#ea580c', fontWeight: 900 }}>
+                          <span style={{ fontSize: '0.65rem', color: '#ff6a2c', fontWeight: 900 }}>
                             {isExpanded ? '▼' : '▶'}
                           </span>
                           <span style={{ fontWeight: 800, color: '#374151' }}>{groupIdx + 1}</span>
@@ -1045,7 +1045,7 @@ const ListedPriceTab = ({ user }) => {
                           <input type="text" value={product.productName || ''} placeholder="Tên sản phẩm..."
                             onChange={e => updateProductCell(product.id, 'productName', e.target.value)}
                             style={{ flex: '3 1 0', minWidth: 100, height: 30, padding: '0 8px', borderRadius: 7, border: '1px solid #e5e7eb', background: '#f8fafc', fontFamily: 'inherit', fontSize: '0.85rem', fontWeight: 700, color: '#0f172a', outline: 'none' }}
-                            onFocus={e => { e.target.style.borderColor = '#ea580c'; e.target.style.background = '#fff'; }}
+                            onFocus={e => { e.target.style.borderColor = '#ff6a2c'; e.target.style.background = '#fff'; }}
                             onBlur={e => { e.target.style.borderColor = '#e5e7eb'; e.target.style.background = '#f8fafc'; }}
                           />
 
@@ -1088,7 +1088,7 @@ const ListedPriceTab = ({ user }) => {
                           {/* Add variant button */}
                           <button type="button"
                             onClick={() => { addVariant(product.id); setExpandedGroups(s => { const n = new Set(s); n.add(product.id); return n; }); }}
-                            style={{ padding: '4px 8px', background: '#fff7ed', border: '1.5px solid #fed7aa', borderRadius: 7, color: '#ea580c', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                            style={{ padding: '4px 8px', background: '#fff7ed', border: '1.5px solid #fed7aa', borderRadius: 7, color: '#ff6a2c', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}>
                             + Phân loại
                           </button>
                         </div>
@@ -1107,7 +1107,7 @@ const ListedPriceTab = ({ user }) => {
                       const hlBg = getFillHighlight(variantIdx);
                       return (
                         <tr key={variant.id} className="listed-price-variant-row"
-                          style={hlBg ? { background: '#fff7ed', outline: '1px dashed #ea580c' } : undefined}
+                          style={hlBg ? { background: '#fff7ed', outline: '1px dashed #ff6a2c' } : undefined}
                           onMouseEnter={() => { if (fillDrag) setFillOver(variantIdx); }}>
                           {/* Variant # */}
                           <td className="listed-price-table__index" style={{ paddingLeft: 18, color: '#a78bfa', fontSize: '0.75rem' }}>

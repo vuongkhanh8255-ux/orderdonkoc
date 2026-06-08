@@ -151,7 +151,7 @@ function DeadlineBadge({ deadline, status }) {
     const done = status === 'Hoàn thành';
     if (done) return <span style={{ fontSize: '0.68rem', color: '#16a34a', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 5, padding: '1px 6px' }}>✅ Xong</span>;
     if (d < 0)   return <span style={{ fontSize: '0.68rem', color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 5, padding: '1px 6px' }}>⚠️ Quá hạn {Math.abs(d)} ngày</span>;
-    if (d === 0) return <span style={{ fontSize: '0.68rem', color: '#ea580c', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 5, padding: '1px 6px' }}>🔥 Hôm nay</span>;
+    if (d === 0) return <span style={{ fontSize: '0.68rem', color: '#ff6a2c', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 5, padding: '1px 6px' }}>🔥 Hôm nay</span>;
     if (d <= 3)  return <span style={{ fontSize: '0.68rem', color: '#d97706', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 5, padding: '1px 6px' }}>⏳ Còn {d} ngày</span>;
     return <span style={{ fontSize: '0.68rem', color: '#6b7280', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 5, padding: '1px 6px' }}>📅 Còn {d} ngày</span>;
 }
@@ -289,7 +289,7 @@ export default function TaskNoteTab() {
     const avgTienDo  = total > 0 ? Math.round(tasks.reduce((s, t) => s + (t.tienDo || 0), 0) / total) : 0;
 
     const DASH_CARDS = [
-        { icon: '📋', label: 'Tổng Tasks',       value: total,      accent: '#ea580c', bg: '#fff7ed', border: '#fed7aa' },
+        { icon: '📋', label: 'Tổng Tasks',       value: total,      accent: '#ff6a2c', bg: '#fff7ed', border: '#fed7aa' },
         { icon: '🆕', label: 'Mới',              value: cntMoi,     accent: '#6366f1', bg: '#eef2ff', border: '#c7d2fe' },
         { icon: '⚙️', label: 'Đang thực hiện',  value: cntDang,    accent: '#d97706', bg: '#fffbeb', border: '#fde68a' },
         { icon: '✅', label: 'Hoàn thành',       value: cntXong,    accent: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
@@ -310,9 +310,9 @@ export default function TaskNoteTab() {
                     </p>
                 </div>
                 <button onClick={openAdd} style={{
-                    padding: '10px 20px', background: 'linear-gradient(135deg,#f59e0b,#ea580c)',
+                    padding: '10px 20px', background: 'linear-gradient(135deg,#f59e0b,#ff6a2c)',
                     color: '#fff', border: 'none', borderRadius: 12, fontWeight: 800,
-                    fontSize: '0.88rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(234,88,12,0.3)',
+                    fontSize: '0.88rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(255,106,44,0.3)',
                     fontFamily: "'Outfit', sans-serif"
                 }}>➕ Thêm Task</button>
             </div>
@@ -345,7 +345,7 @@ export default function TaskNoteTab() {
                 <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                         <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151' }}>📊 Tiến độ trung bình toàn bộ tasks</span>
-                        <span style={{ fontSize: '0.85rem', fontWeight: 900, color: avgTienDo >= 100 ? '#16a34a' : '#ea580c' }}>{avgTienDo}%</span>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 900, color: avgTienDo >= 100 ? '#16a34a' : '#ff6a2c' }}>{avgTienDo}%</span>
                     </div>
                     <div style={{ height: 10, background: '#f3f4f6', borderRadius: 99, overflow: 'hidden' }}>
                         <div style={{
@@ -354,8 +354,8 @@ export default function TaskNoteTab() {
                             background: avgTienDo >= 100
                                 ? 'linear-gradient(90deg,#22c55e,#16a34a)'
                                 : avgTienDo >= 60
-                                    ? 'linear-gradient(90deg,#f59e0b,#ea580c)'
-                                    : 'linear-gradient(90deg,#f59e0b,#ea580c)',
+                                    ? 'linear-gradient(90deg,#f59e0b,#ff6a2c)'
+                                    : 'linear-gradient(90deg,#f59e0b,#ff6a2c)',
                         }} />
                     </div>
                     {/* Completion rate */}
@@ -386,16 +386,16 @@ export default function TaskNoteTab() {
                     return (
                         <button key={s} onClick={() => setFilter(s)} style={{
                             padding: '7px 14px', borderRadius: 20,
-                            border: active ? `2px solid ${cfg?.color || '#ea580c'}` : '2px solid #e5e7eb',
+                            border: active ? `2px solid ${cfg?.color || '#ff6a2c'}` : '2px solid #e5e7eb',
                             background: active ? (cfg?.bg || '#fff7ed') : '#fff',
-                            color: active ? (cfg?.color || '#ea580c') : '#6b7280',
+                            color: active ? (cfg?.color || '#ff6a2c') : '#6b7280',
                             fontWeight: active ? 800 : 500, fontSize: '0.8rem',
                             cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
                             fontFamily: "'Outfit', sans-serif", transition: 'all 0.15s'
                         }}>
                             {s}
                             <span style={{
-                                background: active ? (cfg?.color || '#ea580c') : '#e5e7eb',
+                                background: active ? (cfg?.color || '#ff6a2c') : '#e5e7eb',
                                 color: active ? '#fff' : '#6b7280',
                                 borderRadius: 10, padding: '0 6px', fontSize: '0.7rem', fontWeight: 800
                             }}>{cnt}</span>
@@ -469,7 +469,7 @@ export default function TaskNoteTab() {
                                     <div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: '#9ca3af', marginBottom: 4 }}>
                                             <span>Tiến độ</span>
-                                            <span style={{ fontWeight: 700, color: task.tienDo >= 100 ? '#16a34a' : '#ea580c' }}>{task.tienDo}%</span>
+                                            <span style={{ fontWeight: 700, color: task.tienDo >= 100 ? '#16a34a' : '#ff6a2c' }}>{task.tienDo}%</span>
                                         </div>
                                         <div style={{ height: 7, background: '#f3f4f6', borderRadius: 99, overflow: 'hidden' }}>
                                             <div style={{
@@ -477,7 +477,7 @@ export default function TaskNoteTab() {
                                                 width: `${task.tienDo}%`,
                                                 background: task.tienDo >= 100
                                                     ? 'linear-gradient(90deg,#22c55e,#16a34a)'
-                                                    : 'linear-gradient(90deg,#f59e0b,#ea580c)'
+                                                    : 'linear-gradient(90deg,#f59e0b,#ff6a2c)'
                                             }} />
                                         </div>
                                     </div>
@@ -501,7 +501,7 @@ export default function TaskNoteTab() {
                     onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
                 >
                     <div style={{ background: '#fff', borderRadius: 18, padding: 28, width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
-                        <h3 style={{ margin: '0 0 20px', fontSize: '1rem', fontWeight: 800, color: '#ea580c' }}>
+                        <h3 style={{ margin: '0 0 20px', fontSize: '1rem', fontWeight: 800, color: '#ff6a2c' }}>
                             {editId !== null ? '✏️ Chỉnh sửa task' : '➕ Thêm task mới'}
                         </h3>
 
@@ -538,7 +538,7 @@ export default function TaskNoteTab() {
                             <Field label={`Tiến độ hoàn thành: ${form.tienDo}%`}>
                                 <input type="range" min={0} max={100} step={5} value={form.tienDo}
                                     onChange={e => setForm(f => ({ ...f, tienDo: Number(e.target.value) }))}
-                                    style={{ width: '100%', accentColor: '#ea580c', cursor: 'pointer', marginTop: 4 }} />
+                                    style={{ width: '100%', accentColor: '#ff6a2c', cursor: 'pointer', marginTop: 4 }} />
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: '#9ca3af', marginTop: 2 }}>
                                     <span>0%</span><span>50%</span><span>100%</span>
                                 </div>
@@ -564,7 +564,7 @@ export default function TaskNoteTab() {
                         {/* Buttons */}
                         <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
                             <button onClick={handleSave} style={{
-                                flex: 2, padding: '11px 0', background: 'linear-gradient(135deg,#f59e0b,#ea580c)',
+                                flex: 2, padding: '11px 0', background: 'linear-gradient(135deg,#f59e0b,#ff6a2c)',
                                 color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800,
                                 fontSize: '0.88rem', cursor: 'pointer', fontFamily: "'Outfit', sans-serif"
                             }}>

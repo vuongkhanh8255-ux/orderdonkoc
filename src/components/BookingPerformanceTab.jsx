@@ -757,10 +757,10 @@ const KocApprovalPanel = ({ currentUser }) => {
             {/* Bell trigger */}
             <button
                 onClick={() => { setOpen(v => !v); }}
-                style={{ display: 'flex', alignItems: 'center', gap: 7, background: '#fff', border: `1.5px solid ${pendingCount > 0 ? '#fed7aa' : '#e5e7eb'}`, borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontWeight: 700, fontSize: '0.83rem', color: pendingCount > 0 ? '#ea580c' : '#374151', boxShadow: '0 1px 4px rgba(0,0,0,0.07)', transition: 'all 0.15s' }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 7, background: '#fff', border: `1.5px solid ${pendingCount > 0 ? '#fed7aa' : '#e5e7eb'}`, borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontWeight: 700, fontSize: '0.83rem', color: pendingCount > 0 ? '#ff6a2c' : '#374151', boxShadow: '0 1px 4px rgba(0,0,0,0.07)', transition: 'all 0.15s' }}>
                 🔔 Yêu cầu duyệt KOC
                 {pendingCount > 0 && (
-                    <span style={{ background: '#ea580c', color: '#fff', borderRadius: 999, padding: '1px 7px', fontSize: '0.7rem', fontWeight: 900 }}>
+                    <span style={{ background: '#ff6a2c', color: '#fff', borderRadius: 999, padding: '1px 7px', fontSize: '0.7rem', fontWeight: 900 }}>
                         {pendingCount}
                     </span>
                 )}
@@ -775,7 +775,7 @@ const KocApprovalPanel = ({ currentUser }) => {
                             { key: 'history', label: `📋 Lịch sử` },
                         ].map(t => (
                             <button key={t.key} onClick={() => setTab(t.key)}
-                                style={{ flex: 1, padding: '11px 8px', border: 'none', background: tab === t.key ? '#fff7ed' : '#fafafa', fontWeight: tab === t.key ? 800 : 500, color: tab === t.key ? '#ea580c' : '#6b7280', fontSize: '0.8rem', cursor: 'pointer', borderBottom: tab === t.key ? '2px solid #ea580c' : '2px solid transparent', transition: 'all 0.12s' }}>
+                                style={{ flex: 1, padding: '11px 8px', border: 'none', background: tab === t.key ? '#fff7ed' : '#fafafa', fontWeight: tab === t.key ? 800 : 500, color: tab === t.key ? '#ff6a2c' : '#6b7280', fontSize: '0.8rem', cursor: 'pointer', borderBottom: tab === t.key ? '2px solid #ff6a2c' : '2px solid transparent', transition: 'all 0.12s' }}>
                                 {t.label}
                             </button>
                         ))}
@@ -2077,7 +2077,7 @@ ${txtFormat}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                             <div style={{ display: 'flex', gap: '6px' }}>
                                 <button onClick={() => handleLoadReport(false)} disabled={isLoadingData}
-                                    style={{ padding: '8px 16px', background: isLoadingData ? '#d1d5db' : 'linear-gradient(135deg,#f59e0b,#ea580c)', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: isLoadingData ? 'default' : 'pointer', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                                    style={{ padding: '8px 16px', background: isLoadingData ? '#d1d5db' : 'linear-gradient(135deg,#f59e0b,#ff6a2c)', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: isLoadingData ? 'default' : 'pointer', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
                                     {isLoadingData ? '⏳ Đang tải...' : '📂 Xem Báo Cáo'}
                                 </button>
                                 <button onClick={() => handleLoadReport(true)} disabled={isLoadingData} title="Tải lại từ Supabase, bỏ qua cache"
@@ -2105,14 +2105,14 @@ ${txtFormat}
                     {isLoadingData ? (
                         <div style={{ textAlign: 'center', padding: '50px', background: '#fff', borderRadius: '16px', marginBottom: '30px', border: '1px solid #eee' }}>
                             <div style={{ fontSize: '2rem', animation: 'spin 1s linear infinite', marginBottom: '15px' }}>⏳</div>
-                            <h3 style={{ color: '#ea580c', margin: '0 0 10px 0' }}>Đang tải dữ liệu từ máy chủ ({month}/{year})</h3>
+                            <h3 style={{ color: '#ff6a2c', margin: '0 0 10px 0' }}>Đang tải dữ liệu từ máy chủ ({month}/{year})</h3>
 
                             {loadProgress.total > 0 && (
                                 <div style={{ maxWidth: '400px', margin: '20px auto' }}>
                                     <div style={{ width: '100%', background: '#eee', borderRadius: '10px', height: '12px', overflow: 'hidden' }}>
                                         <div style={{
                                             width: `${Math.min(100, Math.round((loadProgress.current / loadProgress.total) * 100))}%`,
-                                            background: '#ea580c',
+                                            background: '#ff6a2c',
                                             height: '100%',
                                             transition: 'width 0.3s'
                                         }}></div>
@@ -2127,9 +2127,9 @@ ${txtFormat}
                         </div>
                     ) : (
                         <div style={{ display: 'flex', gap: '20px', marginBottom: '30px' }}>
-                            <div style={{ ...cardStyle, flex: 1, alignItems: 'center', borderColor: '#ea580c' }}>
+                            <div style={{ ...cardStyle, flex: 1, alignItems: 'center', borderColor: '#ff6a2c' }}>
                                 <div style={{ color: '#666' }}>TỔNG GMV</div>
-                                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#ea580c' }}>{formatNumber(calculatedStats.gmv)}</div>
+                                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#ff6a2c' }}>{formatNumber(calculatedStats.gmv)}</div>
                             </div>
                             <div style={{ ...cardStyle, flex: 1, alignItems: 'center', borderColor: '#3b82f6' }}>
                                 <div style={{ color: '#666' }}>GMV THÁNG AIR</div>
@@ -2149,7 +2149,7 @@ ${txtFormat}
                     {/* CHART */}
                     <div style={{ display: 'flex', gap: '20px', marginBottom: '24px' }}>
                         <div style={{ ...cardStyle, flex: 2, marginBottom: 0 }}>
-                            <div style={{ color: '#ea580c', fontWeight: 'bold', marginBottom: '15px' }}>🏆 GMV Video Dựa Trên PFM Nhân Sự</div>
+                            <div style={{ color: '#ff6a2c', fontWeight: 'bold', marginBottom: '15px' }}>🏆 GMV Video Dựa Trên PFM Nhân Sự</div>
                             <div style={{ width: '100%', height: 400 }}>
                                 <ResponsiveContainer>
                                     <ComposedChart data={chartData}>
@@ -2166,7 +2166,7 @@ ${txtFormat}
                                         <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ddd' }} formatter={v => formatNumber(v)} />
                                         <Legend />
                                         <Bar yAxisId="left" dataKey="gmvMonth" name="GMV Air Trong Tháng" stackId="a" fill="#3b82f6" />
-                                        <Bar yAxisId="left" dataKey="gmvRest" name="GMV Lũy Kế" stackId="a" fill="#ea580c" />
+                                        <Bar yAxisId="left" dataKey="gmvRest" name="GMV Lũy Kế" stackId="a" fill="#ff6a2c" />
                                         <Line yAxisId="right" dataKey="videoMonth" name="Video Air" stroke="#10b981" strokeWidth={3} />
                                     </ComposedChart>
                                 </ResponsiveContainer>
@@ -2174,13 +2174,13 @@ ${txtFormat}
                         </div>
 
                         <div style={{ ...cardStyle, flex: 1, marginBottom: 0 }}>
-                            <div style={{ color: '#ea580c', fontWeight: 'bold', marginBottom: '15px', textAlign: 'center' }}>🥧 Tỉ lệ Video Air theo Brand</div>
+                            <div style={{ color: '#ff6a2c', fontWeight: 'bold', marginBottom: '15px', textAlign: 'center' }}>🥧 Tỉ lệ Video Air theo Brand</div>
                             <div style={{ width: '100%', height: 400 }}>
                                 <ResponsiveContainer>
                                     <PieChart>
                                         <Pie data={brandStats} dataKey="videoMonth" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={120} label={({ name, percent }) => percent > 0 ? `${name} ${(percent * 100).toFixed(0)}%` : ''}>
                                             {brandStats.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={['#ea580c', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#f43f5e', '#14b8a6'][index % 8]} />
+                                                <Cell key={`cell-${index}`} fill={['#ff6a2c', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#f43f5e', '#14b8a6'][index % 8]} />
                                             ))}
                                         </Pie>
                                         <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ddd', color: '#333', borderRadius: '8px' }} />
@@ -2241,7 +2241,7 @@ ${txtFormat}
                                         }
                                     }}
                                     disabled={savingBudget || !castBudgetData.length}
-                                    style={{ background: savingBudget ? '#9ca3af' : '#fff', color: savingBudget ? '#fff' : '#ea580c', border: 'none', borderRadius: 8, padding: '8px 18px', fontWeight: 700, fontSize: '0.85rem', cursor: savingBudget ? 'default' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+                                    style={{ background: savingBudget ? '#9ca3af' : '#fff', color: savingBudget ? '#fff' : '#ff6a2c', border: 'none', borderRadius: 8, padding: '8px 18px', fontWeight: 700, fontSize: '0.85rem', cursor: savingBudget ? 'default' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
                                 >
                                     {savingBudget ? '⏳ Đang lưu...' : '💾 Lưu Định Mức Tháng Sau'}
                                 </button>
@@ -2262,7 +2262,7 @@ ${txtFormat}
                                         <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: '#166534', background: '#f0fdf4', borderLeft: '2px solid #bbf7d0' }}>
                                             Còn Lại / Vượt
                                         </th>
-                                        <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: '#ea580c' }}>
+                                        <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: '#ff6a2c' }}>
                                             Định Mức Tháng Sau
                                             <div style={{ fontSize: '0.65rem', fontWeight: 400, opacity: 0.8 }}>(GMV% + dư tháng này)</div>
                                         </th>
@@ -2300,7 +2300,7 @@ ${txtFormat}
                                                     {remaining == null ? '—' : isOver ? `▲ ${formatNumber(Math.abs(remaining))} ₫` : `${formatNumber(remaining)} ₫`}
                                                 </td>
                                                 {/* ĐỊNH MỨC THÁNG SAU = gmvBudget + carryOver */}
-                                                <td style={{ padding: '11px 14px', textAlign: 'right', fontWeight: 900, color: '#ea580c', fontSize: '0.95rem' }}>
+                                                <td style={{ padding: '11px 14px', textAlign: 'right', fontWeight: 900, color: '#ff6a2c', fontSize: '0.95rem' }}>
                                                     {formatNumber(row.castBudget)} ₫
                                                     {row.carryOver > 0 && (
                                                         <div style={{ fontSize: '0.65rem', color: '#16a34a', fontWeight: 600, marginTop: 2 }}>

@@ -10,7 +10,7 @@
 
 import React from 'react';
 
-const ORANGE = '#ea580c';
+const ORANGE = '#ff6a2c';
 const COMPANY = 'APPCASH CO., LTD';
 const BRAND = 'Stella Kinetics';
 const EMAIL = 'contact@appcash.app';        // UPDATE: email công ty (nên set forwarding cho appcash.app)
@@ -62,7 +62,7 @@ const Landing = () => (
     {/* Hero */}
     <section style={{ background: 'linear-gradient(180deg,#fff7ed 0%,#fff 100%)', padding: '72px 0 56px' }}>
       <div style={container}>
-        <span style={{ display: 'inline-block', background: '#ffedd5', color: '#9a3412', fontWeight: 700, fontSize: '0.78rem', padding: '5px 12px', borderRadius: 20, marginBottom: 18 }}>
+        <span style={{ display: 'inline-block', background: '#ffedd5', color: '#cc4a16', fontWeight: 700, fontSize: '0.78rem', padding: '5px 12px', borderRadius: 20, marginBottom: 18 }}>
           E-commerce · Vietnam
         </span>
         <h1 style={{ fontSize: '2.6rem', fontWeight: 900, lineHeight: 1.15, margin: '0 0 16px', maxWidth: 720 }}>

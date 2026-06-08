@@ -12,7 +12,7 @@ const SHOPEE_SYNC_API = '/api/shopee/sync-orders';
 const ANALYTICS_APP_KEY = '6k2of554me0j9';
 const AUTH_URL = `https://services.tiktokshop.com/open/authorize?service_id=${ANALYTICS_APP_KEY}`;
 
-const ACCENT = { orange: '#ea580c', blue: '#3b82f6', green: '#16a34a', purple: '#8b5cf6', cyan: '#0891b2', amber: '#d97706', pink: '#ec4899' };
+const ACCENT = { orange: '#ff6a2c', blue: '#3b82f6', green: '#16a34a', purple: '#8b5cf6', cyan: '#0891b2', amber: '#d97706', pink: '#ec4899' };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmtVnd = (v) => {
@@ -107,7 +107,7 @@ const ChangeBadge = ({ value }) => {
 };
 
 // ── Stat Card (Stella-style) ──────────────────────────────────────────────────
-const StatCard = ({ icon, label, value, unit, sub, change, sparkData, sparkKey, accentColor = '#ea580c', selected = false, onClick }) => (
+const StatCard = ({ icon, label, value, unit, sub, change, sparkData, sparkKey, accentColor = '#ff6a2c', selected = false, onClick }) => (
   <div onClick={onClick} style={{
     background: '#fff', borderRadius: 16, padding: '20px 22px', flex: '1 1 240px', minWidth: 230,
     boxShadow: selected ? `0 2px 14px ${accentColor}40` : '0 1px 4px rgba(15,23,42,0.06)',
@@ -155,8 +155,8 @@ const ChartTooltip = ({ active, payload, label, valueFormatter = fmtVnd, suffix 
     <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '10px 14px', fontSize: '0.8rem', boxShadow: '0 4px 16px rgba(15,23,42,0.1)' }}>
       <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>{label}</div>
       {payload.map((p, i) => (
-        <div key={i} style={{ color: p.color || '#ea580c', display: 'flex', gap: 6, alignItems: 'center' }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: p.color || '#ea580c', display: 'inline-block' }} />
+        <div key={i} style={{ color: p.color || '#ff6a2c', display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: p.color || '#ff6a2c', display: 'inline-block' }} />
           {p.name}: <strong>{valueFormatter(p.value)}{suffix}</strong>
         </div>
       ))}
@@ -262,8 +262,8 @@ const ShopeeTopSellers = ({ dateRange }) => {
             <div key={shop.shop_id} style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 16, overflow: 'hidden', boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
               <div style={{ padding: '12px 18px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8, background: '#fff7ed' }}>
                 <ShopeeLogo size={18} />
-                <span style={{ fontWeight: 800, fontSize: '0.86rem', color: '#9a3412' }}>{shop.shop_name}</span>
-                <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: '#c2410c', fontWeight: 600 }}>{shop.items.length} SP</span>
+                <span style={{ fontWeight: 800, fontSize: '0.86rem', color: '#cc4a16' }}>{shop.shop_name}</span>
+                <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: '#e85518', fontWeight: 600 }}>{shop.items.length} SP</span>
               </div>
               <div>
                 {shop.items.map(it => (
@@ -280,7 +280,7 @@ const ShopeeTopSellers = ({ dateRange }) => {
                       {it.price ? <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 2 }}>{fmtVndFull(it.price)} đ</div> : null}
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0, minWidth: 52 }}>
-                      <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#ea580c' }}>{fmtNumber(it.qty)}</div>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#ff6a2c' }}>{fmtNumber(it.qty)}</div>
                       <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>đã bán</div>
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0, minWidth: 64 }}>
@@ -397,7 +397,7 @@ const TikTokTopSellers = ({ dateRange }) => {
                       <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={it.product_name}>{it.product_name}</div>
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0, minWidth: 52 }}>
-                      <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#ea580c' }}>{fmtNumber(it.units_sold)}</div>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#ff6a2c' }}>{fmtNumber(it.units_sold)}</div>
                       <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>đã bán</div>
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0, minWidth: 64 }}>
@@ -717,7 +717,7 @@ const ShopAnalyticsTab = () => {
             🔄 Đồng bộ
           </button>
           <button onClick={() => doSync(true)} disabled={syncing}
-            style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#ea580c', color: '#fff', fontWeight: 700, fontSize: '0.78rem', cursor: syncing ? 'not-allowed' : 'pointer', boxShadow: '0 2px 8px rgba(234,88,12,0.25)', opacity: syncing ? 0.6 : 1 }}>
+            style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#ff6a2c', color: '#fff', fontWeight: 700, fontSize: '0.78rem', cursor: syncing ? 'not-allowed' : 'pointer', boxShadow: '0 2px 8px rgba(255,106,44,0.25)', opacity: syncing ? 0.6 : 1 }}>
             {syncing ? '⏳ Đang sync...' : '📥 Full Sync'}
           </button>
           <a href={AUTH_URL} target="_blank" rel="noopener noreferrer"
@@ -787,7 +787,7 @@ const ShopAnalyticsTab = () => {
                 };
                 return (
                   <button key={r.label} onClick={handleClick}
-                    style={{ padding: '6px 16px', borderRadius: 6, fontSize: '0.78rem', fontWeight: 600, border: 'none', background: isActive ? '#ea580c' : 'transparent', color: isActive ? '#fff' : '#64748b', cursor: 'pointer', transition: 'all 0.15s' }}>
+                    style={{ padding: '6px 16px', borderRadius: 6, fontSize: '0.78rem', fontWeight: 600, border: 'none', background: isActive ? '#ff6a2c' : 'transparent', color: isActive ? '#fff' : '#64748b', cursor: 'pointer', transition: 'all 0.15s' }}>
                     {r.label}
                   </button>
                 );
@@ -834,10 +834,10 @@ const ShopAnalyticsTab = () => {
       {connections.length === 0 && !loading && (
         <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 16, padding: '32px', marginBottom: 20, textAlign: 'center' }}>
           <div style={{ fontSize: '2.5rem', marginBottom: 10 }}>🔗</div>
-          <h3 style={{ margin: '0 0 8px', fontWeight: 800, color: '#9a3412' }}>Chưa kết nối shop nào</h3>
-          <p style={{ color: '#c2410c', fontSize: '0.84rem', margin: '0 0 16px' }}>Kết nối TikTok Shop để xem dữ liệu analytics.</p>
+          <h3 style={{ margin: '0 0 8px', fontWeight: 800, color: '#cc4a16' }}>Chưa kết nối shop nào</h3>
+          <p style={{ color: '#e85518', fontSize: '0.84rem', margin: '0 0 16px' }}>Kết nối TikTok Shop để xem dữ liệu analytics.</p>
           <a href={AUTH_URL} target="_blank" rel="noopener noreferrer"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 28px', background: '#ea580c', color: '#fff', borderRadius: 12, fontWeight: 700, textDecoration: 'none', fontSize: '0.88rem', boxShadow: '0 6px 16px rgba(234,88,12,0.25)' }}>
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 28px', background: '#ff6a2c', color: '#fff', borderRadius: 12, fontWeight: 700, textDecoration: 'none', fontSize: '0.88rem', boxShadow: '0 6px 16px rgba(255,106,44,0.25)' }}>
             ♪ Kết nối TikTok Shop
           </a>
         </div>
@@ -961,7 +961,7 @@ const ShopAnalyticsTab = () => {
               ))}
               <div style={{ marginTop: 18, background: '#f8fafc', borderRadius: 10, padding: '12px 14px', fontSize: '0.78rem', color: '#475569', lineHeight: 1.5 }}>
                 💡 <strong>{computed.channelList[0]?.name}</strong> đang chiếm <strong>{computed.channelList[0]?.percent.toFixed(1)}%</strong> doanh thu
-                {computed.channelList[0]?.amount > 0 && <> — <strong style={{ color: '#ea580c' }}>{fmtVnd(computed.channelList[0]?.amount)} đ</strong></>}
+                {computed.channelList[0]?.amount > 0 && <> — <strong style={{ color: '#ff6a2c' }}>{fmtVnd(computed.channelList[0]?.amount)} đ</strong></>}
               </div>
             </div>
           )}
@@ -972,7 +972,7 @@ const ShopAnalyticsTab = () => {
             const pageRows = computed.dailyTable.slice(tablePage * TABLE_PAGE_SIZE, (tablePage + 1) * TABLE_PAGE_SIZE);
             const pgBtn = (pg, label, disabled) => (
               <button key={label} onClick={() => !disabled && setTablePage(pg)} disabled={disabled}
-                style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #e5e7eb', background: pg === tablePage && typeof label === 'number' ? '#ea580c' : '#fff', color: pg === tablePage && typeof label === 'number' ? '#fff' : disabled ? '#cbd5e1' : '#374151', fontSize: '0.76rem', fontWeight: 600, cursor: disabled ? 'default' : 'pointer', minWidth: 32 }}>
+                style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #e5e7eb', background: pg === tablePage && typeof label === 'number' ? '#ff6a2c' : '#fff', color: pg === tablePage && typeof label === 'number' ? '#fff' : disabled ? '#cbd5e1' : '#374151', fontSize: '0.76rem', fontWeight: 600, cursor: disabled ? 'default' : 'pointer', minWidth: 32 }}>
                 {typeof label === 'number' ? label + 1 : label}
               </button>
             );
@@ -1004,7 +1004,7 @@ const ShopAnalyticsTab = () => {
                         onMouseEnter={e => e.currentTarget.style.background = '#fafbfc'}
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                         <td style={{ ...td, fontWeight: 700, color: '#374151' }}>{row.dateShort}</td>
-                        <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: '#ea580c' }}>{fmtVnd(row.gmv)}</td>
+                        <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: '#ff6a2c' }}>{fmtVnd(row.gmv)}</td>
                         <td style={{ ...td, textAlign: 'right', fontWeight: 600 }}>{fmtNumber(row.orders)}</td>
                         <td style={{ ...td, textAlign: 'right', color: '#475569' }}>{fmtNumber(row.items)}</td>
                         <td style={{ ...td, textAlign: 'right', fontWeight: 600, color: '#16a34a' }}>{fmtNumber(row.buyers)}</td>
@@ -1013,7 +1013,7 @@ const ShopAnalyticsTab = () => {
                         <td style={{ ...td, textAlign: 'right' }}>
                           <span style={{
                             background: row.conversion > 8 ? '#dcfce7' : row.conversion > 5 ? '#fff7ed' : '#fef2f2',
-                            color: row.conversion > 8 ? '#15803d' : row.conversion > 5 ? '#c2410c' : '#dc2626',
+                            color: row.conversion > 8 ? '#15803d' : row.conversion > 5 ? '#e85518' : '#dc2626',
                             padding: '2px 8px', borderRadius: 6, fontWeight: 700, fontSize: '0.76rem',
                           }}>{fmtPercent(row.conversion)}</span>
                         </td>
@@ -1027,7 +1027,7 @@ const ShopAnalyticsTab = () => {
                   <tfoot>
                     <tr style={{ background: '#f8fafc', borderTop: '2px solid #e5e7eb' }}>
                       <td style={{ ...td, fontWeight: 800 }}>Tổng</td>
-                      <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: '#ea580c' }}>{fmtVnd(computed.cur.gmv)}</td>
+                      <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: '#ff6a2c' }}>{fmtVnd(computed.cur.gmv)}</td>
                       <td style={{ ...td, textAlign: 'right', fontWeight: 800 }}>{fmtNumber(computed.cur.orders)}</td>
                       <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: '#475569' }}>{fmtNumber(computed.cur.items)}</td>
                       <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: '#16a34a' }}>{fmtNumber(computed.cur.buyers)}</td>
@@ -1092,7 +1092,7 @@ const ShopAnalyticsTab = () => {
                             {s.seller_name}
                           </div>
                         </td>
-                        <td style={{ ...td, fontWeight: 700, color: '#ea580c' }}>{fmtVnd(s.gmv)} đ</td>
+                        <td style={{ ...td, fontWeight: 700, color: '#ff6a2c' }}>{fmtVnd(s.gmv)} đ</td>
                         <td style={td}>{fmtNumber(s.orders)}</td>
                         <td style={td}>{fmtNumber(s.buyers)}</td>
                         <td style={td}>{fmtNumber(s.visitors)}</td>
@@ -1100,7 +1100,7 @@ const ShopAnalyticsTab = () => {
                         <td style={td}>
                           <span style={{
                             background: s.conversion > 8 ? '#dcfce7' : s.conversion > 5 ? '#fff7ed' : '#fef2f2',
-                            color: s.conversion > 8 ? '#15803d' : s.conversion > 5 ? '#c2410c' : '#dc2626',
+                            color: s.conversion > 8 ? '#15803d' : s.conversion > 5 ? '#e85518' : '#dc2626',
                             padding: '2px 8px', borderRadius: 6, fontWeight: 700, fontSize: '0.76rem',
                           }}>{fmtPercent(s.conversion)}</span>
                         </td>
@@ -1122,7 +1122,7 @@ const ShopAnalyticsTab = () => {
           <h3 style={{ margin: '0 0 8px', fontWeight: 800, color: '#374151' }}>Chưa có dữ liệu analytics</h3>
           <p style={{ color: '#64748b', fontSize: '0.84rem', margin: '0 0 16px' }}>Bấm Full Sync để kéo dữ liệu từ TikTok Analytics + Shopee Orders.</p>
           <button onClick={() => doSync(true)} disabled={syncing}
-            style={{ padding: '12px 28px', background: '#ea580c', color: '#fff', borderRadius: 12, fontWeight: 700, border: 'none', fontSize: '0.88rem', cursor: syncing ? 'not-allowed' : 'pointer', boxShadow: '0 6px 16px rgba(234,88,12,0.25)' }}>
+            style={{ padding: '12px 28px', background: '#ff6a2c', color: '#fff', borderRadius: 12, fontWeight: 700, border: 'none', fontSize: '0.88rem', cursor: syncing ? 'not-allowed' : 'pointer', boxShadow: '0 6px 16px rgba(255,106,44,0.25)' }}>
             {syncing ? '⏳ Đang sync...' : '📥 Full Sync từ 01/04/2026'}
           </button>
         </div>

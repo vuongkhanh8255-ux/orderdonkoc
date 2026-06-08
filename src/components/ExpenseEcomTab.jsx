@@ -437,9 +437,9 @@ const ExpenseEcomTab = () => {
             <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', alignItems: 'stretch' }}>
                 {/* Cột trái: Ngân sách + Thẻ thống kê */}
                 <div style={{ flex: 3, display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    <div style={{ ...cardStyle, borderLeft: '5px solid #ea580c', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 0, background: '#fff' }}>
+                    <div style={{ ...cardStyle, borderLeft: '5px solid #ff6a2c', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 0, background: '#fff' }}>
                         <div>
-                            <h3 style={{ margin: 0, color: '#ea580c', fontFamily: "'Outfit', sans-serif" }}>💰 TỔNG NGÂN SÁCH</h3>
+                            <h3 style={{ margin: 0, color: '#ff6a2c', fontFamily: "'Outfit', sans-serif" }}>💰 TỔNG NGÂN SÁCH</h3>
                             <p style={{ margin: '5px 0 0 0', fontSize: '0.8rem', color: '#666', fontStyle: 'italic' }}>
                                 (Số cũ: <b>{formatCurrency(budget)} đ</b>)
                             </p>
@@ -454,14 +454,14 @@ const ExpenseEcomTab = () => {
                                     placeholder="Nhập tiền nạp thêm..."
                                     style={{
                                         height: '40px', padding: '0 15px', borderRadius: '20px 0 0 20px',
-                                        border: '1px solid #ea580c', borderRight: 'none', outline: 'none',
-                                        fontWeight: 'bold', width: '180px', color: '#ea580c', backgroundColor: '#fff'
+                                        border: '1px solid #ff6a2c', borderRight: 'none', outline: 'none',
+                                        fontWeight: 'bold', width: '180px', color: '#ff6a2c', backgroundColor: '#fff'
                                     }}
                                 />
                                 <button
                                     onClick={handleAddBudgetClick}
                                     style={{
-                                        height: '42px', padding: '0 20px', backgroundColor: '#ea580c', color: '#fff',
+                                        height: '42px', padding: '0 20px', backgroundColor: '#ff6a2c', color: '#fff',
                                         border: 'none', borderRadius: '0 20px 20px 0', cursor: 'pointer', fontWeight: 'bold'
                                     }}
                                 >
@@ -471,10 +471,10 @@ const ExpenseEcomTab = () => {
 
                             <div onClick={handleSetTotalBudgetClick} style={{ cursor: 'pointer', marginLeft: '10px' }} title="Click để đặt lại số tổng">
                                 <div style={{
-                                    fontSize: '1.8rem', fontWeight: 'bold', color: '#ea580c',
+                                    fontSize: '1.8rem', fontWeight: 'bold', color: '#ff6a2c',
                                     padding: '0 20px', height: '50px', lineHeight: '50px',
-                                    border: '2px solid rgba(234, 88, 12, 0.5)', borderRadius: '10px', minWidth: '200px',
-                                    textAlign: 'right', backgroundColor: 'rgba(234, 88, 12, 0.1)'
+                                    border: '2px solid rgba(255, 106, 44, 0.5)', borderRadius: '10px', minWidth: '200px',
+                                    textAlign: 'right', backgroundColor: 'rgba(255, 106, 44, 0.1)'
                                 }}>
                                     {formatCurrency(budget)} đ
                                 </div>
@@ -504,7 +504,7 @@ const ExpenseEcomTab = () => {
                 </div>
 
                 <div style={{ flex: 1, ...cardStyle, marginBottom: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minWidth: '350px' }}>
-                    <h4 style={{ margin: '0 0 10px 0', color: '#ea580c', fontSize: '1rem', fontFamily: "'Outfit', sans-serif" }}>TỶ TRỌNG NGÂN SÁCH</h4>
+                    <h4 style={{ margin: '0 0 10px 0', color: '#ff6a2c', fontSize: '1rem', fontFamily: "'Outfit', sans-serif" }}>TỶ TRỌNG NGÂN SÁCH</h4>
                     <div style={{ width: '100%', height: '180px' }}>
                         <ResponsiveContainer>
                             <PieChart>
@@ -529,7 +529,7 @@ const ExpenseEcomTab = () => {
 
             {/* FORM NHẬP */}
             <div style={cardStyle}>
-                <h3 style={{ color: '#ea580c', borderBottom: '1px solid #eee', paddingBottom: '10px', fontFamily: "'Outfit', sans-serif" }}>✏️ NHẬP KHOẢN CHI MỚI</h3>
+                <h3 style={{ color: '#ff6a2c', borderBottom: '1px solid #eee', paddingBottom: '10px', fontFamily: "'Outfit', sans-serif" }}>✏️ NHẬP KHOẢN CHI MỚI</h3>
                 <form onSubmit={handleAddExpense} style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px' }}>
                     <input type="date" value={newExpense.ngay_chi} onChange={e => setNewExpense({ ...newExpense, ngay_chi: e.target.value })} style={inputStyle} />
                     <input placeholder="Họ tên (*)" value={newExpense.ho_ten} onChange={e => setNewExpense({ ...newExpense, ho_ten: e.target.value })} style={inputStyle} />
@@ -546,13 +546,13 @@ const ExpenseEcomTab = () => {
                     </div>
 
                     <select value={newExpense.phong_ban} onChange={e => setNewExpense({ ...newExpense, phong_ban: e.target.value })} style={{ ...inputStyle, color: newExpense.phong_ban ? '#333' : '#999' }}><option value="">-Phòng ban-</option>{DEPARTMENT_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}</select>
-                    <input placeholder="Số tiền (*)" value={newExpense.khoan_chi} onChange={e => setNewExpense({ ...newExpense, khoan_chi: formatCurrency(e.target.value) })} style={{ ...inputStyle, fontWeight: 'bold', color: '#ea580c', border: '1px solid #ea580c' }} />
+                    <input placeholder="Số tiền (*)" value={newExpense.khoan_chi} onChange={e => setNewExpense({ ...newExpense, khoan_chi: formatCurrency(e.target.value) })} style={{ ...inputStyle, fontWeight: 'bold', color: '#ff6a2c', border: '1px solid #ff6a2c' }} />
                     <input placeholder="Nội dung chi (*)" value={newExpense.noi_dung} onChange={e => setNewExpense({ ...newExpense, noi_dung: e.target.value })} style={{ ...inputStyle, gridColumn: 'span 2' }} />
                     <input placeholder="Link chứng từ" value={newExpense.link_chung_tu} onChange={e => setNewExpense({ ...newExpense, link_chung_tu: e.target.value })} style={{ ...inputStyle, gridColumn: 'span 4' }} />
 
                     <div style={{ gridColumn: 'span 4', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '30px', marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #eee' }}>
                         <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem', color: '#333', userSelect: 'none' }}>
-                            <input type="checkbox" checked={newExpense.vat} onChange={e => setNewExpense({ ...newExpense, vat: e.target.checked })} style={{ width: '20px', height: '20px', margin: '0 10px 0 0', cursor: 'pointer', accentColor: '#ea580c' }} />
+                            <input type="checkbox" checked={newExpense.vat} onChange={e => setNewExpense({ ...newExpense, vat: e.target.checked })} style={{ width: '20px', height: '20px', margin: '0 10px 0 0', cursor: 'pointer', accentColor: '#ff6a2c' }} />
                             Xuất hóa đơn VAT
                         </label>
                         <div style={{ display: 'flex', justifyContent: 'center', marginTop: '25px' }}>
@@ -567,8 +567,8 @@ const ExpenseEcomTab = () => {
             {/* DANH SÁCH CHI TIẾT */}
             <div style={cardStyle}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                    <h3 style={{ color: '#ea580c', margin: 0, fontFamily: "'Outfit', sans-serif" }}>DANH SÁCH CHI TIẾT</h3>
-                    <div style={{ fontSize: '0.9rem', color: '#666' }}>Tìm thấy: <b style={{ color: '#ea580c' }}>{filteredExpenses.length}</b> khoản chi</div>
+                    <h3 style={{ color: '#ff6a2c', margin: 0, fontFamily: "'Outfit', sans-serif" }}>DANH SÁCH CHI TIẾT</h3>
+                    <div style={{ fontSize: '0.9rem', color: '#666' }}>Tìm thấy: <b style={{ color: '#ff6a2c' }}>{filteredExpenses.length}</b> khoản chi</div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', backgroundColor: '#f9fafb', padding: '15px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #eee' }}>
@@ -587,7 +587,7 @@ const ExpenseEcomTab = () => {
 
                 <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid #eee' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                        <thead style={{ background: '#f9fafb', color: '#ea580c' }}>
+                        <thead style={{ background: '#f9fafb', color: '#ff6a2c' }}>
                             <tr>
                                 <th style={{ padding: '10px', width: '50px' }}>STT</th>
                                 <th style={{ padding: '10px' }}>Ngày</th>
@@ -608,7 +608,7 @@ const ExpenseEcomTab = () => {
                                 const stt = filteredExpenses.length - index;
 
                                 return (
-                                    <tr key={item.id} style={{ borderBottom: '1px solid #eee', backgroundColor: isEdit ? 'rgba(234, 88, 12, 0.05)' : 'transparent' }}>
+                                    <tr key={item.id} style={{ borderBottom: '1px solid #eee', backgroundColor: isEdit ? 'rgba(255, 106, 44, 0.05)' : 'transparent' }}>
                                         <td style={{ padding: '10px', textAlign: 'center', fontWeight: 'bold', color: '#999' }}>{stt}</td>
                                         <td style={{ padding: '10px', textAlign: 'center' }}>{isEdit ? <input type="date" value={editFormData.ngay_chi} onChange={e => setEditFormData({ ...editFormData, ngay_chi: e.target.value })} style={inputStyle} /> : item.ngay_chi}</td>
                                         <td style={{ padding: '10px' }}><b>{isEdit ? <input value={editFormData.ho_ten} onChange={e => setEditFormData({ ...editFormData, ho_ten: e.target.value })} style={inputStyle} /> : item.ho_ten}</b></td>
@@ -628,9 +628,9 @@ const ExpenseEcomTab = () => {
 
                                         <td style={{ padding: '10px', textAlign: 'center' }}>{isEdit ? <select value={editFormData.phong_ban} onChange={e => setEditFormData({ ...editFormData, phong_ban: e.target.value })} style={inputStyle}>{DEPARTMENT_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}</select> : item.phong_ban}</td>
                                         <td style={{ padding: '10px' }}>{isEdit ? <input value={editFormData.noi_dung} onChange={e => setEditFormData({ ...editFormData, noi_dung: e.target.value })} style={inputStyle} /> : item.noi_dung}</td>
-                                        <td style={{ padding: '10px', textAlign: 'right', color: '#ea580c', fontWeight: 'bold' }}>{isEdit ? <input value={editFormData.khoan_chi} onChange={e => setEditFormData({ ...editFormData, khoan_chi: formatCurrency(e.target.value) })} style={inputStyle} /> : formatCurrency(item.khoan_chi)}</td>
+                                        <td style={{ padding: '10px', textAlign: 'right', color: '#ff6a2c', fontWeight: 'bold' }}>{isEdit ? <input value={editFormData.khoan_chi} onChange={e => setEditFormData({ ...editFormData, khoan_chi: formatCurrency(e.target.value) })} style={inputStyle} /> : formatCurrency(item.khoan_chi)}</td>
                                         <td style={{ padding: '10px', textAlign: 'center' }}>{isEdit ? <input type="checkbox" checked={editFormData.vat} onChange={e => setEditFormData({ ...editFormData, vat: e.target.checked })} /> : (item.vat ? <span style={{ color: '#10b981' }}>✔</span> : '-')}</td>
-                                        <td style={{ padding: '10px', textAlign: 'center' }}>{isEdit ? <input value={editFormData.link_chung_tu} onChange={e => setEditFormData({ ...editFormData, link_chung_tu: e.target.value })} style={inputStyle} /> : (item.link_chung_tu ? <a href={item.link_chung_tu} target="_blank" rel="noreferrer" style={{ color: '#ea580c', textDecoration: 'underline' }}>Link</a> : '-')}</td>
+                                        <td style={{ padding: '10px', textAlign: 'center' }}>{isEdit ? <input value={editFormData.link_chung_tu} onChange={e => setEditFormData({ ...editFormData, link_chung_tu: e.target.value })} style={inputStyle} /> : (item.link_chung_tu ? <a href={item.link_chung_tu} target="_blank" rel="noreferrer" style={{ color: '#ff6a2c', textDecoration: 'underline' }}>Link</a> : '-')}</td>
 
                                         <td style={{ padding: '10px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                                             {!isEdit && (

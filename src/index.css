@@ -7,10 +7,10 @@
 
 :root {
     /* Primary Colors - Orange Theme */
-    --primary-cyan: #ea580c;
+    --primary-cyan: #ff6a2c;
     /* Orange 600 */
-    --primary-cyan-light: rgba(234, 88, 12, 0.15);
-    --primary-cyan-glow: rgba(234, 88, 12, 0.4);
+    --primary-cyan-light: rgba(255, 106, 44, 0.15);
+    --primary-cyan-glow: rgba(255, 106, 44, 0.4);
 
     /* Background - Light */
     --bg-space-dark: #f6f7f9;
@@ -41,7 +41,7 @@
     --glass-bg: rgba(255, 255, 255, 0.8);
 
     /* Shadows */
-    --shadow-glow: 0 10px 24px rgba(234, 88, 12, 0.08);
+    --shadow-glow: 0 10px 24px rgba(255, 106, 44, 0.08);
     --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.05);
 
     /* Surface System */
@@ -174,7 +174,7 @@ button {
 }
 
 .btn-primary {
-    background: #ea580c;
+    background: #ff6a2c;
     color: white;
     border: none;
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
@@ -182,8 +182,8 @@ button {
 }
 
 .btn-primary:hover {
-    background: #c2410c;
-    box-shadow: 0 8px 18px rgba(234, 88, 12, 0.18);
+    background: #e85518;
+    box-shadow: 0 8px 18px rgba(255, 106, 44, 0.18);
 }
 
 .btn-secondary {
@@ -231,7 +231,7 @@ button {
 }
 
 .btn-pagination-active {
-    background: #ea580c;
+    background: #ff6a2c;
     color: white;
     border: none;
     width: 36px;
@@ -368,7 +368,7 @@ tbody tr:last-child {
 .performance-table-card {
     position: relative;
     --table-accent: #ff5a1f;
-    --table-accent-strong: #c2410c;
+    --table-accent-strong: #e85518;
     --table-soft: #fff7ed;
     --table-soft-2: #fff3ed;
     background:
@@ -394,7 +394,7 @@ tbody tr:last-child {
 
 .performance-table-card.is-brand-table {
     --table-accent: #ff5a1f;
-    --table-accent-strong: #c2410c;
+    --table-accent-strong: #e85518;
     --table-soft: #fff7ed;
     --table-soft-2: #fff3ed;
 }
@@ -678,7 +678,7 @@ tbody tr:last-child {
     max-width: 100%;
     padding: 2px 7px;
     border-radius: 999px;
-    color: #c2410c;
+    color: #e85518;
     background: #fff;
     border: 1px solid #fed7aa;
     font-size: 0.72rem;
@@ -736,16 +736,16 @@ tbody tr:last-child {
 }
 
 .koc-identity-overview__tabs button:hover {
-    border-color: #fdba74;
+    border-color: #ffc196;
     background: #fff7ed;
-    color: #c2410c;
+    color: #e85518;
 }
 
 .koc-identity-overview__tabs button.is-active {
-    border-color: #ea580c;
-    background: #ea580c;
+    border-color: #ff6a2c;
+    background: #ff6a2c;
     color: #fff;
-    box-shadow: 0 8px 18px rgba(234, 88, 12, 0.16);
+    box-shadow: 0 8px 18px rgba(255, 106, 44, 0.16);
 }
 
 .koc-identity-overview__list {
@@ -773,7 +773,7 @@ tbody tr:last-child {
 .koc-identity-overview__row:hover {
     border-color: #fed7aa;
     background: #fff7ed;
-    box-shadow: 0 10px 24px rgba(234, 88, 12, 0.08);
+    box-shadow: 0 10px 24px rgba(255, 106, 44, 0.08);
 }
 
 .koc-identity-overview__koc {
@@ -794,7 +794,7 @@ tbody tr:last-child {
     right: 10px;
     padding: 3px 7px;
     border-radius: 999px;
-    color: #c2410c;
+    color: #e85518;
     background: #fff7ed;
     border: 1px solid #fed7aa;
     font-size: 0.68rem;
@@ -875,7 +875,7 @@ tbody tr:last-child {
 }
 
 .koc-identity-overview__brand-name {
-    color: #c2410c;
+    color: #e85518;
     font-size: 0.74rem;
     font-weight: 850;
     text-transform: uppercase;
@@ -950,7 +950,7 @@ tbody tr:last-child {
     border-radius: 999px;
     border: 1px solid #fed7aa;
     background: #fff7ed;
-    color: #c2410c;
+    color: #e85518;
     font-size: 0.95rem;
     line-height: 1;
     font-weight: 900;
@@ -1143,7 +1143,7 @@ tbody tr:last-child {
     border-radius: 999px;
     border: 1px solid #fed7aa;
     background: #fff7ed;
-    color: #c2410c;
+    color: #e85518;
     font-size: 0.72rem;
     font-weight: 900;
     text-transform: uppercase;
@@ -1186,9 +1186,9 @@ tbody tr:last-child {
 }
 
 .listed-price-page__button.is-primary {
-    background: #ea580c;
+    background: #ff6a2c;
     color: #fff;
-    box-shadow: 0 10px 22px rgba(234, 88, 12, 0.18);
+    box-shadow: 0 10px 22px rgba(255, 106, 44, 0.18);
 }
 
 .listed-price-page__button.is-muted {
@@ -1234,7 +1234,7 @@ tbody tr:last-child {
     border-radius: 999px;
     border: 1px solid #fed7aa;
     background: #fff7ed;
-    color: #c2410c;
+    color: #e85518;
     font-size: 0.8rem;
     font-weight: 800;
 }
@@ -1274,7 +1274,7 @@ tbody tr:last-child {
     overflow: auto;
     max-height: calc(100vh - 240px);
     scrollbar-width: thin;
-    scrollbar-color: #fdba74 #f8fafc;
+    scrollbar-color: #ffc196 #f8fafc;
 }
 
 .listed-price-table {
@@ -1290,9 +1290,9 @@ tbody tr:last-child {
     z-index: 20;
     padding: 12px 10px;
     background: linear-gradient(180deg, #fff7ed 0%, #ffedd5 100%);
-    color: #c2410c;
+    color: #e85518;
     border-bottom: 1px solid #fed7aa;
-    border-right: 1px solid #fdba74;
+    border-right: 1px solid #ffc196;
     font-size: 0.75rem;
     font-weight: 900;
     text-align: left;
@@ -1309,7 +1309,7 @@ tbody tr:last-child {
     border-radius: 999px;
     background: transparent;
     border: 1px solid #fed7aa;
-    color: #fb923c;
+    color: #ff8a4c;
     font-size: 0.6rem;
     font-weight: 700;
     opacity: 0.75;
@@ -1358,7 +1358,7 @@ tbody tr:last-child {
 }
 
 .listed-price-table input:focus {
-    border-color: #fb923c;
+    border-color: #ff8a4c;
     background: #fff;
     box-shadow: 0 0 0 3px rgba(251, 146, 60, 0.14);
 }
@@ -1412,17 +1412,17 @@ tbody tr:last-child {
     border-radius: 999px;
     border: 1px solid #fed7aa;
     background: #fff;
-    color: #c2410c;
+    color: #e85518;
     font-weight: 900;
     cursor: pointer;
 }
 
 .listed-price-table__actions button:hover {
-    border-color: #ea580c;
+    border-color: #ff6a2c;
     background: #fff7ed;
-    color: #ea580c;
+    color: #ff6a2c;
     transform: scale(1.1);
-    box-shadow: 0 2px 8px rgba(234, 88, 12, 0.15);
+    box-shadow: 0 2px 8px rgba(255, 106, 44, 0.15);
 }
 
 /* ── Product accordion header row ── */
@@ -1435,7 +1435,7 @@ tbody tr:last-child {
     border-top: none !important;
 }
 .listed-price-table tr.listed-price-product-row td:first-child {
-    border-left: 4px solid #ea580c;
+    border-left: 4px solid #ff6a2c;
 }
 .listed-price-table tr.listed-price-product-row:hover td {
     background: linear-gradient(90deg, #fff7ed 0%, #fff8f4 100%) !important;
@@ -1449,7 +1449,7 @@ tbody tr:last-child {
     padding: 5px 12px;
     font-weight: 800;
     font-size: 0.8rem;
-    color: #ea580c;
+    color: #ff6a2c;
     letter-spacing: 0.04em;
     text-transform: uppercase;
 }
@@ -1504,7 +1504,7 @@ tbody tr:last-child {
 }
 
 .performance-table-card__page-status strong {
-    color: #ea580c;
+    color: #ff6a2c;
     font-weight: 800;
 }
 
@@ -1519,7 +1519,7 @@ tbody tr:last-child {
     border-radius: 10px;
     border: 1px solid #dbe3ec;
     background: #fff;
-    color: #c2410c;
+    color: #e85518;
     font-size: 0.78rem;
     font-weight: 800;
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
@@ -1527,14 +1527,14 @@ tbody tr:last-child {
 }
 
 .performance-table-card__page-button:hover:not(:disabled) {
-    border-color: #fdba74;
+    border-color: #ffc196;
     background: #fff7ed;
-    box-shadow: 0 8px 18px rgba(234, 88, 12, 0.12);
+    box-shadow: 0 8px 18px rgba(255, 106, 44, 0.12);
 }
 
 .performance-table-card__page-button.is-next:not(:disabled) {
-    border-color: #ea580c;
-    background: #ea580c;
+    border-color: #ff6a2c;
+    background: #ff6a2c;
     color: #fff;
 }
 
@@ -1551,7 +1551,7 @@ tbody tr:last-child {
 
 .performance-budget-card__header {
     padding: 18px 24px;
-    background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
+    background: linear-gradient(135deg, #ff6a2c 0%, #e85518 100%);
     color: #fff;
     display: flex;
     align-items: center;

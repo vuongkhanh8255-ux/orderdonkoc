@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 
-const STAR_COLORS = { 5: '#22c55e', 4: '#84cc16', 3: '#eab308', 2: '#f97316', 1: '#ef4444' };
+const STAR_COLORS = { 5: '#22c55e', 4: '#84cc16', 3: '#eab308', 2: '#ff7a30', 1: '#ef4444' };
 const PAGE_SIZE = 20;
 
 const SHOP_MAP = {
@@ -276,7 +276,7 @@ export default function ReviewsTab() {
   const platformBtn = (val) => ({
     ...btnBase,
     background: platform === val ? (val === 'shopee' ? '#fff7ed' : val === 'tiktok' ? '#f8fafc' : '#fff7ed') : '#fff',
-    color: platform === val ? (val === 'shopee' ? '#ea580c' : val === 'tiktok' ? '#0f172a' : '#ea580c') : '#64748b',
+    color: platform === val ? (val === 'shopee' ? '#ff6a2c' : val === 'tiktok' ? '#0f172a' : '#ff6a2c') : '#64748b',
     borderColor: platform === val ? (val === 'shopee' ? '#fed7aa' : val === 'tiktok' ? '#cbd5e1' : '#fed7aa') : '#e5e7eb',
   });
 
@@ -285,7 +285,7 @@ export default function ReviewsTab() {
     padding: '6px 12px',
     fontSize: '0.78rem',
     background: starFilter === val ? (val === 0 ? '#fff7ed' : (STAR_COLORS[val] + '18')) : '#fff',
-    color: starFilter === val ? (val === 0 ? '#ea580c' : STAR_COLORS[val]) : '#94a3b8',
+    color: starFilter === val ? (val === 0 ? '#ff6a2c' : STAR_COLORS[val]) : '#94a3b8',
     borderColor: starFilter === val ? (val === 0 ? '#fed7aa' : STAR_COLORS[val]) : '#e5e7eb',
   });
 
@@ -319,7 +319,7 @@ export default function ReviewsTab() {
             <button onClick={() => setPlatform('tiktok')} style={platformBtn('tiktok')}>⬛ TikTok</button>
           </div>
           <button onClick={fetchReviews} disabled={loading}
-            style={{ ...btnBase, background: loading ? '#d1d5db' : '#ea580c', color: '#fff', borderColor: loading ? '#d1d5db' : '#ea580c', boxShadow: loading ? 'none' : '0 4px 12px rgba(234,88,12,0.2)', minWidth: 120 }}>
+            style={{ ...btnBase, background: loading ? '#d1d5db' : '#ff6a2c', color: '#fff', borderColor: loading ? '#d1d5db' : '#ff6a2c', boxShadow: loading ? 'none' : '0 4px 12px rgba(255,106,44,0.2)', minWidth: 120 }}>
             {loading ? '⏳ Đang tải...' : '🔍 Tải dữ liệu'}
           </button>
         </div>
@@ -395,7 +395,7 @@ export default function ReviewsTab() {
               );
             })}
             {starFilter > 0 && (
-              <div style={{ marginTop: 8, fontSize: '0.72rem', color: '#ea580c', fontWeight: 600, cursor: 'pointer' }}
+              <div style={{ marginTop: 8, fontSize: '0.72rem', color: '#ff6a2c', fontWeight: 600, cursor: 'pointer' }}
                 onClick={() => { setStarFilter(0); setPage(1); }}>
                 ✕ Bỏ lọc {starFilter} sao
               </div>
@@ -448,7 +448,7 @@ export default function ReviewsTab() {
                   style={{ padding: '14px 16px', borderRadius: 10, background: shopFilter === s.shop ? '#fff7ed' : '#f8fafc', border: `1.5px solid ${shopFilter === s.shop ? '#fed7aa' : '#e5e7eb'}`, cursor: 'pointer', transition: 'all 0.15s' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: '0.72rem', padding: '2px 7px', borderRadius: 5, fontWeight: 700, background: s.platform === 'shopee' ? '#fff7ed' : '#f8fafc', color: s.platform === 'shopee' ? '#ea580c' : '#0f172a', border: `1px solid ${s.platform === 'shopee' ? '#fed7aa' : '#e5e7eb'}` }}>
+                      <span style={{ fontSize: '0.72rem', padding: '2px 7px', borderRadius: 5, fontWeight: 700, background: s.platform === 'shopee' ? '#fff7ed' : '#f8fafc', color: s.platform === 'shopee' ? '#ff6a2c' : '#0f172a', border: `1px solid ${s.platform === 'shopee' ? '#fed7aa' : '#e5e7eb'}` }}>
                         {s.platform === 'shopee' ? '🟠' : '⬛'}
                       </span>
                       <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#0f172a' }}>{s.shop}</span>
@@ -479,7 +479,7 @@ export default function ReviewsTab() {
             })}
           </div>
           {shopFilter !== 'all' && (
-            <div style={{ marginTop: 10, fontSize: '0.72rem', color: '#ea580c', fontWeight: 600, cursor: 'pointer' }}
+            <div style={{ marginTop: 10, fontSize: '0.72rem', color: '#ff6a2c', fontWeight: 600, cursor: 'pointer' }}
               onClick={() => { setShopFilter('all'); setPage(1); }}>
               ✕ Bỏ lọc shop "{shopFilter}"
             </div>
@@ -536,7 +536,7 @@ export default function ReviewsTab() {
                         </div>
                       </td>
                       <td style={{ ...tdStyle, textAlign: 'center' }}>
-                        <span style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: 6, fontWeight: 700, background: p.platform === 'shopee' ? '#fff7ed' : '#f8fafc', color: p.platform === 'shopee' ? '#ea580c' : '#0f172a', border: `1px solid ${p.platform === 'shopee' ? '#fed7aa' : '#e5e7eb'}` }}>
+                        <span style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: 6, fontWeight: 700, background: p.platform === 'shopee' ? '#fff7ed' : '#f8fafc', color: p.platform === 'shopee' ? '#ff6a2c' : '#0f172a', border: `1px solid ${p.platform === 'shopee' ? '#fed7aa' : '#e5e7eb'}` }}>
                           {p.platform === 'shopee' ? 'SPE' : 'TT'}
                         </span>
                       </td>
@@ -567,7 +567,7 @@ export default function ReviewsTab() {
         <div ref={reviewsRef} style={{ ...card, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           {productFilter && (
             <div onClick={() => { setProductFilter(null); setPage(1); }}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, background: '#fff7ed', border: '1px solid #fed7aa', color: '#c2410c', fontSize: '0.76rem', fontWeight: 700, cursor: 'pointer' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, background: '#fff7ed', border: '1px solid #fed7aa', color: '#e85518', fontSize: '0.76rem', fontWeight: 700, cursor: 'pointer' }}
               title="Bỏ lọc sản phẩm">
               📦 {truncate(productFilter.productName, 28)} ✕
             </div>
@@ -576,7 +576,7 @@ export default function ReviewsTab() {
             <input type="text" placeholder="Tìm sản phẩm, nội dung, user..."
               value={searchText} onChange={e => { setSearchText(e.target.value); setPage(1); }}
               style={{ width: '100%', padding: '8px 12px 8px 34px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.82rem', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border-color 0.15s' }}
-              onFocus={e => e.target.style.borderColor = '#ea580c'}
+              onFocus={e => e.target.style.borderColor = '#ff6a2c'}
               onBlur={e => e.target.style.borderColor = '#e5e7eb'} />
             <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontSize: '0.85rem', color: '#94a3b8', pointerEvents: 'none' }}>🔍</span>
           </div>
@@ -642,7 +642,7 @@ export default function ReviewsTab() {
                       onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = '#f8fafc'; }}
                       onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = 'transparent'; }}>
                       <td style={{ ...tdStyle, textAlign: 'center' }}>
-                        <span style={{ fontSize: '0.72rem', padding: '2px 6px', borderRadius: 5, fontWeight: 700, background: r.platform === 'shopee' ? '#fff7ed' : '#f8fafc', color: r.platform === 'shopee' ? '#ea580c' : '#0f172a', border: `1px solid ${r.platform === 'shopee' ? '#fed7aa' : '#e5e7eb'}` }}>
+                        <span style={{ fontSize: '0.72rem', padding: '2px 6px', borderRadius: 5, fontWeight: 700, background: r.platform === 'shopee' ? '#fff7ed' : '#f8fafc', color: r.platform === 'shopee' ? '#ff6a2c' : '#0f172a', border: `1px solid ${r.platform === 'shopee' ? '#fed7aa' : '#e5e7eb'}` }}>
                           {r.platform === 'shopee' ? '🟠' : '⬛'}
                         </span>
                       </td>
@@ -702,7 +702,7 @@ export default function ReviewsTab() {
                       </td>
                       <td style={{ ...tdStyle, color: r.comment ? '#374151' : '#c4b5a0', fontStyle: r.comment ? 'normal' : 'italic', fontSize: '0.78rem', lineHeight: 1.4 }}>
                         {r.comment ? truncate(r.comment, 80) : 'Chỉ đánh giá sao'}
-                        {r.images?.length > 0 && <span style={{ marginLeft: 6, color: '#ea580c', fontSize: '0.72rem', fontWeight: 700, fontStyle: 'normal', whiteSpace: 'nowrap' }} title={`${r.images.length} ảnh`}>📷{r.images.length}</span>}
+                        {r.images?.length > 0 && <span style={{ marginLeft: 6, color: '#ff6a2c', fontSize: '0.72rem', fontWeight: 700, fontStyle: 'normal', whiteSpace: 'nowrap' }} title={`${r.images.length} ảnh`}>📷{r.images.length}</span>}
                       </td>
                       <td style={{ ...tdStyle, fontSize: '0.78rem', fontWeight: 600 }}>{r.userName}</td>
                       <td style={{ ...tdStyle, textAlign: 'center', fontSize: '0.76rem', color: '#64748b' }}>{fmtDate(r.date)}</td>
@@ -739,7 +739,7 @@ export default function ReviewsTab() {
                   p === '...'
                     ? <span key={`e${i}`} style={{ padding: '0 4px', color: '#94a3b8' }}>…</span>
                     : <button key={p} onClick={() => setPage(p)}
-                        style={{ ...btnBase, padding: '6px 10px', fontSize: '0.76rem', minWidth: 34, background: p === page ? '#ea580c' : '#fff', color: p === page ? '#fff' : '#64748b', borderColor: p === page ? '#ea580c' : '#e5e7eb' }}>
+                        style={{ ...btnBase, padding: '6px 10px', fontSize: '0.76rem', minWidth: 34, background: p === page ? '#ff6a2c' : '#fff', color: p === page ? '#fff' : '#64748b', borderColor: p === page ? '#ff6a2c' : '#e5e7eb' }}>
                         {p}
                       </button>
                 ));

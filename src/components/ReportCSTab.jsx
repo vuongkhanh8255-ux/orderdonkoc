@@ -7,7 +7,7 @@ const TOKEN = 'stella2026';
 const BRANDS = ['Bodymiss', 'Milaganics', 'Moaw Moaws', 'eHerb', 'Real Steel', 'Masube', 'Healmi'];
 
 const BRAND_COLORS = {
-  'Bodymiss': '#3b82f6', 'Milaganics': '#10b981', 'Moaw Moaws': '#f97316',
+  'Bodymiss': '#3b82f6', 'Milaganics': '#10b981', 'Moaw Moaws': '#ff7a30',
   'eHerb': '#eab308', 'Real Steel': '#8b5cf6', 'Masube': '#ec4899', 'Healmi': '#06b6d4',
 };
 
@@ -279,7 +279,7 @@ export default function ReportCSTab() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <label style={labelStyle}>Ngày báo cáo:</label>
           <input type="date" value={reportDate} onChange={e => setReportDate(e.target.value)}
-            style={{ padding: '8px 12px', borderRadius: 8, border: '2px solid #f97316', fontSize: 14, fontWeight: 600, background: '#fff' }} />
+            style={{ padding: '8px 12px', borderRadius: 8, border: '2px solid #ff7a30', fontSize: 14, fontWeight: 600, background: '#fff' }} />
         </div>
       </div>
 
@@ -381,7 +381,7 @@ export default function ReportCSTab() {
           <button onClick={handleSave} disabled={saving}
             style={{
               padding: '10px 28px', borderRadius: 10, border: 'none', fontSize: 14, fontWeight: 700, cursor: saving ? 'wait' : 'pointer',
-              background: 'linear-gradient(135deg, #f97316, #ef4444)', color: '#fff', opacity: saving ? 0.6 : 1,
+              background: 'linear-gradient(135deg, #ff7a30, #ef4444)', color: '#fff', opacity: saving ? 0.6 : 1,
             }}>
             {saving ? 'Đang lưu...' : '💾 Lưu báo cáo'}
           </button>

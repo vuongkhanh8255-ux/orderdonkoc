@@ -62,13 +62,13 @@ const LoginPage = ({ onLogin }) => {
                 {/* Logo */}
                 <div style={{ textAlign: 'center', marginBottom: 32 }}>
                     <div style={{
-                        width: 58, height: 58, background: '#ea580c',
+                        width: 58, height: 58, background: '#ff6a2c',
                         borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        margin: '0 auto 12px', boxShadow: '0 10px 22px rgba(234,88,12,0.16)',
+                        margin: '0 auto 12px', boxShadow: '0 10px 22px rgba(255,106,44,0.16)',
                         fontSize: '2rem', color: '#fff', fontWeight: 900
                     }}>✦</div>
                     <p style={{ margin: 0, fontSize: '0.7rem', color: '#999', letterSpacing: 2, textTransform: 'uppercase' }}>powered by</p>
-                    <h1 style={{ margin: '4px 0 0', fontSize: '1.3rem', fontWeight: 900, color: '#ea580c', letterSpacing: 2, textTransform: 'uppercase' }}>
+                    <h1 style={{ margin: '4px 0 0', fontSize: '1.3rem', fontWeight: 900, color: '#ff6a2c', letterSpacing: 2, textTransform: 'uppercase' }}>
                         STELLA KINETICS
                     </h1>
                     <p style={{ margin: '8px 0 0', fontSize: '0.85rem', color: '#9ca3af' }}>Đăng nhập để tiếp tục</p>
@@ -89,7 +89,7 @@ const LoginPage = ({ onLogin }) => {
                                 fontSize: '0.9rem', outline: 'none', transition: 'border 0.2s',
                                 fontFamily: "'Outfit', sans-serif"
                             }}
-                            onFocus={e => e.target.style.border = '2px solid #ea580c'}
+                            onFocus={e => e.target.style.border = '2px solid #ff6a2c'}
                             onBlur={e => e.target.style.border = error ? '2px solid #f87171' : '2px solid #e5e7eb'}
                         />
                     </div>
@@ -107,7 +107,7 @@ const LoginPage = ({ onLogin }) => {
                                     fontSize: '0.9rem', outline: 'none', transition: 'border 0.2s',
                                     fontFamily: "'Outfit', sans-serif"
                                 }}
-                                onFocus={e => e.target.style.border = '2px solid #ea580c'}
+                                onFocus={e => e.target.style.border = '2px solid #ff6a2c'}
                                 onBlur={e => e.target.style.border = error ? '2px solid #f87171' : '2px solid #e5e7eb'}
                             />
                             <button type="button" onClick={() => setShowPass(v => !v)}
@@ -120,7 +120,7 @@ const LoginPage = ({ onLogin }) => {
                     {/* Ghi nhớ đăng nhập */}
                     <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
                         <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)}
-                            style={{ width: 16, height: 16, accentColor: '#ea580c', cursor: 'pointer' }} />
+                            style={{ width: 16, height: 16, accentColor: '#ff6a2c', cursor: 'pointer' }} />
                         <span style={{ fontSize: '0.82rem', color: '#6b7280' }}>Ghi nhớ đăng nhập</span>
                     </label>
 
@@ -133,9 +133,9 @@ const LoginPage = ({ onLogin }) => {
                     <button type="submit" disabled={loading}
                         style={{
                             marginTop: 4, padding: '13px', borderRadius: 8, border: 'none',
-                            background: loading ? '#d1d5db' : '#ea580c',
+                            background: loading ? '#d1d5db' : '#ff6a2c',
                             color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: loading ? 'default' : 'pointer',
-                            boxShadow: loading ? 'none' : '0 8px 18px rgba(234,88,12,0.18)',
+                            boxShadow: loading ? 'none' : '0 8px 18px rgba(255,106,44,0.18)',
                             transition: 'all 0.2s', fontFamily: "'Outfit', sans-serif", letterSpacing: 0
                         }}>
                         {loading ? '⏳ Đang xử lý...' : '🔑 ĐĂNG NHẬP'}

@@ -8,7 +8,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 
 const API = '/api/tiktok-shop/analytics';
-const ACCENT = '#ea580c';
+const ACCENT = '#ff6a2c';
 const FLOOR = '2026-04-01';
 
 // ── Formatters ───────────────────────────────────────────────────────────────
@@ -34,7 +34,7 @@ const inputStyle  = { padding: '8px 12px', borderRadius: 10, border: '1px solid 
 const dateInputStyle = { padding: '7px 8px', borderRadius: 9, border: '1px solid #e5e7eb', background: '#fff', fontSize: '0.8rem', color: '#334155', width: 132 };
 
 // ── Letter avatar (orders API không trả avatar) ────────────────────────────────
-const AVA_COLORS = ['#ea580c', '#3b82f6', '#16a34a', '#8b5cf6', '#0891b2', '#d97706', '#ec4899', '#ef4444', '#14b8a6'];
+const AVA_COLORS = ['#ff6a2c', '#3b82f6', '#16a34a', '#8b5cf6', '#0891b2', '#d97706', '#ec4899', '#ef4444', '#14b8a6'];
 const avaColor = (name) => { let h = 0; const s = name || ''; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return AVA_COLORS[h % AVA_COLORS.length]; };
 const LetterAva = ({ name, size = 30 }) => {
   const ch = ((name || '?').replace(/^@/, '').charAt(0) || '?').toUpperCase();

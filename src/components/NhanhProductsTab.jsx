@@ -144,7 +144,7 @@ export default function NhanhProductsTab() {
   const pageRows = filtered.slice((page - 1) * PAGE, page * PAGE);
 
   const card = { background: '#fff', borderRadius: 16, border: '1px solid #eee', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', padding: 24, marginBottom: 24 };
-  const th = { padding: '12px 16px', textAlign: 'left', borderBottom: '2px solid #eee', color: '#ea580c', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', background: '#f9fafb', position: 'sticky', top: 0 };
+  const th = { padding: '12px 16px', textAlign: 'left', borderBottom: '2px solid #eee', color: '#ff6a2c', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', background: '#f9fafb', position: 'sticky', top: 0 };
   const td = { padding: '10px 16px', borderBottom: '1px solid #f1f5f9', fontSize: '0.86rem', color: '#374151' };
 
   return (
@@ -163,9 +163,9 @@ export default function NhanhProductsTab() {
           <button onClick={clearAll} disabled={loading} className="btn-secondary" style={{ padding: '12px 24px', color: '#ef4444', borderColor: '#ef4444', background: '#fff' }}>
             🗑️ XÓA HẾT
           </button>
-          <span style={{ fontSize: '0.9rem', color: '#666' }}>Đang lưu: <b style={{ color: '#ea580c' }}>{fmt(rows.length)}</b> sản phẩm</span>
+          <span style={{ fontSize: '0.9rem', color: '#666' }}>Đang lưu: <b style={{ color: '#ff6a2c' }}>{fmt(rows.length)}</b> sản phẩm</span>
         </div>
-        {status && <div style={{ marginTop: 12, fontSize: '0.88rem', fontWeight: 600, color: status.startsWith('❌') ? '#ef4444' : status.startsWith('✅') ? '#10b981' : '#ea580c' }}>{status}</div>}
+        {status && <div style={{ marginTop: 12, fontSize: '0.88rem', fontWeight: 600, color: status.startsWith('❌') ? '#ef4444' : status.startsWith('✅') ? '#10b981' : '#ff6a2c' }}>{status}</div>}
       </div>
 
       {rows.length > 0 && (
@@ -190,7 +190,7 @@ export default function NhanhProductsTab() {
                   <tr key={r.id ?? i} style={{ background: i % 2 === 0 ? '#f9fafb' : '#fff' }}>
                     <td style={{ ...td, fontWeight: 600, color: '#111' }}>{r.ma_san_pham}</td>
                     <td style={td}>{r.ten_san_pham}</td>
-                    <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: '#ea580c' }}>{fmt(r.gia_ban_vat)} đ</td>
+                    <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: '#ff6a2c' }}>{fmt(r.gia_ban_vat)} đ</td>
                   </tr>
                 ))}
               </tbody>
@@ -199,10 +199,10 @@ export default function NhanhProductsTab() {
           {totalPages > 1 && (
             <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginTop: 14 }}>
               <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                style={{ padding: '6px 16px', borderRadius: 6, border: '1px solid #ddd', background: '#fff', color: page === 1 ? '#bbb' : '#ea580c', fontWeight: 700, cursor: page === 1 ? 'default' : 'pointer' }}>◀ Trước</button>
+                style={{ padding: '6px 16px', borderRadius: 6, border: '1px solid #ddd', background: '#fff', color: page === 1 ? '#bbb' : '#ff6a2c', fontWeight: 700, cursor: page === 1 ? 'default' : 'pointer' }}>◀ Trước</button>
               <span style={{ padding: '6px 4px', fontSize: '0.85rem', color: '#666' }}>{page} / {totalPages}</span>
               <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                style={{ padding: '6px 16px', borderRadius: 6, border: '1px solid #ddd', background: page === totalPages ? '#fff' : '#ea580c', color: page === totalPages ? '#bbb' : '#fff', fontWeight: 700, cursor: page === totalPages ? 'default' : 'pointer' }}>Sau ▶</button>
+                style={{ padding: '6px 16px', borderRadius: 6, border: '1px solid #ddd', background: page === totalPages ? '#fff' : '#ff6a2c', color: page === totalPages ? '#bbb' : '#fff', fontWeight: 700, cursor: page === totalPages ? 'default' : 'pointer' }}>Sau ▶</button>
             </div>
           )}
         </div>

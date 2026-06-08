@@ -8,8 +8,8 @@ const PublicLandingPage = ({ onGoLogin }) => {
   const MockDashboard = () => (
     <div style={{
       background: '#fff', borderRadius: 16, padding: 0, overflow: 'hidden',
-      boxShadow: '0 25px 60px rgba(234,88,12,0.15), 0 4px 20px rgba(0,0,0,0.08)',
-      border: '1px solid rgba(234,88,12,0.1)', maxWidth: 800, margin: '0 auto',
+      boxShadow: '0 25px 60px rgba(255,106,44,0.15), 0 4px 20px rgba(0,0,0,0.08)',
+      border: '1px solid rgba(255,106,44,0.1)', maxWidth: 800, margin: '0 auto',
       transform: 'perspective(1200px) rotateX(2deg)', transition: 'transform 0.3s',
     }}>
       {/* Title bar */}
@@ -24,14 +24,14 @@ const PublicLandingPage = ({ onGoLogin }) => {
         {/* Sidebar */}
         <div style={{ width: 180, background: '#0f172a', padding: '16px 0', flexShrink: 0 }}>
           <div style={{ padding: '0 14px 16px', borderBottom: '1px solid #1e293b', marginBottom: 12 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg, #ea580c, #f97316)', margin: '0 auto 6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '0.7rem', fontWeight: 900 }}>SK</div>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg, #ff6a2c, #ff7a30)', margin: '0 auto 6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '0.7rem', fontWeight: 900 }}>SK</div>
             <div style={{ textAlign: 'center', fontSize: '0.6rem', color: '#94a3b8', fontWeight: 700 }}>STELLA KINETICS</div>
           </div>
           {['Dashboard Ecom', 'Ads Analytics', 'CRM', 'CSKH', 'Livestream', 'Booking'].map((item, i) => (
             <div key={i} style={{
               padding: '7px 14px', fontSize: '0.65rem', color: i === 0 ? '#fff' : '#64748b',
-              background: i === 0 ? 'rgba(234,88,12,0.2)' : 'transparent', fontWeight: i === 0 ? 700 : 500,
-              borderLeft: i === 0 ? '3px solid #ea580c' : '3px solid transparent',
+              background: i === 0 ? 'rgba(255,106,44,0.2)' : 'transparent', fontWeight: i === 0 ? 700 : 500,
+              borderLeft: i === 0 ? '3px solid #ff6a2c' : '3px solid transparent',
             }}>{item}</div>
           ))}
         </div>
@@ -40,7 +40,7 @@ const PublicLandingPage = ({ onGoLogin }) => {
           {/* Stat cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 12 }}>
             {[
-              { label: 'GMV', value: '2.8 ty', color: '#ea580c', change: '+12.5%' },
+              { label: 'GMV', value: '2.8 ty', color: '#ff6a2c', change: '+12.5%' },
               { label: 'Don hang', value: '1,284', color: '#3b82f6', change: '+8.2%' },
               { label: 'Traffic', value: '45.2K', color: '#8b5cf6', change: '+15.3%' },
               { label: 'CVR', value: '6.82%', color: '#16a34a', change: '+2.1%' },
@@ -58,14 +58,14 @@ const PublicLandingPage = ({ onGoLogin }) => {
             <svg viewBox="0 0 500 120" style={{ width: '100%', height: 100 }}>
               <defs>
                 <linearGradient id="mockGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#ea580c" stopOpacity="0.3"/>
-                  <stop offset="100%" stopColor="#ea580c" stopOpacity="0"/>
+                  <stop offset="0%" stopColor="#ff6a2c" stopOpacity="0.3"/>
+                  <stop offset="100%" stopColor="#ff6a2c" stopOpacity="0"/>
                 </linearGradient>
               </defs>
               <path d="M0,90 Q30,85 60,70 T120,50 T180,60 T240,35 T300,45 T360,20 T420,30 T480,15 L500,15 L500,120 L0,120 Z" fill="url(#mockGrad)" />
-              <path d="M0,90 Q30,85 60,70 T120,50 T180,60 T240,35 T300,45 T360,20 T420,30 T480,15" fill="none" stroke="#ea580c" strokeWidth="2.5" strokeLinecap="round" />
+              <path d="M0,90 Q30,85 60,70 T120,50 T180,60 T240,35 T300,45 T360,20 T420,30 T480,15" fill="none" stroke="#ff6a2c" strokeWidth="2.5" strokeLinecap="round" />
               {[{x:60,y:70},{x:120,y:50},{x:180,y:60},{x:240,y:35},{x:300,y:45},{x:360,y:20},{x:420,y:30},{x:480,y:15}].map((p,i) => (
-                <circle key={i} cx={p.x} cy={p.y} r="3" fill="#ea580c" />
+                <circle key={i} cx={p.x} cy={p.y} r="3" fill="#ff6a2c" />
               ))}
             </svg>
           </div>
@@ -80,7 +80,7 @@ const PublicLandingPage = ({ onGoLogin }) => {
                 ['Milaganics', '650M', '298', '6.5%', '198K'],
                 ['Real Steel', '420M', '185', '5.8%', '310K'],
               ].map((row, i) => row.map((cell, j) => (
-                <div key={`${i}-${j}`} style={{ padding: '3px 0', fontWeight: j === 0 ? 700 : 500, color: j === 1 ? '#ea580c' : '#475569', fontSize: '0.5rem' }}>{cell}</div>
+                <div key={`${i}-${j}`} style={{ padding: '3px 0', fontWeight: j === 0 ? 700 : 500, color: j === 1 ? '#ff6a2c' : '#475569', fontSize: '0.5rem' }}>{cell}</div>
               )))}
             </div>
           </div>
@@ -92,7 +92,7 @@ const PublicLandingPage = ({ onGoLogin }) => {
   // ── Stats Counter ──────────────────────────────────────────────────
   const StatCounter = ({ value, label, suffix = '' }) => (
     <div style={{ textAlign: 'center' }}>
-      <div style={{ fontSize: '2.4rem', fontWeight: 900, color: '#ea580c', lineHeight: 1 }}>
+      <div style={{ fontSize: '2.4rem', fontWeight: 900, color: '#ff6a2c', lineHeight: 1 }}>
         {value}<span style={{ fontSize: '1.4rem' }}>{suffix}</span>
       </div>
       <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, marginTop: 6 }}>{label}</div>
@@ -100,7 +100,7 @@ const PublicLandingPage = ({ onGoLogin }) => {
   );
 
   // ── Feature Icon (SVG circle with gradient) ────────────────────────
-  const FeatureIcon = ({ children, color = '#ea580c' }) => (
+  const FeatureIcon = ({ children, color = '#ff6a2c' }) => (
     <div style={{
       width: 56, height: 56, borderRadius: 14,
       background: `linear-gradient(135deg, ${color}15, ${color}08)`,
@@ -116,21 +116,21 @@ const PublicLandingPage = ({ onGoLogin }) => {
       {/* ── Navbar ──────────────────────────────────────────────────────── */}
       <nav style={{
         background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)',
-        borderBottom: '1px solid rgba(234,88,12,0.1)', padding: '0 32px',
+        borderBottom: '1px solid rgba(255,106,44,0.1)', padding: '0 32px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 68,
         position: 'sticky', top: 0, zIndex: 100,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{
             width: 40, height: 40, borderRadius: 12,
-            background: 'linear-gradient(135deg, #ea580c, #f97316)',
+            background: 'linear-gradient(135deg, #ff6a2c, #ff7a30)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: '#fff', fontWeight: 900, fontSize: '1.1rem',
-            boxShadow: '0 4px 12px rgba(234,88,12,0.3)',
+            boxShadow: '0 4px 12px rgba(255,106,44,0.3)',
           }}>SK</div>
           <div>
             <div style={{ fontWeight: 900, fontSize: '1.05rem', lineHeight: 1.2, color: '#0f172a' }}>STELLA KINETICS</div>
-            <div style={{ fontSize: '0.6rem', color: '#ea580c', fontWeight: 700, letterSpacing: '1px' }}>APPCASH CO., LTD</div>
+            <div style={{ fontSize: '0.6rem', color: '#ff6a2c', fontWeight: 700, letterSpacing: '1px' }}>APPCASH CO., LTD</div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
@@ -139,9 +139,9 @@ const PublicLandingPage = ({ onGoLogin }) => {
           <a href="#stores" style={{ fontSize: '0.82rem', color: '#475569', fontWeight: 600, textDecoration: 'none' }}>Stores</a>
           <button onClick={onGoLogin} style={{
             padding: '9px 28px', borderRadius: 10, border: 'none',
-            background: 'linear-gradient(135deg, #ea580c, #f97316)', color: '#fff',
+            background: 'linear-gradient(135deg, #ff6a2c, #ff7a30)', color: '#fff',
             fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', fontFamily: 'inherit',
-            boxShadow: '0 4px 14px rgba(234,88,12,0.3)', transition: 'all 0.2s',
+            boxShadow: '0 4px 14px rgba(255,106,44,0.3)', transition: 'all 0.2s',
           }}>
             Login
           </button>
@@ -154,7 +154,7 @@ const PublicLandingPage = ({ onGoLogin }) => {
         padding: '80px 24px 60px', position: 'relative', overflow: 'hidden',
       }}>
         {/* Background decorations */}
-        <div style={{ position: 'absolute', top: -100, right: -100, width: 400, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, rgba(234,88,12,0.06) 0%, transparent 70%)', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', top: -100, right: -100, width: 400, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,106,44,0.06) 0%, transparent 70%)', pointerEvents: 'none' }} />
         <div style={{ position: 'absolute', bottom: -50, left: -80, width: 300, height: 300, borderRadius: '50%', background: 'radial-gradient(circle, rgba(249,115,22,0.05) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
         <div style={{ ...section, position: 'relative', zIndex: 1 }}>
@@ -162,16 +162,16 @@ const PublicLandingPage = ({ onGoLogin }) => {
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
               padding: '6px 18px', borderRadius: 20, background: '#fff',
-              border: '1px solid rgba(234,88,12,0.15)', marginBottom: 24,
-              boxShadow: '0 2px 8px rgba(234,88,12,0.06)',
+              border: '1px solid rgba(255,106,44,0.15)', marginBottom: 24,
+              boxShadow: '0 2px 8px rgba(255,106,44,0.06)',
             }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ea580c', animation: 'pulse 2s infinite' }} />
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#ea580c', letterSpacing: '0.5px' }}>ECOMMERCE MANAGEMENT PLATFORM</span>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ff6a2c', animation: 'pulse 2s infinite' }} />
+              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#ff6a2c', letterSpacing: '0.5px' }}>ECOMMERCE MANAGEMENT PLATFORM</span>
             </div>
 
             <h1 style={{ fontSize: '3.2rem', fontWeight: 900, margin: '0 0 18px', lineHeight: 1.15, color: '#0f172a' }}>
               Manage Your Ecommerce<br/>
-              <span style={{ background: 'linear-gradient(135deg, #ea580c, #f97316)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+              <span style={{ background: 'linear-gradient(135deg, #ff6a2c, #ff7a30)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
                 All In One Place
               </span>
             </h1>
@@ -182,15 +182,15 @@ const PublicLandingPage = ({ onGoLogin }) => {
             <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
               <button onClick={onGoLogin} style={{
                 padding: '14px 36px', borderRadius: 12, border: 'none',
-                background: 'linear-gradient(135deg, #ea580c, #f97316)', color: '#fff',
+                background: 'linear-gradient(135deg, #ff6a2c, #ff7a30)', color: '#fff',
                 fontWeight: 800, fontSize: '0.92rem', cursor: 'pointer', fontFamily: 'inherit',
-                boxShadow: '0 8px 24px rgba(234,88,12,0.3)', transition: 'all 0.2s',
+                boxShadow: '0 8px 24px rgba(255,106,44,0.3)', transition: 'all 0.2s',
               }}>
                 Get Started
               </button>
               <a href="#features" style={{
-                padding: '14px 36px', borderRadius: 12, border: '2px solid #ea580c',
-                background: '#fff', color: '#ea580c', fontWeight: 800, fontSize: '0.92rem',
+                padding: '14px 36px', borderRadius: 12, border: '2px solid #ff6a2c',
+                background: '#fff', color: '#ff6a2c', fontWeight: 800, fontSize: '0.92rem',
                 textDecoration: 'none', display: 'inline-block', fontFamily: 'inherit',
               }}>
                 Explore Features
@@ -219,15 +219,15 @@ const PublicLandingPage = ({ onGoLogin }) => {
       <div id="features" style={{ padding: '80px 24px', background: '#fff' }}>
         <div style={section}>
           <div style={{ textAlign: 'center', marginBottom: 56 }}>
-            <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#ea580c', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: 8 }}>PLATFORM FEATURES</div>
+            <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#ff6a2c', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: 8 }}>PLATFORM FEATURES</div>
             <h2 style={{ fontSize: '2rem', fontWeight: 900, margin: '0 0 10px' }}>Everything You Need to Scale</h2>
             <p style={{ color: '#64748b', fontSize: '0.92rem', maxWidth: 500, margin: '0 auto' }}>Our internal dashboard centralizes all ecommerce operations into one powerful platform</p>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24 }}>
             {[
-              { icon: '📊', title: 'Dashboard Ecom', desc: 'Real-time GMV, orders, traffic and conversion rate analytics across all stores with daily trend charts and shop comparison.', color: '#ea580c' },
-              { icon: '📈', title: 'Ads Performance', desc: 'Monitor advertising spend, ROAS, CPC, impressions and campaign performance across TikTok Ads and Shopee Ads.', color: '#f97316' },
+              { icon: '📊', title: 'Dashboard Ecom', desc: 'Real-time GMV, orders, traffic and conversion rate analytics across all stores with daily trend charts and shop comparison.', color: '#ff6a2c' },
+              { icon: '📈', title: 'Ads Performance', desc: 'Monitor advertising spend, ROAS, CPC, impressions and campaign performance across TikTok Ads and Shopee Ads.', color: '#ff7a30' },
               { icon: '💬', title: 'Customer Service Hub', desc: 'Unified chat inbox combining messages from all shops. Manage customer inquiries, reviews and after-sales support.', color: '#0891b2' },
               { icon: '🎬', title: 'Livestream Analytics', desc: 'Track livestream sessions, viewer count, engagement rate and live sales performance in real-time.', color: '#8b5cf6' },
               { icon: '📋', title: 'KOC/KOL Booking', desc: 'Manage influencer partnerships, track KOC orders, commission rates and campaign ROI from one place.', color: '#16a34a' },
@@ -251,7 +251,7 @@ const PublicLandingPage = ({ onGoLogin }) => {
       <div style={{ padding: '80px 24px', background: 'linear-gradient(180deg, #fff7ed 0%, #fff 100%)' }}>
         <div style={section}>
           <div style={{ textAlign: 'center', marginBottom: 56 }}>
-            <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#ea580c', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: 8 }}>HOW IT WORKS</div>
+            <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#ff6a2c', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: 8 }}>HOW IT WORKS</div>
             <h2 style={{ fontSize: '2rem', fontWeight: 900, margin: 0 }}>Seamless Data Integration</h2>
           </div>
 
@@ -265,11 +265,11 @@ const PublicLandingPage = ({ onGoLogin }) => {
               <div key={i} style={{ textAlign: 'center', position: 'relative' }}>
                 <div style={{
                   width: 72, height: 72, borderRadius: '50%', margin: '0 auto 16px',
-                  background: 'linear-gradient(135deg, #ea580c, #f97316)',
+                  background: 'linear-gradient(135deg, #ff6a2c, #ff7a30)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '1.8rem', boxShadow: '0 8px 24px rgba(234,88,12,0.25)',
+                  fontSize: '1.8rem', boxShadow: '0 8px 24px rgba(255,106,44,0.25)',
                 }}>{s.icon}</div>
-                <div style={{ fontSize: '0.7rem', fontWeight: 900, color: '#ea580c', letterSpacing: '1px', marginBottom: 6 }}>STEP {s.step}</div>
+                <div style={{ fontSize: '0.7rem', fontWeight: 900, color: '#ff6a2c', letterSpacing: '1px', marginBottom: 6 }}>STEP {s.step}</div>
                 <h4 style={{ margin: '0 0 6px', fontSize: '1rem', fontWeight: 800 }}>{s.title}</h4>
                 <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b', lineHeight: 1.5 }}>{s.desc}</p>
               </div>
@@ -284,7 +284,7 @@ const PublicLandingPage = ({ onGoLogin }) => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: 48, alignItems: 'center' }}>
             {/* Info */}
             <div>
-              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#ea580c', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: 8 }}>ABOUT US</div>
+              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#ff6a2c', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: 8 }}>ABOUT US</div>
               <h2 style={{ fontSize: '1.8rem', fontWeight: 900, margin: '0 0 16px' }}>APPCASH CO., LTD</h2>
               <p style={{ fontSize: '0.88rem', color: '#64748b', lineHeight: 1.8, marginBottom: 24 }}>
                 APPCASH Electronic Commercial Technology Company Limited is a Vietnamese ecommerce company
@@ -299,8 +299,8 @@ const PublicLandingPage = ({ onGoLogin }) => {
                   { label: 'Headquarters', value: 'HCM City, Vietnam' },
                   { label: 'Brand', value: 'Stella Kinetics' },
                 ].map((item, i) => (
-                  <div key={i} style={{ padding: '12px 16px', background: '#fff7ed', borderRadius: 10, border: '1px solid rgba(234,88,12,0.1)' }}>
-                    <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#ea580c', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{item.label}</div>
+                  <div key={i} style={{ padding: '12px 16px', background: '#fff7ed', borderRadius: 10, border: '1px solid rgba(255,106,44,0.1)' }}>
+                    <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#ff6a2c', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{item.label}</div>
                     <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#0f172a', marginTop: 2 }}>{item.value}</div>
                   </div>
                 ))}
@@ -308,7 +308,7 @@ const PublicLandingPage = ({ onGoLogin }) => {
             </div>
             {/* Visual */}
             <div style={{
-              background: 'linear-gradient(135deg, #ea580c, #f97316)', borderRadius: 24, padding: 40,
+              background: 'linear-gradient(135deg, #ff6a2c, #ff7a30)', borderRadius: 24, padding: 40,
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
               color: '#fff', minHeight: 380, position: 'relative', overflow: 'hidden',
             }}>
@@ -344,7 +344,7 @@ const PublicLandingPage = ({ onGoLogin }) => {
       <div id="stores" style={{ padding: '80px 24px', background: '#fafafa' }}>
         <div style={section}>
           <div style={{ textAlign: 'center', marginBottom: 48 }}>
-            <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#ea580c', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: 8 }}>OUR STORES</div>
+            <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#ff6a2c', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: 8 }}>OUR STORES</div>
             <h2 style={{ fontSize: '2rem', fontWeight: 900, margin: '0 0 10px' }}>Multi-Platform Presence</h2>
             <p style={{ color: '#64748b', fontSize: '0.88rem' }}>Operating across major ecommerce platforms in Vietnam</p>
           </div>
@@ -364,7 +364,7 @@ const PublicLandingPage = ({ onGoLogin }) => {
               }}>
                 <div style={{
                   width: 48, height: 48, borderRadius: 12, margin: '0 auto 12px',
-                  background: `linear-gradient(135deg, ${['#ea580c','#f97316','#fb923c','#0891b2','#3b82f6'][i]}, ${['#f97316','#fb923c','#fdba74','#06b6d4','#60a5fa'][i]})`,
+                  background: `linear-gradient(135deg, ${['#ff6a2c','#ff7a30','#ff8a4c','#0891b2','#3b82f6'][i]}, ${['#ff7a30','#ff8a4c','#ffc196','#06b6d4','#60a5fa'][i]})`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   color: '#fff', fontSize: '1.2rem', fontWeight: 900,
                 }}>{shop.name[0]}</div>
@@ -374,7 +374,7 @@ const PublicLandingPage = ({ onGoLogin }) => {
                   {shop.platforms.map(p => (
                     <span key={p} style={{
                       padding: '2px 8px', borderRadius: 4, fontSize: '0.6rem', fontWeight: 700,
-                      background: p === 'TikTok' ? '#0f172a' : '#ea580c', color: '#fff',
+                      background: p === 'TikTok' ? '#0f172a' : '#ff6a2c', color: '#fff',
                     }}>{p}</span>
                   ))}
                 </div>
@@ -387,7 +387,7 @@ const PublicLandingPage = ({ onGoLogin }) => {
       {/* ── CTA ─────────────────────────────────────────────────────────── */}
       <div style={{
         padding: '80px 24px', textAlign: 'center',
-        background: 'linear-gradient(135deg, #ea580c, #f97316)', color: '#fff',
+        background: 'linear-gradient(135deg, #ff6a2c, #ff7a30)', color: '#fff',
       }}>
         <div style={section}>
           <h2 style={{ fontSize: '2.2rem', fontWeight: 900, margin: '0 0 12px' }}>Ready to Take Control?</h2>
@@ -396,7 +396,7 @@ const PublicLandingPage = ({ onGoLogin }) => {
           </p>
           <button onClick={onGoLogin} style={{
             padding: '16px 48px', borderRadius: 14, border: '2px solid #fff',
-            background: '#fff', color: '#ea580c', fontWeight: 900, fontSize: '1rem',
+            background: '#fff', color: '#ff6a2c', fontWeight: 900, fontSize: '1rem',
             cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
             transition: 'all 0.2s',
           }}>
@@ -414,7 +414,7 @@ const PublicLandingPage = ({ onGoLogin }) => {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
               <div style={{
-                width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #ea580c, #f97316)',
+                width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #ff6a2c, #ff7a30)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: '0.9rem',
               }}>SK</div>
               <div style={{ fontWeight: 800, color: '#fff', fontSize: '0.9rem' }}>STELLA KINETICS</div>

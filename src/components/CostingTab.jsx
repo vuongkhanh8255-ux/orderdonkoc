@@ -234,12 +234,12 @@ export default function CostingTab() {
           onKeyDown={e => e.key === 'Enter' && handleAuth()}
           placeholder="Nhập mật khẩu..."
           style={{ width:'100%', padding:'12px 14px', borderRadius:10, border:`2px solid ${pwErr ? '#fca5a5' : '#e5e7eb'}`, fontSize:'0.9rem', boxSizing:'border-box', outline:'none', fontFamily:'inherit', transition:'border 0.2s' }}
-          onFocus={e => e.target.style.borderColor = '#ea580c'}
+          onFocus={e => e.target.style.borderColor = '#ff6a2c'}
           onBlur={e  => e.target.style.borderColor = pwErr ? '#fca5a5' : '#e5e7eb'}
         />
         {pwErr && <p style={{ color:'#dc2626', fontSize:'0.77rem', margin:'6px 0 0' }}>⚠️ {pwErr}</p>}
         <button onClick={handleAuth}
-          style={{ width:'100%', marginTop:14, padding:'12px', borderRadius:10, background:'#ea580c', color:'#fff', fontWeight:800, border:'none', cursor:'pointer', fontSize:'0.9rem', fontFamily:'inherit', boxShadow:'0 6px 16px rgba(234,88,12,0.28)' }}>
+          style={{ width:'100%', marginTop:14, padding:'12px', borderRadius:10, background:'#ff6a2c', color:'#fff', fontWeight:800, border:'none', cursor:'pointer', fontSize:'0.9rem', fontFamily:'inherit', boxShadow:'0 6px 16px rgba(255,106,44,0.28)' }}>
           Xác nhận →
         </button>
       </div>
@@ -251,7 +251,7 @@ export default function CostingTab() {
     <div style={{ fontFamily:"'Outfit',sans-serif", maxWidth:'100%' }}>
       {/* Header */}
       <div style={{ marginBottom:20 }}>
-        <div style={{ fontSize:'0.72rem', fontWeight:700, color:'#ea580c', textTransform:'uppercase', letterSpacing:'1.5px', marginBottom:4 }}>Ecom</div>
+        <div style={{ fontSize:'0.72rem', fontWeight:700, color:'#ff6a2c', textTransform:'uppercase', letterSpacing:'1.5px', marginBottom:4 }}>Ecom</div>
         <h1 style={{ margin:0, fontSize:'1.6rem', fontWeight:900, color:'#0f172a', letterSpacing:'-0.3px' }}>GIÁ COST</h1>
         <p style={{ margin:'4px 0 0', fontSize:'0.82rem', color:'#64748b', display:'flex', alignItems:'center', gap:6 }}>
           Bảng costing sản phẩm LABCOS — chỉ Admin.
@@ -317,13 +317,13 @@ export default function CostingTab() {
           {/* Column picker button */}
           <button onClick={() => setColPickerOpen(s => !s)}
             title="Tùy chỉnh hiển thị cột"
-            style={{ padding:'7px 11px', borderRadius:8, border:`1.5px solid ${hiddenCols.size > 0 ? '#fed7aa' : '#e5e7eb'}`, background: hiddenCols.size > 0 ? '#fff7ed' : '#fff', color: hiddenCols.size > 0 ? '#ea580c' : '#94a3b8', fontWeight:700, fontSize:'0.82rem', cursor:'pointer', whiteSpace:'nowrap' }}>
+            style={{ padding:'7px 11px', borderRadius:8, border:`1.5px solid ${hiddenCols.size > 0 ? '#fed7aa' : '#e5e7eb'}`, background: hiddenCols.size > 0 ? '#fff7ed' : '#fff', color: hiddenCols.size > 0 ? '#ff6a2c' : '#94a3b8', fontWeight:700, fontSize:'0.82rem', cursor:'pointer', whiteSpace:'nowrap' }}>
             ⚙ Cột {hiddenCols.size > 0 ? `(ẩn ${hiddenCols.size})` : ''}
           </button>
 
           {/* Stats */}
           <div style={{ marginLeft:'auto', fontSize:'0.78rem', color:'#94a3b8', whiteSpace:'nowrap' }}>
-            <strong style={{ color:'#ea580c' }}>{filtered.length}</strong> / {rows.length} SP
+            <strong style={{ color:'#ff6a2c' }}>{filtered.length}</strong> / {rows.length} SP
           </div>
 
           {/* Clear filter */}
@@ -362,7 +362,7 @@ export default function CostingTab() {
               return (
                 <label key={col} style={{ display:'flex', alignItems:'center', gap:5, cursor:'pointer', padding:'4px 10px', borderRadius:8, border:`1px solid ${isHidden ? '#e5e7eb' : '#fed7aa'}`, background: isHidden ? '#f8fafc' : '#fff7ed', fontSize:'0.75rem', fontWeight: isHidden ? 400 : 600, color: isHidden ? '#9ca3af' : '#92400e', userSelect:'none', whiteSpace:'nowrap' }}>
                   <input type="checkbox" checked={!isHidden} onChange={() => toggleCol(col)}
-                    style={{ accentColor:'#ea580c', cursor:'pointer' }} />
+                    style={{ accentColor:'#ff6a2c', cursor:'pointer' }} />
                   {col}
                 </label>
               );
@@ -398,8 +398,8 @@ export default function CostingTab() {
                     <th key={h} style={{
                       position:'sticky', top:0, zIndex:20,
                       padding:'10px 10px', background:'linear-gradient(180deg,#fff7ed 0%,#ffedd5 100%)',
-                      color:'#c2410c', fontWeight:900, fontSize:'0.72rem', textTransform:'uppercase',
-                      whiteSpace:'nowrap', borderBottom:'2px solid #fed7aa', borderRight:'1px solid #fdba74',
+                      color:'#e85518', fontWeight:900, fontSize:'0.72rem', textTransform:'uppercase',
+                      whiteSpace:'nowrap', borderBottom:'2px solid #fed7aa', borderRight:'1px solid #ffc196',
                       textAlign: h === 'STT' ? 'center' : 'left', minWidth: h === tenCol ? 260 : h === maCol ? 130 : 80,
                     }}>{h}</th>
                   ))}
@@ -435,7 +435,7 @@ export default function CostingTab() {
                           whiteSpace: h === tenCol ? 'normal' : 'nowrap',
                           textAlign: h === 'STT' ? 'center' : 'left',
                           fontWeight: h === tenCol ? 600 : 400,
-                          color: h === brandCol ? '#ea580c' : h === maCol ? '#3b82f6' : '#0f172a',
+                          color: h === brandCol ? '#ff6a2c' : h === maCol ? '#3b82f6' : '#0f172a',
                           fontSize: h === brandCol ? '0.73rem' : '0.78rem',
                         }}>
                           {h === brandCol
@@ -493,7 +493,7 @@ export default function CostingTab() {
               {sheetPicker.sheetNames.map(name => (
                 <button key={name} onClick={() => handlePickSheet(name)}
                   style={{ padding:'12px 16px', borderRadius:10, border:'1.5px solid #e5e7eb', background:'#f8fafc', color:'#0f172a', fontWeight:600, fontSize:'0.88rem', cursor:'pointer', textAlign:'left', fontFamily:'inherit', transition:'all 0.15s' }}
-                  onMouseEnter={e => { e.currentTarget.style.background='#fff7ed'; e.currentTarget.style.borderColor='#fed7aa'; e.currentTarget.style.color='#ea580c'; }}
+                  onMouseEnter={e => { e.currentTarget.style.background='#fff7ed'; e.currentTarget.style.borderColor='#fed7aa'; e.currentTarget.style.color='#ff6a2c'; }}
                   onMouseLeave={e => { e.currentTarget.style.background='#f8fafc'; e.currentTarget.style.borderColor='#e5e7eb'; e.currentTarget.style.color='#0f172a'; }}>
                   📄 {name}
                 </button>

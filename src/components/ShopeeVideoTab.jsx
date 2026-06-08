@@ -122,9 +122,9 @@ export default function ShopeeVideoTab() {
           <button onClick={fetchVideos} disabled={loading}
             style={{
               padding: '10px 24px', borderRadius: 8, border: 'none',
-              background: loading ? '#d1d5db' : '#ea580c', color: '#fff',
+              background: loading ? '#d1d5db' : '#ff6a2c', color: '#fff',
               fontWeight: 800, fontSize: '0.88rem', cursor: loading ? 'default' : 'pointer',
-              boxShadow: loading ? 'none' : '0 4px 12px rgba(234,88,12,0.18)',
+              boxShadow: loading ? 'none' : '0 4px 12px rgba(255,106,44,0.18)',
               fontFamily: 'inherit',
             }}>
             {loading ? '⏳ Đang tải...' : hasFetched ? '🔄 Tải lại' : '📥 Tải danh sách video'}
@@ -197,13 +197,13 @@ export default function ShopeeVideoTab() {
                   }}>
                   <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#0f172a' }}>{s.shop_name}</div>
                   <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 4 }}>
-                    <b style={{ color: '#ea580c' }}>{fmtNum(s.videos?.length || 0)}</b> video
+                    <b style={{ color: '#ff6a2c' }}>{fmtNum(s.videos?.length || 0)}</b> video
                   </div>
                 </div>
               ))}
             </div>
             {shopFilter !== 'all' && (
-              <div style={{ marginTop: 10, fontSize: '0.72rem', color: '#ea580c', fontWeight: 600, cursor: 'pointer' }}
+              <div style={{ marginTop: 10, fontSize: '0.72rem', color: '#ff6a2c', fontWeight: 600, cursor: 'pointer' }}
                 onClick={() => setShopFilter('all')}>
                 ✕ Bỏ lọc shop
               </div>

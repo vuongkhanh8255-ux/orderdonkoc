@@ -81,8 +81,8 @@ const CARD = {
 };
 const BTN_PRIMARY = {
   padding: '10px 24px', borderRadius: 10, border: 'none',
-  background: '#ea580c', color: '#fff', fontWeight: 700, fontSize: '0.88rem',
-  cursor: 'pointer', boxShadow: '0 4px 12px rgba(234,88,12,0.2)',
+  background: '#ff6a2c', color: '#fff', fontWeight: 700, fontSize: '0.88rem',
+  cursor: 'pointer', boxShadow: '0 4px 12px rgba(255,106,44,0.2)',
   transition: 'all 0.2s',
 };
 const BTN_SECONDARY = {
@@ -98,7 +98,7 @@ const INPUT = {
   fontSize: '0.85rem', outline: 'none', width: '100%', boxSizing: 'border-box',
   fontFamily: 'inherit', transition: 'border 0.2s',
 };
-const BADGE = (color = '#ea580c', bg = '#fff7ed') => ({
+const BADGE = (color = '#ff6a2c', bg = '#fff7ed') => ({
   display: 'inline-flex', alignItems: 'center', gap: 4,
   padding: '3px 10px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700,
   color, background: bg,
@@ -533,7 +533,7 @@ export default function TopPicksTab() {
   const tabStyle = (isActive) => ({
     padding: '10px 24px', borderRadius: '10px 10px 0 0', cursor: 'pointer',
     fontWeight: isActive ? 800 : 600, fontSize: '0.88rem',
-    color: isActive ? '#ea580c' : '#64748b',
+    color: isActive ? '#ff6a2c' : '#64748b',
     background: isActive ? '#fff' : '#f1f5f9',
     border: isActive ? '1px solid #e5e7eb' : '1px solid transparent',
     borderBottom: isActive ? '2px solid #fff' : '1px solid #e5e7eb',
@@ -606,8 +606,8 @@ export default function TopPicksTab() {
 
         {/* Loading spinner */}
         {(loading || boosting) && (
-          <div style={{ textAlign: 'center', padding: '40px 20px', color: '#ea580c', fontSize: '0.9rem', fontWeight: 700 }}>
-            <div style={{ width: 40, height: 40, border: '3px solid #fed7aa', borderTopColor: '#ea580c', borderRadius: '50%', margin: '0 auto 12px', animation: 'tpSpin 0.8s linear infinite' }} />
+          <div style={{ textAlign: 'center', padding: '40px 20px', color: '#ff6a2c', fontSize: '0.9rem', fontWeight: 700 }}>
+            <div style={{ width: 40, height: 40, border: '3px solid #fed7aa', borderTopColor: '#ff6a2c', borderRadius: '50%', margin: '0 auto 12px', animation: 'tpSpin 0.8s linear infinite' }} />
             {boosting ? 'Đang đẩy sản phẩm...' : 'Đang tải...'}
             <style>{`@keyframes tpSpin { to { transform: rotate(360deg); } }`}</style>
           </div>
@@ -787,7 +787,7 @@ function BoostSection({ products: rawProducts, boostedItems: rawBoosted, boostSe
       {/* Selected chips */}
       {boostSelected.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '12px 16px', background: '#fff7ed', borderRadius: 12, border: '1px solid #fed7aa', marginBottom: 16 }}>
-          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#9a3412', alignSelf: 'center' }}>Sẽ đẩy:</span>
+          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#cc4a16', alignSelf: 'center' }}>Sẽ đẩy:</span>
           {boostSelected.map(p => (
             <div key={p.item_id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px 4px 6px', borderRadius: 20, background: '#fff', border: '1px solid #fed7aa', fontSize: '0.72rem', fontWeight: 600, color: '#0f172a' }}>
               {p.image?.image_url_list?.[0] && <img src={p.image.image_url_list[0]} alt="" style={{ width: 18, height: 18, borderRadius: 4, objectFit: 'cover' }} />}
@@ -816,7 +816,7 @@ function BoostSection({ products: rawProducts, boostedItems: rawBoosted, boostSe
                 display: 'flex', alignItems: 'center', gap: 12,
                 padding: '12px 14px', borderRadius: 12,
                 cursor: boosted ? 'default' : 'pointer',
-                border: selected ? '2px solid #ea580c' : boosted ? '2px solid #fde68a' : '2px solid #e5e7eb',
+                border: selected ? '2px solid #ff6a2c' : boosted ? '2px solid #fde68a' : '2px solid #e5e7eb',
                 background: selected ? '#fff7ed' : boosted ? '#fffbeb' : '#fff',
                 opacity: boosted ? 0.7 : 1,
                 transition: 'all 0.2s',
@@ -825,8 +825,8 @@ function BoostSection({ products: rawProducts, boostedItems: rawBoosted, boostSe
               {/* Checkbox */}
               <div style={{
                 width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-                border: selected ? '2px solid #ea580c' : boosted ? '2px solid #f59e0b' : '2px solid #d1d5db',
-                background: selected ? '#ea580c' : boosted ? '#f59e0b' : '#fff',
+                border: selected ? '2px solid #ff6a2c' : boosted ? '2px solid #f59e0b' : '2px solid #d1d5db',
+                background: selected ? '#ff6a2c' : boosted ? '#f59e0b' : '#fff',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 color: '#fff', fontSize: '0.7rem', fontWeight: 900,
               }}>
@@ -847,7 +847,7 @@ function BoostSection({ products: rawProducts, boostedItems: rawBoosted, boostSe
                 <div style={{ display: 'flex', gap: 8, marginTop: 4, alignItems: 'center' }}>
                   <span style={{ fontSize: '0.72rem', color: '#64748b' }}>ID: {product.item_id}</span>
                   {product.price_info?.[0]?.original_price && (
-                    <span style={{ fontSize: '0.72rem', color: '#ea580c', fontWeight: 600 }}>{fmtVnd(product.price_info[0].original_price)}</span>
+                    <span style={{ fontSize: '0.72rem', color: '#ff6a2c', fontWeight: 600 }}>{fmtVnd(product.price_info[0].original_price)}</span>
                   )}
                   {boosted && <span style={BADGE('#b45309', '#fef3c7')}>🔥 Đang đẩy</span>}
                 </div>
@@ -926,8 +926,8 @@ function ScheduleSection({
   let countdownText, countdownColor;
   if (!savedEnabled) { countdownText = 'Lịch đang TẮT'; countdownColor = '#94a3b8'; }
   else if (savedCount === 0) { countdownText = 'Chưa có sản phẩm'; countdownColor = '#94a3b8'; }
-  else if (remaining == null) { countdownText = 'Sẽ đẩy ở chu kỳ tới'; countdownColor = '#ea580c'; }
-  else if (remaining > 0) { countdownText = fmtCountdown(remaining); countdownColor = '#ea580c'; }
+  else if (remaining == null) { countdownText = 'Sẽ đẩy ở chu kỳ tới'; countdownColor = '#ff6a2c'; }
+  else if (remaining > 0) { countdownText = fmtCountdown(remaining); countdownColor = '#ff6a2c'; }
   else { countdownText = 'Đang tới lượt đẩy…'; countdownColor = '#16a34a'; }
 
   const statCell = (label, value, color = '#0f172a') => (
@@ -975,7 +975,7 @@ function ScheduleSection({
       {/* Editor: toggle + picker */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#0f172a' }}>Bật đẩy định kỳ</span>
-        <div onClick={() => onToggleEnabled(!scheduleEnabled)} style={{ width: 48, height: 26, borderRadius: 13, cursor: 'pointer', background: scheduleEnabled ? '#ea580c' : '#d1d5db', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+        <div onClick={() => onToggleEnabled(!scheduleEnabled)} style={{ width: 48, height: 26, borderRadius: 13, cursor: 'pointer', background: scheduleEnabled ? '#ff6a2c' : '#d1d5db', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
           <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: scheduleEnabled ? 24 : 2, transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
         </div>
         <span style={{ fontSize: '0.82rem', fontWeight: 700, color: scheduleEnabled ? '#16a34a' : '#64748b' }}>
@@ -1000,7 +1000,7 @@ function ScheduleSection({
       {/* Selected chips */}
       {selectedItems.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '12px 16px', background: '#fff7ed', borderRadius: 12, border: '1px solid #fed7aa', marginBottom: 16 }}>
-          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#9a3412', alignSelf: 'center' }}>Sẽ xoay vòng đẩy:</span>
+          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#cc4a16', alignSelf: 'center' }}>Sẽ xoay vòng đẩy:</span>
           {selectedItems.map(p => (
             <div key={p.item_id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px 4px 6px', borderRadius: 20, background: '#fff', border: '1px solid #fed7aa', fontSize: '0.72rem', fontWeight: 600, color: '#0f172a' }}>
               {p.image_url && <img src={p.image_url} alt="" style={{ width: 18, height: 18, borderRadius: 4, objectFit: 'cover' }} />}
@@ -1023,9 +1023,9 @@ function ScheduleSection({
           return (
             <div key={product.item_id} onClick={() => onToggleSelect(product)} style={{
               display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12, cursor: 'pointer',
-              border: selected ? '2px solid #ea580c' : '2px solid #e5e7eb', background: selected ? '#fff7ed' : '#fff', transition: 'all 0.2s',
+              border: selected ? '2px solid #ff6a2c' : '2px solid #e5e7eb', background: selected ? '#fff7ed' : '#fff', transition: 'all 0.2s',
             }}>
-              <div style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, border: selected ? '2px solid #ea580c' : '2px solid #d1d5db', background: selected ? '#ea580c' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '0.7rem', fontWeight: 900 }}>
+              <div style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, border: selected ? '2px solid #ff6a2c' : '2px solid #d1d5db', background: selected ? '#ff6a2c' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '0.7rem', fontWeight: 900 }}>
                 {selected && '✓'}
               </div>
               <div style={{ width: 48, height: 48, borderRadius: 8, flexShrink: 0, overflow: 'hidden', background: '#f1f5f9', border: '1px solid #e5e7eb' }}>
@@ -1035,7 +1035,7 @@ function ScheduleSection({
                 <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{product.item_name || `Item ${product.item_id}`}</div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                   <span style={{ fontSize: '0.72rem', color: '#64748b' }}>ID: {product.item_id}</span>
-                  {product.price_info?.[0]?.original_price && <span style={{ fontSize: '0.72rem', color: '#ea580c', fontWeight: 600 }}>{fmtVnd(product.price_info[0].original_price)}</span>}
+                  {product.price_info?.[0]?.original_price && <span style={{ fontSize: '0.72rem', color: '#ff6a2c', fontWeight: 600 }}>{fmtVnd(product.price_info[0].original_price)}</span>}
                 </div>
               </div>
             </div>
@@ -1119,7 +1119,7 @@ function TopPicksList({ collections, onEdit, onDelete, onToggleActivate, onRefre
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <div onClick={() => onToggleActivate(col)} title={isActive ? 'Tắt' : 'Kích hoạt'} style={{ width: 44, height: 24, borderRadius: 12, cursor: 'pointer', background: isActive ? '#ea580c' : '#d1d5db', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+                  <div onClick={() => onToggleActivate(col)} title={isActive ? 'Tắt' : 'Kích hoạt'} style={{ width: 44, height: 24, borderRadius: 12, cursor: 'pointer', background: isActive ? '#ff6a2c' : '#d1d5db', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
                     <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: isActive ? 22 : 2, transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
                   </div>
                   <button onClick={() => onEdit(col)} style={{ ...BTN_SECONDARY, padding: '6px 14px', fontSize: '0.76rem' }}>✏️ Sửa</button>
@@ -1168,7 +1168,7 @@ function TopPicksEditor({ isEditing, collectionName, onNameChange, isActivated, 
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingTop: 24 }}>
           <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569' }}>Trạng thái:</label>
-          <div onClick={() => onActivatedChange(!isActivated)} style={{ width: 44, height: 24, borderRadius: 12, cursor: 'pointer', background: isActivated ? '#ea580c' : '#d1d5db', position: 'relative', transition: 'background 0.2s' }}>
+          <div onClick={() => onActivatedChange(!isActivated)} style={{ width: 44, height: 24, borderRadius: 12, cursor: 'pointer', background: isActivated ? '#ff6a2c' : '#d1d5db', position: 'relative', transition: 'background 0.2s' }}>
             <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: isActivated ? 22 : 2, transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
           </div>
           <span style={{ fontSize: '0.82rem', fontWeight: 600, color: isActivated ? '#16a34a' : '#64748b' }}>
@@ -1186,7 +1186,7 @@ function TopPicksEditor({ isEditing, collectionName, onNameChange, isActivated, 
 
       {selectedProducts.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '12px 16px', background: '#fff7ed', borderRadius: 12, border: '1px solid #fed7aa', marginBottom: 16 }}>
-          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#9a3412', alignSelf: 'center' }}>Đã chọn:</span>
+          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#cc4a16', alignSelf: 'center' }}>Đã chọn:</span>
           {selectedProducts.map(p => (
             <div key={p.item_id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px 4px 6px', borderRadius: 20, background: '#fff', border: '1px solid #fed7aa', fontSize: '0.72rem', fontWeight: 600, color: '#0f172a' }}>
               {p.image?.image_url_list?.[0] && <img src={p.image.image_url_list[0]} alt="" style={{ width: 18, height: 18, borderRadius: 4, objectFit: 'cover' }} />}
@@ -1203,9 +1203,9 @@ function TopPicksEditor({ isEditing, collectionName, onNameChange, isActivated, 
           return (
             <div key={product.item_id} onClick={() => onToggleProduct(product)} style={{
               display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12, cursor: 'pointer',
-              border: selected ? '2px solid #ea580c' : '2px solid #e5e7eb', background: selected ? '#fff7ed' : '#fff', transition: 'all 0.2s',
+              border: selected ? '2px solid #ff6a2c' : '2px solid #e5e7eb', background: selected ? '#fff7ed' : '#fff', transition: 'all 0.2s',
             }}>
-              <div style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, border: selected ? '2px solid #ea580c' : '2px solid #d1d5db', background: selected ? '#ea580c' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '0.7rem', fontWeight: 900 }}>
+              <div style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, border: selected ? '2px solid #ff6a2c' : '2px solid #d1d5db', background: selected ? '#ff6a2c' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '0.7rem', fontWeight: 900 }}>
                 {selected && '✓'}
               </div>
               <div style={{ width: 48, height: 48, borderRadius: 8, flexShrink: 0, overflow: 'hidden', background: '#f1f5f9', border: '1px solid #e5e7eb' }}>
@@ -1215,7 +1215,7 @@ function TopPicksEditor({ isEditing, collectionName, onNameChange, isActivated, 
                 <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{product.item_name || `Item ${product.item_id}`}</div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                   <span style={{ fontSize: '0.72rem', color: '#64748b' }}>ID: {product.item_id}</span>
-                  {product.price_info?.[0]?.original_price && <span style={{ fontSize: '0.72rem', color: '#ea580c', fontWeight: 600 }}>{fmtVnd(product.price_info[0].original_price)}</span>}
+                  {product.price_info?.[0]?.original_price && <span style={{ fontSize: '0.72rem', color: '#ff6a2c', fontWeight: 600 }}>{fmtVnd(product.price_info[0].original_price)}</span>}
                 </div>
               </div>
             </div>

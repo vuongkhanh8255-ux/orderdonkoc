@@ -53,8 +53,8 @@ const BRANDS = [
     ] },
 ];
 
-const ACCENT = '#ea580c';
-const PIE_COLORS = ['#ea580c', '#3b82f6', '#16a34a', '#8b5cf6', '#0891b2', '#d97706'];
+const ACCENT = '#ff6a2c';
+const PIE_COLORS = ['#ff6a2c', '#3b82f6', '#16a34a', '#8b5cf6', '#0891b2', '#d97706'];
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────
 const fmtVnd = (v) => { const n = Number(v) || 0; if (n >= 1e9) return `${(n / 1e9).toFixed(2)} tỷ`; if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`; if (n >= 1e3) return `${(n / 1e3).toFixed(0)}K`; return n.toLocaleString('vi-VN'); };

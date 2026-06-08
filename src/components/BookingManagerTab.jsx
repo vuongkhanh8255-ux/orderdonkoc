@@ -7,7 +7,7 @@ import { useAppData } from '../context/AppDataContext';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, Label } from 'recharts';
 import { normalizeProductName } from '../utils/productMapping';
 
-const COLORS = ['#ea580c', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#f43f5e', '#14b8a6'];
+const COLORS = ['#ff6a2c', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#f43f5e', '#14b8a6'];
 
 // --- HÀM HELPER FORMAT ---
 const formatCurrency = (val) => {
@@ -218,7 +218,7 @@ const BookingManagerTab = () => {
             {/* FORM NHẬP TAY - LUÔN HIỆN */}
             <div style={{ backgroundColor: '#fff7ed', padding: '20px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #fed7aa' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                    <h3 style={{ marginTop: 0, color: '#ea580c', margin: 0, fontSize: '1.1rem', fontWeight: '700' }}>THÊM BOOKING NGOÀI</h3>
+                    <h3 style={{ marginTop: 0, color: '#ff6a2c', margin: 0, fontSize: '1.1rem', fontWeight: '700' }}>THÊM BOOKING NGOÀI</h3>
                 </div>
                 <form onSubmit={handleManualAdd} style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px' }}>
 

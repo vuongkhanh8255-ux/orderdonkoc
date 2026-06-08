@@ -23,7 +23,7 @@ const STATUS_COLOR = {
   COMPLETED:           { bg: '#dcfce7', text: '#15803d' },
   DELIVERED:           { bg: '#dbeafe', text: '#1d4ed8' },
   IN_TRANSIT:          { bg: '#ede9fe', text: '#6d28d9' },
-  AWAITING_SHIPMENT:   { bg: '#fff7ed', text: '#c2410c' },
+  AWAITING_SHIPMENT:   { bg: '#fff7ed', text: '#e85518' },
   AWAITING_COLLECTION: { bg: '#fef9c3', text: '#854d0e' },
   PARTIALLY_SHIPPING:  { bg: '#e0f2fe', text: '#0369a1' },
   CANCELLED:           { bg: '#fee2e2', text: '#b91c1c' },
@@ -31,7 +31,7 @@ const STATUS_COLOR = {
   UNPAID:              { bg: '#fef3c7', text: '#92400e' },
 };
 
-const SHOP_COLORS = ['#ea580c','#3b82f6','#16a34a','#8b5cf6','#ec4899','#0891b2','#d97706','#dc2626','#059669','#7c3aed'];
+const SHOP_COLORS = ['#ff6a2c','#3b82f6','#16a34a','#8b5cf6','#ec4899','#0891b2','#d97706','#dc2626','#059669','#7c3aed'];
 
 const getStatusStyle = (s) => STATUS_COLOR[s] || { bg: '#f1f5f9', text: '#475569' };
 const ALL_STATUSES   = Object.keys(STATUS_LABELS);
@@ -84,8 +84,8 @@ const Pagination = ({ page, totalPages, onChange }) => {
   }
   const btn = (label, target, disabled = false, active = false) => (
     <button key={label} onClick={() => !disabled && target && onChange(target)} disabled={disabled}
-      style={{ padding:'6px 11px', borderRadius:7, border:'1.5px solid', borderColor: active?'#ea580c':'#e5e7eb',
-        background: active?'#ea580c':'#fff', color: active?'#fff': disabled?'#d1d5db':'#374151',
+      style={{ padding:'6px 11px', borderRadius:7, border:'1.5px solid', borderColor: active?'#ff6a2c':'#e5e7eb',
+        background: active?'#ff6a2c':'#fff', color: active?'#fff': disabled?'#d1d5db':'#374151',
         fontWeight: active?700:500, fontSize:'0.82rem', cursor: disabled?'default':'pointer',
         minWidth:34, fontFamily:'inherit' }}>
       {label}
@@ -109,7 +109,7 @@ const GmvTooltip = ({ active, payload, label }) => {
     <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:10, padding:'10px 14px', fontSize:'0.8rem', boxShadow:'0 4px 16px rgba(15,23,42,0.1)' }}>
       <div style={{ fontWeight:700, color:'#0f172a', marginBottom:4 }}>{label}</div>
       {payload.map((p,i) => (
-        <div key={i} style={{ color: p.color || '#ea580c' }}>
+        <div key={i} style={{ color: p.color || '#ff6a2c' }}>
           {p.name}: <strong>{fmtGmv(p.value)} VND</strong>
         </div>
       ))}
@@ -386,7 +386,7 @@ const TikTokOrdersTab = () => {
       {/* Header */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20, flexWrap:'wrap', gap:12 }}>
         <div>
-          <div style={{ fontSize:'0.7rem', fontWeight:800, color:'#ea580c', letterSpacing:2, textTransform:'uppercase', marginBottom:4 }}>TikTok Shop</div>
+          <div style={{ fontSize:'0.7rem', fontWeight:800, color:'#ff6a2c', letterSpacing:2, textTransform:'uppercase', marginBottom:4 }}>TikTok Shop</div>
           <h1 style={{ margin:0, fontSize:'1.6rem', fontWeight:900, color:'#0f172a', letterSpacing:'-0.3px' }}>ĐƠN HÀNG TIKTOK SHOP</h1>
           <p style={{ margin:'5px 0 0', color:'#64748b', fontSize:'0.88rem' }}>
             Dữ liệu đơn hàng thực từ TikTok Shop Open API. Nhấn <strong>Sync</strong> để cập nhật.
@@ -413,9 +413,9 @@ const TikTokOrdersTab = () => {
                     });
                   }}
                     style={{ padding:'3px 10px', borderRadius:20, fontSize:'0.75rem', fontWeight:600, cursor:'pointer',
-                      border:`1.5px solid ${active?'#ea580c':'#d1d5db'}`,
+                      border:`1.5px solid ${active?'#ff6a2c':'#d1d5db'}`,
                       background: active?'#fff7ed':'#f8fafc',
-                      color: active?'#ea580c':'#9ca3af' }}>
+                      color: active?'#ff6a2c':'#9ca3af' }}>
                     {conn.seller_name?.replace(/Việt Nam/gi,'VN').replace(/Hồ Chí Minh/gi,'HCM').slice(0,18) || conn.shop_id}
                   </button>
                 );
@@ -428,7 +428,7 @@ const TikTokOrdersTab = () => {
               {loading ? '⏳' : '↺'} Tải lại
             </button>
             <button onClick={fullResync} disabled={syncing} title="Kéo lại toàn bộ từ 01/04/2026"
-              style={{ padding:'9px 18px', borderRadius:8, border:'1.5px solid #ea580c', background:'#fff7ed', color:'#ea580c', fontWeight:700, fontSize:'0.88rem', cursor:syncing?'not-allowed':'pointer', opacity:syncing?0.6:1 }}>
+              style={{ padding:'9px 18px', borderRadius:8, border:'1.5px solid #ff6a2c', background:'#fff7ed', color:'#ff6a2c', fontWeight:700, fontSize:'0.88rem', cursor:syncing?'not-allowed':'pointer', opacity:syncing?0.6:1 }}>
               {syncing ? '⏳' : '📦'} Full Resync {resyncShops ? `(${resyncShops.size} shop)` : '(tất cả)'}
             </button>
             {syncing && (
@@ -438,7 +438,7 @@ const TikTokOrdersTab = () => {
               </button>
             )}
             <button onClick={doSync} disabled={syncing}
-              style={{ padding:'9px 20px', borderRadius:8, border:'none', background:syncing?'#d1d5db':'#ea580c', color:'#fff', fontWeight:700, cursor:syncing?'default':'pointer', fontSize:'0.85rem', boxShadow:syncing?'none':'0 4px 14px rgba(234,88,12,0.25)' }}>
+              style={{ padding:'9px 20px', borderRadius:8, border:'none', background:syncing?'#d1d5db':'#ff6a2c', color:'#fff', fontWeight:700, cursor:syncing?'default':'pointer', fontSize:'0.85rem', boxShadow:syncing?'none':'0 4px 14px rgba(255,106,44,0.25)' }}>
               {syncing ? '⏳ Đang sync...' : '🔄 Sync Orders'}
             </button>
           </div>
@@ -465,7 +465,7 @@ const TikTokOrdersTab = () => {
         </div>
       )}
       {connections.length === 0 && !loading && (
-        <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:12, padding:'12px 16px', marginBottom:16, fontSize:'0.85rem', color:'#c2410c' }}>
+        <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:12, padding:'12px 16px', marginBottom:16, fontSize:'0.85rem', color:'#e85518' }}>
           ⚠️ Chưa có TikTok Shop nào được kết nối. Authorize app qua TikTok Partner Center trước.
         </div>
       )}
@@ -499,7 +499,7 @@ const TikTokOrdersTab = () => {
       {/* Stats Cards */}
       <div style={{ display:'flex', gap:12, marginBottom:18, flexWrap:'wrap' }}>
         {[
-          { label:'Tổng đơn',   value:stats.total,     color:'#ea580c', icon:'🛒' },
+          { label:'Tổng đơn',   value:stats.total,     color:'#ff6a2c', icon:'🛒' },
           { label:'Hoàn thành', value:stats.completed, color:'#16a34a', icon:'✅' },
           { label:'Đang giao',  value:stats.shipping,  color:'#2563eb', icon:'🚚' },
           { label:'Đã hủy',     value:stats.cancelled, color:'#dc2626', icon:'❌' },
@@ -520,7 +520,7 @@ const TikTokOrdersTab = () => {
           <button key={t.key} onClick={() => setActiveTab(t.key)}
             style={{ padding:'8px 20px', borderRadius:8, border:'none', cursor:'pointer', fontWeight:700, fontSize:'0.85rem', fontFamily:'inherit',
               background: activeTab===t.key ? '#fff' : 'transparent',
-              color: activeTab===t.key ? '#ea580c' : '#64748b',
+              color: activeTab===t.key ? '#ff6a2c' : '#64748b',
               boxShadow: activeTab===t.key ? '0 1px 4px rgba(15,23,42,0.08)' : 'none',
               transition:'all 0.15s' }}>
             {t.label}
@@ -538,7 +538,7 @@ const TikTokOrdersTab = () => {
               {[['7d','7 ngày'],['30d','30 ngày'],['all','Tất cả']].map(([val,label]) => (
                 <button key={val} onClick={() => setDashRange(val)}
                   style={{ padding:'6px 14px', borderRadius:6, border:'none', cursor:'pointer', fontWeight:600, fontSize:'0.8rem', fontFamily:'inherit',
-                    background: dashRange===val ? '#ea580c' : 'transparent',
+                    background: dashRange===val ? '#ff6a2c' : 'transparent',
                     color: dashRange===val ? '#fff' : '#64748b', transition:'all 0.15s' }}>
                   {label}
                 </button>
@@ -550,11 +550,11 @@ const TikTokOrdersTab = () => {
               <option value="">Tất cả shop</option>
               {connections.map(c => <option key={c.shop_id} value={c.shop_id}>{c.seller_name||c.shop_id}</option>)}
             </select>
-            {dashLoading && <span style={{ fontSize:'0.78rem', color:'#ea580c', fontWeight:700 }}>⟳ Đang tải...</span>}
+            {dashLoading && <span style={{ fontSize:'0.78rem', color:'#ff6a2c', fontWeight:700 }}>⟳ Đang tải...</span>}
             {dashData?.isTruncated && <span style={{ fontSize:'0.74rem', color:'#92400e', background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:999, padding:'3px 10px', fontWeight:600 }}>⚠️ Hiển thị 50,000 đơn đầu</span>}
             {dashData?.emptyAmountCount > 0 && (
               <span title={`${dashData.emptyAmountCount} đơn chưa có doanh thu (UNPAID / payment chưa cập nhật). Sync lại để cập nhật.`}
-                style={{ fontSize:'0.74rem', color:'#9a3412', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:999, padding:'3px 10px', fontWeight:600, cursor:'default' }}>
+                style={{ fontSize:'0.74rem', color:'#cc4a16', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:999, padding:'3px 10px', fontWeight:600, cursor:'default' }}>
                 ⚠️ {dashData.emptyAmountCount.toLocaleString('vi-VN')} đơn thiếu doanh thu
               </span>
             )}
@@ -566,7 +566,7 @@ const TikTokOrdersTab = () => {
               <div style={{ display:'flex', gap:12, marginBottom:20, flexWrap:'wrap' }}>
                 <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:12, padding:'14px 18px', flex:1, minWidth:140, boxShadow:'0 1px 3px rgba(15,23,42,0.04)' }}>
                   <div style={{ fontSize:'0.74rem', color:'#64748b', marginBottom:4 }}>💰 Tổng GMV (gross)</div>
-                  <div style={{ fontSize:'1.25rem', fontWeight:800, color:'#ea580c' }}>{fmtGmv(dashData.totalGmv)} VND</div>
+                  <div style={{ fontSize:'1.25rem', fontWeight:800, color:'#ff6a2c' }}>{fmtGmv(dashData.totalGmv)} VND</div>
                   <div style={{ fontSize:'0.72rem', color:'#9ca3af', marginTop:2 }}>Kể cả đơn hủy · {fmtGmv(dashData.avgDailyGmv)}/ngày</div>
                 </div>
                 <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:12, padding:'14px 18px', flex:1, minWidth:140, boxShadow:'0 1px 3px rgba(15,23,42,0.04)' }}>
@@ -598,7 +598,7 @@ const TikTokOrdersTab = () => {
                       <XAxis dataKey="name" tick={{ fontSize:11, fill:'#64748b' }} angle={-30} textAnchor="end" interval={0} />
                       <YAxis tickFormatter={fmtGmv} tick={{ fontSize:11, fill:'#64748b' }} width={70} />
                       <Tooltip content={<GmvTooltip />} />
-                      <Bar dataKey="gmv" name="GMV" fill="#ea580c" radius={[5,5,0,0]}
+                      <Bar dataKey="gmv" name="GMV" fill="#ff6a2c" radius={[5,5,0,0]}
                         label={{ position:'top', formatter:v=>fmtGmv(v), fontSize:10, fill:'#374151', fontWeight:700 }} />
                     </BarChart>
                   </ResponsiveContainer>
@@ -622,7 +622,7 @@ const TikTokOrdersTab = () => {
                               <span style={{ display:'inline-block', width:10, height:10, borderRadius:'50%', background:SHOP_COLORS[i%SHOP_COLORS.length], marginRight:8, verticalAlign:'middle' }}></span>
                               {s.name}
                             </td>
-                            <td style={{ padding:'8px 12px', fontWeight:700, color:'#ea580c' }}>{fmtGmv(s.gmv)} ₫</td>
+                            <td style={{ padding:'8px 12px', fontWeight:700, color:'#ff6a2c' }}>{fmtGmv(s.gmv)} ₫</td>
                             <td style={{ padding:'8px 12px', color:'#374151' }}>{s.orders.toLocaleString('vi-VN')}</td>
                             <td style={{ padding:'8px 12px', color:'#64748b' }}>{s.orders>0 ? fmtGmv(s.gmv/s.orders) : '—'} ₫</td>
                           </tr>
@@ -645,7 +645,7 @@ const TikTokOrdersTab = () => {
                       <XAxis dataKey="date" tick={{ fontSize:10, fill:'#64748b' }} interval={Math.max(1, Math.floor(dashData.byDay.length/15))} />
                       <YAxis tickFormatter={fmtGmv} tick={{ fontSize:10, fill:'#64748b' }} width={65} />
                       <Tooltip content={<GmvTooltip />} />
-                      <Line type="monotone" dataKey="GMV" stroke="#ea580c" strokeWidth={2.5} dot={false} activeDot={{ r:5 }} />
+                      <Line type="monotone" dataKey="GMV" stroke="#ff6a2c" strokeWidth={2.5} dot={false} activeDot={{ r:5 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 )}
@@ -674,7 +674,7 @@ const TikTokOrdersTab = () => {
                             </td>
                             <td style={{ padding:'9px 14px', color:'#0f172a', fontWeight:i<3?700:400, maxWidth:320, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.name}</td>
                             <td style={{ padding:'9px 14px', color:'#374151' }}>{p.qty.toLocaleString('vi-VN')}</td>
-                            <td style={{ padding:'9px 14px', textAlign:'right', fontWeight:700, color:'#ea580c' }}>{fmtGmv(p.revenue)} ₫</td>
+                            <td style={{ padding:'9px 14px', textAlign:'right', fontWeight:700, color:'#ff6a2c' }}>{fmtGmv(p.revenue)} ₫</td>
                           </tr>
                         ))}
                       </tbody>
@@ -783,7 +783,7 @@ const TikTokOrdersTab = () => {
                           <tr style={{ background:'#fffbf5' }}>
                             <td colSpan={6} style={{ padding:'0 16px 14px' }}>
                               <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:10, padding:'12px 16px' }}>
-                                <div style={{ fontWeight:700, fontSize:'0.8rem', color:'#c2410c', marginBottom:10 }}>🛍️ Chi tiết đơn {order.id}</div>
+                                <div style={{ fontWeight:700, fontSize:'0.8rem', color:'#e85518', marginBottom:10 }}>🛍️ Chi tiết đơn {order.id}</div>
                                 {items.length === 0 ? <div style={{ color:'#9ca3af', fontSize:'0.82rem' }}>Không có thông tin sản phẩm</div> : (
                                   <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
                                     {items.map((item,i) => (
@@ -792,7 +792,7 @@ const TikTokOrdersTab = () => {
                                         <span style={{ flex:1 }}>{item.product_name||item.sku_name||'SP'}</span>
                                         {item.sku_id && <span style={{ color:'#9ca3af', fontSize:'0.75rem' }}>SKU: {item.sku_id}</span>}
                                         <span style={{ fontWeight:700 }}>× {item.quantity||1}</span>
-                                        {item.sale_price && <span style={{ color:'#ea580c', fontWeight:700 }}>{formatAmount(item.sale_price, item.currency)}</span>}
+                                        {item.sale_price && <span style={{ color:'#ff6a2c', fontWeight:700 }}>{formatAmount(item.sale_price, item.currency)}</span>}
                                       </div>
                                     ))}
                                   </div>

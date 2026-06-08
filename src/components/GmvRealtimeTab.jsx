@@ -5,7 +5,7 @@ import { PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, Cart
 const BLUECORE_BASE = '/bluecore-api/api/services/app/PublicRecommendation/Get?tenancyName=hoanganhannie&sectionName=GMV_API&replaceUnicode=false';
 const API_MAX_SIZE = 10000;
 
-const COLORS = ['#ea580c', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e', '#6366f1', '#84cc16'];
+const COLORS = ['#ff6a2c', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e', '#6366f1', '#84cc16'];
 
 const formatCurrency = (value) => {
     if (!value && value !== 0) return '0';
@@ -317,20 +317,20 @@ const GmvRealtimeTab = () => {
                     {/* DATE SELECTOR - Split Year/Month/Day + View Mode */}
                     <div style={{ ...cardStyle, marginBottom: '20px', padding: '16px 20px', background: 'linear-gradient(135deg, #fff7ed, #fef3c7)', border: '1px solid #fed7aa' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: '0.95rem', fontWeight: '600', color: '#ea580c' }}>📅</span>
+                            <span style={{ fontSize: '0.95rem', fontWeight: '600', color: '#ff6a2c' }}>📅</span>
                             {/* Year */}
                             <select value={yearFilter || ''} onChange={(e) => { setYearFilter(Number(e.target.value)); setMonthFilter(null); setDayFilter(null); }}
-                                style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #fed7aa', fontSize: '0.85rem', fontWeight: '700', color: '#ea580c', background: '#fff', outline: 'none', cursor: 'pointer', minWidth: '80px' }}>
+                                style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #fed7aa', fontSize: '0.85rem', fontWeight: '700', color: '#ff6a2c', background: '#fff', outline: 'none', cursor: 'pointer', minWidth: '80px' }}>
                                 {yearList.map(y => <option key={y} value={y}>{y}</option>)}
                             </select>
                             {/* Month */}
                             <select value={monthFilter || ''} onChange={(e) => { setMonthFilter(Number(e.target.value)); setDayFilter(null); }}
-                                style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #fed7aa', fontSize: '0.85rem', fontWeight: '700', color: '#ea580c', background: '#fff', outline: 'none', cursor: 'pointer', minWidth: '70px' }}>
+                                style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #fed7aa', fontSize: '0.85rem', fontWeight: '700', color: '#ff6a2c', background: '#fff', outline: 'none', cursor: 'pointer', minWidth: '70px' }}>
                                 {monthList.map(m => <option key={m} value={m}>Th{m}</option>)}
                             </select>
                             {/* Day */}
                             <select value={dayFilter || ''} onChange={(e) => setDayFilter(Number(e.target.value))}
-                                style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #fed7aa', fontSize: '0.85rem', fontWeight: '700', color: '#ea580c', background: '#fff', outline: 'none', cursor: 'pointer', minWidth: '65px' }}>
+                                style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #fed7aa', fontSize: '0.85rem', fontWeight: '700', color: '#ff6a2c', background: '#fff', outline: 'none', cursor: 'pointer', minWidth: '65px' }}>
                                 {dayList.map(d => <option key={d} value={d}>{d}</option>)}
                             </select>
 
@@ -343,9 +343,9 @@ const GmvRealtimeTab = () => {
                                     style={{
                                         padding: '6px 14px', borderRadius: '20px', fontWeight: '700', fontSize: '0.8rem',
                                         cursor: 'pointer', transition: 'all 0.2s', border: 'none',
-                                        background: viewMode === m ? '#ea580c' : '#fff',
-                                        color: viewMode === m ? '#fff' : '#ea580c',
-                                        boxShadow: viewMode === m ? '0 2px 8px rgba(234,88,12,0.3)' : '0 1px 3px rgba(0,0,0,0.1)'
+                                        background: viewMode === m ? '#ff6a2c' : '#fff',
+                                        color: viewMode === m ? '#fff' : '#ff6a2c',
+                                        boxShadow: viewMode === m ? '0 2px 8px rgba(255,106,44,0.3)' : '0 1px 3px rgba(0,0,0,0.1)'
                                     }}>
                                     {m === 'day' ? '1 Ngày' : m === 'week' ? '7 Ngày' : '30 Ngày'}
                                 </button>
@@ -365,9 +365,9 @@ const GmvRealtimeTab = () => {
                                         padding: '10px 24px', borderRadius: '30px', fontWeight: '700', fontSize: '0.9rem',
                                         cursor: 'pointer', transition: 'all 0.2s',
                                         border: platformFilter === p ? 'none' : '1px solid #d1d5db',
-                                        background: platformFilter === p ? 'linear-gradient(135deg, #f59e0b, #ea580c)' : '#fff',
+                                        background: platformFilter === p ? 'linear-gradient(135deg, #f59e0b, #ff6a2c)' : '#fff',
                                         color: platformFilter === p ? '#fff' : '#374151',
-                                        boxShadow: platformFilter === p ? '0 4px 10px rgba(234, 88, 12, 0.25)' : 'none'
+                                        boxShadow: platformFilter === p ? '0 4px 10px rgba(255, 106, 44, 0.25)' : 'none'
                                     }}
                                 >
                                     {p === 'All' ? '🌐 Tất cả' : p === 'TikTok' ? '🎵 TikTok Shop' : '🛒 Shopee'}
@@ -387,7 +387,7 @@ const GmvRealtimeTab = () => {
                                     outline: 'none', cursor: 'pointer', minWidth: '180px',
                                     transition: 'border-color 0.2s'
                                 }}
-                                onFocus={(e) => e.target.style.borderColor = '#ea580c'}
+                                onFocus={(e) => e.target.style.borderColor = '#ff6a2c'}
                                 onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
                             >
                                 {brandList.map(b => (
@@ -400,9 +400,9 @@ const GmvRealtimeTab = () => {
                     {/* SUMMARY CARDS */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '30px' }}>
                         {/* Total GMV */}
-                        <div style={{ ...cardStyle, borderLeft: '4px solid #ea580c' }}>
+                        <div style={{ ...cardStyle, borderLeft: '4px solid #ff6a2c' }}>
                             <p style={{ color: '#9CA3AF', fontSize: '0.85rem', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>💰 Tổng GMV</p>
-                            <p style={{ fontSize: '1.8rem', fontWeight: '900', color: '#ea580c', marginBottom: '8px' }}>{formatCurrency(stats.totalGMV)}</p>
+                            <p style={{ fontSize: '1.8rem', fontWeight: '900', color: '#ff6a2c', marginBottom: '8px' }}>{formatCurrency(stats.totalGMV)}</p>
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                 <span style={{ fontSize: '0.75rem', color: '#6B7280' }}>vs Tháng trước:</span>
                                 <GrowthBadge current={stats.totalGMV} previous={stats.totalGMV_lastMonth} />
@@ -448,11 +448,11 @@ const GmvRealtimeTab = () => {
                                     <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} />
                                     <Tooltip formatter={(val, name) => [name === 'GMV' ? formatCurrency(val) : formatNumber(val), name === 'GMV' ? 'GMV' : 'Đơn hàng']} />
                                     <Legend wrapperStyle={{ fontSize: '0.85rem' }} />
-                                    <Line yAxisId="left" type="monotone" dataKey="GMV" name="GMV" stroke="#ea580c" strokeWidth={3}
-                                        dot={viewMode === 'week' ? { r: 4, fill: '#ea580c' } : { r: 2, fill: '#ea580c' }}
+                                    <Line yAxisId="left" type="monotone" dataKey="GMV" name="GMV" stroke="#ff6a2c" strokeWidth={3}
+                                        dot={viewMode === 'week' ? { r: 4, fill: '#ff6a2c' } : { r: 2, fill: '#ff6a2c' }}
                                         activeDot={{ r: 7 }}
                                         label={viewMode === 'week' ? ({ x, y, value }) => (
-                                            <text x={x} y={y - 12} textAnchor="middle" fontSize={10} fontWeight="700" fill="#ea580c">{formatCurrency(value)}</text>
+                                            <text x={x} y={y - 12} textAnchor="middle" fontSize={10} fontWeight="700" fill="#ff6a2c">{formatCurrency(value)}</text>
                                         ) : false}
                                     />
                                     <Line yAxisId="right" type="monotone" dataKey="orders" name="Đơn hàng" stroke="#3b82f6" strokeWidth={2}
@@ -489,7 +489,7 @@ const GmvRealtimeTab = () => {
                                     <YAxis tickFormatter={(v) => formatCurrency(v)} tick={{ fontSize: 11 }} />
                                     <Tooltip formatter={(val) => formatCurrency(val)} />
                                     <Legend wrapperStyle={{ fontSize: '0.85rem' }} />
-                                    <Bar dataKey="today" name="Hôm nay" fill="#ea580c" radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="today" name="Hôm nay" fill="#ff6a2c" radius={[4, 4, 0, 0]} />
                                     <Bar dataKey="lastMonth" name="Tháng trước" fill="#f59e0b" radius={[4, 4, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
@@ -502,7 +502,7 @@ const GmvRealtimeTab = () => {
                         <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
                                 <thead>
-                                    <tr style={{ background: 'linear-gradient(135deg, #f59e0b, #ea580c)', color: '#fff' }}>
+                                    <tr style={{ background: 'linear-gradient(135deg, #f59e0b, #ff6a2c)', color: '#fff' }}>
                                         <th style={{ padding: '14px 12px', textAlign: 'left', fontWeight: '700' }}>#</th>
                                         <th style={{ padding: '14px 12px', textAlign: 'left', fontWeight: '700' }}>Gian hàng</th>
                                         <th style={{ padding: '14px 12px', textAlign: 'center', fontWeight: '700' }}>Ngày</th>
@@ -543,7 +543,7 @@ const GmvRealtimeTab = () => {
                                             <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '600' }}>
                                                 {formatNumber(d.total_orders)}
                                             </td>
-                                            <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '700', color: '#ea580c', fontSize: '1rem' }}>
+                                            <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '700', color: '#ff6a2c', fontSize: '1rem' }}>
                                                 {formatCurrency(d.GMV)}
                                             </td>
                                             <td style={{ padding: '10px 12px', textAlign: 'center' }}>
@@ -552,15 +552,15 @@ const GmvRealtimeTab = () => {
                                         </tr>
                                     ))}
                                     {/* TOTAL ROW */}
-                                    <tr style={{ background: 'linear-gradient(135deg, #fff7ed, #fef3c7)', fontWeight: '800', borderTop: '2px solid #ea580c' }}>
+                                    <tr style={{ background: 'linear-gradient(135deg, #fff7ed, #fef3c7)', fontWeight: '800', borderTop: '2px solid #ff6a2c' }}>
                                         <td style={{ padding: '12px' }}></td>
-                                        <td style={{ padding: '12px', color: '#ea580c', fontSize: '1rem' }}>TỔNG CỘNG</td>
+                                        <td style={{ padding: '12px', color: '#ff6a2c', fontSize: '1rem' }}>TỔNG CỘNG</td>
                                         <td style={{ padding: '12px', textAlign: 'center', color: '#6B7280', fontSize: '0.8rem' }}></td>
                                         <td style={{ padding: '12px', textAlign: 'center', color: '#6B7280', fontSize: '0.8rem' }}>{filteredData.length} dòng</td>
                                         <td style={{ padding: '12px', textAlign: 'right', color: '#111827', fontSize: '1rem' }}>
                                             {formatNumber(stats.totalOrders)}
                                         </td>
-                                        <td style={{ padding: '12px', textAlign: 'right', color: '#ea580c', fontSize: '1.1rem' }}>
+                                        <td style={{ padding: '12px', textAlign: 'right', color: '#ff6a2c', fontSize: '1.1rem' }}>
                                             {formatCurrency(stats.totalGMV)}
                                         </td>
                                         <td style={{ padding: '12px', textAlign: 'center' }}>

@@ -15,7 +15,7 @@ const blockAirDelete = () => {
   return true;
 };
 
-const COLORS = ['#ea580c', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#f43f5e', '#14b8a6'];
+const COLORS = ['#ff6a2c', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#f43f5e', '#14b8a6'];
 const CHART_HEIGHT = 500;
 const PIE_CY = "45%";
 const PIE_CX = "50%";
@@ -68,7 +68,7 @@ const HardcodedCenterText = ({ value, isMoney = false }) => {
             style={{
                 fontSize: isMoney ? '28px' : '40px',
                 fontWeight: '800',
-                fill: '#ea580c',
+                fill: '#ff6a2c',
                 fontFamily: "'Outfit', sans-serif"
             }}
         >
@@ -911,7 +911,7 @@ const AirLinksTab = () => {
 
             {/* FORM THÊM MỚI - FIX GRID ALIGNMENT */}
             <div className="mirinda-card" style={{ marginBottom: '2rem', padding: '25px' }}>
-                <h3 style={{ borderBottom: '1px solid #f3f4f6', paddingBottom: '15px', marginBottom: '25px', color: '#ea580c', fontSize: '1.25rem', fontWeight: '700', textTransform: 'uppercase' }}>
+                <h3 style={{ borderBottom: '1px solid #f3f4f6', paddingBottom: '15px', marginBottom: '25px', color: '#ff6a2c', fontSize: '1.25rem', fontWeight: '700', textTransform: 'uppercase' }}>
                     ✏️ THÊM LINK AIR MỚI
                 </h3>
                 {/* ── BLACKLIST KOC ── */}
@@ -1172,7 +1172,7 @@ const AirLinksTab = () => {
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                 <span style={{ fontSize: '32px' }}>⚠️</span>
-                                <h3 style={{ margin: 0, color: '#EA580C', fontSize: '1.4rem', fontWeight: 'bold' }}>
+                                <h3 style={{ margin: 0, color: '#ff6a2c', fontSize: '1.4rem', fontWeight: 'bold' }}>
                                     CẢNH BÁO NHẬP TRÙNG ({filteredDuplicates.length}/{duplicates.length} video)
                                 </h3>
                             </div>
@@ -1297,7 +1297,7 @@ const AirLinksTab = () => {
                                                     </td>
                                                     <td style={{ padding: '10px 14px', color: '#000' }}>
                                                         <div style={{ marginBottom: '4px' }}>
-                                                            <strong style={{ color: '#EA580C' }}>👤 {item.nhansu?.ten_nhansu || 'Unknown'}</strong>
+                                                            <strong style={{ color: '#ff6a2c' }}>👤 {item.nhansu?.ten_nhansu || 'Unknown'}</strong>
                                                         </div>
                                                         <div style={{ fontSize: '0.85rem', color: '#666' }}>
                                                             🏢 {item.brands?.ten_brand || 'N/A'} • 📦 {item.san_pham || 'N/A'}
@@ -1598,11 +1598,11 @@ const AirLinksTab = () => {
 
             {/* BÁO CÁO HIỆU SUẤT */}
             <div className="mirinda-card" style={{ marginBottom: '2rem', padding: '25px', borderRadius: '16px', border: '1px solid #e5e7eb', boxShadow: '0 4px 12px rgba(0,0,0,0.06)', backgroundColor: '#fff' }}>
-                <h2 style={{ textAlign: 'center', color: '#ea580c', fontSize: '1.2rem', marginBottom: '1.2rem', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>📊 Báo Cáo Hiệu Suất Air Links</h2>
+                <h2 style={{ textAlign: 'center', color: '#ff6a2c', fontSize: '1.2rem', marginBottom: '1.2rem', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>📊 Báo Cáo Hiệu Suất Air Links</h2>
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem' }}>
                     <select value={airReportMonth} onChange={e => setAirReportMonth(e.target.value)} style={{ padding: '9px 14px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '0.9rem', outline: 'none' }}>{Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>Tháng {i + 1}</option>)}</select>
                     <input type="number" value={airReportYear} onChange={e => setAirReportYear(e.target.value)} style={{ width: '90px', padding: '9px 14px', border: '1.5px solid #e5e7eb', borderRadius: '8px', fontSize: '0.9rem', outline: 'none' }} />
-                    <button onClick={handleGenerateAirLinksReport} disabled={isAirReportLoading} style={{ background: 'linear-gradient(135deg,#f59e0b,#ea580c)', color: '#fff', padding: '9px 24px', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '700' }}>{isAirReportLoading ? '⏳...' : 'Xem Báo Cáo'}</button>
+                    <button onClick={handleGenerateAirLinksReport} disabled={isAirReportLoading} style={{ background: 'linear-gradient(135deg,#f59e0b,#ff6a2c)', color: '#fff', padding: '9px 24px', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '700' }}>{isAirReportLoading ? '⏳...' : 'Xem Báo Cáo'}</button>
                 </div>
                 {Object.keys(castBudgetByNhanSu).length === 0 && (
                     <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 14px', marginBottom: 12, fontSize: '0.8rem', color: '#92400e' }}>
@@ -1631,7 +1631,7 @@ const AirLinksTab = () => {
                                         <tr key={item.nhansu_id} style={{ borderBottom: '1px solid #f0f0f0', background: rowBg }}
                                             onMouseEnter={e => e.currentTarget.style.background = '#fff7ed'}
                                             onMouseLeave={e => e.currentTarget.style.background = rowBg}>
-                                            <td style={{ fontWeight: 700, color: '#ea580c', padding: '11px 14px', borderRight: '1px solid #f3f4f6' }}>{item.ten_nhansu}</td>
+                                            <td style={{ fontWeight: 700, color: '#ff6a2c', padding: '11px 14px', borderRight: '1px solid #f3f4f6' }}>{item.ten_nhansu}</td>
                                             <td style={{ textAlign: 'center', padding: '11px 10px', color: '#374151', borderRight: '1px solid #f3f4f6' }}>{item.sl_video_air}</td>
                                             <td style={{ textAlign: 'right', padding: '11px 14px', fontWeight: 600, color: '#374151', borderRight: '1px solid #f3f4f6' }}>{Math.round(item.chi_phi_cast).toLocaleString('vi-VN')} đ</td>
                                             <td style={{ textAlign: 'right', padding: '11px 14px', fontWeight: 700, color: '#0369a1', borderRight: '1px solid #f3f4f6' }}>
@@ -1651,13 +1651,13 @@ const AirLinksTab = () => {
                             <tfoot>
                                 {totalsRowAirReport && (
                                     <tr style={{ background: 'linear-gradient(135deg,#fff7ed,#fef3c7)', borderTop: '2px solid #fed7aa', fontWeight: 800 }}>
-                                        <td style={{ padding: '12px 14px', color: '#c2410c', borderRight: '1px solid #fed7aa' }}>TỔNG CỘNG</td>
-                                        <td style={{ textAlign: 'center', padding: '12px 10px', color: '#c2410c', borderRight: '1px solid #fed7aa' }}>{totalsRowAirReport.sl_video_air}</td>
-                                        <td style={{ textAlign: 'right', padding: '12px 14px', color: '#c2410c', borderRight: '1px solid #fed7aa' }}>{Math.round(totalsRowAirReport.chi_phi_cast).toLocaleString('vi-VN')} đ</td>
+                                        <td style={{ padding: '12px 14px', color: '#e85518', borderRight: '1px solid #fed7aa' }}>TỔNG CỘNG</td>
+                                        <td style={{ textAlign: 'center', padding: '12px 10px', color: '#e85518', borderRight: '1px solid #fed7aa' }}>{totalsRowAirReport.sl_video_air}</td>
+                                        <td style={{ textAlign: 'right', padding: '12px 14px', color: '#e85518', borderRight: '1px solid #fed7aa' }}>{Math.round(totalsRowAirReport.chi_phi_cast).toLocaleString('vi-VN')} đ</td>
                                         <td style={{ borderRight: '1px solid #fed7aa' }}></td>
                                         <td style={{ borderRight: '2px solid #fed7aa' }}></td>
                                         {airReportData.brandHeaders.map(brand => (
-                                            <td key={brand} style={{ textAlign: 'center', padding: '12px 10px', color: '#c2410c', borderRight: '1px solid #f3f4f6' }}>{totalsRowAirReport.brand_counts_air[brand] || 0}</td>
+                                            <td key={brand} style={{ textAlign: 'center', padding: '12px 10px', color: '#e85518', borderRight: '1px solid #f3f4f6' }}>{totalsRowAirReport.brand_counts_air[brand] || 0}</td>
                                         ))}
                                     </tr>
                                 )}
@@ -1907,7 +1907,7 @@ const AirLinksTab = () => {
                                 borderRadius: '8px', marginBottom: '25px', fontSize: '16px', outline: 'none',
                                 transition: 'border-color 0.2s', fontFamily: 'monospace'
                             }}
-                            onFocus={(e) => e.target.style.borderColor = '#ea580c'}
+                            onFocus={(e) => e.target.style.borderColor = '#ff6a2c'}
                             onBlur={(e) => e.target.style.borderColor = '#d1d5db'}
                         />
                         <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>

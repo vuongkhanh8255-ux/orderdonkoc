@@ -10,11 +10,11 @@ const CS_SHEET_ID = '1w9Y10K-eSasVbL1_jpT1_o1EkqCJq068OAwRg-ZPYcE';
 const BRAND_COLORS = {
   'BODYMISS':   '#3b82f6',
   'MILAGANICS': '#10b981',
-  'MOAWS':      '#f97316',
+  'MOAWS':      '#ff7a30',
   'EHERB':      '#eab308',
 };
 
-const STAR_COLORS = { 1: '#ef4444', 2: '#f97316', 3: '#eab308', 4: '#22c55e', 5: '#10b981' };
+const STAR_COLORS = { 1: '#ef4444', 2: '#ff7a30', 3: '#eab308', 4: '#22c55e', 5: '#10b981' };
 
 const normalizeBrand = (b) => {
   if (!b) return 'Không rõ';
@@ -175,7 +175,7 @@ function DanhGiaTab() {
   const selectStyle = { width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, background: '#fff', cursor: 'pointer', outline: 'none' };
   const pillStyle = (active) => ({
     padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: 'none',
-    background: active ? 'linear-gradient(135deg, #f97316, #ef4444)' : '#f3f4f6',
+    background: active ? 'linear-gradient(135deg, #ff7a30, #ef4444)' : '#f3f4f6',
     color: active ? '#fff' : '#666', transition: 'all 0.2s',
   });
 
@@ -190,14 +190,14 @@ function DanhGiaTab() {
           </p>
         </div>
         <div style={{ fontSize: 13, color: '#888' }}>
-          Tổng: <b style={{ color: '#f97316' }}>{rawData.length}</b> đánh giá
+          Tổng: <b style={{ color: '#ff7a30' }}>{rawData.length}</b> đánh giá
         </div>
       </div>
 
       {/* Stats Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
         {Object.entries(stats.byBrand).map(([brand, count]) => (
-          <div key={brand} style={{ ...cardStyle, borderLeft: `4px solid ${BRAND_COLORS[brand] || '#6b7280'}`, cursor: 'pointer', transition: 'all 0.2s', ...(brandFilter === brand ? { boxShadow: '0 0 0 2px #f97316' } : {}) }}
+          <div key={brand} style={{ ...cardStyle, borderLeft: `4px solid ${BRAND_COLORS[brand] || '#6b7280'}`, cursor: 'pointer', transition: 'all 0.2s', ...(brandFilter === brand ? { boxShadow: '0 0 0 2px #ff7a30' } : {}) }}
             onClick={() => setBrandFilter(brandFilter === brand ? 'Tất cả' : brand)}
           >
             <div style={labelStyle}>{brand}</div>
@@ -260,13 +260,13 @@ function DanhGiaTab() {
                         {i + 1}
                       </td>
                       <td style={{ padding: '8px' }}>
-                        <span style={{ padding: '2px 8px', borderRadius: 6, fontSize: 12, background: expandedCategory === cat ? '#f97316' : '#f3f4f6', color: expandedCategory === cat ? '#fff' : '#444', transition: 'all 0.2s' }}>{cat}</span>
+                        <span style={{ padding: '2px 8px', borderRadius: 6, fontSize: 12, background: expandedCategory === cat ? '#ff7a30' : '#f3f4f6', color: expandedCategory === cat ? '#fff' : '#444', transition: 'all 0.2s' }}>{cat}</span>
                       </td>
-                      <td style={{ padding: '8px', textAlign: 'right', fontWeight: 700, color: '#f97316' }}>{count}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', fontWeight: 700, color: '#ff7a30' }}>{count}</td>
                       <td style={{ padding: '8px', textAlign: 'right', fontSize: 12, color: '#888' }}>
                         {(count / filtered.length * 100).toFixed(1)}%
                         <div style={{ marginTop: 2, height: 4, borderRadius: 2, background: '#f3f4f6', overflow: 'hidden' }}>
-                          <div style={{ height: '100%', borderRadius: 2, background: 'linear-gradient(90deg, #f97316, #ef4444)', width: `${(count / filtered.length * 100)}%` }} />
+                          <div style={{ height: '100%', borderRadius: 2, background: 'linear-gradient(90deg, #ff7a30, #ef4444)', width: `${(count / filtered.length * 100)}%` }} />
                         </div>
                       </td>
                     </tr>
@@ -585,7 +585,7 @@ function TikTokHealthTab() {
           <p style={{ margin: '4px 0 0', fontSize: 13, color: '#888' }}>Theo dõi chỉ số CSKH & Hiệu suất cửa hàng theo từng kỳ báo cáo</p>
         </div>
         <button onClick={() => { setForm(EMPTY_HEALTH); setShowForm(true); }}
-          style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #f97316, #ef4444)', color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer', boxShadow: '0 4px 12px rgba(249,115,22,0.3)' }}>
+          style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #ff7a30, #ef4444)', color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer', boxShadow: '0 4px 12px rgba(249,115,22,0.3)' }}>
           + Nhập kỳ mới
         </button>
       </div>
@@ -706,7 +706,7 @@ function TikTokHealthTab() {
             {/* Metrics */}
             {METRICS.map(({ section, metrics: mList }) => (
               <div key={section} style={{ marginBottom: 18 }}>
-                <div style={{ fontSize: 11, fontWeight: 800, color: '#f97316', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10, paddingBottom: 6, borderBottom: '2px solid #fed7aa' }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: '#ff7a30', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10, paddingBottom: 6, borderBottom: '2px solid #fed7aa' }}>
                   {section}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -733,7 +733,7 @@ function TikTokHealthTab() {
               <button onClick={() => setShowForm(false)} style={{ flex: 1, padding: 12, borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>
                 Hủy
               </button>
-              <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: 12, borderRadius: 9, border: 'none', background: saving ? '#d1d5db' : 'linear-gradient(135deg, #f97316, #ef4444)', color: '#fff', fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontSize: 14, boxShadow: saving ? 'none' : '0 4px 12px rgba(249,115,22,0.3)' }}>
+              <button onClick={handleSave} disabled={saving} style={{ flex: 2, padding: 12, borderRadius: 9, border: 'none', background: saving ? '#d1d5db' : 'linear-gradient(135deg, #ff7a30, #ef4444)', color: '#fff', fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontSize: 14, boxShadow: saving ? 'none' : '0 4px 12px rgba(249,115,22,0.3)' }}>
                 {saving ? '⏳ Đang lưu...' : '💾 Lưu'}
               </button>
             </div>
@@ -748,8 +748,8 @@ function TikTokHealthTab() {
 const SHOP_COLORS = {
   'BODYMISS':      '#3b82f6',
   'MILAGANICS':    '#10b981',
-  'MOAW MOAWS':    '#f97316',
-  'MOAWS':         '#f97316',
+  'MOAW MOAWS':    '#ff7a30',
+  'MOAWS':         '#ff7a30',
   'EHERB HCM':     '#eab308',
   'EHERB':         '#eab308',
   'REAL STEEL':    '#8b5cf6',
@@ -1117,7 +1117,7 @@ function TikTokReviewsTab() {
   const selectSt = { width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13, background: '#fff', cursor: 'pointer', outline: 'none' };
   const pill = (active) => ({
     padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: 'none',
-    background: active ? 'linear-gradient(135deg, #f97316, #ef4444)' : '#f3f4f6',
+    background: active ? 'linear-gradient(135deg, #ff7a30, #ef4444)' : '#f3f4f6',
     color: active ? '#fff' : '#666', transition: 'all 0.2s',
   });
 
@@ -1142,7 +1142,7 @@ function TikTokReviewsTab() {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button onClick={() => handleSync(false)} disabled={syncing}
-            style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: syncing ? '#d1d5db' : 'linear-gradient(135deg, #f97316, #ef4444)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: syncing ? 'default' : 'pointer', boxShadow: syncing ? 'none' : '0 4px 12px rgba(249,115,22,0.3)', transition: 'all 0.2s' }}>
+            style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: syncing ? '#d1d5db' : 'linear-gradient(135deg, #ff7a30, #ef4444)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: syncing ? 'default' : 'pointer', boxShadow: syncing ? 'none' : '0 4px 12px rgba(249,115,22,0.3)', transition: 'all 0.2s' }}>
             {syncing ? '⏳ Đang đồng bộ...' : '🔄 Sync đánh giá'}
           </button>
           <button onClick={() => handleSync(true)} disabled={syncing}
@@ -1255,7 +1255,7 @@ function TikTokReviewsTab() {
               </div>
             </div>
             <button onClick={() => handleSync(false)} disabled={syncing || syncingShop}
-              style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: syncing ? '#d1d5db' : 'linear-gradient(135deg, #f97316, #ef4444)', color: '#fff', fontWeight: 700, fontSize: 12, cursor: syncing ? 'default' : 'pointer', boxShadow: syncing ? 'none' : '0 2px 8px rgba(249,115,22,0.25)' }}>
+              style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: syncing ? '#d1d5db' : 'linear-gradient(135deg, #ff7a30, #ef4444)', color: '#fff', fontWeight: 700, fontSize: 12, cursor: syncing ? 'default' : 'pointer', boxShadow: syncing ? 'none' : '0 2px 8px rgba(249,115,22,0.25)' }}>
               {syncing ? '⏳ Syncing all...' : '🔄 Sync tất cả'}
             </button>
           </div>
@@ -1340,9 +1340,9 @@ function TikTokReviewsTab() {
 
       {/* Stats Overview */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
-        <div style={{ ...card, borderTop: '3px solid #f97316' }}>
+        <div style={{ ...card, borderTop: '3px solid #ff7a30' }}>
           <div style={labelSt}>Tổng đánh giá</div>
-          <div style={{ fontSize: 28, fontWeight: 900, color: '#f97316' }}>{stats.total}</div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: '#ff7a30' }}>{stats.total}</div>
         </div>
         <div style={{ ...card, borderTop: '3px solid #10b981' }}>
           <div style={labelSt}>Đánh giá TB</div>
@@ -1412,7 +1412,7 @@ function TikTokReviewsTab() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
             {topProducts.map((p, i) => (
               <div key={p.name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, background: '#f9fafb', border: '1px solid #f3f4f6' }}>
-                <span style={{ width: 24, height: 24, borderRadius: 6, background: i < 3 ? 'linear-gradient(135deg, #f97316, #ef4444)' : '#e5e7eb', color: i < 3 ? '#fff' : '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{i + 1}</span>
+                <span style={{ width: 24, height: 24, borderRadius: 6, background: i < 3 ? 'linear-gradient(135deg, #ff7a30, #ef4444)' : '#e5e7eb', color: i < 3 ? '#fff' : '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{i + 1}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.name}>{p.name}</div>
                   <div style={{ fontSize: 11, color: '#888' }}>{p.count} đánh giá · ⭐ {p.avg}</div>
@@ -1627,7 +1627,7 @@ export default function CSKHTab() {
             style={{
               padding: '10px 24px', borderRadius: 10, border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer',
               fontFamily: 'system-ui, sans-serif', transition: 'all 0.2s',
-              background: tab === t.key ? 'linear-gradient(135deg, #f97316, #ef4444)' : 'transparent',
+              background: tab === t.key ? 'linear-gradient(135deg, #ff7a30, #ef4444)' : 'transparent',
               color: tab === t.key ? '#fff' : '#666',
               boxShadow: tab === t.key ? '0 2px 8px rgba(249,115,22,0.3)' : 'none',
             }}>

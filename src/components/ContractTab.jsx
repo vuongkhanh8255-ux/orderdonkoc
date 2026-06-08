@@ -70,12 +70,12 @@ const ContractTab = () => {
 
                 {/* FORM ĐIỀN THÔNG TIN */}
                 <div className="mirinda-card" style={{ border: '1px solid #eee', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-                    <h2 style={{ textAlign: 'center', color: '#ea580c', marginBottom: '1.5rem', fontFamily: "'Outfit', sans-serif", letterSpacing: '1px' }}>Thông tin hợp đồng</h2>
+                    <h2 style={{ textAlign: 'center', color: '#ff6a2c', marginBottom: '1.5rem', fontFamily: "'Outfit', sans-serif", letterSpacing: '1px' }}>Thông tin hợp đồng</h2>
                     <form onSubmit={handleGenerateContract} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
 
                         {/* Thông tin Bên A */}
                         <fieldset style={{ border: '1px solid #ddd', padding: '1.5rem', borderRadius: '12px', backgroundColor: '#f9fafb' }}>
-                            <legend style={{ padding: '0 10px', fontWeight: '700', fontSize: '1.1rem', color: '#ea580c', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Bên A (Công ty)</legend>
+                            <legend style={{ padding: '0 10px', fontWeight: '700', fontSize: '1.1rem', color: '#ff6a2c', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Bên A (Công ty)</legend>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.5rem', marginTop: '0.5rem' }}>
                                 <div><label style={{ color: '#666', marginBottom: '5px', display: 'block', fontSize: '0.9rem' }}>Tên công ty</label><input type="text" value={contractData.benA_ten} readOnly style={{ backgroundColor: '#fff', border: '1px solid #ddd', color: '#333', borderRadius: '8px', padding: '10px' }} /></div>
                                 <div><label style={{ color: '#666', marginBottom: '5px', display: 'block', fontSize: '0.9rem' }}>Địa chỉ</label><input type="text" value={contractData.benA_diaChi} readOnly style={{ backgroundColor: '#fff', border: '1px solid #ddd', color: '#333', borderRadius: '8px', padding: '10px' }} /></div>
@@ -123,7 +123,7 @@ const ContractTab = () => {
                 {/* KẾT QUẢ HỢP ĐỒNG */}
                 <div id="outputContainer" className="mirinda-card" style={{ display: isOutputVisible ? 'block' : 'none', border: '1px solid #eee', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                        <h2 style={{ fontSize: '1.5rem', color: '#ea580c', margin: 0, fontFamily: "'Outfit', sans-serif" }}>Nội dung hợp đồng</h2>
+                        <h2 style={{ fontSize: '1.5rem', color: '#ff6a2c', margin: 0, fontFamily: "'Outfit', sans-serif" }}>Nội dung hợp đồng</h2>
                         <div>
                             <button onClick={handleCopyToClipboard} className="btn-secondary" style={{ marginRight: '10px' }}>Sao chép</button>
                             <button onClick={() => window.print()} className="btn-secondary">In / PDF</button>
@@ -138,11 +138,11 @@ const ContractTab = () => {
 
             {/* KHO LƯU TRỮ LINK HỢP ĐỒNG */}
             <div className="mirinda-card" style={{ border: '1px solid #eee' }}>
-                <h2 style={{ textAlign: 'center', color: '#ea580c', marginBottom: '1.5rem', fontSize: '1.8rem', fontWeight: '800' }}>📁 KHO LƯU TRỮ LINK HỢP ĐỒNG</h2>
+                <h2 style={{ textAlign: 'center', color: '#ff6a2c', marginBottom: '1.5rem', fontSize: '1.8rem', fontWeight: '800' }}>📁 KHO LƯU TRỮ LINK HỢP ĐỒNG</h2>
 
                 {/* FORM THÊM LINK MỚI */}
                 <div style={{ backgroundColor: '#f9fafb', padding: '1.5rem', borderRadius: '12px', border: '1px dashed #ddd', marginBottom: '2rem' }}>
-                    <h3 style={{ marginTop: 0, color: '#ea580c', marginBottom: '15px' }}>+ Lưu Link Mới</h3>
+                    <h3 style={{ marginTop: 0, color: '#ff6a2c', marginBottom: '15px' }}>+ Lưu Link Mới</h3>
                     <form onSubmit={handleAddLinkSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 150px', gap: '1rem', alignItems: 'end' }}>
                         <div>
                             <label style={{ color: '#666', fontSize: '0.9rem', marginBottom: '5px', display: 'block' }}>ID Kênh / Tên KOC</label>
@@ -181,7 +181,7 @@ const ContractTab = () => {
                 <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid #eee' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead style={{ background: '#fff7ed' }}>
-                            <tr style={{ color: '#ea580c', textTransform: 'uppercase', fontSize: '0.85rem' }}>
+                            <tr style={{ color: '#ff6a2c', textTransform: 'uppercase', fontSize: '0.85rem' }}>
                                 <th style={{ width: '50px', padding: '12px' }}>STT</th>
                                 <th style={{ padding: '12px' }}>ID Kênh / KOC</th>
                                 <th style={{ padding: '12px' }}>Link Hợp Đồng</th>
@@ -199,7 +199,7 @@ const ContractTab = () => {
                                 savedContracts.map((item, index) => (
                                     <tr key={item.id} style={{ borderBottom: '1px solid #eee' }}>
                                         <td style={{ textAlign: 'center', padding: '10px' }}>{index + 1}</td>
-                                        <td style={{ fontWeight: 'bold', color: '#ea580c', padding: '10px' }}>{item.id_kenh}</td>
+                                        <td style={{ fontWeight: 'bold', color: '#ff6a2c', padding: '10px' }}>{item.id_kenh}</td>
                                         <td style={{ padding: '10px' }}>
                                             <a href={item.link_hop_dong} target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', textDecoration: 'underline' }}>
                                                 {item.link_hop_dong}

@@ -48,7 +48,7 @@ const ADS_ORDERS_KEY  = 'col_AD621H4HOQGMS864I7GRLFRE41QE3ETB41GM8SO';      // S
 const DATA_START = (() => { const d = new Date(); d.setMonth(d.getMonth() - 3); d.setHours(0,0,0,0); return d.getTime(); })();
 
 // ─── COLORS ──────────────────────────────────────────────────────────────────
-const COLORS = ['#ea580c', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e', '#6366f1', '#84cc16'];
+const COLORS = ['#ff6a2c', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e', '#6366f1', '#84cc16'];
 const SOURCE_COLORS = { Tiktokshop: '#010101', TiktokShop: '#010101', Shopee: '#ee4d2d' };
 
 // ─── SECTION METRIC CONFIGS ──────────────────────────────────────────────────
@@ -83,7 +83,7 @@ const sourceColor = (s) => {
 // ─── SECTION METRIC CONFIGS (must be after fmt) ──────────────────────────────
 const S1_CONFIGS = {
   traffic: { label: 'Traffic',      icon: '👁️', color: '#6366f1', key: 'traffic', format: v => v >= 1e6 ? (v/1e6).toFixed(1)+'tr' : (v/1e3).toFixed(0)+'k' },
-  gmv:     { label: 'GMV',          icon: '💰', color: '#ea580c', key: 'gmv',     format: v => fmt(v) },
+  gmv:     { label: 'GMV',          icon: '💰', color: '#ff6a2c', key: 'gmv',     format: v => fmt(v) },
   orders:  { label: 'Đơn hàng',     icon: '📦', color: '#f59e0b', key: 'orders',  format: v => v.toLocaleString('vi-VN') },
   aov:     { label: 'AOV',          icon: '📊', color: '#8b5cf6', key: 'aov',     format: v => fmt(v) },
   abs:     { label: 'ABS (SP/đơn)', icon: '🛒', color: '#14b8a6', key: 'abs',     format: v => Number(v).toFixed(1) },
@@ -122,7 +122,7 @@ const isStellaCampaign = (advertiserName) => {
 };
 
 // ─── SUB-COMPONENTS ──────────────────────────────────────────────────────────
-const StatCard = ({ icon, label, value, sub, color = '#ea580c', loading, active, onClick, compare }) => {
+const StatCard = ({ icon, label, value, sub, color = '#ff6a2c', loading, active, onClick, compare }) => {
   const sparkPaths = [
     "polygon(0 60%, 15% 45%, 30% 55%, 45% 35%, 60% 50%, 75% 25%, 90% 35%, 100% 15%, 100% 100%, 0 100%)",
     "polygon(0 70%, 20% 60%, 40% 70%, 55% 45%, 70% 55%, 85% 30%, 100% 20%, 100% 100%, 0 100%)",
@@ -745,7 +745,7 @@ const StellaDashboardTab = () => {
   // ─── METRIC CONFIGS (for trend chart) ─────────────────────────────────────
   const METRIC_CONFIGS = {
     traffic:     { label: 'Tổng Traffic',      color: '#6366f1', source: 'traffic', key: 'traffic',          format: v => v.toLocaleString('vi-VN') },
-    gmv:         { label: 'Tổng GMV',         color: '#ea580c', source: 'orders', key: 'GMV',              format: fmt },
+    gmv:         { label: 'Tổng GMV',         color: '#ff6a2c', source: 'orders', key: 'GMV',              format: fmt },
     orders:      { label: 'Tổng đơn hàng',    color: '#f59e0b', source: 'orders', key: 'count_order',     format: v => v.toLocaleString('vi-VN') },
     qty:         { label: 'Tổng sản phẩm',    color: '#10b981', source: 'orders', key: 'product_quantity', format: v => v.toLocaleString('vi-VN') },
     adsCost:     { label: 'Chi phí Ads',       color: '#3b82f6', source: 'ads',     key: ADS_COST_KEY,      format: fmt },
@@ -830,7 +830,7 @@ const StellaDashboardTab = () => {
   const toggleMetric = (m, setter) => setter(prev => prev[0] === m ? prev : [m, prev[0]]);
   const s2DailyStats = dailyStats.filter(d => d.adsCost > 0 || d.adsOrders > 0);
 
-  const filterBtnStyle = (active, color = '#ea580c') => ({
+  const filterBtnStyle = (active, color = '#ff6a2c') => ({
     padding: '7px 16px', borderRadius: '99px', fontWeight: 700,
     fontSize: '0.8rem', cursor: 'pointer', border: 'none',
     background: active ? color : '#f3f4f6',
@@ -841,7 +841,7 @@ const StellaDashboardTab = () => {
   const tabStyle = (active) => ({
     padding: '6px 14px', borderRadius: 8, fontWeight: 700, fontSize: '0.8rem',
     cursor: 'pointer', border: 'none', transition: 'all 0.2s',
-    background: active ? '#ea580c' : '#f3f4f6',
+    background: active ? '#ff6a2c' : '#f3f4f6',
     color: active ? '#fff' : '#555',
   });
 
@@ -905,9 +905,9 @@ const StellaDashboardTab = () => {
           </p>
         </div>
         <button onClick={fetchAll} style={{
-          padding: '9px 18px', borderRadius: 10, background: '#ea580c', color: '#fff',
+          padding: '9px 18px', borderRadius: 10, background: '#ff6a2c', color: '#fff',
           border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: '0.82rem',
-          boxShadow: '0 2px 8px rgba(234,88,12,0.3)', display: 'flex', alignItems: 'center', gap: 6, letterSpacing: '-0.01em'
+          boxShadow: '0 2px 8px rgba(255,106,44,0.3)', display: 'flex', alignItems: 'center', gap: 6, letterSpacing: '-0.01em'
         }}>🔄 Làm mới</button>
       </div>
       <div style={{ padding: '24px 28px' }}>
@@ -961,9 +961,9 @@ const StellaDashboardTab = () => {
                   style={{
                     padding: '8px 14px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: '0.8rem', fontWeight: 600,
                     cursor: 'pointer', transition: 'all 0.15s',
-                    background: periodMode === v ? '#ea580c' : '#f8fafc',
+                    background: periodMode === v ? '#ff6a2c' : '#f8fafc',
                     color: periodMode === v ? '#fff' : '#475569',
-                    boxShadow: periodMode === v ? '0 2px 8px rgba(234,88,12,0.25)' : 'none',
+                    boxShadow: periodMode === v ? '0 2px 8px rgba(255,106,44,0.25)' : 'none',
                   }}>
                   {l}
                 </button>
@@ -1004,7 +1004,7 @@ const StellaDashboardTab = () => {
       <SectionHeader title="Tổng Quan" subtitle="Chỉ số hiệu suất tổng hợp theo ngày." />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 14 }}>
         <StatCard icon="👁️" label="Traffic"    value={totalTraffic.toLocaleString('vi-VN')} sub="lượt xem"   color="#6366f1" loading={loading} active={s1Metrics.includes('traffic')} onClick={() => toggleMetric('traffic', setS1Metrics)} compare={getPrevBounds ? { curr: totalTraffic, prev: prevTraffic } : null} />
-        <StatCard icon="💰" label="Tổng GMV"   value={fmt(totalGMV)} sub={fmtFull(totalGMV)}                  color="#ea580c" loading={loading} active={s1Metrics.includes('gmv')}     onClick={() => toggleMetric('gmv', setS1Metrics)}     compare={getPrevBounds ? { curr: totalGMV, prev: prevGMV } : null} />
+        <StatCard icon="💰" label="Tổng GMV"   value={fmt(totalGMV)} sub={fmtFull(totalGMV)}                  color="#ff6a2c" loading={loading} active={s1Metrics.includes('gmv')}     onClick={() => toggleMetric('gmv', setS1Metrics)}     compare={getPrevBounds ? { curr: totalGMV, prev: prevGMV } : null} />
         <StatCard icon="📦" label="Đơn hàng"   value={totalOrders.toLocaleString('vi-VN')} sub="đơn"          color="#f59e0b" loading={loading} active={s1Metrics.includes('orders')}  onClick={() => toggleMetric('orders', setS1Metrics)}  compare={getPrevBounds ? { curr: totalOrders, prev: prevOrders } : null} />
         <StatCard icon="📊" label="AOV"         value={fmt(avgAOV)} sub="₫/đơn"                                color="#8b5cf6" loading={loading} active={s1Metrics.includes('aov')}     onClick={() => toggleMetric('aov', setS1Metrics)}     compare={getPrevBounds ? { curr: avgAOV, prev: prevAOV } : null} />
         <StatCard icon="🛒" label="ABS"         value={avgABS.toFixed(1)} sub="SP/đơn"                        color="#14b8a6" loading={loading} active={s1Metrics.includes('abs')}     onClick={() => toggleMetric('abs', setS1Metrics)}     compare={getPrevBounds ? { curr: avgABS, prev: prevABS } : null} />
@@ -1068,7 +1068,7 @@ const StellaDashboardTab = () => {
                         <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.83rem', fontFamily: "'Outfit', sans-serif" }}>{item.name}</span>
                       </div>
                     </td>
-                    <td style={{ ...tdNum, fontWeight: 700, color: '#ea580c' }}>{fmt(item.GMV)}</td>
+                    <td style={{ ...tdNum, fontWeight: 700, color: '#ff6a2c' }}>{fmt(item.GMV)}</td>
                     <td style={{ ...tdNum, color: '#64748b' }}>{(item.orders||0).toLocaleString('vi-VN')}</td>
                     <td style={{ ...tdNum, color: '#8b5cf6' }}>{fmt(aov)}</td>
                     <td style={{ ...tdNum, color: '#6366f1' }}>{Math.round(item.traffic||0).toLocaleString('vi-VN')}</td>
@@ -1191,7 +1191,7 @@ const StellaDashboardTab = () => {
                         {item.brand}
                       </span>
                     </td>
-                    <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.83rem', color: '#ea580c' }}>{fmt(item.spend)}</td>
+                    <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.83rem', color: '#ff6a2c' }}>{fmt(item.spend)}</td>
                     <td style={{ padding: '14px 20px', minWidth: 140 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <div style={{ flex: 1, height: 5, background: '#f1f5f9', borderRadius: 99, overflow: 'hidden' }}>
@@ -1206,8 +1206,8 @@ const StellaDashboardTab = () => {
             }
             {!loading && campaignsByBrand.length > 0 && (
               <tr style={{ background: '#fff7ed', borderTop: '2px solid #fed7aa' }}>
-                <td style={{ padding: '14px 20px', fontWeight: 900, fontSize: '0.83rem', color: '#ea580c' }}>TỔNG</td>
-                <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 900, fontSize: '0.83rem', color: '#ea580c' }}>{fmt(totalCampaignSpend)}</td>
+                <td style={{ padding: '14px 20px', fontWeight: 900, fontSize: '0.83rem', color: '#ff6a2c' }}>TỔNG</td>
+                <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 900, fontSize: '0.83rem', color: '#ff6a2c' }}>{fmt(totalCampaignSpend)}</td>
                 <td style={{ padding: '14px 20px', fontSize: '0.72rem', fontWeight: 700, color: '#475569' }}>100%</td>
               </tr>
             )}
@@ -1243,20 +1243,20 @@ const StellaDashboardTab = () => {
                   <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}
                     onMouseEnter={e => e.currentTarget.style.background = '#fef7f0'}
                     onMouseLeave={e => e.currentTarget.style.background = ''}>
-                    <td style={{ padding: '14px 20px', fontWeight: 800, fontSize: '0.83rem', color: i < 3 ? '#ea580c' : '#9ca3af' }}>
+                    <td style={{ padding: '14px 20px', fontWeight: 800, fontSize: '0.83rem', color: i < 3 ? '#ff6a2c' : '#9ca3af' }}>
                       {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
                     </td>
                     <td style={{ padding: '14px 20px', fontWeight: 600, fontSize: '0.83rem', color: '#0f172a', maxWidth: 280 }}>
                       <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.campaign}</div>
                     </td>
                     <td style={{ padding: '14px 20px' }}>
-                      <span style={{ padding: '2px 10px', borderRadius: 99, background: '#fff7ed', color: '#c2410c', fontSize: '0.72rem', fontWeight: 700 }}>{item.brand}</span>
+                      <span style={{ padding: '2px 10px', borderRadius: 99, background: '#fff7ed', color: '#e85518', fontSize: '0.72rem', fontWeight: 700 }}>{item.brand}</span>
                     </td>
-                    <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.83rem', color: '#ea580c' }}>{fmt(item.spend)}</td>
+                    <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: 700, fontSize: '0.83rem', color: '#ff6a2c' }}>{fmt(item.spend)}</td>
                     <td style={{ padding: '14px 20px', minWidth: 120 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <div style={{ flex: 1, height: 5, background: '#f1f5f9', borderRadius: 99, overflow: 'hidden' }}>
-                          <div style={{ width: pct + '%', height: '100%', background: '#ea580c', borderRadius: 99 }} />
+                          <div style={{ width: pct + '%', height: '100%', background: '#ff6a2c', borderRadius: 99 }} />
                         </div>
                         <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', minWidth: 36 }}>{pct.toFixed(1)}%</span>
                       </div>
@@ -1285,9 +1285,9 @@ const StellaDashboardTab = () => {
             style={{
               padding: '8px 16px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: '0.82rem',
               fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
-              background: tiktokPeriod === v ? '#ea580c' : '#f8fafc',
+              background: tiktokPeriod === v ? '#ff6a2c' : '#f8fafc',
               color: tiktokPeriod === v ? '#fff' : '#475569',
-              boxShadow: tiktokPeriod === v ? '0 2px 8px rgba(234,88,12,0.25)' : 'none',
+              boxShadow: tiktokPeriod === v ? '0 2px 8px rgba(255,106,44,0.25)' : 'none',
             }}>{l}</button>
         ))}
         <div ref={tiktokPickerRef} style={{ position: 'relative' }}>
@@ -1295,9 +1295,9 @@ const StellaDashboardTab = () => {
             style={{
               padding: '8px 16px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: '0.82rem',
               fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
-              background: tiktokPeriod === 'range' ? '#ea580c' : '#f8fafc',
+              background: tiktokPeriod === 'range' ? '#ff6a2c' : '#f8fafc',
               color: tiktokPeriod === 'range' ? '#fff' : '#475569',
-              boxShadow: tiktokPeriod === 'range' ? '0 2px 8px rgba(234,88,12,0.25)' : 'none',
+              boxShadow: tiktokPeriod === 'range' ? '0 2px 8px rgba(255,106,44,0.25)' : 'none',
             }}>
             {tiktokPeriod === 'range' && tiktokRange.start
               ? `${tiktokRange.start.toLocaleDateString('vi-VN')}${tiktokRange.end ? ' – ' + tiktokRange.end.toLocaleDateString('vi-VN') : ''}`
@@ -1317,7 +1317,7 @@ const StellaDashboardTab = () => {
 
       {/* KPI cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
-        <StatCard icon="💰" label={tiktokPeriod === '1' ? 'GMV hôm nay' : tiktokPeriod === '7' ? 'GMV 7 ngày' : tiktokPeriod === '30' ? 'GMV 30 ngày' : 'GMV kỳ chọn'} color="#ea580c"
+        <StatCard icon="💰" label={tiktokPeriod === '1' ? 'GMV hôm nay' : tiktokPeriod === '7' ? 'GMV 7 ngày' : tiktokPeriod === '30' ? 'GMV 30 ngày' : 'GMV kỳ chọn'} color="#ff6a2c"
           value={tiktokLoading ? '...' : fmt(tiktokTotalGmv)}
           sub="Gross (kể cả hủy)" loading={tiktokLoading} />
         <StatCard icon="📦" label="Tổng đơn" color="#f59e0b"
@@ -1347,13 +1347,13 @@ const StellaDashboardTab = () => {
             <ComposedChart data={tiktokDailyStats} margin={{ top: 10, right: 16, left: 0, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
               <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#9ca3af' }} tickLine={false} axisLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: '#ea580c' }} tickLine={false} axisLine={false} tickFormatter={v => fmt(v)} width={68} />
+              <YAxis tick={{ fontSize: 11, fill: '#ff6a2c' }} tickLine={false} axisLine={false} tickFormatter={v => fmt(v)} width={68} />
               <Tooltip
                 contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', fontFamily: "'Outfit',sans-serif" }}
                 labelFormatter={(l, p) => p?.[0]?.payload?.fullDate || l}
                 formatter={(v, name) => name === 'gmv' ? [fmtFull(v), 'GMV'] : [v.toLocaleString('vi-VN'), 'Đơn']}
               />
-              <Bar dataKey="gmv" fill="#ea580c" radius={[4, 4, 0, 0]} opacity={0.85} />
+              <Bar dataKey="gmv" fill="#ff6a2c" radius={[4, 4, 0, 0]} opacity={0.85} />
             </ComposedChart>
           </ResponsiveContainer>
         )}

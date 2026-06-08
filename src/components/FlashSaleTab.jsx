@@ -45,8 +45,8 @@ const CARD = {
 };
 const BTN_PRIMARY = {
   padding: '10px 24px', borderRadius: 10, border: 'none',
-  background: '#ea580c', color: '#fff', fontWeight: 700, fontSize: '0.88rem',
-  cursor: 'pointer', boxShadow: '0 4px 12px rgba(234,88,12,0.2)',
+  background: '#ff6a2c', color: '#fff', fontWeight: 700, fontSize: '0.88rem',
+  cursor: 'pointer', boxShadow: '0 4px 12px rgba(255,106,44,0.2)',
   transition: 'all 0.2s',
 };
 const BTN_SECONDARY = {
@@ -62,7 +62,7 @@ const INPUT = {
   fontSize: '0.85rem', outline: 'none', width: '100%', boxSizing: 'border-box',
   fontFamily: 'inherit', transition: 'border 0.2s',
 };
-const BADGE = (color = '#ea580c', bg = '#fff7ed') => ({
+const BADGE = (color = '#ff6a2c', bg = '#fff7ed') => ({
   display: 'inline-flex', alignItems: 'center', gap: 4,
   padding: '3px 10px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700,
   color, background: bg,
@@ -466,7 +466,7 @@ export default function FlashSaleTab() {
                   padding: '6px 16px', borderRadius: 20, fontSize: '0.78rem', fontWeight: 700,
                   border: '1.5px solid', cursor: loading ? 'default' : 'pointer', transition: 'all 0.2s',
                   ...(active
-                    ? { borderColor: '#ea580c', background: '#fff7ed', color: '#ea580c' }
+                    ? { borderColor: '#ff6a2c', background: '#fff7ed', color: '#ff6a2c' }
                     : { borderColor: '#e5e7eb', background: '#fff', color: '#64748b' }),
                 }}
               >
@@ -487,20 +487,20 @@ export default function FlashSaleTab() {
               const isDone = step > stepNum;
               return (
                 <React.Fragment key={i}>
-                  {i > 0 && <div style={{ flex: 1, height: 2, background: isDone ? '#ea580c' : '#e5e7eb', margin: '0 8px' }} />}
+                  {i > 0 && <div style={{ flex: 1, height: 2, background: isDone ? '#ff6a2c' : '#e5e7eb', margin: '0 8px' }} />}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div style={{
                       width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: '0.8rem', fontWeight: 800,
-                      background: isDone ? '#ea580c' : isActive ? '#fff7ed' : '#f1f5f9',
-                      color: isDone ? '#fff' : isActive ? '#ea580c' : '#94a3b8',
-                      border: isActive ? '2px solid #ea580c' : '2px solid transparent',
+                      background: isDone ? '#ff6a2c' : isActive ? '#fff7ed' : '#f1f5f9',
+                      color: isDone ? '#fff' : isActive ? '#ff6a2c' : '#94a3b8',
+                      border: isActive ? '2px solid #ff6a2c' : '2px solid transparent',
                     }}>
                       {isDone ? '✓' : stepNum}
                     </div>
                     <span style={{
                       fontSize: '0.78rem', fontWeight: isActive ? 800 : 600,
-                      color: isActive ? '#ea580c' : isDone ? '#16a34a' : '#94a3b8',
+                      color: isActive ? '#ff6a2c' : isDone ? '#16a34a' : '#94a3b8',
                     }}>{label}</span>
                   </div>
                 </React.Fragment>
@@ -535,11 +535,11 @@ export default function FlashSaleTab() {
       {/* Loading */}
       {loading && (
         <div style={{
-          textAlign: 'center', padding: '40px 20px', color: '#ea580c',
+          textAlign: 'center', padding: '40px 20px', color: '#ff6a2c',
           fontSize: '0.9rem', fontWeight: 700,
         }}>
           <div style={{
-            width: 40, height: 40, border: '3px solid #fed7aa', borderTopColor: '#ea580c',
+            width: 40, height: 40, border: '3px solid #fed7aa', borderTopColor: '#ff6a2c',
             borderRadius: '50%', margin: '0 auto 12px',
             animation: 'fsSpin 0.8s linear infinite',
           }} />
@@ -772,7 +772,7 @@ function TimeSlotPicker({ slots, selectedSlots, onToggle, onToggleGroup, onConti
                 style={{
                   padding: '4px 12px', borderRadius: 14, fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer',
                   border: '1.5px solid', ...(allIn
-                    ? { borderColor: '#ea580c', background: '#fff7ed', color: '#c2410c' }
+                    ? { borderColor: '#ff6a2c', background: '#fff7ed', color: '#e85518' }
                     : { borderColor: '#e5e7eb', background: '#fff', color: '#64748b' }),
                 }}>
                 {allIn ? '✓ Bỏ chọn cả ngày' : '+ Chọn cả ngày'}
@@ -788,15 +788,15 @@ function TimeSlotPicker({ slots, selectedSlots, onToggle, onToggleGroup, onConti
                     style={{
                       padding: '16px', borderRadius: 12, cursor: 'pointer', transition: 'all 0.15s',
                       textAlign: 'center', position: 'relative',
-                      border: `2px solid ${on ? '#ea580c' : '#e5e7eb'}`,
+                      border: `2px solid ${on ? '#ff6a2c' : '#e5e7eb'}`,
                       background: on ? '#fff7ed' : '#fff',
                     }}
                   >
-                    {on && <span style={{ position: 'absolute', top: 8, right: 10, color: '#ea580c', fontWeight: 900 }}>✓</span>}
-                    <div style={{ fontSize: '1.2rem', fontWeight: 900, color: on ? '#c2410c' : '#0f172a' }}>
+                    {on && <span style={{ position: 'absolute', top: 8, right: 10, color: '#ff6a2c', fontWeight: 900 }}>✓</span>}
+                    <div style={{ fontSize: '1.2rem', fontWeight: 900, color: on ? '#e85518' : '#0f172a' }}>
                       {fmtTime(slot.start_time)} — {fmtTime(slot.end_time)}
                     </div>
-                    <div style={{ fontSize: '0.75rem', color: on ? '#ea580c' : '#94a3b8', marginTop: 4 }}>
+                    <div style={{ fontSize: '0.75rem', color: on ? '#ff6a2c' : '#94a3b8', marginTop: 4 }}>
                       {on ? 'Đã chọn' : 'Bấm để chọn'}
                     </div>
                   </div>
@@ -815,7 +815,7 @@ function TimeSlotPicker({ slots, selectedSlots, onToggle, onToggleGroup, onConti
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
       }}>
         <span style={{ fontSize: '0.85rem', fontWeight: 700, color: count ? '#0f172a' : '#94a3b8' }}>
-          Đã chọn <strong style={{ color: '#ea580c' }}>{count}</strong> khung giờ
+          Đã chọn <strong style={{ color: '#ff6a2c' }}>{count}</strong> khung giờ
         </span>
         <button
           onClick={onContinue}
@@ -886,7 +886,7 @@ function ProductSelector({ products, selectedProducts, onToggle, onLoadMore, has
               style={{
                 display: 'flex', alignItems: 'center', gap: 12,
                 padding: '12px 14px', borderRadius: 12, cursor: 'pointer',
-                border: selected ? '2px solid #ea580c' : '2px solid #e5e7eb',
+                border: selected ? '2px solid #ff6a2c' : '2px solid #e5e7eb',
                 background: selected ? '#fff7ed' : '#fff',
                 transition: 'all 0.2s',
               }}
@@ -896,8 +896,8 @@ function ProductSelector({ products, selectedProducts, onToggle, onLoadMore, has
               {/* Checkbox */}
               <div style={{
                 width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-                border: selected ? '2px solid #ea580c' : '2px solid #d1d5db',
-                background: selected ? '#ea580c' : '#fff',
+                border: selected ? '2px solid #ff6a2c' : '2px solid #d1d5db',
+                background: selected ? '#ff6a2c' : '#fff',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 color: '#fff', fontSize: '0.7rem', fontWeight: 900,
               }}>
@@ -927,7 +927,7 @@ function ProductSelector({ products, selectedProducts, onToggle, onLoadMore, has
                     ID: {product.item_id}
                   </span>
                   {product.price_info?.[0]?.original_price && (
-                    <span style={{ fontSize: '0.72rem', color: '#ea580c', fontWeight: 600 }}>
+                    <span style={{ fontSize: '0.72rem', color: '#ff6a2c', fontWeight: 600 }}>
                       {fmtVnd(product.price_info[0].original_price)}
                     </span>
                   )}
@@ -1131,7 +1131,7 @@ function PriceConfigurator({ selectedProducts, configs, onUpdateConfig, onNext, 
                             onClick={() => updateField(product.item_id, modelId, 'enabled', !c.enabled)}
                             style={{
                               width: 40, height: 22, borderRadius: 11, cursor: 'pointer',
-                              background: c.enabled ? '#ea580c' : '#d1d5db', position: 'relative',
+                              background: c.enabled ? '#ff6a2c' : '#d1d5db', position: 'relative',
                               transition: 'background 0.2s',
                             }}
                           >
@@ -1184,16 +1184,16 @@ function ReviewStep({ slots, selectedProducts, configs, onSubmit, onBack }) {
       }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 12 }}>
           <div>
-            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#9a3412', textTransform: 'uppercase', marginBottom: 4 }}>
+            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#cc4a16', textTransform: 'uppercase', marginBottom: 4 }}>
               Số khung giờ
             </div>
-            <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#ea580c' }}>
+            <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#ff6a2c' }}>
               {(slots || []).length} khung
             </div>
             <div style={{ fontSize: '0.78rem', color: '#64748b' }}>mỗi khung 1 Flash Sale</div>
           </div>
           <div>
-            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#9a3412', textTransform: 'uppercase', marginBottom: 4 }}>
+            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#cc4a16', textTransform: 'uppercase', marginBottom: 4 }}>
               Số sản phẩm
             </div>
             <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#0f172a' }}>
@@ -1202,7 +1202,7 @@ function ReviewStep({ slots, selectedProducts, configs, onSubmit, onBack }) {
             <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{totalItems} variants</div>
           </div>
           <div>
-            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#9a3412', textTransform: 'uppercase', marginBottom: 4 }}>
+            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#cc4a16', textTransform: 'uppercase', marginBottom: 4 }}>
               Tổng FS sẽ tạo
             </div>
             <div style={{ fontSize: '1.1rem', fontWeight: 900, color: '#0f172a' }}>
@@ -1215,7 +1215,7 @@ function ReviewStep({ slots, selectedProducts, configs, onSubmit, onBack }) {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {(slots || []).map(s => (
             <span key={slotKey(s)} style={{
-              fontSize: '0.74rem', fontWeight: 700, color: '#9a3412',
+              fontSize: '0.74rem', fontWeight: 700, color: '#cc4a16',
               background: '#fff', border: '1px solid #fed7aa', borderRadius: 14, padding: '3px 10px',
             }}>
               {fmtTime(s.start_time)}–{fmtTime(s.end_time)} · {fmtDate(s.start_time)}
@@ -1245,7 +1245,7 @@ function ReviewStep({ slots, selectedProducts, configs, onSubmit, onBack }) {
                   <span style={{ color: '#475569', fontWeight: 600 }}>{c.model_name}</span>
                   <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
                     <span style={{ color: '#94a3b8', textDecoration: 'line-through' }}>{fmtVnd(c.original_price)}</span>
-                    <span style={{ color: '#ea580c', fontWeight: 700 }}>{fmtVnd(c.price)}</span>
+                    <span style={{ color: '#ff6a2c', fontWeight: 700 }}>{fmtVnd(c.price)}</span>
                     <span style={BADGE('#16a34a', '#f0fdf4')}>-{disc}%</span>
                     <span style={{ color: '#64748b' }}>x{c.stock}</span>
                   </div>

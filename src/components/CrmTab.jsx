@@ -73,19 +73,19 @@ const PROVINCES = [
 
 const TAG_CONFIG = {
   VIP:      { label:'VIP',        bg:'#fef2f2', color:'#dc2626' },
-  loyal:    { label:'Khách thân', bg:'#fff7ed', color:'#ea580c' },
+  loyal:    { label:'Khách thân', bg:'#fff7ed', color:'#ff6a2c' },
   regular:  { label:'Thường',     bg:'#eff6ff', color:'#2563eb' },
   new:      { label:'KH mới',    bg:'#fefce8', color:'#ca8a04' },
   inactive: { label:'Không HĐ',  bg:'#f1f5f9', color:'#64748b' },
 };
-const DONUT_COLORS = ['#dc2626','#ea580c','#2563eb','#ca8a04','#94a3b8'];
+const DONUT_COLORS = ['#dc2626','#ff6a2c','#2563eb','#ca8a04','#94a3b8'];
 const OA_CHANNELS = [
   { key:'zalo',     name:'Zalo OA',  icon:'💬', color:'#0068ff', connected:true },
   { key:'facebook', name:'Facebook', icon:'📘', color:'#1877f2', connected:true },
   { key:'tiktok',   name:'TikTok',   icon:'🎵', color:'#010101', connected:true },
   { key:'telegram', name:'Telegram', icon:'✈️', color:'#0088cc', connected:false },
 ];
-const AVATAR_COLORS = ['#ea580c','#2563eb','#16a34a','#7c3aed','#dc2626','#0891b2','#d97706','#ec4899'];
+const AVATAR_COLORS = ['#ff6a2c','#2563eb','#16a34a','#7c3aed','#dc2626','#0891b2','#d97706','#ec4899'];
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Helpers
@@ -181,7 +181,7 @@ const EMPTY_CUSTOMER = {
    ═══════════════════════════════════════════════════════════════════════════ */
 const S = {
   font: "'Be Vietnam Pro','Inter',system-ui,-apple-system,sans-serif",
-  primary: '#ea580c',
+  primary: '#ff6a2c',
   card: {
     background:'#fff', borderRadius:14, border:'1px solid #e5e7eb',
     boxShadow:'0 1px 3px rgba(15,23,42,0.04)',
@@ -196,8 +196,8 @@ const S = {
     fontSize:'0.85rem', outline:'none', boxSizing:'border-box', background:'#fff', color:'#1e293b',
   },
   btnPrimary: {
-    padding:'10px 20px', borderRadius:10, border:'none', background:'#ea580c', color:'#fff',
-    fontWeight:600, fontSize:'0.88rem', cursor:'pointer', boxShadow:'0 2px 8px rgba(234,88,12,0.25)',
+    padding:'10px 20px', borderRadius:10, border:'none', background:'#ff6a2c', color:'#fff',
+    fontWeight:600, fontSize:'0.88rem', cursor:'pointer', boxShadow:'0 2px 8px rgba(255,106,44,0.25)',
   },
   btnOutline: {
     padding:'9px 16px', borderRadius:10, border:'1.5px solid #e2e8f0', background:'#fff',
@@ -849,8 +849,8 @@ const CrmTab = () => {
         return (
           <button key={label} onClick={()=>applyDatePreset(key)} style={{
             padding:'7px 12px', borderRadius:8, fontSize:'0.8rem', fontWeight:600, cursor:'pointer', fontFamily:S.font,
-            border: active ? '1.5px solid #ea580c' : '1.5px solid #e2e8f0',
-            background: active ? '#fff7ed' : '#fff', color: active ? '#ea580c' : '#64748b',
+            border: active ? '1.5px solid #ff6a2c' : '1.5px solid #e2e8f0',
+            background: active ? '#fff7ed' : '#fff', color: active ? '#ff6a2c' : '#64748b',
           }}>{label}</button>
         );
       })}
@@ -993,7 +993,7 @@ const CrmTab = () => {
                 </div>
               </div>
               <div style={{ display:'flex', gap:14, fontSize:'0.76rem', fontWeight:600 }}>
-                <span style={{ display:'flex', alignItems:'center', gap:5, color:'#ea580c' }}><span style={{ width:10, height:10, borderRadius:3, background:'#ea580c' }}/>Doanh thu</span>
+                <span style={{ display:'flex', alignItems:'center', gap:5, color:'#ff6a2c' }}><span style={{ width:10, height:10, borderRadius:3, background:'#ff6a2c' }}/>Doanh thu</span>
                 <span style={{ display:'flex', alignItems:'center', gap:5, color:'#2563eb' }}><span style={{ width:10, height:10, borderRadius:3, background:'#2563eb' }}/>Số đơn</span>
               </div>
             </div>
@@ -1010,7 +1010,7 @@ const CrmTab = () => {
                     labelFormatter={d => `Ngày ${d.slice(8)}/${d.slice(5,7)}/${d.slice(0,4)}`}
                     formatter={(value, name) => name==='Doanh thu' ? [fmtMoney(value)+'đ', name] : [`${value} đơn`, name]}
                     contentStyle={{ borderRadius:10, border:'1px solid #e5e7eb', boxShadow:'0 4px 12px rgba(0,0,0,0.08)' }}/>
-                  <Line yAxisId='rev' type='monotone' dataKey='rev' name='Doanh thu' stroke='#ea580c' strokeWidth={2.5} dot={{ r:3, fill:'#ea580c' }} activeDot={{ r:6 }}/>
+                  <Line yAxisId='rev' type='monotone' dataKey='rev' name='Doanh thu' stroke='#ff6a2c' strokeWidth={2.5} dot={{ r:3, fill:'#ff6a2c' }} activeDot={{ r:6 }}/>
                   <Line yAxisId='cnt' type='monotone' dataKey='count' name='Số đơn' stroke='#2563eb' strokeWidth={2} dot={{ r:2, fill:'#2563eb' }} strokeDasharray='5 5'/>
                 </LineChart>
               </ResponsiveContainer>
@@ -1042,8 +1042,8 @@ const CrmTab = () => {
                     <XAxis dataKey='name' tick={{ fontSize:12, fill:'#94a3b8' }} axisLine={false} tickLine={false}/>
                     <YAxis tick={{ fontSize:11, fill:'#94a3b8' }} axisLine={false} tickLine={false}/>
                     <Tooltip contentStyle={{ borderRadius:10, border:'1px solid #e5e7eb', boxShadow:'0 4px 12px rgba(0,0,0,0.08)' }}/>
-                    <Line type='monotone' dataKey='KH mới' stroke='#ea580c' strokeWidth={2.5}
-                      dot={{ r:4, fill:'#ea580c' }} activeDot={{ r:6 }}/>
+                    <Line type='monotone' dataKey='KH mới' stroke='#ff6a2c' strokeWidth={2.5}
+                      dot={{ r:4, fill:'#ff6a2c' }} activeDot={{ r:6 }}/>
                     <Line type='monotone' dataKey='Đơn hàng' stroke='#3b82f6' strokeWidth={2}
                       dot={{ r:3, fill:'#3b82f6' }} strokeDasharray='5 5'/>
                   </LineChart>
@@ -1104,7 +1104,7 @@ const CrmTab = () => {
                       </div>
                       <div style={{ height:8, background:'#f1f5f9', borderRadius:4, overflow:'hidden' }}>
                         <div style={{ width:`${p.pct}%`, height:'100%', background:
-                          i===0?'#ea580c':i===1?'#f97316':i===2?'#fb923c':'#fdba74',
+                          i===0?'#ff6a2c':i===1?'#ff7a30':i===2?'#ff8a4c':'#ffc196',
                           borderRadius:4, transition:'width 0.4s' }}/>
                       </div>
                     </div>
@@ -1130,8 +1130,8 @@ const CrmTab = () => {
                   <div style={{ fontSize:'0.82rem', color:'#475569', marginTop:4 }}>{fmtNum(newVsReturn.newOrders)} đơn</div>
                 </div>
                 <div style={{ background:'#fff7ed', borderRadius:12, padding:16, textAlign:'center' }}>
-                  <div style={{ fontSize:'0.72rem', color:'#ea580c', fontWeight:600, marginBottom:6, textTransform:'uppercase' }}>KH Cũ</div>
-                  <div style={{ fontSize:'1.4rem', fontWeight:800, color:'#c2410c' }}>{fmtNum(newVsReturn.retCusts)}</div>
+                  <div style={{ fontSize:'0.72rem', color:'#ff6a2c', fontWeight:600, marginBottom:6, textTransform:'uppercase' }}>KH Cũ</div>
+                  <div style={{ fontSize:'1.4rem', fontWeight:800, color:'#e85518' }}>{fmtNum(newVsReturn.retCusts)}</div>
                   <div style={{ fontSize:'0.75rem', color:'#64748b', marginTop:2 }}>khách</div>
                   <div style={{ fontSize:'0.82rem', color:'#475569', marginTop:4 }}>{fmtNum(newVsReturn.retOrders)} đơn</div>
                 </div>
@@ -1141,7 +1141,7 @@ const CrmTab = () => {
                   <div style={{ display:'flex', height:10, borderRadius:5, overflow:'hidden', background:'#f1f5f9' }}>
                     <div style={{ width:`${Math.round(newVsReturn.newCusts/(newVsReturn.newCusts+newVsReturn.retCusts)*100)}%`,
                       background:'#3b82f6', transition:'width 0.4s' }}/>
-                    <div style={{ flex:1, background:'#ea580c', transition:'width 0.4s' }}/>
+                    <div style={{ flex:1, background:'#ff6a2c', transition:'width 0.4s' }}/>
                   </div>
                   <div style={{ display:'flex', justifyContent:'space-between', marginTop:4, fontSize:'0.72rem', color:'#64748b' }}>
                     <span>{Math.round(newVsReturn.newCusts/(newVsReturn.newCusts+newVsReturn.retCusts)*100)}% mới</span>
@@ -1176,7 +1176,7 @@ const CrmTab = () => {
                         <td style={{ padding:'10px 14px', fontWeight:600, color:'#0f172a' }}>{fmtNum(b.custs)}</td>
                         <td style={{ padding:'10px 14px', fontWeight:700, color:'#16a34a' }}>{fmtNum(b.contacted)}</td>
                         <td style={{ padding:'10px 14px', fontWeight:600, color:'#a16207' }}>{fmtNum(b.notContacted)}</td>
-                        <td style={{ padding:'10px 14px', fontWeight:700, color:'#ea580c' }}>{b.pct}%</td>
+                        <td style={{ padding:'10px 14px', fontWeight:700, color:'#ff6a2c' }}>{b.pct}%</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1210,8 +1210,8 @@ const CrmTab = () => {
             <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
               {[['','Tất cả'], ...BUSINESS_TYPES.map(b=>[b,b])].map(([k,l]) => (
                 <button key={k} onClick={()=>setFBizType(prev => prev===k ? '' : k)} style={{
-                  padding:'6px 14px', borderRadius:20, border: fBizType===k ? '2px solid #ea580c' : '1.5px solid #e2e8f0',
-                  background: fBizType===k ? '#fff7ed' : '#fff', color: fBizType===k ? '#ea580c' : '#64748b',
+                  padding:'6px 14px', borderRadius:20, border: fBizType===k ? '2px solid #ff6a2c' : '1.5px solid #e2e8f0',
+                  background: fBizType===k ? '#fff7ed' : '#fff', color: fBizType===k ? '#ff6a2c' : '#64748b',
                   fontWeight:600, fontSize:'0.75rem', cursor:'pointer', fontFamily:S.font,
                 }}>{l}</button>
               ))}
@@ -1239,7 +1239,7 @@ const CrmTab = () => {
             </select>
 
             <button onClick={()=>setShowImport(true)}
-              style={{ ...S.btnPrimary, background:'#fff', color:'#ea580c', border:'1.5px solid #ea580c' }}>
+              style={{ ...S.btnPrimary, background:'#fff', color:'#ff6a2c', border:'1.5px solid #ff6a2c' }}>
               📥 Nhập Excel
             </button>
             <button onClick={()=>setShowCustForm(true)} style={S.btnPrimary}>
@@ -1886,7 +1886,7 @@ const CrmTab = () => {
                 style={{ ...S.btnPrimary, padding:'8px 16px', fontSize:'0.82rem', whiteSpace:'nowrap' }}>
                 📄 Tải file mẫu (.xlsx)
               </button>
-              <div style={{ fontSize:'0.74rem', color:'#9a3412', lineHeight:1.5 }}>
+              <div style={{ fontSize:'0.74rem', color:'#cc4a16', lineHeight:1.5 }}>
                 <b>LOẠI HÌNH KD</b> điền đúng 1 trong: {BUSINESS_TYPES.join(' · ')}.<br/>
                 <b>ĐLH</b> = đã liên hệ → điền <b>x</b> (để trống = chưa). Nhân sự + Loại KH chọn ở dưới (gán cả file).
               </div>

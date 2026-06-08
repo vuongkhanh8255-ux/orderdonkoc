@@ -64,11 +64,11 @@ export default function SidebarNotes() {
                 onClick={() => setOpen(o => !o)}
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', cursor: 'pointer', userSelect: 'none', background: open ? '#fff7ed' : '#fff', transition: 'background 0.2s' }}
             >
-                <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#ea580c', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#ff6a2c', display: 'flex', alignItems: 'center', gap: 6 }}>
                     📝 Take Note
-                    {notes.length > 0 && <span style={{ background: '#ea580c', color: '#fff', borderRadius: 10, padding: '1px 7px', fontSize: '0.65rem', fontWeight: 700 }}>{notes.length}</span>}
+                    {notes.length > 0 && <span style={{ background: '#ff6a2c', color: '#fff', borderRadius: 10, padding: '1px 7px', fontSize: '0.65rem', fontWeight: 700 }}>{notes.length}</span>}
                 </span>
-                <span style={{ fontSize: '0.65rem', color: '#f97316', transform: open ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s', display: 'inline-block' }}>▼</span>
+                <span style={{ fontSize: '0.65rem', color: '#ff7a30', transform: open ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s', display: 'inline-block' }}>▼</span>
             </div>
 
             {open && (
@@ -98,7 +98,7 @@ export default function SidebarNotes() {
                                     🖼️ Ảnh
                                 </button>
                                 <button onClick={handleSave}
-                                    style={{ flex: 2, padding: '5px 0', background: 'linear-gradient(135deg,#f59e0b,#ea580c)', color: '#fff', border: 'none', borderRadius: 7, fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>
+                                    style={{ flex: 2, padding: '5px 0', background: 'linear-gradient(135deg,#f59e0b,#ff6a2c)', color: '#fff', border: 'none', borderRadius: 7, fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>
                                     {editId !== null ? '💾 Cập nhật' : '➕ Thêm'}
                                 </button>
                                 <button onClick={cancelAdd}
@@ -107,7 +107,7 @@ export default function SidebarNotes() {
                         </div>
                     ) : (
                         <button onClick={() => setAdding(true)}
-                            style={{ width: '100%', padding: '7px 0', background: '#fff7ed', border: '1px dashed #fed7aa', borderRadius: 8, fontSize: '0.75rem', color: '#ea580c', fontWeight: 700, cursor: 'pointer', marginBottom: 8 }}>
+                            style={{ width: '100%', padding: '7px 0', background: '#fff7ed', border: '1px dashed #fed7aa', borderRadius: 8, fontSize: '0.75rem', color: '#ff6a2c', fontWeight: 700, cursor: 'pointer', marginBottom: 8 }}>
                             ➕ Thêm task mới
                         </button>
                     )}
@@ -128,7 +128,7 @@ export default function SidebarNotes() {
                                     <div key={note.id} style={{ background: '#fafafa', border: '1px solid #f0f0f0', borderRadius: 9, padding: '8px 10px', position: 'relative' }}>
                                         {/* Index + date */}
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: note.text || note.imgSrc ? 5 : 0 }}>
-                                            <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#ea580c', background: '#fff7ed', padding: '1px 6px', borderRadius: 5 }}>#{idx + 1}</span>
+                                            <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#ff6a2c', background: '#fff7ed', padding: '1px 6px', borderRadius: 5 }}>#{idx + 1}</span>
                                             <span style={{ fontSize: '0.6rem', color: '#bbb' }}>{note.createdAt}</span>
                                         </div>
                                         {/* Image */}

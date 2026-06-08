@@ -136,7 +136,7 @@ const SearchableDropdown = ({ options, value, onChange, placeholder, style, isMu
                                         padding: '10px 14px',
                                         cursor: 'pointer',
                                         fontSize: '14px',
-                                        color: isSelected ? '#ea580c' : '#333',
+                                        color: isSelected ? '#ff6a2c' : '#333',
                                         backgroundColor: isSelected ? '#fff7ed' : 'transparent',
                                         fontWeight: isSelected ? '600' : '400',
                                         display: 'flex',
@@ -152,7 +152,7 @@ const SearchableDropdown = ({ options, value, onChange, placeholder, style, isMu
                                             type="checkbox"
                                             checked={isSelected}
                                             onChange={() => { }}
-                                            style={{ cursor: 'pointer', accentColor: '#ea580c' }}
+                                            style={{ cursor: 'pointer', accentColor: '#ff6a2c' }}
                                         />
                                     )}
                                     {opt.label}

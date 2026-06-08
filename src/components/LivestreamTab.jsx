@@ -13,7 +13,7 @@ const SHEET_LIVE  = 'TỔNG - PERFORMANCE LIVES 2025';
 const BRANDS = ['Tất cả', 'Bodymiss', 'Milaganics', 'Moaw Moaws', 'eHerb', 'Masube', 'Real Steel', 'Healmi'];
 
 const BRAND_COLORS = {
-  'Bodymiss':   '#f97316',
+  'Bodymiss':   '#ff7a30',
   'Milaganics': '#22c55e',
   'Moaw Moaws': '#ef4444',
   'eHerb':      '#eab308',
@@ -22,7 +22,7 @@ const BRAND_COLORS = {
   'Healmi':     '#ec4899',
 };
 
-const PIE_COLORS = ['#f97316','#22c55e','#ef4444','#eab308','#8b5cf6','#3b82f6','#ec4899'];
+const PIE_COLORS = ['#ff7a30','#22c55e','#ef4444','#eab308','#8b5cf6','#3b82f6','#ec4899'];
 
 function normalizeBrand(kenhStr) {
   if (!kenhStr) return 'Khác';
@@ -63,7 +63,7 @@ async function fetchSheet(sheetName, range = '', noHeaders = false) {
 }
 
 // ── DONUT CHART ─────────────────────────────────────────────────────────────
-function DonutKPI({ value, total, label, color = '#f97316' }) {
+function DonutKPI({ value, total, label, color = '#ff7a30' }) {
   const pct = total > 0 ? Math.min(value / total, 1) : 0;
   const r = 54, cx = 70, cy = 70;
   const circ = 2 * Math.PI * r;
@@ -303,7 +303,7 @@ export default function LivestreamTab() {
   const tabBtn = (t, label) => (
     <button onClick={() => setInnerTab(t)} style={{
       padding: '8px 20px', border: 'none', cursor: 'pointer', borderRadius: 8,
-      background: innerTab === t ? 'linear-gradient(135deg,#f59e0b,#ea580c)' : '#f3f4f6',
+      background: innerTab === t ? 'linear-gradient(135deg,#f59e0b,#ff6a2c)' : '#f3f4f6',
       color: innerTab === t ? '#fff' : '#6b7280',
       fontWeight: innerTab === t ? 700 : 500, fontSize: '0.85rem',
     }}>{label}</button>
@@ -357,7 +357,7 @@ export default function LivestreamTab() {
             </div>
           )}
           <button onClick={() => { setBrand(pendingBrand); setHost(pendingHost); setDateFrom(pendingDateFrom); setDateTo(pendingDateTo); setSearch(pendingSearch); }}
-            style={{ padding:'7px 20px', background:'linear-gradient(135deg,#f59e0b,#ea580c)', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontSize:'0.83rem', fontWeight:700 }}>
+            style={{ padding:'7px 20px', background:'linear-gradient(135deg,#f59e0b,#ff6a2c)', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontSize:'0.83rem', fontWeight:700 }}>
             Áp dụng
           </button>
           {(brand !== 'Tất cả' || host !== 'Tất cả' || dateFrom || dateTo || search) && (
@@ -412,7 +412,7 @@ export default function LivestreamTab() {
                   <XAxis dataKey="name" tick={{ fontSize:11 }}/>
                   <YAxis tick={{ fontSize:11 }}/>
                   <Tooltip formatter={v => v.toFixed(1)+'h'}/>
-                  <Bar dataKey="hours" fill="#f97316" radius={[4,4,0,0]} label={{ position:'top', fontSize:10, formatter:v=>v.toFixed(1)+'h' }}/>
+                  <Bar dataKey="hours" fill="#ff7a30" radius={[4,4,0,0]} label={{ position:'top', fontSize:10, formatter:v=>v.toFixed(1)+'h' }}/>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -474,7 +474,7 @@ export default function LivestreamTab() {
                       <tr key={i} style={{ borderBottom:'1px solid #f3f4f6', background: i%2===0?'#fff':'#fafafa' }}>
                         <td style={{ padding:'7px 12px', whiteSpace:'nowrap' }}>{d ? d.toLocaleDateString('vi-VN') : '—'}</td>
                         <td style={{ padding:'7px 12px' }}>{r['KÊNH']||r['Kênh']||'—'}</td>
-                        <td style={{ padding:'7px 12px', fontWeight:600, color:'#f97316' }}>{r['HOST']||r['Host']||'—'}</td>
+                        <td style={{ padding:'7px 12px', fontWeight:600, color:'#ff7a30' }}>{r['HOST']||r['Host']||'—'}</td>
                         <td style={{ padding:'7px 12px' }}>{parseFloat(r['GIỜ']||0).toFixed(1)}h</td>
                         <td style={{ padding:'7px 12px', fontWeight:600 }}>{fmtMoney(ds)}</td>
                         <td style={{ padding:'7px 12px' }}>{parseFloat(r['ĐƠN HÀNG']||0).toLocaleString()}</td>
@@ -514,7 +514,7 @@ export default function LivestreamTab() {
             <h4 style={{ margin:'0 0 14px', fontSize:'0.85rem', fontWeight:700, color:'#374151' }}>📊 THỐNG KÊ VIDEO THEO BRAND</h4>
             <div style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
               {videoByBrand.map(x => (
-                <div key={x.brand} style={{ background:'#fef3c7', borderRadius:10, padding:'12px 20px', minWidth:140, borderLeft:`4px solid ${BRAND_COLORS[x.brand]||'#f97316'}` }}>
+                <div key={x.brand} style={{ background:'#fef3c7', borderRadius:10, padding:'12px 20px', minWidth:140, borderLeft:`4px solid ${BRAND_COLORS[x.brand]||'#ff7a30'}` }}>
                   <div style={{ fontSize:'0.72rem', color:'#92400e', fontWeight:700, marginBottom:4 }}>{x.brand.toUpperCase()}</div>
                   <div style={{ fontSize:'1.4rem', fontWeight:800, color:'#1f2937' }}>{x.total}</div>
                   <div style={{ fontSize:'0.72rem', color:'#6b7280' }}>video · {x.talents} talent</div>
@@ -546,7 +546,7 @@ export default function LivestreamTab() {
                     <tr key={i} style={{ borderBottom:'1px solid #f3f4f6', background: i%2===0?'#fff':'#fafafa' }}>
                       <td style={{ padding:'7px 12px', color:'#9ca3af' }}>{i+1}</td>
                       <td style={{ padding:'7px 12px', whiteSpace:'nowrap' }}>{d ? d.toLocaleDateString('vi-VN') : '—'}</td>
-                      <td style={{ padding:'7px 12px', fontWeight:600, color:'#f97316' }}>{r['TALENT']||r['Talent']||'—'}</td>
+                      <td style={{ padding:'7px 12px', fontWeight:600, color:'#ff7a30' }}>{r['TALENT']||r['Talent']||'—'}</td>
                       <td style={{ padding:'7px 12px' }}>
                         <span style={{ background: BRAND_COLORS[b]+'22', color: BRAND_COLORS[b]||'#6b7280', padding:'2px 8px', borderRadius:6, fontSize:'0.75rem', fontWeight:600 }}>
                           {r['KÊNH']||r['Kênh']||'—'}

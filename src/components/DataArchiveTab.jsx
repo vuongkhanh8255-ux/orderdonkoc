@@ -80,7 +80,7 @@ const DataTable = ({ columns, data = [], title }) => {
     return (
         <div style={cardStyle}>
             <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ color: '#ea580c', fontWeight: 'bold', fontSize: '1.1rem', textTransform: 'uppercase' }}>{title}</div>
+                <div style={{ color: '#ff6a2c', fontWeight: 'bold', fontSize: '1.1rem', textTransform: 'uppercase' }}>{title}</div>
                 <div style={{ fontSize: '0.8rem', color: '#666' }}>Hiển thị {paginatedData.length} / Tổng {processedData.length} kết quả</div>
             </div>
 
@@ -93,7 +93,7 @@ const DataTable = ({ columns, data = [], title }) => {
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                                         <div
                                             onClick={() => handleSort(col.accessor)}
-                                            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', color: '#ea580c', fontSize: '0.8rem', fontWeight: '700', textTransform: 'uppercase' }}
+                                            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', color: '#ff6a2c', fontSize: '0.8rem', fontWeight: '700', textTransform: 'uppercase' }}
                                         >
                                             {col.header}
                                             {sortConfig.key === col.accessor && (
@@ -129,20 +129,20 @@ const DataTable = ({ columns, data = [], title }) => {
             {/* PAGINATION CONTROLS */}
             <div style={{ marginTop: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', color: '#666' }}>
                 <div>
-                    Trang <strong style={{ color: '#ea580c' }}>{currentPage}</strong> / {totalPages}
+                    Trang <strong style={{ color: '#ff6a2c' }}>{currentPage}</strong> / {totalPages}
                 </div>
                 <div style={{ display: 'flex', gap: '10px' }}>
                     <button
                         onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                         disabled={currentPage === 1}
-                        style={{ padding: '6px 16px', background: currentPage === 1 ? '#f3f4f6' : '#fff', color: currentPage === 1 ? '#999' : '#ea580c', border: '1px solid #ddd', borderRadius: '6px', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
+                        style={{ padding: '6px 16px', background: currentPage === 1 ? '#f3f4f6' : '#fff', color: currentPage === 1 ? '#999' : '#ff6a2c', border: '1px solid #ddd', borderRadius: '6px', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
                     >
                         ◀ TRƯỚC
                     </button>
                     <button
                         onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                         disabled={currentPage === totalPages}
-                        style={{ padding: '6px 16px', background: currentPage === totalPages ? '#f3f4f6' : '#ea580c', color: currentPage === totalPages ? '#999' : '#fff', border: '1px solid #ddd', borderRadius: '6px', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
+                        style={{ padding: '6px 16px', background: currentPage === totalPages ? '#f3f4f6' : '#ff6a2c', color: currentPage === totalPages ? '#999' : '#fff', border: '1px solid #ddd', borderRadius: '6px', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
                     >
                         SAU ▶
                     </button>
@@ -589,7 +589,7 @@ const DataArchiveTab = () => {
 
                 {isImporting && importProgress.total > 0 && (
                     <div style={{ marginTop: '20px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#ea580c', marginBottom: '8px', fontWeight: '600' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#ff6a2c', marginBottom: '8px', fontWeight: '600' }}>
                             <span>Tiến độ Import...</span>
                             <span>{importProgress.current.toLocaleString()} / {importProgress.total.toLocaleString()} rows</span>
                         </div>
@@ -603,13 +603,13 @@ const DataArchiveTab = () => {
             {/* DEBUG PARSE RESULT PANE */}
             {testParseResults.length > 0 && (
                 <div style={{ ...cardStyle, background: '#fff7ed', border: '1px solid #fed7aa' }}>
-                    <h3 style={{ color: '#ea580c', marginBottom: '10px', fontSize: '1rem' }}>🐛 CHẾ ĐỘ XEM THỬ 20 DÒNG (Để sếp dễ kiểm tra hệ thống đọc số có tính sai không)</h3>
+                    <h3 style={{ color: '#ff6a2c', marginBottom: '10px', fontSize: '1rem' }}>🐛 CHẾ ĐỘ XEM THỬ 20 DÒNG (Để sếp dễ kiểm tra hệ thống đọc số có tính sai không)</h3>
                     <p style={{ fontSize: '0.85rem', color: '#666', marginBottom: '15px', fontStyle: 'italic' }}>
                         *Lưu ý quan trọng: Đây chỉ là 20 dòng trích điểm danh làm mẫu, <strong>không phải là hệ thống chỉ import 20 dòng</strong>. Hệ thống vẫn đang import toàn bộ <strong>{importProgress.total > 0 ? importProgress.total.toLocaleString() : 'tất cả'}</strong> dòng dữ liệu ở tiến trình bên trên.
                     </p>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                         <thead>
-                            <tr style={{ background: '#ffedd5', color: '#9a3412', textAlign: 'left' }}>
+                            <tr style={{ background: '#ffedd5', color: '#cc4a16', textAlign: 'left' }}>
                                 <th style={{ padding: '8px' }}>Video ID</th>
                                 <th style={{ padding: '8px' }}>Raw String (Từ file)</th>
                                 <th style={{ padding: '8px' }}>Cleaned String</th>
@@ -643,7 +643,7 @@ const DataArchiveTab = () => {
             <div style={{ display: 'flex', gap: '20px', marginBottom: '30px' }}>
                 <div style={{ flex: 1, background: '#fff', border: '1px solid #eee', padding: '20px', borderRadius: '12px', textAlign: 'center' }}>
                     <div style={{ color: '#666', fontSize: '0.9rem', marginBottom: '8px' }}>TỔNG GMV TRONG DB</div>
-                    <div style={{ fontSize: '1.8rem', fontWeight: '800', color: '#ea580c' }}>{formatNumber(totalGMV)}</div>
+                    <div style={{ fontSize: '1.8rem', fontWeight: '800', color: '#ff6a2c' }}>{formatNumber(totalGMV)}</div>
                 </div>
                 <div style={{ flex: 1, background: '#fff', border: '1px solid #eee', padding: '20px', borderRadius: '12px', textAlign: 'center' }}>
                     <div style={{ color: '#666', fontSize: '0.9rem', marginBottom: '8px' }}>TỔNG LƯỢT XEM</div>

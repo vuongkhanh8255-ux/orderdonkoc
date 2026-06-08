@@ -55,7 +55,7 @@ class AppErrorBoundary extends Component {
           <button onClick={() => this.setState({ hasError: false, error: null })}
             style={{ padding: '9px 20px', borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}>🔄 Thử lại</button>
           <button onClick={() => window.location.reload()}
-            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: '#ea580c', color: '#fff', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}>↻ Tải lại trang</button>
+            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: '#ff6a2c', color: '#fff', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}>↻ Tải lại trang</button>
         </div>
       </div>
     );
@@ -184,12 +184,12 @@ function AppMain({ user, onLogout, allowedViews }) {
     gap: '10px',
     background: isActive ? '#fff7ed' : 'transparent',
     borderRadius: '8px',
-    color: isActive ? '#c2410c' : '#64748b',
+    color: isActive ? '#e85518' : '#64748b',
     fontWeight: isActive ? '700' : '500',
     transition: 'background 0.18s ease, color 0.18s ease, border-color 0.18s ease',
     fontSize: '0.83rem',
     border: isActive ? '1px solid #fed7aa' : '1px solid transparent',
-    borderLeft: isActive ? '3px solid #ea580c' : '3px solid transparent',
+    borderLeft: isActive ? '3px solid #ff6a2c' : '3px solid transparent',
     boxShadow: 'none',
     letterSpacing: 0,
   });
@@ -228,7 +228,7 @@ function AppMain({ user, onLogout, allowedViews }) {
               <div
                 onClick={() => { setSidebarCollapsed(p => !p); setSidebarHovered(false); }}
                 title={sidebarCollapsed ? 'Mở sidebar' : 'Thu gọn sidebar'}
-                style={{ width: '46px', height: '46px', background: '#ea580c', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '900', fontSize: '1.45rem', boxShadow: '0 8px 18px rgba(234,88,12,0.16)', cursor: 'pointer', transition: 'transform 0.18s', userSelect: 'none' }}
+                style={{ width: '46px', height: '46px', background: '#ff6a2c', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '900', fontSize: '1.45rem', boxShadow: '0 8px 18px rgba(255,106,44,0.16)', cursor: 'pointer', transition: 'transform 0.18s', userSelect: 'none' }}
                 onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.08)'}
                 onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
               >
@@ -333,13 +333,13 @@ function AppMain({ user, onLogout, allowedViews }) {
                   <div onClick={() => toggleGroup(group.key)}
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '10px 14px 4px', padding: '10px 12px', cursor: 'pointer', userSelect: 'none', borderRadius: 8, background: '#f8fafc', border: '1px solid #e5e7eb' }}>
                     <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#475569', letterSpacing: 0 }}>{group.label}</span>
-                    <span style={{ fontSize: '0.7rem', color: '#f97316', transition: 'transform 0.2s', display: 'inline-block', transform: openGroups[group.key] ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
+                    <span style={{ fontSize: '0.7rem', color: '#ff7a30', transition: 'transform 0.2s', display: 'inline-block', transform: openGroups[group.key] ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
                   </div>
                   {openGroups[group.key] && visibleItems.map(({ view, name }) => (
                     <div key={view}
                       style={menuItemStyle(currentView === view)}
                       onClick={() => setCurrentView(view)}
-                      onMouseEnter={(e) => { if (currentView !== view) { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.color = '#c2410c'; e.currentTarget.style.borderColor = '#e5e7eb'; } }}
+                      onMouseEnter={(e) => { if (currentView !== view) { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.color = '#e85518'; e.currentTarget.style.borderColor = '#e5e7eb'; } }}
                       onMouseLeave={(e) => { if (currentView !== view) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#64748b'; e.currentTarget.style.borderColor = 'transparent'; } }}>
                       <span style={{ display: 'inline-block', width: 16, textAlign: 'center', opacity: 0.4, flexShrink: 0 }}>•</span>
                       <span>{name}</span>
@@ -355,13 +355,13 @@ function AppMain({ user, onLogout, allowedViews }) {
             {isExpanded ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', borderRadius: 8, padding: '10px 12px', border: '1px solid #e5e7eb' }}>
                 <div>
-                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#ea580c' }}>👤 {user.name}</div>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#ff6a2c' }}>👤 {user.name}</div>
                   <div style={{ fontSize: '0.68rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{user.role}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   {user.role === 'admin' && (
                     <button onClick={() => setPwModalOpen(true)} title="Đổi mật khẩu (sẽ thu hồi phiên của các tài khoản khác)"
-                      style={{ padding: '5px 9px', background: '#fff', border: '1px solid #fed7aa', borderRadius: 7, color: '#c2410c', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>
+                      style={{ padding: '5px 9px', background: '#fff', border: '1px solid #fed7aa', borderRadius: 7, color: '#e85518', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>
                       🔐
                     </button>
                   )}
@@ -374,7 +374,7 @@ function AppMain({ user, onLogout, allowedViews }) {
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                 {user.role === 'admin' && (
                   <button onClick={() => setPwModalOpen(true)} title="Đổi mật khẩu"
-                    style={{ width: 36, height: 36, borderRadius: 8, background: '#fff', border: '1px solid #fed7aa', color: '#c2410c', fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    style={{ width: 36, height: 36, borderRadius: 8, background: '#fff', border: '1px solid #fed7aa', color: '#e85518', fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     🔐
                   </button>
                 )}
@@ -451,7 +451,7 @@ function ComingSoonPlaceholder({ icon, title, description }) {
       <div style={{
         width: 80, height: 80, borderRadius: 20, background: '#fff7ed', border: '2px solid #fed7aa',
         display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2.2rem',
-        margin: '0 auto 24px', boxShadow: '0 8px 24px rgba(234,88,12,0.1)',
+        margin: '0 auto 24px', boxShadow: '0 8px 24px rgba(255,106,44,0.1)',
       }}>{icon}</div>
       <h1 style={{ margin: '0 0 8px', fontSize: '1.6rem', fontWeight: 900, color: '#0f172a' }}>{title}</h1>
       <p style={{ margin: '0 0 24px', fontSize: '0.92rem', color: '#64748b', lineHeight: 1.6 }}>{description}</p>
@@ -534,7 +534,7 @@ function AdminPasswordModal({ onClose, onLogout }) {
           <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 900, color: '#0f172a' }}>🔐 Đổi mật khẩu Admin</h3>
           <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: '1.4rem', cursor: 'pointer', color: '#94a3b8' }}>×</button>
         </div>
-        <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', padding: '10px 12px', borderRadius: 10, marginBottom: 16, fontSize: '0.78rem', color: '#9a3412' }}>
+        <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', padding: '10px 12px', borderRadius: 10, marginBottom: 16, fontSize: '0.78rem', color: '#cc4a16' }}>
           ⚠️ Sau khi đổi mật khẩu, <strong>toàn bộ phiên đăng nhập của các tài khoản khác sẽ bị thu hồi</strong> và bạn cũng sẽ phải đăng nhập lại.
         </div>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -553,7 +553,7 @@ function AdminPasswordModal({ onClose, onLogout }) {
                   border: '2px solid #e5e7eb', fontSize: '0.88rem', outline: 'none',
                   fontFamily: 'inherit', transition: 'border 0.2s',
                 }}
-                onFocus={e => e.target.style.border = '2px solid #ea580c'}
+                onFocus={e => e.target.style.border = '2px solid #ff6a2c'}
                 onBlur={e => e.target.style.border = '2px solid #e5e7eb'} />
             </div>
           ))}
@@ -566,10 +566,10 @@ function AdminPasswordModal({ onClose, onLogout }) {
             </button>
             <button type="submit" disabled={loading || !!success}
               style={{ flex: 1, padding: '11px', borderRadius: 8, border: 'none',
-                background: loading || success ? '#d1d5db' : '#ea580c',
+                background: loading || success ? '#d1d5db' : '#ff6a2c',
                 color: '#fff', fontWeight: 800, fontSize: '0.86rem',
                 cursor: (loading || success) ? 'default' : 'pointer',
-                boxShadow: (loading || success) ? 'none' : '0 6px 14px rgba(234,88,12,0.22)' }}>
+                boxShadow: (loading || success) ? 'none' : '0 6px 14px rgba(255,106,44,0.22)' }}>
               {loading ? '⏳ Đang xử lý...' : 'Lưu thay đổi'}
             </button>
           </div>

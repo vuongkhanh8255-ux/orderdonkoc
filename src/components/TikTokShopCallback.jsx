@@ -26,7 +26,7 @@ const TikTokShopCallback = () => {
         padding: 28,
         boxShadow: '0 18px 48px rgba(15, 23, 42, 0.08)'
       }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: '#fff7ed', border: '1px solid #fed7aa', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ea580c', fontWeight: 900, fontSize: 22, marginBottom: 16 }}>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: '#fff7ed', border: '1px solid #fed7aa', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ff6a2c', fontWeight: 900, fontSize: 22, marginBottom: 16 }}>
           ♪
         </div>
         <h1 style={{ margin: 0, fontSize: '1.45rem', fontWeight: 900, color: '#0f172a' }}>

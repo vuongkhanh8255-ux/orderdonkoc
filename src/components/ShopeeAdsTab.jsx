@@ -119,9 +119,9 @@ export default function ShopeeAdsTab() {
             <button onClick={() => fetchAds(days, mode)} disabled={loading}
               style={{
                 padding: '10px 24px', borderRadius: 8, border: 'none',
-                background: loading ? '#d1d5db' : '#ea580c', color: '#fff',
+                background: loading ? '#d1d5db' : '#ff6a2c', color: '#fff',
                 fontWeight: 800, fontSize: '0.88rem', cursor: loading ? 'default' : 'pointer',
-                boxShadow: loading ? 'none' : '0 4px 12px rgba(234,88,12,0.18)', fontFamily: 'inherit',
+                boxShadow: loading ? 'none' : '0 4px 12px rgba(255,106,44,0.18)', fontFamily: 'inherit',
               }}>
               {loading ? '⏳ Đang tải...' : hasFetched ? '🔄 Tải lại' : '📥 Tải dữ liệu Ads'}
             </button>
@@ -134,8 +134,8 @@ export default function ShopeeAdsTab() {
               <button key={m} onClick={() => { setMode(m); fetchAds(days, m); }}
                 style={{
                   padding: '7px 16px', borderRadius: 8, fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
-                  border: `1.5px solid ${mode === m ? '#ea580c' : '#e5e7eb'}`,
-                  background: mode === m ? '#fff7ed' : '#fff', color: mode === m ? '#c2410c' : '#64748b',
+                  border: `1.5px solid ${mode === m ? '#ff6a2c' : '#e5e7eb'}`,
+                  background: mode === m ? '#fff7ed' : '#fff', color: mode === m ? '#e85518' : '#64748b',
                 }}>
                 {lbl}
               </button>
@@ -176,7 +176,7 @@ export default function ShopeeAdsTab() {
             {kpi('ROAS', fmtRoas(agg.roas), 'Doanh thu / Chi phí', '#7c3aed')}
             {kpi('Đơn từ Ads', fmtNum(agg.orders), null, '#0f172a')}
             {kpi('Lượt click', fmtNum(agg.clicks), `CTR ${fmtPct(agg.ctr)}`, '#2563eb')}
-            {kpi('Số dư QC', fmtVND(agg.balance), 'Tổng tất cả shop', '#ea580c')}
+            {kpi('Số dư QC', fmtVND(agg.balance), 'Tổng tất cả shop', '#ff6a2c')}
           </div>
 
           {/* Shop errors */}
@@ -233,7 +233,7 @@ export default function ShopeeAdsTab() {
                             <td style={td}>{fmtNum(t.clicks)}</td>
                             <td style={td}>{fmtPct(t.ctr)}</td>
                             <td style={td}>{fmtVND(t.cpc)}</td>
-                            <td style={{ ...td, color: '#ea580c', fontWeight: 600 }}>{fmtVND(s.balance)}</td>
+                            <td style={{ ...td, color: '#ff6a2c', fontWeight: 600 }}>{fmtVND(s.balance)}</td>
                           </tr>
                           {open && (
                             <tr>

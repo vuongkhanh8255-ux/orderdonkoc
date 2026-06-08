@@ -7,7 +7,7 @@ const SHOPS = [
   { id: 1, name: 'Body Miss Việt Nam', platform: 'tiktok', color: '#3b82f6' },
   { id: 2, name: 'eHerb Hồ Chí Minh', platform: 'tiktok', color: '#10b981' },
   { id: 3, name: 'Milaganics Việt Nam', platform: 'tiktok', color: '#8b5cf6' },
-  { id: 4, name: 'Moaw Moaws Việt Nam', platform: 'tiktok', color: '#f97316' },
+  { id: 4, name: 'Moaw Moaws Việt Nam', platform: 'tiktok', color: '#ff7a30' },
   { id: 5, name: 'eHerb Việt Nam', platform: 'tiktok', color: '#eab308' },
 ];
 
@@ -69,7 +69,7 @@ export default function ChatInboxTab() {
         <div>
           <h2 style={{ margin: '0 0 4px', fontSize: '1.3rem', fontWeight: 900 }}>💬 Chat Inbox</h2>
           <p style={{ margin: 0, color: '#64748b', fontSize: '0.8rem' }}>
-            Quản lý tin nhắn khách hàng từ tất cả shop · <strong style={{ color: '#ea580c' }}>{totalUnread}</strong> tin chưa đọc
+            Quản lý tin nhắn khách hàng từ tất cả shop · <strong style={{ color: '#ff6a2c' }}>{totalUnread}</strong> tin chưa đọc
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -117,7 +117,7 @@ export default function ChatInboxTab() {
                 { key: 'resolved', label: 'Đã xong' },
               ].map(f => (
                 <button key={f.key} onClick={() => setFilterStatus(f.key)}
-                  style={{ flex: 1, padding: '5px 4px', borderRadius: 6, fontSize: '0.68rem', fontWeight: 600, border: 'none', background: filterStatus === f.key ? '#fff' : 'transparent', color: filterStatus === f.key ? '#ea580c' : '#64748b', cursor: 'pointer', boxShadow: filterStatus === f.key ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>
+                  style={{ flex: 1, padding: '5px 4px', borderRadius: 6, fontSize: '0.68rem', fontWeight: 600, border: 'none', background: filterStatus === f.key ? '#fff' : 'transparent', color: filterStatus === f.key ? '#ff6a2c' : '#64748b', cursor: 'pointer', boxShadow: filterStatus === f.key ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>
                   {f.label}
                 </button>
               ))}
@@ -134,7 +134,7 @@ export default function ChatInboxTab() {
                   style={{
                     padding: '14px 16px', cursor: 'pointer', borderBottom: '1px solid #f8fafc',
                     background: isSelected ? '#fff7ed' : 'transparent',
-                    borderLeft: isSelected ? '3px solid #ea580c' : '3px solid transparent',
+                    borderLeft: isSelected ? '3px solid #ff6a2c' : '3px solid transparent',
                     transition: 'all 0.12s',
                   }}>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
@@ -233,7 +233,7 @@ export default function ChatInboxTab() {
                   }}>
                     <div style={{
                       maxWidth: '65%', padding: '10px 16px', borderRadius: 16,
-                      background: m.from === 'agent' ? '#ea580c' : '#fff',
+                      background: m.from === 'agent' ? '#ff6a2c' : '#fff',
                       color: m.from === 'agent' ? '#fff' : '#0f172a',
                       border: m.from === 'agent' ? 'none' : '1px solid #e5e7eb',
                       borderBottomRightRadius: m.from === 'agent' ? 4 : 16,
@@ -267,9 +267,9 @@ export default function ChatInboxTab() {
                 />
                 <button style={{
                   width: 40, height: 40, borderRadius: '50%', border: 'none',
-                  background: '#ea580c', color: '#fff', cursor: 'pointer', fontSize: '1.1rem',
+                  background: '#ff6a2c', color: '#fff', cursor: 'pointer', fontSize: '1.1rem',
                   display: 'grid', placeItems: 'center', flexShrink: 0,
-                  boxShadow: '0 2px 8px rgba(234,88,12,0.3)',
+                  boxShadow: '0 2px 8px rgba(255,106,44,0.3)',
                 }}>➤</button>
               </div>
             </>
@@ -319,7 +319,7 @@ export default function ChatInboxTab() {
               <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', padding: 14, marginBottom: 12 }}>
                 <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>Đơn hàng gần nhất</div>
                 <div style={{ background: '#fff7ed', borderRadius: 8, padding: 10 }}>
-                  <div style={{ fontWeight: 700, fontSize: '0.78rem', color: '#ea580c', marginBottom: 4 }}>{selectedConvo.orderId}</div>
+                  <div style={{ fontWeight: 700, fontSize: '0.78rem', color: '#ff6a2c', marginBottom: 4 }}>{selectedConvo.orderId}</div>
                   <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Serum Vitamin C 30ml × 2</div>
                   <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Tổng: <strong style={{ color: '#0f172a' }}>485.000đ</strong></div>
                   <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>

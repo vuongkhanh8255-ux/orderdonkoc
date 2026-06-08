@@ -22,7 +22,7 @@ const toYmd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, 
 const ymdToShopee = (ymd) => { const p = (ymd || '').split('-'); return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : ymd; };
 const shopeeToYmd = (s) => { const m = /^(\d{2})-(\d{2})-(\d{4})$/.exec(s || ''); return m ? `${m[3]}-${m[2]}-${m[1]}` : s; };
 
-const SHOP_COLORS = ['#ea580c', '#2563eb', '#16a34a', '#8b5cf6', '#db2777', '#0891b2', '#d97706', '#0d9488'];
+const SHOP_COLORS = ['#ff6a2c', '#2563eb', '#16a34a', '#8b5cf6', '#db2777', '#0891b2', '#d97706', '#0d9488'];
 const PRESETS = [{ label: '7 ngày', days: 7 }, { label: '14 ngày', days: 14 }, { label: '30 ngày', days: 30 }, { label: '60 ngày', days: 60 }];
 
 const card = { background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', padding: '18px 20px', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' };
@@ -146,7 +146,7 @@ export default function ShopeeAdsDashboard() {
             <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#64748b' }}>
               {single ? `Shop: ${single.shop_name}` : `So sánh hiệu quả quảng cáo ${displayShops.length} shop`}
               {meta && <span style={{ marginLeft: 8, color: '#94a3b8' }}>· {meta.start_date} → {meta.end_date}</span>}
-              {loading && <span style={{ marginLeft: 8, color: '#ea580c' }}>· ⏳ đang tải…</span>}
+              {loading && <span style={{ marginLeft: 8, color: '#ff6a2c' }}>· ⏳ đang tải…</span>}
             </p>
           </div>
         </div>
@@ -169,7 +169,7 @@ export default function ShopeeAdsDashboard() {
                 const isActive = activeDays === r.days;
                 return (
                   <button key={r.label} onClick={() => setPreset(r.days)}
-                    style={{ padding: '6px 14px', borderRadius: 6, fontSize: '0.78rem', fontWeight: 600, border: 'none', background: isActive ? '#ea580c' : 'transparent', color: isActive ? '#fff' : '#64748b', cursor: 'pointer' }}>
+                    style={{ padding: '6px 14px', borderRadius: 6, fontSize: '0.78rem', fontWeight: 600, border: 'none', background: isActive ? '#ff6a2c' : 'transparent', color: isActive ? '#fff' : '#64748b', cursor: 'pointer' }}>
                     {r.label}
                   </button>
                 );
@@ -188,7 +188,7 @@ export default function ShopeeAdsDashboard() {
             </div>
           </div>
           <button onClick={() => fetchAds(dateRange.start, dateRange.end)} disabled={loading}
-            style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: loading ? '#d1d5db' : '#ea580c', color: '#fff', fontWeight: 800, fontSize: '0.84rem', cursor: loading ? 'default' : 'pointer', fontFamily: 'inherit', alignSelf: 'flex-end' }}>
+            style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: loading ? '#d1d5db' : '#ff6a2c', color: '#fff', fontWeight: 800, fontSize: '0.84rem', cursor: loading ? 'default' : 'pointer', fontFamily: 'inherit', alignSelf: 'flex-end' }}>
             {loading ? '⏳' : '🔄 Tải lại'}
           </button>
         </div>
@@ -222,7 +222,7 @@ export default function ShopeeAdsDashboard() {
             {kpi('ROAS chung', fmtRoas(agg.roas), 'Doanh thu / Chi phí', '#7c3aed')}
             {kpi('Tổng đơn Ads', fmtNum(agg.orders), null, '#0f172a')}
             {kpi('Tổng click', fmtNum(agg.clicks), `CTR ${fmtPct(agg.ctr)}`, '#2563eb')}
-            {kpi('Số dư ví QC', fmtVND(agg.balance), single ? 'Shop này' : 'Tất cả shop', '#ea580c')}
+            {kpi('Số dư ví QC', fmtVND(agg.balance), single ? 'Shop này' : 'Tất cả shop', '#ff6a2c')}
           </div>
 
           {errShops.length > 0 && !shopFilter && (
@@ -237,7 +237,7 @@ export default function ShopeeAdsDashboard() {
             {chartCard('Xu hướng theo ngày', single ? `Chi phí & doanh thu Ads — ${single.shop_name}` : 'Tổng chi phí & doanh thu Ads các shop', 280,
               <AreaChart data={trend} margin={{ top: 8, right: 12, bottom: 0, left: 6 }}>
                 <defs>
-                  <linearGradient id="gExp" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#ea580c" stopOpacity={0.3} /><stop offset="95%" stopColor="#ea580c" stopOpacity={0} /></linearGradient>
+                  <linearGradient id="gExp" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#ff6a2c" stopOpacity={0.3} /><stop offset="95%" stopColor="#ff6a2c" stopOpacity={0} /></linearGradient>
                   <linearGradient id="gGmv" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#16a34a" stopOpacity={0.3} /><stop offset="95%" stopColor="#16a34a" stopOpacity={0} /></linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -246,7 +246,7 @@ export default function ShopeeAdsDashboard() {
                 <Tooltip formatter={(v, n) => [fmtVNDfull(v), n === 'expense' ? 'Chi phí' : 'Doanh thu']} />
                 <Legend formatter={(v) => (v === 'expense' ? 'Chi phí' : 'Doanh thu Ads')} />
                 <Area type="monotone" dataKey="gmv" stroke="#16a34a" strokeWidth={2} fill="url(#gGmv)" />
-                <Area type="monotone" dataKey="expense" stroke="#ea580c" strokeWidth={2} fill="url(#gExp)" />
+                <Area type="monotone" dataKey="expense" stroke="#ff6a2c" strokeWidth={2} fill="url(#gExp)" />
               </AreaChart>
             )}
           </div>
