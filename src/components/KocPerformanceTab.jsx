@@ -31,6 +31,7 @@ const shortName = (s) => { const t = (s || '').trim(); return t.length > 46 ? t.
 
 const selectStyle = { padding: '8px 12px', borderRadius: 10, border: '1px solid #e5e7eb', background: '#fff', fontSize: '0.85rem', fontWeight: 600, color: '#334155', cursor: 'pointer' };
 const inputStyle  = { padding: '8px 12px', borderRadius: 10, border: '1px solid #e5e7eb', background: '#fff', fontSize: '0.85rem', color: '#334155' };
+const dateInputStyle = { padding: '7px 8px', borderRadius: 9, border: '1px solid #e5e7eb', background: '#fff', fontSize: '0.8rem', color: '#334155', width: 132 };
 
 // ── Letter avatar (orders API không trả avatar) ────────────────────────────────
 const AVA_COLORS = ['#ea580c', '#3b82f6', '#16a34a', '#8b5cf6', '#0891b2', '#d97706', '#ec4899', '#ef4444', '#14b8a6'];
@@ -257,9 +258,11 @@ export default function KocPerformanceTab() {
           </select>
         )}
         {presets.map(p => <button key={p.key} style={presetBtn(activePreset === p.key)} onClick={() => { setStart(p.s); setEnd(p.e); }}>{p.label}</button>)}
-        <input type="date" value={start} min={FLOOR} onChange={e => setStart(e.target.value)} style={inputStyle} />
-        <span style={{ color: '#94a3b8' }}>→</span>
-        <input type="date" value={end} onChange={e => setEnd(e.target.value)} style={inputStyle} />
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <input type="date" value={start} min={FLOOR} onChange={e => setStart(e.target.value)} style={dateInputStyle} />
+          <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>→</span>
+          <input type="date" value={end} onChange={e => setEnd(e.target.value)} style={dateInputStyle} />
+        </div>
         <select value={sortKey} onChange={e => setSortKey(e.target.value)} style={selectStyle}>
           {SALES_SORTS.map(s => <option key={s.key} value={s.key}>Sắp xếp: {s.label}</option>)}
         </select>
