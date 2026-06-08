@@ -156,7 +156,7 @@ function AppMain({ user, onLogout, allowedViews }) {
   // --- STYLES ---
   const sidebarStyle = {
     width: isExpanded ? SIDEBAR_WIDTH : COLLAPSED_WIDTH,
-    background: '#ffffff',
+    background: 'linear-gradient(170deg, #ff8c42 0%, #ff6a2c 45%, #f5591a 100%)',
     display: 'flex',
     flexDirection: 'column',
     height: '100vh',
@@ -165,7 +165,7 @@ function AppMain({ user, onLogout, allowedViews }) {
     top: 0,
     zIndex: 1000,
     fontFamily: "'Outfit', sans-serif",
-    borderRight: '1px solid #e5e7eb',
+    borderRight: 'none',
     overflow: 'hidden',
     whiteSpace: 'nowrap',
     transition: 'width 0.22s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -182,15 +182,15 @@ function AppMain({ user, onLogout, allowedViews }) {
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
-    background: isActive ? '#fff7ed' : 'transparent',
+    background: isActive ? '#ffffff' : 'transparent',
     borderRadius: '8px',
-    color: isActive ? '#e85518' : '#64748b',
+    color: isActive ? '#f0560f' : 'rgba(255,255,255,0.92)',
     fontWeight: isActive ? '700' : '500',
     transition: 'background 0.18s ease, color 0.18s ease, border-color 0.18s ease',
     fontSize: '0.83rem',
-    border: isActive ? '1px solid #fed7aa' : '1px solid transparent',
-    borderLeft: isActive ? '3px solid #ff6a2c' : '3px solid transparent',
-    boxShadow: 'none',
+    border: '1px solid transparent',
+    borderLeft: '3px solid transparent',
+    boxShadow: isActive ? '0 4px 12px rgba(0,0,0,0.14)' : 'none',
     letterSpacing: 0,
   });
 
@@ -222,13 +222,13 @@ function AppMain({ user, onLogout, allowedViews }) {
           onMouseLeave={() => setSidebarHovered(false)}
         >
           {/* Header — logo + toggle button */}
-          <div style={{ padding: isExpanded ? '20px 0' : '20px 0', textAlign: 'center', minHeight: isExpanded ? '110px' : '72px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid #e5e7eb', background: '#fff', position: 'relative', transition: 'min-height 0.22s', flexShrink: 0 }}>
+          <div style={{ padding: isExpanded ? '20px 0' : '20px 0', textAlign: 'center', minHeight: isExpanded ? '110px' : '72px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid rgba(255,255,255,0.18)', background: 'transparent', position: 'relative', transition: 'min-height 0.22s', flexShrink: 0 }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: isExpanded ? '8px' : '0' }}>
               {/* Logo icon — nút toggle collapse */}
               <div
                 onClick={() => { setSidebarCollapsed(p => !p); setSidebarHovered(false); }}
                 title={sidebarCollapsed ? 'Mở sidebar' : 'Thu gọn sidebar'}
-                style={{ width: '46px', height: '46px', background: '#ff6a2c', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '900', fontSize: '1.45rem', boxShadow: '0 8px 18px rgba(255,106,44,0.16)', cursor: 'pointer', transition: 'transform 0.18s', userSelect: 'none' }}
+                style={{ width: '46px', height: '46px', background: '#ffffff', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ff6a2c', fontWeight: '900', fontSize: '1.45rem', boxShadow: '0 6px 16px rgba(0,0,0,0.20)', cursor: 'pointer', transition: 'transform 0.18s', userSelect: 'none' }}
                 onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.08)'}
                 onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
               >
@@ -237,8 +237,8 @@ function AppMain({ user, onLogout, allowedViews }) {
               {/* Text — ẩn khi collapsed */}
               {isExpanded && (
                 <>
-                  <span style={{ fontSize: '0.75rem', color: '#999', fontStyle: 'italic', letterSpacing: '2px', textTransform: 'uppercase' }}>powered by</span>
-                  <h2 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#111827', letterSpacing: '1.4px', textTransform: 'uppercase', lineHeight: '1.1', fontFamily: "'Outfit', sans-serif" }}>
+                  <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.85)', fontStyle: 'italic', letterSpacing: '2px', textTransform: 'uppercase' }}>powered by</span>
+                  <h2 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#ffffff', letterSpacing: '1.4px', textTransform: 'uppercase', lineHeight: '1.1', fontFamily: "'Outfit', sans-serif" }}>
                     STELLA KINETICS
                   </h2>
                 </>
@@ -300,7 +300,7 @@ function AppMain({ user, onLogout, allowedViews }) {
                 return (
                   <div key={group.key} style={{ marginBottom: 2 }}>
                     {/* Group emoji */}
-                    <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 2px', fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700 }}>
+                    <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 2px', fontSize: '0.72rem', color: 'rgba(255,255,255,0.75)', fontWeight: 700 }}>
                       <span title={group.label} style={{ fontSize: '1rem' }}>{group.emoji}</span>
                     </div>
                     {/* Items — icon only */}
@@ -312,12 +312,12 @@ function AppMain({ user, onLogout, allowedViews }) {
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           margin: '2px 8px', padding: '9px 0',
                           borderRadius: 8, cursor: 'pointer',
-                          background: currentView === view ? '#fff7ed' : 'transparent',
-                          border: currentView === view ? '1px solid #fed7aa' : '1px solid transparent',
+                          background: currentView === view ? '#ffffff' : 'transparent',
+                          border: currentView === view ? '1px solid #ffffff' : '1px solid transparent',
                           fontSize: '1.1rem',
                           transition: 'background 0.15s, border-color 0.15s',
                         }}
-                        onMouseEnter={e => { if (currentView !== view) e.currentTarget.style.background = '#f8fafc'; }}
+                        onMouseEnter={e => { if (currentView !== view) e.currentTarget.style.background = 'rgba(255,255,255,0.16)'; }}
                         onMouseLeave={e => { if (currentView !== view) e.currentTarget.style.background = 'transparent'; }}
                       >
                         {icon}
@@ -331,16 +331,16 @@ function AppMain({ user, onLogout, allowedViews }) {
               return (
                 <div key={group.key} style={{ marginBottom: 4 }}>
                   <div onClick={() => toggleGroup(group.key)}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '10px 14px 4px', padding: '10px 12px', cursor: 'pointer', userSelect: 'none', borderRadius: 8, background: '#f8fafc', border: '1px solid #e5e7eb' }}>
-                    <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#475569', letterSpacing: 0 }}>{group.label}</span>
-                    <span style={{ fontSize: '0.7rem', color: '#ff7a30', transition: 'transform 0.2s', display: 'inline-block', transform: openGroups[group.key] ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '10px 14px 4px', padding: '10px 12px', cursor: 'pointer', userSelect: 'none', borderRadius: 8, background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.24)' }}>
+                    <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#ffffff', letterSpacing: 0 }}>{group.label}</span>
+                    <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.85)', transition: 'transform 0.2s', display: 'inline-block', transform: openGroups[group.key] ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
                   </div>
                   {openGroups[group.key] && visibleItems.map(({ view, name }) => (
                     <div key={view}
                       style={menuItemStyle(currentView === view)}
                       onClick={() => setCurrentView(view)}
-                      onMouseEnter={(e) => { if (currentView !== view) { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.color = '#e85518'; e.currentTarget.style.borderColor = '#e5e7eb'; } }}
-                      onMouseLeave={(e) => { if (currentView !== view) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#64748b'; e.currentTarget.style.borderColor = 'transparent'; } }}>
+                      onMouseEnter={(e) => { if (currentView !== view) { e.currentTarget.style.background = 'rgba(255,255,255,0.16)'; e.currentTarget.style.color = '#ffffff'; e.currentTarget.style.borderColor = 'transparent'; } }}
+                      onMouseLeave={(e) => { if (currentView !== view) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.92)'; e.currentTarget.style.borderColor = 'transparent'; } }}>
                       <span style={{ display: 'inline-block', width: 16, textAlign: 'center', opacity: 0.4, flexShrink: 0 }}>•</span>
                       <span>{name}</span>
                     </div>
@@ -351,12 +351,12 @@ function AppMain({ user, onLogout, allowedViews }) {
           </div>
 
           {/* User info + logout */}
-          <div style={{ padding: isExpanded ? '12px 14px' : '10px 8px', borderTop: '1px solid #e5e7eb', background: '#fff', flexShrink: 0 }}>
+          <div style={{ padding: isExpanded ? '12px 14px' : '10px 8px', borderTop: '1px solid rgba(255,255,255,0.18)', background: 'rgba(0,0,0,0.06)', flexShrink: 0 }}>
             {isExpanded ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', borderRadius: 8, padding: '10px 12px', border: '1px solid #e5e7eb' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.16)', borderRadius: 8, padding: '10px 12px', border: '1px solid rgba(255,255,255,0.28)' }}>
                 <div>
-                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#ff6a2c' }}>👤 {user.name}</div>
-                  <div style={{ fontSize: '0.68rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{user.role}</div>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#ffffff' }}>👤 {user.name}</div>
+                  <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.78)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{user.role}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   {user.role === 'admin' && (
