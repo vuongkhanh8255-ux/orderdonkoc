@@ -1,6 +1,8 @@
 // src/components/FlashSaleTab.jsx — Flash Sale Automation Tool
 // Built by Quốc Khánh
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import * as XLSX from 'xlsx';
+import { supabase } from '../supabaseClient';
 
 const API_BASE = '/api/shopee/flash-sale';
 const DEFAULT_SHOP_ID = '341325550';
@@ -36,6 +38,53 @@ async function apiCall(action, params = {}, body = null) {
     : { method: 'GET' };
   const res = await fetch(url, opts);
   return res.json();
+}
+
+// Chạy tác vụ async theo lô (giới hạn song song) để không quá tải API.
+async function runChunked(arr, size, fn) {
+  for (let i = 0; i < arr.length; i += size) {
+    await Promise.all(arr.slice(i, i + size).map(fn));
+  }
+}
+
+// Đọc sheet Excel → các dòng { item_id, model_id, item_name, model_name, original_price, price, stock }.
+// Khớp cột theo TÊN tiêu đề (không phụ thuộc thứ tự cột), bỏ dấu để dò.
+function parseSheetRows(ws) {
+  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
+  if (!aoa.length) return [];
+  const norm = (s) => String(s ?? '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/đ/g, 'd').trim();
+  let hi = aoa.findIndex(row => Array.isArray(row) && row.some(c => { const n = norm(c); return n.includes('id san pham') || n === 'item_id'; }));
+  if (hi < 0) hi = 0;
+  const header = (aoa[hi] || []).map(norm);
+  const col = (...keys) => header.findIndex(h => keys.some(k => h.includes(k)));
+  const cItem = col('id san pham', 'item_id', 'item id');
+  const cModel = col('id phan loai', 'model_id', 'model id');
+  const cIName = col('ten san pham', 'ten sp');
+  const cMName = col('ten phan loai');
+  const cOrig = col('gia goc', 'original');
+  const cPrice = col('gia flash', 'gia fs', 'gia sale', 'gia km');
+  const cStock = col('so luong', 'ton kho', 'stock', 'sl km');
+  const digits = (v) => String(v ?? '').replace(/[^\d]/g, '');
+  const num = (v) => { const d = digits(v); return d ? parseInt(d, 10) : 0; };
+  const out = [];
+  for (let i = hi + 1; i < aoa.length; i++) {
+    const row = aoa[i];
+    if (!Array.isArray(row)) continue;
+    const item_id = cItem >= 0 ? digits(row[cItem]) : '';
+    if (!item_id) continue;
+    const price = cPrice >= 0 ? num(row[cPrice]) : 0;
+    if (!price) continue; // dòng chưa điền giá → bỏ qua
+    out.push({
+      item_id,
+      model_id: cModel >= 0 ? (digits(row[cModel]) || '0') : '0',
+      item_name: cIName >= 0 ? String(row[cIName] ?? '').trim() : '',
+      model_name: cMName >= 0 ? String(row[cMName] ?? '').trim() : '',
+      original_price: cOrig >= 0 ? num(row[cOrig]) : 0,
+      price,
+      stock: cStock >= 0 ? (num(row[cStock]) || 100) : 100,
+    });
+  }
+  return out;
 }
 
 // ── Styles ───────────────────────────────────────────────────────────────────
@@ -414,6 +463,165 @@ export default function FlashSaleTab() {
     loadFlashSales();
   };
 
+  // ════════════ NHẬP FLASH SALE TỪ EXCEL (tự tick SP + điền giá) ════════════
+  const [impBusy, setImpBusy] = useState(false);
+  const [impMsg, setImpMsg]   = useState(null);   // { ok, text }
+  const [impRows, setImpRows] = useState(null);   // dòng vừa nhập (để "Lưu mẫu")
+  const [savedTpls, setSavedTpls] = useState([]); // mẫu đã lưu (theo shop)
+  const [expProg, setExpProg] = useState(null);   // { done, total, phase }
+
+  const loadSavedTemplates = useCallback(async () => {
+    try {
+      const { data } = await supabase.from('flash_sale_templates')
+        .select('id,name,created_at').eq('shop_id', String(selectedShopId))
+        .order('created_at', { ascending: false }).limit(50);
+      setSavedTpls(data || []);
+    } catch { /* bảng chưa tạo / lỗi mạng — bỏ qua */ }
+  }, [selectedShopId]);
+  useEffect(() => { loadSavedTemplates(); }, [loadSavedTemplates]);
+
+  // Khớp các dòng (item_id + model_id) → tự tick SP + điền giá → nhảy tới bước cấu hình.
+  const importFromRows = async (rows, srcName) => {
+    setImpBusy(true); setImpMsg(null); setError('');
+    try {
+      const byItem = new Map();
+      for (const r of rows) { if (!byItem.has(r.item_id)) byItem.set(r.item_id, []); byItem.get(r.item_id).push(r); }
+      const ids = [...byItem.keys()];
+      const newSelected = [], newConfigs = {}, missing = [];
+      let done = 0;
+      await runChunked(ids, 5, async (itemId) => {
+        const itemRows = byItem.get(itemId);
+        const models = await loadModels(itemId);
+        const modelById = new Map(models.map(m => [String(m.model_id), m]));
+        const cfg = {};
+        for (const r of itemRows) {
+          const mid = String(r.model_id ?? '0');
+          const m = modelById.get(mid);
+          if (!m && models.length > 0) { missing.push(`${itemId}/${mid}`); continue; }
+          const orig = Number(m?.price_info?.[0]?.original_price || m?.original_price || r.original_price || 0);
+          cfg[mid] = {
+            enabled: true, price: Number(r.price), stock: Number(r.stock) || 100,
+            original_price: orig,
+            model_name: m?.model_name || m?.name || r.model_name || (mid === '0' ? 'Mặc định' : `Model ${mid}`),
+            model_sku: m?.model_sku || '',
+          };
+        }
+        if (Object.keys(cfg).length) {
+          newSelected.push({ item_id: itemId, item_name: itemRows[0].item_name || `SP ${itemId}`, models });
+          newConfigs[itemId] = cfg;
+        } else { missing.push(`SP ${itemId}`); }
+        done++; setExpProg({ done, total: ids.length, phase: 'Đang khớp sản phẩm…' });
+      });
+      setExpProg(null);
+      if (!newSelected.length) { setError('Không khớp được sản phẩm nào. Kiểm tra cột ID sản phẩm / ID phân loại trong file.'); return; }
+      setSelectedProducts(newSelected);
+      setProductConfigs(newConfigs);
+      setImpRows(rows);
+      const skuCount = Object.values(newConfigs).reduce((a, c) => a + Object.keys(c).length, 0);
+      setImpMsg({ ok: true, text: `✅ Đã nhập ${newSelected.length} SP · ${skuCount} phân loại từ ${srcName}.${missing.length ? ` ⚠️ ${missing.length} dòng không khớp.` : ''}` });
+      setStep(3);
+    } catch (e) {
+      setError('Lỗi nhập file: ' + e.message);
+    } finally { setImpBusy(false); }
+  };
+
+  const handleExcelFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setImpBusy(true); setImpMsg(null); setError('');
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = parseSheetRows(ws);
+      if (!rows.length) { setError('File trống hoặc thiếu cột "Giá Flash Sale". Tải file mẫu để đối chiếu.'); setImpBusy(false); return; }
+      await importFromRows(rows, file.name);
+    } catch (err) { setError('Không đọc được file: ' + err.message); setImpBusy(false); }
+  };
+
+  // Xuất file mẫu = toàn bộ SP + phân loại của shop (ID + giá gốc), 2 cột giá/SL để trống.
+  const exportTemplate = async () => {
+    setImpBusy(true); setImpMsg(null); setError(''); setExpProg({ done: 0, total: 0, phase: 'Đang tải sản phẩm…' });
+    try {
+      const all = []; let page = 0;
+      while (page <= 40) {
+        const res = await apiCall('products', { offset: page * 50, page_size: 50 });
+        const items = res.data?.items || res.data || [];
+        all.push(...items);
+        setExpProg({ done: all.length, total: all.length, phase: `Đang tải sản phẩm… (${all.length})` });
+        if (items.length < 50) break;
+        page++;
+      }
+      if (!all.length) { setError('Shop chưa có sản phẩm để xuất.'); return; }
+      const rows = []; let done = 0;
+      await runChunked(all, 6, async (p) => {
+        const models = await loadModels(p.item_id);
+        const iName = p.item_name || p.name || `SP ${p.item_id}`;
+        if (models.length) {
+          for (const m of models) rows.push({
+            'ID sản phẩm': String(p.item_id), 'ID phân loại': String(m.model_id),
+            'Tên sản phẩm': iName, 'Tên phân loại': m.model_name || m.name || '',
+            'Giá gốc': Number(m.price_info?.[0]?.original_price || m.original_price || 0),
+            'Giá Flash Sale': '', 'Số lượng KM': '',
+          });
+        } else rows.push({
+          'ID sản phẩm': String(p.item_id), 'ID phân loại': '0',
+          'Tên sản phẩm': iName, 'Tên phân loại': '(không phân loại)',
+          'Giá gốc': Number(p.price_info?.[0]?.original_price || p.original_price || 0),
+          'Giá Flash Sale': '', 'Số lượng KM': '',
+        });
+        done++; setExpProg({ done, total: all.length, phase: `Đang lấy phân loại… (${done}/${all.length})` });
+      });
+      const HEAD = ['ID sản phẩm', 'ID phân loại', 'Tên sản phẩm', 'Tên phân loại', 'Giá gốc', 'Giá Flash Sale', 'Số lượng KM'];
+      const ws = XLSX.utils.json_to_sheet(rows, { header: HEAD });
+      ws['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 42 }, { wch: 24 }, { wch: 12 }, { wch: 14 }, { wch: 12 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'FlashSale');
+      const guide = XLSX.utils.aoa_to_sheet([
+        ['HƯỚNG DẪN NHẬP FLASH SALE'], [''],
+        ['1. KHÔNG sửa 2 cột "ID sản phẩm" và "ID phân loại" — đây là mã khớp với Shopee.'],
+        ['2. Điền "Giá Flash Sale" (PHẢI thấp hơn Giá gốc) và "Số lượng KM" cho dòng muốn chạy.'],
+        ['3. Dòng để TRỐNG cột "Giá Flash Sale" sẽ được bỏ qua (không tạo FS).'],
+        ['4. Lưu file → bấm "Nhập file Excel" trên web → hệ thống tự tick SP + điền giá.'],
+        ['5. Có thể bấm "Lưu mẫu này" để lần sau chọn lại, khỏi upload.'],
+      ]);
+      guide['!cols'] = [{ wch: 92 }];
+      XLSX.utils.book_append_sheet(wb, guide, 'Hướng dẫn');
+      XLSX.writeFile(wb, `FlashSale_Mau_${String(selectedShopId)}.xlsx`);
+      setImpMsg({ ok: true, text: `✅ Đã tải file mẫu (${rows.length} phân loại). Điền Giá FS + Số lượng rồi upload lại.` });
+    } catch (e) {
+      setError('Lỗi xuất file mẫu: ' + e.message);
+    } finally { setExpProg(null); setImpBusy(false); }
+  };
+
+  const saveCurrentTemplate = async () => {
+    if (!impRows?.length) { setError('Chưa có dữ liệu file để lưu — nhập file Excel trước.'); return; }
+    const name = prompt('Đặt tên cho mẫu giá này:', `Mẫu ${new Date().toLocaleDateString('vi-VN')}`);
+    if (!name) return;
+    setImpBusy(true);
+    try {
+      const { error: dbErr } = await supabase.from('flash_sale_templates')
+        .insert({ name: name.trim(), shop_id: String(selectedShopId), rows: impRows });
+      if (dbErr) throw dbErr;
+      setImpMsg({ ok: true, text: `💾 Đã lưu mẫu "${name.trim()}".` });
+      await loadSavedTemplates();
+    } catch (e) { setError('Lỗi lưu mẫu: ' + e.message); }
+    finally { setImpBusy(false); }
+  };
+
+  const applySavedTemplate = async (id) => {
+    if (!id) return;
+    setImpBusy(true); setError('');
+    try {
+      const { data, error: dbErr } = await supabase.from('flash_sale_templates').select('rows,name').eq('id', id).maybeSingle();
+      if (dbErr) throw dbErr;
+      const rows = data?.rows || [];
+      if (!rows.length) { setError('Mẫu rỗng.'); setImpBusy(false); return; }
+      await importFromRows(rows, `mẫu "${data.name}"`);
+    } catch (e) { setError('Lỗi áp mẫu: ' + e.message); setImpBusy(false); }
+  };
+
   // ══════════════════════════════════════════════════════════════════════
   // RENDER
   // ══════════════════════════════════════════════════════════════════════
@@ -572,15 +780,59 @@ export default function FlashSaleTab() {
 
       {/* ═══ STEP 2: Select Products ═══ */}
       {step === 2 && !loading && (
-        <ProductSelector
-          products={products}
-          selectedProducts={selectedProducts}
-          onToggle={toggleProduct}
-          onLoadMore={() => loadProducts(productPage + 1, true)}
-          hasMore={hasMoreProducts}
-          onNext={goToConfig}
-          loading={loading}
-        />
+        <>
+          {/* ── Nhập nhanh từ Excel ── */}
+          <div style={{ ...CARD, marginBottom: 16, padding: '16px 20px', border: '1px solid #fed7aa', background: '#fffdfa' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <span style={{ fontSize: '1.05rem' }}>📥</span>
+              <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: '#0f172a' }}>Nhập nhanh từ Excel</h3>
+              <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>— khỏi tick + nhập giá tay</span>
+            </div>
+            <p style={{ margin: '0 0 12px', fontSize: '0.78rem', color: '#64748b', lineHeight: 1.5 }}>
+              ① Tải <b>file mẫu</b> (đã có sẵn ID + giá gốc của shop) → ② điền <b>Giá Flash Sale</b> + <b>Số lượng</b> → ③ <b>upload lại</b>.
+              Hệ thống tự tick SP &amp; điền giá rồi nhảy tới bước duyệt.
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+              <button style={{ ...BTN_SECONDARY, opacity: impBusy ? 0.6 : 1 }} disabled={impBusy} onClick={exportTemplate}>⬇️ Tải file mẫu (SP shop này)</button>
+              <label style={{ ...BTN_PRIMARY, opacity: impBusy ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: impBusy ? 'default' : 'pointer' }}>
+                📤 Nhập file Excel
+                <input type="file" accept=".xlsx,.xls" disabled={impBusy} onChange={handleExcelFile} style={{ display: 'none' }} />
+              </label>
+              {savedTpls.length > 0 && (
+                <select disabled={impBusy} defaultValue="" onChange={e => applySavedTemplate(e.target.value)}
+                  style={{ ...INPUT, width: 'auto', minWidth: 190, padding: '9px 12px' }}>
+                  <option value="">📁 Chọn mẫu đã lưu…</option>
+                  {savedTpls.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              )}
+              {impRows?.length > 0 && (
+                <button style={{ ...BTN_SECONDARY, opacity: impBusy ? 0.6 : 1 }} disabled={impBusy} onClick={saveCurrentTemplate}>💾 Lưu mẫu này</button>
+              )}
+            </div>
+            {expProg && (
+              <div style={{ marginTop: 10, fontSize: '0.78rem', color: '#ff6a2c', fontWeight: 700 }}>
+                ⏳ {expProg.phase || 'Đang xử lý…'} {expProg.total ? `(${expProg.done}/${expProg.total})` : ''}
+              </div>
+            )}
+            {impMsg && (
+              <div style={{ marginTop: 10, fontSize: '0.8rem', fontWeight: 600, color: impMsg.ok ? '#15803d' : '#dc2626', background: impMsg.ok ? '#f0fdf4' : '#fef2f2', border: `1px solid ${impMsg.ok ? '#bbf7d0' : '#fecaca'}`, borderRadius: 8, padding: '8px 12px' }}>
+                {impMsg.text}
+              </div>
+            )}
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed #e5e7eb', fontSize: '0.76rem', color: '#94a3b8' }}>
+              Hoặc chọn thủ công bên dưới ↓
+            </div>
+          </div>
+          <ProductSelector
+            products={products}
+            selectedProducts={selectedProducts}
+            onToggle={toggleProduct}
+            onLoadMore={() => loadProducts(productPage + 1, true)}
+            hasMore={hasMoreProducts}
+            onNext={goToConfig}
+            loading={loading}
+          />
+        </>
       )}
 
       {/* ═══ STEP 3: Configure Prices ═══ */}
