@@ -5,7 +5,7 @@
 // sản phẩm). Bảng xếp hạng GMV/đơn/video/hoa hồng (VND), lọc theo ngày, search tên KOC,
 // bấm 1 KOC để xem sản phẩm họ làm video / kéo đơn.
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 
 const API = '/api/tiktok-shop/analytics';
 const ACCENT = '#ea580c';
@@ -139,6 +139,98 @@ const VideoBreakdown = ({ state, username }) => {
   );
 };
 
+// ── Compact date-range picker (1 field + calendar popup) ──────────────────────
+const MONTHS_VN = ['Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6', 'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'];
+const DOW_VN = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+const navBtn = { background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 7, width: 28, height: 28, cursor: 'pointer', fontSize: '1.05rem', color: '#475569', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' };
+const fmtRangeLabel = (s, e) => {
+  const f = (d) => { const p = (d || '').split('-'); return p.length === 3 ? `${p[2]}/${p[1]}` : ''; };
+  if (!s) return 'Chọn ngày';
+  return (!e || e === s) ? f(s) : `${f(s)} → ${f(e)}`;
+};
+
+function DateRangePicker({ start, end, min, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [sel, setSel] = useState({ s: start, e: end });
+  const [view, setView] = useState(() => { const d = end ? new Date(end) : new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
+  const boxRef = useRef(null);
+  const today = toYmd(new Date());
+  const minYmd = min || '0000-01-01';
+
+  // Mở popup: đồng bộ lại lựa chọn + lịch theo prop, gắn listener click-ngoài
+  useEffect(() => {
+    if (!open) return;
+    setSel({ s: start, e: end });
+    const d = end ? new Date(end) : new Date();
+    setView({ y: d.getFullYear(), m: d.getMonth() });
+    const h = (ev) => { if (boxRef.current && !boxRef.current.contains(ev.target)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open, start, end]);
+
+  const cells = useMemo(() => {
+    const first = new Date(view.y, view.m, 1);
+    const lead = (first.getDay() + 6) % 7; // Thứ 2 đầu tuần
+    const days = new Date(view.y, view.m + 1, 0).getDate();
+    const out = [];
+    for (let i = 0; i < lead; i++) out.push(null);
+    for (let d = 1; d <= days; d++) out.push(d);
+    return out;
+  }, [view]);
+
+  const ymdOf = (d) => `${view.y}-${String(view.m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  const shift = (delta) => setView(v => { let m = v.m + delta, y = v.y; if (m < 0) { m = 11; y--; } if (m > 11) { m = 0; y++; } return { y, m }; });
+  const pick = (ymd) => {
+    if (ymd < minYmd || ymd > today) return;
+    setSel(p => (!p.s || p.e || ymd < p.s) ? { s: ymd, e: '' } : { s: p.s, e: ymd });
+  };
+  const apply = () => { if (sel.s) onChange(sel.s, sel.e || sel.s); setOpen(false); };
+
+  return (
+    <div ref={boxRef} style={{ position: 'relative', display: 'inline-block', flexShrink: 0 }}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        style={{ ...dateInputStyle, width: 'auto', minWidth: 118, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
+        <span style={{ fontSize: '0.9rem' }}>📅</span>
+        <span>{fmtRangeLabel(start, end)}</span>
+        <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>▾</span>
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 60, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 12px 32px rgba(15,23,42,0.16)', padding: 12, width: 258 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <button type="button" onClick={() => shift(-1)} style={navBtn}>‹</button>
+            <span style={{ fontWeight: 800, fontSize: '0.85rem', color: '#1e293b' }}>{MONTHS_VN[view.m]} {view.y}</span>
+            <button type="button" onClick={() => shift(1)} style={navBtn}>›</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 4 }}>
+            {DOW_VN.map(d => <div key={d} style={{ textAlign: 'center', fontSize: '0.66rem', fontWeight: 700, color: '#94a3b8' }}>{d}</div>)}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
+            {cells.map((d, i) => {
+              if (!d) return <div key={i} />;
+              const ymd = ymdOf(d);
+              const off = ymd < minYmd || ymd > today;
+              const isEdge = ymd === sel.s || ymd === (sel.e || sel.s);
+              const inRange = sel.s && sel.e && ymd > sel.s && ymd < sel.e;
+              return (
+                <button key={i} type="button" disabled={off} onClick={() => pick(ymd)}
+                  style={{ height: 30, borderRadius: 7, border: 'none', cursor: off ? 'default' : 'pointer', fontSize: '0.78rem',
+                    fontWeight: isEdge ? 800 : 500,
+                    background: isEdge ? ACCENT : inRange ? '#ffe8d9' : 'transparent',
+                    color: off ? '#cbd5e1' : isEdge ? '#fff' : '#334155' }}>{d}</button>
+              );
+            })}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, paddingTop: 8, borderTop: '1px solid #f1f5f9' }}>
+            <span style={{ fontSize: '0.72rem', color: '#64748b' }}>{sel.s ? fmtRangeLabel(sel.s, sel.e || sel.s) : 'Chọn ngày bắt đầu'}</span>
+            <button type="button" onClick={apply} disabled={!sel.s}
+              style={{ background: ACCENT, color: '#fff', border: 'none', borderRadius: 8, padding: '6px 16px', fontSize: '0.78rem', fontWeight: 700, cursor: sel.s ? 'pointer' : 'default', opacity: sel.s ? 1 : 0.5 }}>Áp dụng</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 export default function KocPerformanceTab() {
   const [shops, setShops]   = useState([]);
@@ -258,11 +350,7 @@ export default function KocPerformanceTab() {
           </select>
         )}
         {presets.map(p => <button key={p.key} style={presetBtn(activePreset === p.key)} onClick={() => { setStart(p.s); setEnd(p.e); }}>{p.label}</button>)}
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          <input type="date" value={start} min={FLOOR} onChange={e => setStart(e.target.value)} style={dateInputStyle} />
-          <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>→</span>
-          <input type="date" value={end} onChange={e => setEnd(e.target.value)} style={dateInputStyle} />
-        </div>
+        <DateRangePicker start={start} end={end} min={FLOOR} onChange={(s, e) => { setStart(s); setEnd(e); }} />
         <select value={sortKey} onChange={e => setSortKey(e.target.value)} style={selectStyle}>
           {SALES_SORTS.map(s => <option key={s.key} value={s.key}>Sắp xếp: {s.label}</option>)}
         </select>
