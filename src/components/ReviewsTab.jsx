@@ -11,6 +11,8 @@ const SHOP_MAP = {
   '7494813818973817115': 'Milaganics', '7494251668499498533': 'Healmii',
 };
 const shopName = (id) => SHOP_MAP[id] || id;
+// Brand = tên shop bỏ hậu tố sàn/loại (eHerb HCM→eHerb, Milaganics FBS→Milaganics, …)
+const brandOf = (shop) => (shop || '').replace(/\s+(FBS|SPA|HCM|Mall|MP|Mp)\b.*$/i, '').trim() || (shop || '—');
 
 function fmtDate(iso) {
   if (!iso) return '—';
@@ -117,6 +119,7 @@ export default function ReviewsTab() {
 
   const [starFilter, setStarFilter] = useState(0);
   const [shopFilter, setShopFilter] = useState('all');
+  const [brandFilter, setBrandFilter] = useState('all');
   const [searchText, setSearchText] = useState('');
   const [replyFilter, setReplyFilter] = useState('all');
   const [sortBy, setSortBy] = useState('date_desc');
@@ -257,6 +260,30 @@ export default function ReviewsTab() {
     return ['all', ...Array.from(set).sort()];
   }, [reviews]);
 
+  // ── Brand stats (gom nhiều shop cùng brand) ──
+  const brandStats = useMemo(() => {
+    const map = {};
+    for (const r of reviews) {
+      const brand = brandOf(r.shop);
+      if (!map[brand]) map[brand] = { brand, total: 0, sum: 0, replied: 0, dist: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, shops: new Set() };
+      const m = map[brand];
+      m.total++; m.sum += r.star; m.dist[r.star]++; if (r.hasReply) m.replied++; m.shops.add(r.shop);
+    }
+    return Object.values(map)
+      .map(b => ({ ...b, avg: (b.sum / b.total).toFixed(1), bad: b.dist[1] + b.dist[2] + b.dist[3], shopCount: b.shops.size }))
+      .sort((a, b) => b.total - a.total);
+  }, [reviews]);
+
+  // Review xấu (1-3★) chưa phản hồi → tồn đọng cần xử lý
+  const needFixCount = useMemo(() => reviews.filter(r => r.star <= 3 && !r.hasReply).length, [reviews]);
+
+  // Top sản phẩm bị chê nhiều nhất (1-3★)
+  const topBad = useMemo(() => productStats
+    .map(p => ({ ...p, bad: p.dist[1] + p.dist[2] + p.dist[3] }))
+    .filter(p => p.bad > 0)
+    .sort((a, b) => b.bad - a.bad)
+    .slice(0, 8), [productStats]);
+
   // ── Filtered reviews ──
   const filtered = useMemo(() => {
     let result = [...reviews];
@@ -264,6 +291,7 @@ export default function ReviewsTab() {
     if (platform !== 'both') result = result.filter(r => r.platform === platform);
     // Lọc theo khoảng ngày đánh giá (narrow tức thì, không cần tải lại). Ngày không parse được thì giữ.
     result = result.filter(r => { const d = reviewYmd(r.date); return !d || (d >= startDate && d <= endDate); });
+    if (brandFilter !== 'all') result = result.filter(r => brandOf(r.shop) === brandFilter);
     if (shopFilter !== 'all') result = result.filter(r => r.shop === shopFilter);
     if (productFilter) result = result.filter(r => r.productId === productFilter.productId && r.platform === productFilter.platform);
     if (starFilter > 0) result = result.filter(r => r.star === starFilter);
@@ -287,7 +315,7 @@ export default function ReviewsTab() {
       }
     });
     return result;
-  }, [reviews, platform, startDate, endDate, shopFilter, productFilter, starFilter, replyFilter, searchText, sortBy]);
+  }, [reviews, platform, startDate, endDate, brandFilter, shopFilter, productFilter, starFilter, replyFilter, searchText, sortBy]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -457,6 +485,70 @@ export default function ReviewsTab() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* ── BRAND STATS ── */}
+        <div style={{ ...card, marginBottom: 20 }}>
+          <h3 style={{ margin: '0 0 14px', fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>
+            🏷️ Thống kê theo Brand ({brandStats.length})
+          </h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+            {brandStats.map(b => {
+              const replyPct = b.total ? ((b.replied / b.total) * 100).toFixed(0) : 0;
+              const badPct = b.total ? ((b.bad / b.total) * 100).toFixed(1) : '0.0';
+              const active = brandFilter === b.brand;
+              return (
+                <div key={b.brand}
+                  onClick={() => { setBrandFilter(active ? 'all' : b.brand); setPage(1); focusReviews(); }}
+                  style={{ padding: '14px 16px', borderRadius: 10, background: active ? '#fff7ed' : '#f8fafc', border: `1.5px solid ${active ? '#fed7aa' : '#e5e7eb'}`, cursor: 'pointer', transition: 'all 0.15s' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a' }}>{b.brand}</span>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: parseFloat(b.avg) >= 4.5 ? '#22c55e' : parseFloat(b.avg) >= 3.5 ? '#eab308' : '#ef4444' }}>{b.avg} ⭐</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 4, height: 6, borderRadius: 3, overflow: 'hidden', background: '#e5e7eb', marginBottom: 8 }}>
+                    {[5, 4, 3, 2, 1].map(star => { const w = b.total ? (b.dist[star] / b.total) * 100 : 0; return w > 0 ? <div key={star} style={{ width: `${w}%`, background: STAR_COLORS[star], minWidth: 2 }} title={`${star}★: ${b.dist[star]}`} /> : null; })}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#64748b' }}>
+                    <span><b style={{ color: '#0f172a' }}>{fmtNum(b.total)}</b> đg · {b.shopCount} shop</span>
+                    <span>Xấu <b style={{ color: b.bad > 0 ? '#ef4444' : '#22c55e' }}>{badPct}%</b> · Reply {replyPct}%</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {brandFilter !== 'all' && (
+            <div style={{ marginTop: 10, fontSize: '0.72rem', color: '#ff6a2c', fontWeight: 600, cursor: 'pointer' }}
+              onClick={() => { setBrandFilter('all'); setPage(1); }}>✕ Bỏ lọc brand "{brandFilter}"</div>
+          )}
+        </div>
+
+        {/* ── CẦN XỬ LÝ (review xấu chưa phản hồi) ── */}
+        <div style={{ ...card, marginBottom: 20, borderColor: needFixCount > 0 ? '#fecaca' : '#f1f5f9' }}>
+          <h3 style={{ margin: '0 0 4px', fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>
+            ⚠️ Cần xử lý — <span style={{ color: needFixCount > 0 ? '#ef4444' : '#22c55e' }}>{fmtNum(needFixCount)}</span> review xấu (1-3★) chưa phản hồi
+          </h3>
+          <p style={{ margin: '0 0 12px', fontSize: '0.74rem', color: '#94a3b8' }}>Top sản phẩm bị chê nhiều nhất — bấm để lọc xem review</p>
+          {topBad.length === 0 ? (
+            <div style={{ fontSize: '0.82rem', color: '#22c55e', fontWeight: 600 }}>🎉 Không có review xấu trong khoảng này</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {topBad.map(p => (
+                <div key={p.key}
+                  onClick={() => { setProductFilter({ productId: p.productId, platform: p.platform, productName: p.productName }); setStarFilter(0); setPage(1); focusReviews(); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: '#fff7f7', border: '1px solid #fee2e2', cursor: 'pointer' }}>
+                  {p.productImage && <img src={p.productImage} alt="" style={{ width: 32, height: 32, borderRadius: 5, objectFit: 'cover', flexShrink: 0 }} onError={e => { e.target.style.display = 'none'; }} />}
+                  <span style={{ flex: 1, fontSize: '0.8rem', fontWeight: 600, color: '#0f172a', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.productName}>
+                    <span style={{ fontSize: '0.66rem', padding: '1px 5px', borderRadius: 4, marginRight: 6, fontWeight: 700, background: p.platform === 'shopee' ? '#fff7ed' : '#f1f5f9', color: p.platform === 'shopee' ? '#ff6a2c' : '#0f172a' }}>{p.platform === 'shopee' ? 'SPE' : 'TT'}</span>
+                    {truncate(p.productName, 48)}
+                  </span>
+                  <span style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                    {[1, 2, 3].map(s => p.dist[s] > 0 ? <span key={s} style={{ fontSize: '0.72rem', fontWeight: 700, color: STAR_COLORS[s] }}>{s}★{p.dist[s]}</span> : null)}
+                    <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#ef4444', minWidth: 26, textAlign: 'right' }}>{p.bad}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* ── SHOP STATS ── */}
