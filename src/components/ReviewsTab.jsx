@@ -32,14 +32,30 @@ const toYmd = (d) => {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 };
 
+// Shop bị loại khỏi dashboard đánh giá (theo yêu cầu): Milaganics SPA (831509831) + Milaganics FBS (341325550)
+const EXCLUDED_SELLERS = new Set(['831509831', '341325550']);
+
+// Ngày review → 'YYYY-MM-DD' an toàn (ISO / ms / unix-giây đều xử lý được, không parse được thì trả '')
+const reviewYmd = (d) => {
+  if (d == null || d === '') return '';
+  let ms = d;
+  if (typeof d === 'number' && d < 1e12) ms = d * 1000; // unix giây → ms
+  const dt = new Date(ms);
+  return isNaN(dt.getTime()) ? '' : toYmd(dt);
+};
+
 // Chuẩn hoá 1 batch dữ liệu ERP (shopee + tiktok) về cùng shape review
 function normalizeChunk(data) {
   const out = [];
   if (data.shopee?.data) {
     for (const r of data.shopee.data) {
+      if (EXCLUDED_SELLERS.has(String(r.seller_id))) continue;
       out.push({
         id: `s-${r.commentId}`,
         platform: 'shopee',
+        orderCode: r.orderSn || (r.orderId ? String(r.orderId) : ''),
+        orderId: r.orderId ? String(r.orderId) : '',
+        userId: r.userId ? String(r.userId) : '',
         productId: String(r.productId || r.itemId),
         productName: r.productName || '',
         productImage: r.productCover ? `https://cf.shopee.vn/file/${r.productCover}_tn` : '',
@@ -60,9 +76,13 @@ function normalizeChunk(data) {
   }
   if (data.tiktok?.data) {
     for (const r of data.tiktok.data) {
+      if (EXCLUDED_SELLERS.has(String(r.seller_id))) continue;
       out.push({
         id: `t-${r.main_review_id}`,
         platform: 'tiktok',
+        orderCode: r.order_id ? String(r.order_id) : '',
+        orderId: '',
+        userId: '',
         productId: r.product_info?.product_id || '',
         productName: r.product_info?.product_name || '',
         productImage: r.product_info?.img?.thumb_url_list?.[0] || '',
@@ -137,7 +157,8 @@ export default function ReviewsTab() {
       for (let i = 0; i < chunks.length; i++) {
         if (chunks.length > 1) setProgress(`Đang tải đợt ${i + 1}/${chunks.length}...`);
         const [cStart, cEnd] = chunks[i];
-        const res = await fetch(`/api/erp/reviews?platform=${platform}&startDate=${cStart}&endDate=${cEnd}`);
+        // Luôn tải CẢ 2 sàn → nút Shopee/TikTok lọc client-side tức thì (không cần tải lại)
+        const res = await fetch(`/api/erp/reviews?platform=both&startDate=${cStart}&endDate=${cEnd}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (!data.success) throw new Error(data.error || 'Lỗi tải dữ liệu');
@@ -156,7 +177,7 @@ export default function ReviewsTab() {
       setLoading(false);
       setProgress('');
     }
-  }, [platform, startDate, endDate]);
+  }, [startDate, endDate]);
 
   useEffect(() => {
     if (!didMount.current) { didMount.current = true; fetchReviews(); }
@@ -239,6 +260,10 @@ export default function ReviewsTab() {
   // ── Filtered reviews ──
   const filtered = useMemo(() => {
     let result = [...reviews];
+    // Lọc theo sàn (client-side) — nút Tất cả / Shopee / TikTok
+    if (platform !== 'both') result = result.filter(r => r.platform === platform);
+    // Lọc theo khoảng ngày đánh giá (narrow tức thì, không cần tải lại). Ngày không parse được thì giữ.
+    result = result.filter(r => { const d = reviewYmd(r.date); return !d || (d >= startDate && d <= endDate); });
     if (shopFilter !== 'all') result = result.filter(r => r.shop === shopFilter);
     if (productFilter) result = result.filter(r => r.productId === productFilter.productId && r.platform === productFilter.platform);
     if (starFilter > 0) result = result.filter(r => r.star === starFilter);
@@ -262,7 +287,7 @@ export default function ReviewsTab() {
       }
     });
     return result;
-  }, [reviews, shopFilter, productFilter, starFilter, replyFilter, searchText, sortBy]);
+  }, [reviews, platform, startDate, endDate, shopFilter, productFilter, starFilter, replyFilter, searchText, sortBy]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -690,6 +715,12 @@ export default function ReviewsTab() {
                               <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 10 }}>
                                 <div style={{ fontWeight: 700, color: '#3b82f6', fontSize: '0.68rem', textTransform: 'uppercase', marginBottom: 4 }}>Phản hồi shop</div>
                                 <div style={{ color: '#374151', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{r.replyText}</div>
+                              </div>
+                            )}
+                            {(r.orderCode || r.userId) && (
+                              <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 8, marginTop: 8, display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: '0.72rem', color: '#64748b' }}>
+                                {r.orderCode && <span>🧾 Mã đơn: <b style={{ color: '#0f172a', fontFamily: 'monospace', userSelect: 'all' }}>{r.orderCode}</b></span>}
+                                {r.userId && <span>🆔 User ID: <b style={{ color: '#0f172a', userSelect: 'all' }}>{r.userId}</b></span>}
                               </div>
                             )}
                           </div>
