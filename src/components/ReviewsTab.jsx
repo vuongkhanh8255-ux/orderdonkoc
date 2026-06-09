@@ -268,6 +268,11 @@ export default function ReviewsTab() {
     return ['all', ...Array.from(set).sort()];
   }, [reviews]);
 
+  const brandList = useMemo(() => {
+    const set = new Set(reviews.map(r => brandOf(r.shop)));
+    return ['all', ...Array.from(set).sort()];
+  }, [reviews]);
+
   // ── Brand stats (gom nhiều shop cùng brand) ──
   const brandStats = useMemo(() => {
     const map = {};
@@ -330,12 +335,17 @@ export default function ReviewsTab() {
   const tdStyle = { padding: '10px 12px', fontSize: '0.82rem', color: '#0f172a', borderBottom: '1px solid #f1f5f9', verticalAlign: 'middle' };
   const btnBase = { padding: '8px 16px', borderRadius: 8, fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', border: '1.5px solid', transition: 'all 0.15s', fontFamily: 'inherit' };
 
-  const platformBtn = (val) => ({
-    ...btnBase,
-    background: platform === val ? (val === 'shopee' ? '#fff7ed' : val === 'tiktok' ? '#f8fafc' : '#fff7ed') : '#fff',
-    color: platform === val ? (val === 'shopee' ? '#ff6a2c' : val === 'tiktok' ? '#0f172a' : '#ff6a2c') : '#64748b',
-    borderColor: platform === val ? (val === 'shopee' ? '#fed7aa' : val === 'tiktok' ? '#cbd5e1' : '#fed7aa') : '#e5e7eb',
-  });
+  const platformBtn = (val) => {
+    const active = platform === val;
+    const fill = val === 'tiktok' ? '#0f172a' : val === 'shopee' ? '#ff6a2c' : '#475569';
+    return {
+      ...btnBase,
+      fontWeight: active ? 800 : 600,
+      background: active ? fill : '#fff',
+      color: active ? '#fff' : '#64748b',
+      borderColor: active ? fill : '#e5e7eb',
+    };
+  };
 
   const starFilterBtn = (val) => ({
     ...btnBase,
@@ -375,6 +385,10 @@ export default function ReviewsTab() {
             <button onClick={() => setPlatform('shopee')} style={platformBtn('shopee')}>🟠 Shopee</button>
             <button onClick={() => setPlatform('tiktok')} style={platformBtn('tiktok')}>⬛ TikTok</button>
           </div>
+          <select value={brandFilter} onChange={e => { setBrandFilter(e.target.value); setPage(1); }}
+            style={{ padding: '8px 12px', borderRadius: 8, border: `1.5px solid ${brandFilter !== 'all' ? '#ff6a2c' : '#e5e7eb'}`, fontSize: '0.82rem', fontFamily: 'inherit', color: brandFilter !== 'all' ? '#ff6a2c' : '#0f172a', background: brandFilter !== 'all' ? '#fff7ed' : '#fff', cursor: 'pointer', fontWeight: 700 }}>
+            {brandList.map(b => <option key={b} value={b}>{b === 'all' ? '🏷️ Brand: Tất cả' : `🏷️ ${b}`}</option>)}
+          </select>
           <button onClick={fetchReviews} disabled={loading}
             style={{ ...btnBase, background: loading ? '#d1d5db' : '#ff6a2c', color: '#fff', borderColor: loading ? '#d1d5db' : '#ff6a2c', boxShadow: loading ? 'none' : '0 4px 12px rgba(255,106,44,0.2)', minWidth: 120 }}>
             {loading ? '⏳ Đang tải...' : '🔍 Tải dữ liệu'}
