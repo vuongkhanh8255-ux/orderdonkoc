@@ -167,7 +167,7 @@ export const AppDataProvider = ({ children }) => {
     ngayThucHien: new Date().toISOString().split('T')[0],
     sanPham: '', linkSanPham: '', linkKenh: '', soLuong: 1, donGia: 0,
     benA_ten: "CÔNG TY TNHH ĐỘNG \nHỌC STELLA", benA_diaChi: "9/11 Nguyễn Huy Tưởng, Phường Gia Định, Thành phố Hồ Chí Minh",
-    benA_mst: "0314421133", benA_nguoiDaiDien: "VÕ HUÂN", benA_chucVu: "Giám đốc",
+    benA_mst: "0309391133", benA_nguoiDaiDien: "VÕ HUÂN", benA_chucVu: "Giám đốc",
   });
   const [contractHTML, setContractHTML] = useState('');
   const [isOutputVisible, setIsOutputVisible] = useState(false);
