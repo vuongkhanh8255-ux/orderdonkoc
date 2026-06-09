@@ -186,13 +186,21 @@ export default function ReviewsTab() {
     if (!didMount.current) { didMount.current = true; fetchReviews(); }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Phạm vi dashboard theo nút Sàn (Shopee/TikTok/Tất cả) + khoảng ngày → MỌI thống kê bám theo
+  const scoped = useMemo(() => reviews.filter(r => {
+    if (platform !== 'both' && r.platform !== platform) return false;
+    const d = reviewYmd(r.date);
+    if (d && (d < startDate || d > endDate)) return false;
+    return true;
+  }), [reviews, platform, startDate, endDate]);
+
   // ── Stats ──
   const stats = useMemo(() => {
     const dist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
     let sum = 0, replied = 0;
     const shopee = { total: 0, sum: 0, dist: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } };
     const tiktok = { total: 0, sum: 0, dist: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } };
-    for (const r of reviews) {
+    for (const r of scoped) {
       dist[r.star]++;
       sum += r.star;
       if (r.hasReply) replied++;
@@ -208,12 +216,12 @@ export default function ReviewsTab() {
       shopee: { ...shopee, avg: shopee.total ? (shopee.sum / shopee.total).toFixed(1) : '—' },
       tiktok: { ...tiktok, avg: tiktok.total ? (tiktok.sum / tiktok.total).toFixed(1) : '—' },
     };
-  }, [reviews]);
+  }, [scoped]);
 
   // ── Product stats ──
   const productStats = useMemo(() => {
     const map = {};
-    for (const r of reviews) {
+    for (const r of scoped) {
       const key = `${r.platform}-${r.productId}`;
       if (!map[key]) {
         map[key] = {
@@ -231,12 +239,12 @@ export default function ReviewsTab() {
     return Object.values(map)
       .map(p => ({ ...p, avg: (p.sum / p.total).toFixed(1) }))
       .sort((a, b) => b.total - a.total);
-  }, [reviews]);
+  }, [scoped]);
 
   // ── Shop stats ──
   const shopStats = useMemo(() => {
     const map = {};
-    for (const r of reviews) {
+    for (const r of scoped) {
       const key = `${r.platform}-${r.sellerId}`;
       if (!map[key]) {
         map[key] = {
@@ -253,7 +261,7 @@ export default function ReviewsTab() {
     return Object.values(map)
       .map(s => ({ ...s, avg: (s.sum / s.total).toFixed(1) }))
       .sort((a, b) => b.total - a.total);
-  }, [reviews]);
+  }, [scoped]);
 
   const shopList = useMemo(() => {
     const set = new Set(reviews.map(r => r.shop));
@@ -263,7 +271,7 @@ export default function ReviewsTab() {
   // ── Brand stats (gom nhiều shop cùng brand) ──
   const brandStats = useMemo(() => {
     const map = {};
-    for (const r of reviews) {
+    for (const r of scoped) {
       const brand = brandOf(r.shop);
       if (!map[brand]) map[brand] = { brand, total: 0, sum: 0, replied: 0, dist: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, shops: new Set() };
       const m = map[brand];
@@ -272,10 +280,10 @@ export default function ReviewsTab() {
     return Object.values(map)
       .map(b => ({ ...b, avg: (b.sum / b.total).toFixed(1), bad: b.dist[1] + b.dist[2] + b.dist[3], shopCount: b.shops.size }))
       .sort((a, b) => b.total - a.total);
-  }, [reviews]);
+  }, [scoped]);
 
   // Review xấu (1-3★) chưa phản hồi → tồn đọng cần xử lý
-  const needFixCount = useMemo(() => reviews.filter(r => r.star <= 3 && !r.hasReply).length, [reviews]);
+  const needFixCount = useMemo(() => scoped.filter(r => r.star <= 3 && !r.hasReply).length, [scoped]);
 
   // Top sản phẩm bị chê nhiều nhất (1-3★)
   const topBad = useMemo(() => productStats
@@ -286,11 +294,7 @@ export default function ReviewsTab() {
 
   // ── Filtered reviews ──
   const filtered = useMemo(() => {
-    let result = [...reviews];
-    // Lọc theo sàn (client-side) — nút Tất cả / Shopee / TikTok
-    if (platform !== 'both') result = result.filter(r => r.platform === platform);
-    // Lọc theo khoảng ngày đánh giá (narrow tức thì, không cần tải lại). Ngày không parse được thì giữ.
-    result = result.filter(r => { const d = reviewYmd(r.date); return !d || (d >= startDate && d <= endDate); });
+    let result = [...scoped]; // đã lọc sàn + ngày
     if (brandFilter !== 'all') result = result.filter(r => brandOf(r.shop) === brandFilter);
     if (shopFilter !== 'all') result = result.filter(r => r.shop === shopFilter);
     if (productFilter) result = result.filter(r => r.productId === productFilter.productId && r.platform === productFilter.platform);
@@ -315,7 +319,7 @@ export default function ReviewsTab() {
       }
     });
     return result;
-  }, [reviews, platform, startDate, endDate, brandFilter, shopFilter, productFilter, starFilter, replyFilter, searchText, sortBy]);
+  }, [scoped, brandFilter, shopFilter, productFilter, starFilter, replyFilter, searchText, sortBy]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
