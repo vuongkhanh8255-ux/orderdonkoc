@@ -21,6 +21,10 @@ const fmtVnd = (v) => {
   return n.toLocaleString('vi-VN');
 };
 const fmtViews = (v) => { const n = Number(v); if (!Number.isFinite(n) || v === null || v === undefined) return '—'; if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`; if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`; return String(n); };
+// ROAS = Doanh thu (GMV) / (Hoa hồng + Cast). null khi chưa có chi phí (commission+cast = 0).
+const roasOf = (gmv, commission, cast) => { const cost = (Number(commission) || 0) + (Number(cast) || 0); return cost > 0 ? (Number(gmv) || 0) / cost : null; };
+const fmtRoas = (v) => { if (v == null || !Number.isFinite(v)) return '—'; return (v >= 10 ? v.toFixed(1) : v.toFixed(2)) + 'x'; };
+const roasColor = (v) => v == null ? '#cbd5e1' : v >= 3 ? '#16a34a' : v >= 1 ? '#d97706' : '#dc2626';
 const toYmd = (d) => { const dt = d instanceof Date ? d : new Date(d); return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`; };
 // Ngày đăng: ưu tiên video_post_time thật ("2025-11-14 ..."), fallback đơn đầu tiên
 const postLabel = (v) => v.video_post_time ? v.video_post_time.slice(0, 10).split('-').reverse().join('/') : fromUnix(v.first_order);
@@ -63,6 +67,7 @@ const SALES_SORTS = [
   { key: 'vperiod',    label: 'Video kỳ' },
   { key: 'commission', label: 'Hoa hồng' },
   { key: 'cast',       label: 'Cast (chi phí)' },
+  { key: 'roas',       label: 'ROAS' },
 ];
 
 // Cache kết quả koc_orders theo (shop|seller|từ|đến) trong phiên → chọn lại khoảng đã xem là ra liền.
@@ -349,7 +354,9 @@ export default function KocPerformanceTab() {
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const cs = (data?.creators || []).filter(c => !q || (c.username || '').toLowerCase().includes(q));
+    const cs = (data?.creators || [])
+      .filter(c => !q || (c.username || '').toLowerCase().includes(q))
+      .map(c => ({ ...c, roas: roasOf(c.gmv, c.commission, c.cast) }));
     return [...cs].sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0));
   }, [data, sortKey, search]);
   const totals = data?.totals || { gmv: 0, orders: 0, commission: 0, views: 0, cast: 0 };
@@ -412,6 +419,7 @@ export default function KocPerformanceTab() {
             { label: 'Tổng view', value: fmtViews(totals.views), icon: '👁' },
             { label: 'Tổng hoa hồng', value: `${fmtVnd(totals.commission)} đ`, icon: '💸' },
             { label: 'Tổng cast', value: `${fmtVnd(totals.cast || 0)} đ`, icon: '💵' },
+            { label: 'ROAS tổng', value: fmtRoas(roasOf(totals.gmv, totals.commission, totals.cast)), icon: '📊' },
           ].map(s => (
             <div key={s.label} style={{ flex: '1 1 180px', background: '#fff', borderRadius: 14, padding: '14px 18px', border: '1px solid #f1f5f9', borderLeft: `4px solid ${ACCENT}`, boxShadow: '0 1px 4px rgba(15,23,42,0.05)' }}>
               <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>{s.icon} {s.label}</div>
@@ -448,6 +456,7 @@ export default function KocPerformanceTab() {
                   <th style={th}>👁 View</th>
                   <th style={th}>Hoa hồng</th>
                   <th style={th}>💵 Cast</th>
+                  <th style={th} title="ROAS = GMV / (Hoa hồng + Cast) — doanh thu trên mỗi đồng chi phí">📊 ROAS</th>
                   <th style={th}>Gần nhất</th>
                 </tr>
               </thead>
@@ -472,10 +481,11 @@ export default function KocPerformanceTab() {
                         <td style={{ ...td, color: '#0891b2', fontWeight: 700 }}>{fmtViews(c.views)}</td>
                         <td style={td}>{fmtVnd(c.commission)} đ</td>
                         <td style={{ ...td, color: c.cast > 0 ? '#16a34a' : '#cbd5e1', fontWeight: c.cast > 0 ? 700 : 400 }}>{c.cast > 0 ? `${fmtVnd(c.cast)} đ` : '—'}</td>
+                        <td style={{ ...td, fontWeight: 800, color: roasColor(c.roas) }} title={c.roas != null ? `${fmtVnd(c.gmv)} / (${fmtVnd(c.commission)} + ${fmtVnd(c.cast)})` : 'Chưa có chi phí'}>{fmtRoas(c.roas)}</td>
                         <td style={{ ...td, color: '#94a3b8', fontSize: '0.78rem' }}>{fromUnix(c.last_order)}</td>
                       </tr>
                       {open && (
-                        <tr><td colSpan={10} style={{ padding: 0, borderTop: `2px solid ${ACCENT}`, background: '#fafafa' }}>
+                        <tr><td colSpan={11} style={{ padding: 0, borderTop: `2px solid ${ACCENT}`, background: '#fafafa' }}>
                           <div style={{ display: 'flex', gap: 6, padding: '10px 16px 4px' }}>
                             <button onClick={() => switchDrill(c.username, 'products')} style={drillTabBtn(drillTab === 'products')}>📦 Sản phẩm</button>
                             <button onClick={() => switchDrill(c.username, 'videos')} style={drillTabBtn(drillTab === 'videos')}>🎬 Video</button>
