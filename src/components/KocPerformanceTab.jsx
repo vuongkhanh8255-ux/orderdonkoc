@@ -281,9 +281,11 @@ const brandOfShop = (sellerName) => {
 };
 
 const assignDate = (a) => { if (!a) return ''; const d = a.status === 'approved' ? (a.approved_at || a.assigned_at) : (a.proposed_at || a.assigned_at); return d ? new Date(d).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }) : ''; };
-function KocAssignCell({ username, brand, assignments, staffNames, currentUser, onChanged }) {
+function KocAssignCell({ username, brand, assignments, staffNames, currentUser, onChanged, allBrands = [] }) {
   const assignment = (assignments || []).find(a => a.brand_name === brand) || null;          // gán ở brand đang xem
   const others = (assignments || []).filter(a => a.brand_name !== brand && a.staff_name);     // đã định danh ở brand khác (đồng bộ)
+  const assignedSet = new Set((assignments || []).filter(a => a.staff_name).map(a => a.brand_name));
+  const unassigned = (allBrands || []).filter(b => b !== brand && !assignedSet.has(b));         // brand khác CHƯA gán → để biết mà gán
   const role = currentUser?.role || 'guest';
   const me = currentUser?.username || '';
   const isAdmin = role === 'admin';
@@ -339,6 +341,12 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
           <span title={others.map(o => `${o.brand_name}: ${o.staff_name}${o.status === 'proposed' ? ' (đề xuất)' : ''}`).join('\n')}
             style={{ fontSize: '0.66rem', color: '#64748b', background: '#fff', border: '1px dashed #cbd5e1', borderRadius: 10, padding: '2px 8px', maxWidth: 230, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             ↗ đã định danh: {others.map(o => o.brand_name).join(', ')}
+          </span>
+        )}
+        {unassigned.length > 0 && (
+          <span title={'Chưa gán nhân sự ở: ' + unassigned.join(', ')}
+            style={{ fontSize: '0.64rem', color: '#94a3b8', maxWidth: 230, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            ○ chưa định danh: {unassigned.join(', ')}
           </span>
         )}
       </div>
@@ -433,6 +441,7 @@ export default function KocPerformanceTab() {
   const currentUser = useMemo(() => { try { return JSON.parse(localStorage.getItem('sk_session')) || JSON.parse(sessionStorage.getItem('sk_session')); } catch { return null; } }, []);
   const staffNames = useMemo(() => [...new Set((nhanSus || []).map(i => i?.ten_nhansu || i?.name || '').filter(n => n && !HIDDEN_STAFF.includes(n)))].sort((a, b) => a.localeCompare(b, 'vi')), [nhanSus]);
   const brand = useMemo(() => brandOfShop(selSeller), [selSeller]);
+  const allBrands = useMemo(() => [...new Set((shops || []).map(s => brandOfShop(s.seller_name)))].filter(b => b && b !== '—'), [shops]);
   const [assignMap, setAssignMap] = useState({});
   const [showAssignPanel, setShowAssignPanel] = useState(true);
   const [assignShow, setAssignShow] = useState(48);
@@ -697,7 +706,7 @@ export default function KocPerformanceTab() {
                           <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>{fmtVnd(c.gmv)}đ · {c.vperiod > 0 ? `${fmtNum(c.vperiod)} video kỳ` : '0 video kỳ'}</div>
                         </div>
                       </div>
-                      <KocAssignCell username={uname} brand={brand} assignments={assignMap[uname]} staffNames={staffNames} currentUser={currentUser} onChanged={reloadAssignments} />
+                      <KocAssignCell username={uname} brand={brand} assignments={assignMap[uname]} staffNames={staffNames} currentUser={currentUser} onChanged={reloadAssignments} allBrands={allBrands} />
                     </div>
                   );
                 })}
