@@ -424,9 +424,12 @@ export default function KocPerformanceTab() {
             { label: 'Tổng cast', value: `${fmtVnd(totals.cast || 0)} đ`, icon: '💵' },
             { label: 'ROAS tổng', value: fmtRoas(roasOf(totals.gmv, totals.commission, totals.cast)), icon: '📊' },
           ].map(s => (
-            <div key={s.label} style={{ flex: '1 1 180px', background: '#fff', borderRadius: 14, padding: '14px 18px', border: '1px solid #f1f5f9', borderLeft: `4px solid ${ACCENT}`, boxShadow: '0 1px 4px rgba(15,23,42,0.05)' }}>
-              <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>{s.icon} {s.label}</div>
-              <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#0f172a', marginTop: 4 }}>{s.value}</div>
+            <div key={s.label} style={{ background: '#fff', borderRadius: 14, padding: '15px 18px', border: '1px solid #eef1f5', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ width: 28, height: 28, borderRadius: 8, background: '#fff4ec', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', flexShrink: 0 }}>{s.icon}</span>
+                <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px' }}>{s.label}</span>
+              </div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#0f172a', marginTop: 8 }}>{s.value}</div>
             </div>
           ))}
         </div>
