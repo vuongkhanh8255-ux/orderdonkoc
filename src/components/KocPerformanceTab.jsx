@@ -26,7 +26,6 @@ const toYmd = (d) => { const dt = d instanceof Date ? d : new Date(d); return `$
 const postLabel = (v) => v.video_post_time ? v.video_post_time.slice(0, 10).split('-').reverse().join('/') : fromUnix(v.first_order);
 const daysAgoYmd = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return toYmd(d); };
 const fromUnix = (s) => { const n = Number(s) || 0; return n ? new Date(n * 1000).toLocaleDateString('vi-VN') : '—'; };
-const sellerKeyOf = (name, fallback) => (name || '').toLowerCase().split(' ')[0] || fallback;
 const shortName = (s) => { const t = (s || '').trim(); return t.length > 46 ? t.slice(0, 46) + '…' : t; };
 
 const selectStyle = { padding: '8px 12px', borderRadius: 10, border: '1px solid #e5e7eb', background: '#fff', fontSize: '0.85rem', fontWeight: 600, color: '#334155', cursor: 'pointer' };
@@ -235,7 +234,7 @@ function DateRangePicker({ start, end, min, onChange }) {
 // ════════════════════════════════════════════════════════════════════════════
 export default function KocPerformanceTab() {
   const [shops, setShops]   = useState([]);
-  const [seller, setSeller] = useState('body');
+  const [shopId, setShopId] = useState('');
   const [start, setStart]   = useState(FLOOR);
   const [end, setEnd]       = useState(toYmd(new Date()));
   const [data, setData]     = useState(null);
@@ -257,23 +256,26 @@ export default function KocPerformanceTab() {
         const j = await r.json();
         if (cancelled || !j.ok || !Array.isArray(j.shops)) return;
         setShops(j.shops);
-        const body = j.shops.find(s => (s.seller_name || '').toLowerCase().includes('body'));
-        if (body) setSeller(sellerKeyOf(body.seller_name, 'body'));
+        const body = j.shops.find(s => (s.seller_name || '').toLowerCase().includes('body')) || j.shops[0];
+        if (body) setShopId(body.shop_id || '');
       } catch { /* keep default */ }
     })();
     return () => { cancelled = true; };
   }, []);
 
+  // Tên shop đang chọn (để truyền kèm cho các action dùng seller). shop_id mới là khoá chính (duy nhất).
+  const selSeller = shops.find(s => String(s.shop_id) === String(shopId))?.seller_name || '';
+
   const fetchSales = useCallback(async () => {
     setLoading(true); setError(null); setExpanded(null); setProdCache({}); setVidCache({}); setDrillTab('products');
     try {
-      const qs = new URLSearchParams({ action: 'koc_orders', seller, start_date: start, end_date: end });
+      const qs = new URLSearchParams({ action: 'koc_orders', shop_id: shopId, seller: selSeller, start_date: start, end_date: end });
       const r = await fetch(`${API}?${qs}`);
       const j = await r.json();
       if (!j.ok) { setError(j.error || 'Lỗi tải dữ liệu'); setData(null); return; }
       setData(j);
     } catch (e) { setError(e.message); setData(null); } finally { setLoading(false); }
-  }, [seller, start, end]);
+  }, [shopId, selSeller, start, end]);
 
   useEffect(() => { fetchSales(); }, [fetchSales]);
 
@@ -282,17 +284,17 @@ export default function KocPerformanceTab() {
     const users = (data?.creators || []).slice(0, 60).map(r => r.username).filter(Boolean);
     if (!users.length) return;
     let cancelled = false;
-    fetch(`${API}?action=koc_avatars&seller=${encodeURIComponent(seller)}&users=${encodeURIComponent(users.join(','))}&max=8`)
+    fetch(`${API}?action=koc_avatars&shop_id=${encodeURIComponent(shopId)}&seller=${encodeURIComponent(selSeller)}&users=${encodeURIComponent(users.join(','))}&max=8`)
       .then(r => r.json()).then(j => { if (!cancelled && j?.ok && j.avatars) setAvatarMap(prev => ({ ...prev, ...j.avatars })); }).catch(() => {});
     return () => { cancelled = true; };
-  }, [data, seller]);
+  }, [data, shopId, selSeller]);
 
   // Drill-down dùng đúng khoảng ngày đang chọn (start/end). prodCache bị xoá mỗi lần
   // đổi ngày/shop (trong fetchSales) nên dữ liệu sản phẩm luôn khớp filter hiện tại.
   const loadProducts = (username) => {
     if (prodCache[username]) return;
     setProdCache(p => ({ ...p, [username]: { loading: true } }));
-    const qs = new URLSearchParams({ action: 'koc_products', seller, creator: username, start_date: start, end_date: end });
+    const qs = new URLSearchParams({ action: 'koc_products', shop_id: shopId, seller: selSeller, creator: username, start_date: start, end_date: end });
     fetch(`${API}?${qs}`).then(r => r.json())
       .then(j => setProdCache(p => ({ ...p, [username]: j.ok ? { products: j.products || [] } : { error: j.error || 'Lỗi' } })))
       .catch(e => setProdCache(p => ({ ...p, [username]: { error: e.message } })));
@@ -300,7 +302,7 @@ export default function KocPerformanceTab() {
   const loadVideos = (username) => {
     if (vidCache[username]) return;
     setVidCache(p => ({ ...p, [username]: { loading: true } }));
-    const qs = new URLSearchParams({ action: 'koc_videos', seller, creator: username, start_date: start, end_date: end });
+    const qs = new URLSearchParams({ action: 'koc_videos', shop_id: shopId, seller: selSeller, creator: username, start_date: start, end_date: end });
     fetch(`${API}?${qs}`).then(r => r.json())
       .then(j => setVidCache(p => ({ ...p, [username]: j.ok ? { videos: j.videos || [], ym: j.ym_selected } : { error: j.error || 'Lỗi' } })))
       .catch(e => setVidCache(p => ({ ...p, [username]: { error: e.message } })));
@@ -346,8 +348,8 @@ export default function KocPerformanceTab() {
       {/* Filter bar — nằm ngang */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
         {shops.length > 1 && (
-          <select value={seller} onChange={e => setSeller(e.target.value)} style={selectStyle}>
-            {shops.map(s => <option key={s.open_id || s.shop_id || s.seller_name} value={sellerKeyOf(s.seller_name, s.shop_id)}>{s.seller_name}</option>)}
+          <select value={shopId} onChange={e => setShopId(e.target.value)} style={selectStyle}>
+            {shops.map(s => <option key={s.shop_id || s.seller_name} value={s.shop_id || ''}>{s.seller_name}</option>)}
           </select>
         )}
         {presets.map(p => <button key={p.key} style={presetBtn(activePreset === p.key)} onClick={() => { setStart(p.s); setEnd(p.e); }}>{p.label}</button>)}
