@@ -699,12 +699,11 @@ async function handleKocOrders({ params, supabase, res }) {
     }
   }
 
-  const [{ data: stats, error }, { data: totRows }, { data: viewRows }, { data: castRows }, { data: vcRows }] = await Promise.all([
+  const [{ data: stats, error }, { data: totRows }, { data: viewRows }, { data: castRows }] = await Promise.all([
     supabase.rpc('koc_order_stats', { p_shop_id: shopId, p_start: start, p_end: end }),
     supabase.rpc('koc_order_totals', { p_shop_id: shopId, p_start: start, p_end: end }),
     supabase.rpc('koc_video_views', { p_shop_id: shopId, p_start: start, p_end: end }),
     supabase.rpc('koc_cast_by_creator', { p_shop_id: shopId, p_start: start, p_end: end }),
-    supabase.rpc('koc_video_counts', { p_shop_id: shopId, p_start: start, p_end: end }),
   ]);
   if (error) return res.status(200).json({ ok: false, error: error.message });
 
@@ -715,9 +714,6 @@ async function handleKocOrders({ params, supabase, res }) {
   // Cast (chi phí booking) mỗi KOC: link video air_links.cast ↔ video affiliate (chỉ video có fill cast)
   const castByUser = {};
   for (const r of (castRows || [])) castByUser[normU(r.creator_username)] = Number(r.cast_total) || 0;
-  // Số clip ĐÃ ĐĂNG mỗi KOC (nguồn tiktok_shop_videos): vtotal = toàn thời gian, vperiod = đăng trong kỳ
-  const vTotalByUser = {}, vPeriodByUser = {};
-  for (const r of (vcRows || [])) { const k = normU(r.username); vTotalByUser[k] = Number(r.v_total) || 0; vPeriodByUser[k] = Number(r.v_period) || 0; }
 
   const creators = (stats || []).map(s => ({
     username: s.creator_username,
@@ -726,8 +722,8 @@ async function handleKocOrders({ params, supabase, res }) {
     qty: Number(s.qty) || 0,
     commission: Number(s.commission) || 0,
     videos: Number(s.videos) || 0,
-    vtotal: vTotalByUser[normU(s.creator_username)] || 0,
-    vperiod: vPeriodByUser[normU(s.creator_username)] || 0,
+    vtotal: Number(s.vtotal) || 0,
+    vperiod: Number(s.vperiod) || 0,
     views: viewByUser[normU(s.creator_username)] || 0,
     cast: castByUser[normU(s.creator_username)] || 0,
     lives: Number(s.lives) || 0,
