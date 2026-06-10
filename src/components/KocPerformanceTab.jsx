@@ -489,6 +489,13 @@ export default function KocPerformanceTab() {
       .map(c => ({ ...c, roas: roasOf(c.gmv, c.commission, c.cast) }));
     return [...cs].sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0));
   }, [data, sortKey, search]);
+  // Phân trang bảng KOC (mặc định 20 dòng/trang) — khỏi kéo dài cả 1000 dòng
+  const [kocPage, setKocPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  useEffect(() => { setKocPage(1); }, [rows, pageSize]);
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const pageOffset = (kocPage - 1) * pageSize;
+  const pagedRows = rows.slice(pageOffset, pageOffset + pageSize);
   const totals = data?.totals || { gmv: 0, orders: 0, commission: 0, views: 0, cast: 0 };
   const sync = data?.sync;
 
@@ -502,6 +509,7 @@ export default function KocPerformanceTab() {
   const activePreset = presets.find(p => p.s === start && p.e === end)?.key;
   const presetBtn = (active) => ({ padding: '7px 14px', borderRadius: 9, border: `1px solid ${active ? ACCENT : '#e5e7eb'}`, background: active ? ACCENT : '#fff', color: active ? '#fff' : '#475569', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' });
   const drillTabBtn = (active) => ({ padding: '5px 12px', borderRadius: 8, border: `1px solid ${active ? ACCENT : '#e5e7eb'}`, background: active ? '#fff7ed' : '#fff', color: active ? ACCENT : '#64748b', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' });
+  const pgBtn = (active, disabled) => ({ padding: '6px 11px', borderRadius: 8, border: `1px solid ${active ? ACCENT : '#e5e7eb'}`, background: active ? ACCENT : '#fff', color: active ? '#fff' : (disabled ? '#cbd5e1' : '#64748b'), fontSize: '0.78rem', fontWeight: 700, cursor: disabled ? 'default' : 'pointer', minWidth: 34 });
 
   const th = { padding: '10px 12px', fontSize: '0.7rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', textAlign: 'right', whiteSpace: 'nowrap' };
   const td = { padding: '9px 12px', fontSize: '0.86rem', color: '#0f172a', textAlign: 'right', whiteSpace: 'nowrap', borderTop: '1px solid #f1f5f9' };
@@ -593,12 +601,13 @@ export default function KocPerformanceTab() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((c, i) => {
+                {pagedRows.map((c, i) => {
+                  const rank = pageOffset + i;
                   const open = expanded === c.username;
                   return (
                     <React.Fragment key={c.username || i}>
-                      <tr onClick={() => toggleExpand(c.username)} style={{ background: open ? '#fff7ed' : (i % 2 ? '#fcfcfd' : '#fff'), cursor: 'pointer' }}>
-                        <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: i < 3 ? ACCENT : '#94a3b8' }}>{i + 1}</td>
+                      <tr onClick={() => toggleExpand(c.username)} style={{ background: open ? '#fff7ed' : (rank % 2 ? '#fcfcfd' : '#fff'), cursor: 'pointer' }}>
+                        <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: rank < 3 ? ACCENT : '#94a3b8' }}>{rank + 1}</td>
                         <td style={{ ...td, textAlign: 'left' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                             <span style={{ color: '#cbd5e1', fontSize: '0.7rem', width: 10 }}>{open ? '▼' : '▶'}</span>
@@ -633,6 +642,26 @@ export default function KocPerformanceTab() {
               </tbody>
             </table>
           </div>
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '12px 16px', borderTop: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
+              <button onClick={() => setKocPage(p => Math.max(1, p - 1))} disabled={kocPage === 1} style={pgBtn(false, kocPage === 1)}>‹ Trước</button>
+              {(() => {
+                const pages = []; const show = 7;
+                let s = Math.max(1, kocPage - 3); let e = Math.min(totalPages, s + show - 1);
+                if (e - s < show - 1) s = Math.max(1, e - show + 1);
+                if (s > 1) { pages.push(1); if (s > 2) pages.push('…'); }
+                for (let p = s; p <= e; p++) pages.push(p);
+                if (e < totalPages) { if (e < totalPages - 1) pages.push('…'); pages.push(totalPages); }
+                return pages.map((p, idx) => p === '…'
+                  ? <span key={`e${idx}`} style={{ padding: '0 4px', color: '#94a3b8' }}>…</span>
+                  : <button key={p} onClick={() => setKocPage(p)} style={pgBtn(p === kocPage, false)}>{p}</button>);
+              })()}
+              <button onClick={() => setKocPage(p => Math.min(totalPages, p + 1))} disabled={kocPage === totalPages} style={pgBtn(false, kocPage === totalPages)}>Sau ›</button>
+              <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))} style={{ marginLeft: 8, padding: '6px 8px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: '0.78rem', color: '#334155', cursor: 'pointer' }}>
+                {[10, 20, 50, 100].map(n => <option key={n} value={n}>{n}/trang</option>)}
+              </select>
+            </div>
+          )}
           <div style={{ padding: '8px 14px', fontSize: '0.72rem', color: '#94a3b8', borderTop: '1px solid #f1f5f9' }}>
             💡 Bấm vào 1 KOC để xem sản phẩm họ làm video / kéo đơn (theo đúng khoảng ngày đang chọn).
             {data && data.count > (data.shown || 0) && <span> · Bảng hiển thị top {fmtNum(data.shown)}/{fmtNum(data.count)} KOC theo GMV (tổng phía trên vẫn tính đủ).</span>}
