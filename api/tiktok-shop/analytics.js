@@ -689,7 +689,7 @@ async function handleKocOrders({ params, supabase, res }) {
 
   // ── Cache CHUNG: mọi máy vào là tức thì cho tới khi shop có data mới ──
   // sync_token đổi khi total_synced / high_water / backfill thay đổi → cache tự stale.
-  const syncToken = 'v3|' + (meta ? `${meta.total_synced || 0}|${meta.high_water_create_time || ''}|${meta.backfill_done ? 1 : 0}` : 'no-meta');
+  const syncToken = 'v4|' + (meta ? `${meta.total_synced || 0}|${meta.high_water_create_time || ''}|${meta.backfill_done ? 1 : 0}` : 'no-meta');
   const cacheKey = `${shopId || 'null'}|${start}|${end || 'null'}`;
   const force = params.force === '1';
   if (!force) {
@@ -699,11 +699,13 @@ async function handleKocOrders({ params, supabase, res }) {
     }
   }
 
+  // Cast scope theo NGÀY AIR của video; "Tất cả" (cast_all=1) → cộng hết (không lọc ngày)
+  const castAll = params.cast_all === '1';
   const [{ data: stats, error }, { data: totRows }, { data: viewRows }, { data: castRows }] = await Promise.all([
     supabase.rpc('koc_order_stats', { p_shop_id: shopId, p_start: start, p_end: end }),
     supabase.rpc('koc_order_totals', { p_shop_id: shopId, p_start: start, p_end: end }),
     supabase.rpc('koc_video_views', { p_shop_id: shopId, p_start: start, p_end: end }),
-    supabase.rpc('koc_cast_by_creator', { p_shop_id: shopId, p_start: start, p_end: end }),
+    supabase.rpc('koc_cast_by_creator', { p_shop_id: shopId, p_start: castAll ? null : start, p_end: castAll ? null : end }),
   ]);
   if (error) return res.status(200).json({ ok: false, error: error.message });
 

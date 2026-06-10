@@ -305,7 +305,9 @@ export default function KocPerformanceTab() {
     if (!force && SALES_CACHE.has(key)) { setData(SALES_CACHE.get(key)); setFromCache(true); setLoading(false); return; }
     setLoading(true); setFromCache(false);
     try {
-      const qs = new URLSearchParams({ action: 'koc_orders', shop_id: shopId, seller: selSeller, start_date: start, end_date: end });
+      // "Tất cả" (FLOOR → hôm nay) → cast cộng hết (không lọc theo ngày air); khoảng khác → cast theo ngày air trong khoảng
+      const isAll = start === FLOOR && end === toYmd(new Date());
+      const qs = new URLSearchParams({ action: 'koc_orders', shop_id: shopId, seller: selSeller, start_date: start, end_date: end, cast_all: isAll ? '1' : '0' });
       if (force) qs.set('force', '1'); // Tải lại → server bỏ qua cache chung, tính mới + cập nhật cache
       const r = await fetch(`${API}?${qs}`);
       const j = await r.json();
