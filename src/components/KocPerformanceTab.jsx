@@ -58,6 +58,7 @@ const SearchBox = ({ value, onChange }) => (
 
 const SALES_SORTS = [
   { key: 'gmv',        label: 'GMV' },
+  { key: 'views',      label: 'View' },
   { key: 'orders',     label: 'Số đơn' },
   { key: 'videos',     label: 'Số video' },
   { key: 'commission', label: 'Hoa hồng' },
@@ -372,6 +373,7 @@ export default function KocPerformanceTab() {
             { label: 'KOC có đơn', value: fmtNum(data.count), icon: '🧑‍🤝‍🧑' },
             { label: 'Tổng GMV', value: `${fmtVnd(totals.gmv)} đ`, icon: '💰' },
             { label: 'Tổng đơn', value: fmtNum(totals.orders), icon: '🛒' },
+            { label: 'Tổng view', value: fmtViews(totals.views), icon: '👁' },
             { label: 'Tổng hoa hồng', value: `${fmtVnd(totals.commission)} đ`, icon: '💸' },
           ].map(s => (
             <div key={s.label} style={{ flex: '1 1 180px', background: '#fff', borderRadius: 14, padding: '14px 18px', border: '1px solid #f1f5f9', borderLeft: `4px solid ${ACCENT}`, boxShadow: '0 1px 4px rgba(15,23,42,0.05)' }}>
@@ -405,6 +407,7 @@ export default function KocPerformanceTab() {
                   <th style={th}>GMV</th>
                   <th style={th}>Đơn</th>
                   <th style={th}>🎬 Video</th>
+                  <th style={th}>👁 View</th>
                   <th style={th}>Hoa hồng</th>
                   <th style={th}>Gần nhất</th>
                 </tr>
@@ -426,11 +429,12 @@ export default function KocPerformanceTab() {
                         <td style={{ ...td, fontWeight: 800 }}>{fmtVnd(c.gmv)} đ</td>
                         <td style={td}>{fmtNum(c.orders)}</td>
                         <td style={{ ...td, color: '#7c3aed', fontWeight: 700 }}>{fmtNum(c.videos)}</td>
+                        <td style={{ ...td, color: '#0891b2', fontWeight: 700 }}>{fmtViews(c.views)}</td>
                         <td style={td}>{fmtVnd(c.commission)} đ</td>
                         <td style={{ ...td, color: '#94a3b8', fontSize: '0.78rem' }}>{fromUnix(c.last_order)}</td>
                       </tr>
                       {open && (
-                        <tr><td colSpan={7} style={{ padding: 0, borderTop: `2px solid ${ACCENT}`, background: '#fafafa' }}>
+                        <tr><td colSpan={8} style={{ padding: 0, borderTop: `2px solid ${ACCENT}`, background: '#fafafa' }}>
                           <div style={{ display: 'flex', gap: 6, padding: '10px 16px 4px' }}>
                             <button onClick={() => switchDrill(c.username, 'products')} style={drillTabBtn(drillTab === 'products')}>📦 Sản phẩm</button>
                             <button onClick={() => switchDrill(c.username, 'videos')} style={drillTabBtn(drillTab === 'videos')}>🎬 Video</button>
