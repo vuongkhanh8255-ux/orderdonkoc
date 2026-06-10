@@ -280,7 +280,10 @@ const brandOfShop = (sellerName) => {
   return s.replace(/\s*VIỆT NAM\s*/g, '').trim() || '—';
 };
 
-function KocAssignCell({ username, brand, assignment, staffNames, currentUser, onChanged }) {
+const assignDate = (a) => { if (!a) return ''; const d = a.status === 'approved' ? (a.approved_at || a.assigned_at) : (a.proposed_at || a.assigned_at); return d ? new Date(d).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }) : ''; };
+function KocAssignCell({ username, brand, assignments, staffNames, currentUser, onChanged }) {
+  const assignment = (assignments || []).find(a => a.brand_name === brand) || null;          // gán ở brand đang xem
+  const others = (assignments || []).filter(a => a.brand_name !== brand && a.staff_name);     // đã định danh ở brand khác (đồng bộ)
   const role = currentUser?.role || 'guest';
   const me = currentUser?.username || '';
   const isAdmin = role === 'admin';
@@ -325,11 +328,20 @@ function KocAssignCell({ username, brand, assignment, staffNames, currentUser, o
 
   return (
     <>
-      <button onClick={openModal} disabled={!canInteract}
-        title={assignment ? `${status === 'proposed' ? 'Đề xuất' : 'Đang gán'}: ${assignment.staff_name}` : (canInteract ? 'Bấm để gán' : 'Chưa gán')}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 9px', borderRadius: 14, fontSize: '0.74rem', fontWeight: 700, cursor: canInteract ? 'pointer' : 'default', color, background: bg, border: `1px solid ${border}`, maxWidth: 132, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {assignment ? <>{status === 'proposed' ? '🟡' : '🟢'} {assignment.staff_name}</> : (canInteract ? '+ Gán' : '—')}
-      </button>
+      <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+        <button onClick={openModal} disabled={!canInteract}
+          title={assignment ? `${status === 'proposed' ? 'Đề xuất' : 'Đang gán'}: ${assignment.staff_name}` : (canInteract ? 'Bấm để gán' : 'Chưa gán')}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 9px', borderRadius: 14, fontSize: '0.74rem', fontWeight: 700, cursor: canInteract ? 'pointer' : 'default', color, background: bg, border: `1px solid ${border}`, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {assignment ? <>{status === 'proposed' ? '🟡' : '🟢'} {assignment.staff_name}</> : (canInteract ? '+ Gán' : '—')}
+        </button>
+        {assignment && <span style={{ fontSize: '0.66rem', color: '#94a3b8', paddingLeft: 2 }}>📅 từ {assignDate(assignment)}</span>}
+        {others.length > 0 && (
+          <span title={others.map(o => `${o.brand_name}: ${o.staff_name}${o.status === 'proposed' ? ' (đề xuất)' : ''}`).join('\n')}
+            style={{ fontSize: '0.64rem', color: '#64748b', background: '#fff', border: '1px dashed #cbd5e1', borderRadius: 10, padding: '1px 7px', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            ↗ đã định danh: {others.map(o => o.brand_name).join(', ')}
+          </span>
+        )}
+      </div>
       {open && (
         <div onClick={close} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 22, width: 370, fontFamily: "'Outfit', sans-serif", boxShadow: '0 20px 50px rgba(0,0,0,0.25)' }}>
@@ -423,13 +435,12 @@ export default function KocPerformanceTab() {
   const brand = useMemo(() => brandOfShop(selSeller), [selSeller]);
   const [assignMap, setAssignMap] = useState({});
   const reloadAssignments = useCallback(async () => {
-    if (!brand) { setAssignMap({}); return; }
+    // Load TẤT CẢ assignment (mọi brand) → mỗi KOC biết được gán ở brand hiện tại + brand khác
     const { data } = await supabase.from(ASSIGN_TABLE)
-      .select('koc_id, brand_name, staff_name, status, proposed_by, proposed_at, approved_by, approved_at, assigned_at')
-      .eq('brand_name', brand);
-    const m = {}; (data || []).forEach(a => { m[(a.koc_id || '').toLowerCase()] = a; });
+      .select('koc_id, brand_name, staff_name, status, proposed_by, proposed_at, approved_by, approved_at, assigned_at');
+    const m = {}; (data || []).forEach(a => { const k = (a.koc_id || '').toLowerCase(); (m[k] = m[k] || []).push(a); });
     setAssignMap(m);
-  }, [brand]);
+  }, []);
   useEffect(() => { reloadAssignments(); }, [reloadAssignments]);
 
   // Lấy avatar thật (cache + fetch dần) cho top 60 KOC mỗi lần đổi data/shop
@@ -604,7 +615,7 @@ export default function KocPerformanceTab() {
                         <td style={{ ...td, fontWeight: 800, color: roasColor(c.roas) }} title={c.roas != null ? `${fmtVnd(c.gmv)} / (${fmtVnd(c.commission)} + ${fmtVnd(c.cast)})` : 'Chưa có chi phí'}>{fmtRoas(c.roas)}</td>
                         <td style={{ ...td, color: '#94a3b8', fontSize: '0.78rem' }}>{fromUnix(c.last_order)}</td>
                         <td style={{ ...td, textAlign: 'left' }} onClick={e => e.stopPropagation()}>
-                          <KocAssignCell username={(c.username || '').toLowerCase().replace(/^@/, '')} brand={brand} assignment={assignMap[(c.username || '').toLowerCase().replace(/^@/, '')]} staffNames={staffNames} currentUser={currentUser} onChanged={reloadAssignments} />
+                          <KocAssignCell username={(c.username || '').toLowerCase().replace(/^@/, '')} brand={brand} assignments={assignMap[(c.username || '').toLowerCase().replace(/^@/, '')]} staffNames={staffNames} currentUser={currentUser} onChanged={reloadAssignments} />
                         </td>
                       </tr>
                       {open && (
