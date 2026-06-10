@@ -331,13 +331,13 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
       <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
         <button onClick={openModal} disabled={!canInteract}
           title={assignment ? `${status === 'proposed' ? 'Đề xuất' : 'Đang gán'}: ${assignment.staff_name}` : (canInteract ? 'Bấm để gán' : 'Chưa gán')}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 9px', borderRadius: 14, fontSize: '0.74rem', fontWeight: 700, cursor: canInteract ? 'pointer' : 'default', color, background: bg, border: `1px solid ${border}`, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 11px', borderRadius: 14, fontSize: '0.78rem', fontWeight: 700, cursor: canInteract ? 'pointer' : 'default', color, background: bg, border: `1px solid ${border}`, maxWidth: 210, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {assignment ? <>{status === 'proposed' ? '🟡' : '🟢'} {assignment.staff_name}</> : (canInteract ? '+ Gán' : '—')}
         </button>
         {assignment && <span style={{ fontSize: '0.66rem', color: '#94a3b8', paddingLeft: 2 }}>📅 từ {assignDate(assignment)}</span>}
         {others.length > 0 && (
           <span title={others.map(o => `${o.brand_name}: ${o.staff_name}${o.status === 'proposed' ? ' (đề xuất)' : ''}`).join('\n')}
-            style={{ fontSize: '0.64rem', color: '#64748b', background: '#fff', border: '1px dashed #cbd5e1', borderRadius: 10, padding: '1px 7px', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            style={{ fontSize: '0.66rem', color: '#64748b', background: '#fff', border: '1px dashed #cbd5e1', borderRadius: 10, padding: '2px 8px', maxWidth: 230, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             ↗ đã định danh: {others.map(o => o.brand_name).join(', ')}
           </span>
         )}
@@ -434,6 +434,8 @@ export default function KocPerformanceTab() {
   const staffNames = useMemo(() => [...new Set((nhanSus || []).map(i => i?.ten_nhansu || i?.name || '').filter(n => n && !HIDDEN_STAFF.includes(n)))].sort((a, b) => a.localeCompare(b, 'vi')), [nhanSus]);
   const brand = useMemo(() => brandOfShop(selSeller), [selSeller]);
   const [assignMap, setAssignMap] = useState({});
+  const [showAssignPanel, setShowAssignPanel] = useState(true);
+  const [assignShow, setAssignShow] = useState(48);
   const reloadAssignments = useCallback(async () => {
     // Load TẤT CẢ assignment (mọi brand) → mỗi KOC biết được gán ở brand hiện tại + brand khác
     const { data } = await supabase.from(ASSIGN_TABLE)
@@ -588,7 +590,6 @@ export default function KocPerformanceTab() {
                   <th style={th}>💵 Cast</th>
                   <th style={th} title="ROAS = GMV / (Hoa hồng + Cast) — doanh thu trên mỗi đồng chi phí">📊 ROAS</th>
                   <th style={th}>Gần nhất</th>
-                  <th style={{ ...th, textAlign: 'left' }}>👤 Nhân sự</th>
                 </tr>
               </thead>
               <tbody>
@@ -614,12 +615,9 @@ export default function KocPerformanceTab() {
                         <td style={{ ...td, color: c.cast > 0 ? '#16a34a' : '#cbd5e1', fontWeight: c.cast > 0 ? 700 : 400 }}>{c.cast > 0 ? `${fmtVnd(c.cast)} đ` : '—'}</td>
                         <td style={{ ...td, fontWeight: 800, color: roasColor(c.roas) }} title={c.roas != null ? `${fmtVnd(c.gmv)} / (${fmtVnd(c.commission)} + ${fmtVnd(c.cast)})` : 'Chưa có chi phí'}>{fmtRoas(c.roas)}</td>
                         <td style={{ ...td, color: '#94a3b8', fontSize: '0.78rem' }}>{fromUnix(c.last_order)}</td>
-                        <td style={{ ...td, textAlign: 'left' }} onClick={e => e.stopPropagation()}>
-                          <KocAssignCell username={(c.username || '').toLowerCase().replace(/^@/, '')} brand={brand} assignments={assignMap[(c.username || '').toLowerCase().replace(/^@/, '')]} staffNames={staffNames} currentUser={currentUser} onChanged={reloadAssignments} />
-                        </td>
                       </tr>
                       {open && (
-                        <tr><td colSpan={12} style={{ padding: 0, borderTop: `2px solid ${ACCENT}`, background: '#fafafa' }}>
+                        <tr><td colSpan={11} style={{ padding: 0, borderTop: `2px solid ${ACCENT}`, background: '#fafafa' }}>
                           <div style={{ display: 'flex', gap: 6, padding: '10px 16px 4px' }}>
                             <button onClick={() => switchDrill(c.username, 'products')} style={drillTabBtn(drillTab === 'products')}>📦 Sản phẩm</button>
                             <button onClick={() => switchDrill(c.username, 'videos')} style={drillTabBtn(drillTab === 'videos')}>🎬 Video</button>
@@ -639,6 +637,51 @@ export default function KocPerformanceTab() {
             💡 Bấm vào 1 KOC để xem sản phẩm họ làm video / kéo đơn (theo đúng khoảng ngày đang chọn).
             {data && data.count > (data.shown || 0) && <span> · Bảng hiển thị top {fmtNum(data.shown)}/{fmtNum(data.count)} KOC theo GMV (tổng phía trên vẫn tính đủ).</span>}
           </div>
+        </div>
+      )}
+
+      {/* 🏷️ ĐỊNH DANH KOC — panel riêng, dạng thẻ cho rộng rãi / trực quan */}
+      {!loading && data && rows.length > 0 && (
+        <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #eef1f5', marginTop: 18, overflow: 'hidden', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+          <div onClick={() => setShowAssignPanel(v => !v)}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', cursor: 'pointer', borderBottom: showAssignPanel ? '1px solid #f1f5f9' : 'none' }}>
+            <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
+              🏷️ Định danh KOC <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '0.8rem' }}>· {data.shop} → brand <b style={{ color: ACCENT }}>{brand}</b></span>
+            </h3>
+            <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>{showAssignPanel ? '▲ Thu gọn' : '▼ Mở'}</span>
+          </div>
+          {showAssignPanel && (
+            <div style={{ padding: 16 }}>
+              <p style={{ margin: '0 0 12px', fontSize: '0.74rem', color: '#94a3b8' }}>
+                Gán nhân sự quản lý KOC cho brand này. {currentUser?.role === 'admin' ? 'Bạn gán là duyệt luôn 🟢.' : currentUser?.role === 'ecom' ? 'Bạn gửi đề xuất 🟡, admin duyệt sau.' : 'Chỉ admin/ecom thao tác được.'} Chip viền đứt = đã định danh ở brand khác.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(248px, 1fr))', gap: 12 }}>
+                {rows.slice(0, assignShow).map((c, i) => {
+                  const uname = (c.username || '').toLowerCase().replace(/^@/, '');
+                  return (
+                    <div key={c.username || i} style={{ border: '1px solid #eef1f5', borderRadius: 12, padding: 12, background: '#fcfcfd' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 800, color: i < 3 ? ACCENT : '#cbd5e1', width: 18, flexShrink: 0 }}>{i + 1}</span>
+                        <KocAvatar username={c.username} url={avatarMap[c.username]?.avatar} size={34} />
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <a href={`https://www.tiktok.com/@${uname}`} target="_blank" rel="noreferrer" style={{ display: 'block', fontWeight: 700, color: ACCENT, fontSize: '0.84rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none' }}>@{uname}</a>
+                          <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>{fmtVnd(c.gmv)}đ · {c.vperiod > 0 ? `${fmtNum(c.vperiod)} video kỳ` : '0 video kỳ'}</div>
+                        </div>
+                      </div>
+                      <KocAssignCell username={uname} brand={brand} assignments={assignMap[uname]} staffNames={staffNames} currentUser={currentUser} onChanged={reloadAssignments} />
+                    </div>
+                  );
+                })}
+              </div>
+              {rows.length > assignShow && (
+                <div style={{ textAlign: 'center', marginTop: 14 }}>
+                  <button onClick={() => setAssignShow(n => n + 48)} style={{ padding: '8px 22px', borderRadius: 9, border: '1px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer' }}>
+                    Xem thêm ({fmtNum(rows.length - assignShow)} KOC)
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
