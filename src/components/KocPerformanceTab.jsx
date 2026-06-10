@@ -267,6 +267,8 @@ function DateRangePicker({ start, end, min, onChange }) {
 // ════════════════════════════════════════════════════════════════════════════
 // ── Định danh KOC: gán nhân sự theo brand (dùng chung bảng koc_brand_assignments với Booking) ──
 const ASSIGN_TABLE = 'koc_brand_assignments';
+const HIST_TABLE = 'koc_assignment_history';
+const HIST_LABEL = { assign: '🟢 Gán', propose: '🟡 Đề xuất', approve: '✓ Duyệt', remove: '🗑️ Loại' };
 const HIDDEN_STAFF = ['Anh Kiệt', 'Thiệu Huy'];
 // Shop seller_name → brand_name (khớp convention bên Booking: EHERB / MILAGANICS / ...)
 const brandOfShop = (sellerName) => {
@@ -294,14 +296,20 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
   const [open, setOpen] = useState(false);
   const [staff, setStaff] = useState('');
   const [busy, setBusy] = useState(false);
+  const [hist, setHist] = useState(null); // lịch sử (null = chưa tải)
 
   const status = assignment?.status; // 'proposed' | 'approved' | undefined
   const color = status === 'approved' ? '#16a34a' : status === 'proposed' ? '#d97706' : '#94a3b8';
   const bg = status === 'approved' ? '#f0fdf4' : status === 'proposed' ? '#fffbeb' : '#f8fafc';
   const border = status === 'approved' ? '#bbf7d0' : status === 'proposed' ? '#fde68a' : '#e5e7eb';
 
-  const openModal = (e) => { e.stopPropagation(); if (!canInteract) return; setStaff(assignment?.staff_name || staffNames[0] || ''); setOpen(true); };
+  const openModal = (e) => { e.stopPropagation(); if (!canInteract) return; setStaff(assignment?.staff_name || staffNames[0] || ''); setHist(null); setOpen(true); };
   const close = (e) => { e?.stopPropagation?.(); setOpen(false); };
+  const logHistory = (action, sn) => supabase.from(HIST_TABLE).insert({ koc_id: username, brand_name: brand, staff_name: sn || null, action, actor: me }).then(() => {}, () => {});
+  const loadHist = async () => {
+    const { data } = await supabase.from(HIST_TABLE).select('brand_name, staff_name, action, actor, created_at').eq('koc_id', username).order('created_at', { ascending: false }).limit(50);
+    setHist(data || []);
+  };
 
   const save = async () => {
     const sn = (staff || '').trim(); if (!sn) return;
@@ -311,6 +319,7 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
       ? { koc_id: username, brand_name: brand, staff_name: sn, assigned_at: assignment?.assigned_at || nowIso, updated_at: nowIso, status: 'approved', approved_by: me, approved_at: nowIso, proposed_by: assignment?.proposed_by || null, proposed_at: assignment?.proposed_at || null }
       : { koc_id: username, brand_name: brand, staff_name: sn, assigned_at: nowIso, updated_at: nowIso, status: 'proposed', proposed_by: me, proposed_at: nowIso, approved_by: null, approved_at: null };
     await supabase.from(ASSIGN_TABLE).upsert(record, { onConflict: 'koc_id,brand_name' });
+    logHistory(isAdmin ? 'assign' : 'propose', sn);
     setBusy(false); setOpen(false); onChanged?.();
   };
   const approve = async () => {
@@ -318,11 +327,13 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
     setBusy(true);
     const nowIso = new Date().toISOString();
     await supabase.from(ASSIGN_TABLE).upsert({ ...assignment, status: 'approved', approved_by: me, approved_at: nowIso, updated_at: nowIso }, { onConflict: 'koc_id,brand_name' });
+    logHistory('approve', assignment.staff_name);
     setBusy(false); setOpen(false); onChanged?.();
   };
   const remove = async () => {
     setBusy(true);
     await supabase.from(ASSIGN_TABLE).delete().eq('koc_id', username).eq('brand_name', brand);
+    logHistory('remove', assignment?.staff_name);
     setBusy(false); setOpen(false); onChanged?.();
   };
 
@@ -367,6 +378,20 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
                   : <>🟢 Đang gán <b>{assignment.staff_name}</b> từ {assignment.approved_at ? new Date(assignment.approved_at).toLocaleDateString('vi-VN') : '—'}</>}
               </div>
             )}
+            <div style={{ marginBottom: 12 }}>
+              <button onClick={loadHist} style={{ background: 'none', border: 'none', color: '#0891b2', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer', padding: 0 }}>🕘 {hist === null ? 'Xem lịch sử định danh' : 'Tải lại lịch sử'}</button>
+              {hist !== null && (
+                <div style={{ maxHeight: 150, overflowY: 'auto', marginTop: 6, border: '1px solid #f1f5f9', borderRadius: 8 }}>
+                  {hist.length === 0
+                    ? <div style={{ padding: 10, fontSize: '0.74rem', color: '#94a3b8' }}>Chưa có lịch sử</div>
+                    : hist.map((h, i) => (
+                      <div key={i} style={{ padding: '6px 10px', fontSize: '0.72rem', color: '#475569', borderTop: i ? '1px solid #f1f5f9' : 'none' }}>
+                        <b>{HIST_LABEL[h.action] || h.action}</b>{h.staff_name ? ` ${h.staff_name}` : ''} · {h.brand_name || '—'} · <span style={{ color: '#94a3b8' }}>{h.actor || '?'} · {new Date(h.created_at).toLocaleString('vi-VN')}</span>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button onClick={save} disabled={busy || !staff} style={{ flex: 1, padding: '9px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer', opacity: busy || !staff ? 0.6 : 1 }}>{isAdmin ? (status === 'proposed' ? 'Duyệt + lưu' : 'Lưu gán') : 'Gửi đề xuất'}</button>
               {isAdmin && status === 'proposed' && <button onClick={approve} disabled={busy} style={{ padding: '9px 12px', borderRadius: 9, border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#16a34a', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer' }}>✓ Duyệt</button>}
@@ -453,6 +478,24 @@ export default function KocPerformanceTab() {
     setAssignMap(m);
   }, []);
   useEffect(() => { reloadAssignments(); }, [reloadAssignments]);
+
+  // Phase 3 — cảnh báo 45 ngày 0 video (RPC koc_assignment_warnings)
+  const [warnMap, setWarnMap] = useState({});
+  const reloadWarnings = useCallback(async () => {
+    if (!brand || !shopId) { setWarnMap({}); return; }
+    const { data } = await supabase.rpc('koc_assignment_warnings', { p_shop_id: String(shopId), p_brand: brand });
+    const m = {}; (data || []).forEach(w => { m[(w.koc_id || '').toLowerCase()] = w; });
+    setWarnMap(m);
+  }, [brand, shopId]);
+  useEffect(() => { reloadWarnings(); }, [reloadWarnings]);
+  const refreshAssign = useCallback(() => { reloadAssignments(); reloadWarnings(); }, [reloadAssignments, reloadWarnings]);
+  const overdueWarns = useMemo(() => Object.values(warnMap).filter(w => (w.video_count || 0) === 0 && w.days_since >= 45).sort((a, b) => b.days_since - a.days_since), [warnMap]);
+  const removeAssign = async (kocId) => {
+    if (!confirm(`Loại định danh @${kocId} khỏi brand ${brand}? (gán ≥45 ngày mà chưa lên video)`)) return;
+    await supabase.from(ASSIGN_TABLE).delete().eq('koc_id', kocId).eq('brand_name', brand);
+    await supabase.from(HIST_TABLE).insert({ koc_id: kocId, brand_name: brand, action: 'remove', actor: currentUser?.username || '' }).then(() => {}, () => {});
+    refreshAssign();
+  };
 
   // Lấy avatar thật (cache + fetch dần) cho top 60 KOC mỗi lần đổi data/shop
   useEffect(() => {
@@ -693,6 +736,20 @@ export default function KocPerformanceTab() {
               <p style={{ margin: '0 0 12px', fontSize: '0.74rem', color: '#94a3b8' }}>
                 Gán nhân sự quản lý KOC cho brand này. {currentUser?.role === 'admin' ? 'Bạn gán là duyệt luôn 🟢.' : currentUser?.role === 'ecom' ? 'Bạn gửi đề xuất 🟡, admin duyệt sau.' : 'Chỉ admin/ecom thao tác được.'} Chip viền đứt = đã định danh ở brand khác.
               </p>
+              {currentUser?.role === 'admin' && overdueWarns.length > 0 && (
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+                  <div style={{ fontWeight: 800, color: '#dc2626', fontSize: '0.86rem', marginBottom: 8 }}>⚠️ Cần xử lý — {overdueWarns.length} KOC gán ≥45 ngày mà 0 video <span style={{ color: '#94a3b8', fontWeight: 600 }}>(brand {brand})</span></div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {overdueWarns.map(w => (
+                      <div key={w.koc_id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.78rem', background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #fee2e2', flexWrap: 'wrap' }}>
+                        <a href={`https://www.tiktok.com/@${w.koc_id}`} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontWeight: 700, textDecoration: 'none' }}>@{w.koc_id}</a>
+                        <span style={{ color: '#64748b' }}>NS: <b>{w.staff_name}</b> · gán <b>{w.days_since}</b> ngày trước · 0 video</span>
+                        <button onClick={() => removeAssign(w.koc_id)} style={{ marginLeft: 'auto', padding: '5px 14px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>Loại</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(248px, 1fr))', gap: 12 }}>
                 {rows.slice(0, assignShow).map((c, i) => {
                   const uname = (c.username || '').toLowerCase().replace(/^@/, '');
@@ -706,7 +763,14 @@ export default function KocPerformanceTab() {
                           <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>{fmtVnd(c.gmv)}đ · {c.vperiod > 0 ? `${fmtNum(c.vperiod)} video kỳ` : '0 video kỳ'}</div>
                         </div>
                       </div>
-                      <KocAssignCell username={uname} brand={brand} assignments={assignMap[uname]} staffNames={staffNames} currentUser={currentUser} onChanged={reloadAssignments} allBrands={allBrands} />
+                      <KocAssignCell username={uname} brand={brand} assignments={assignMap[uname]} staffNames={staffNames} currentUser={currentUser} onChanged={refreshAssign} allBrands={allBrands} />
+                      {(() => {
+                        const w = warnMap[uname];
+                        if (!w || (w.video_count || 0) > 0) return null;
+                        if (w.days_since >= 45) return <div style={{ marginTop: 7, fontSize: '0.66rem', fontWeight: 700, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '4px 8px' }}>⚠️ {w.days_since} ngày · 0 video — cần xử lý</div>;
+                        if (w.days_since >= 38) return <div style={{ marginTop: 7, fontSize: '0.66rem', fontWeight: 700, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '4px 8px' }}>⏳ sắp hết hạn — còn {45 - w.days_since} ngày, 0 video</div>;
+                        return null;
+                      })()}
                     </div>
                   );
                 })}
