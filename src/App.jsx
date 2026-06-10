@@ -12,6 +12,7 @@ import DashboardTab from './components/DashboardTab';
 import BookingPerformanceTab from './components/BookingPerformanceTab';
 import KocPerformanceTab from './components/KocPerformanceTab';
 import KocBlacklistTab from './components/KocBlacklistTab';
+import KocPaymentTab from './components/KocPaymentTab';
 import DataArchiveTab from './components/DataArchiveTab';
 import NhanhProductsTab from './components/NhanhProductsTab';
 import GmvRealtimeTab from './components/GmvRealtimeTab';
@@ -282,6 +283,7 @@ function AppMain({ user, onLogout, allowedViews }) {
                 { view: 'koc_performance',     icon: '🌟', name: 'Hiệu suất KOC' },
                 { view: 'booking_performance', icon: '📈', name: 'Dashboard booking' },
                 { view: 'contract',            icon: '📝', name: 'Hợp Đồng' },
+                { view: 'koc_payment',         icon: '💸', name: 'Thanh toán KOC' },
                 { view: 'airlinks',            icon: '🔗', name: 'Quản Lý Link Air' },
               ]},
               { key: 'archive', label: '🗄️ Lưu trữ', emoji: '🗄️', items: [
@@ -414,6 +416,7 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'task_notes' && <TaskNoteTab />}
           {currentView === 'crm' && <CrmTab />}
           {currentView === 'koc_blacklist' && <KocBlacklistTab />}
+          {currentView === 'koc_payment' && <KocPaymentTab />}
           {currentView === 'koc_performance' && <KocPerformanceTab />}
           {currentView === 'shop_analytics' && <ShopAnalyticsTab />}
           {currentView === 'overview_report' && <ReportTab />}
