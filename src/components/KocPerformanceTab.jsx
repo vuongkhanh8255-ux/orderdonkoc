@@ -109,20 +109,37 @@ const ProductBreakdown = ({ state }) => {
 const VID_GRID = '20px 60px 1fr 82px 64px 70px 38px 78px';
 const ymShort = (ym) => ym ? 'T' + Number(ym.split('-')[1]) : 'Tháng';
 const VideoBreakdown = ({ state, username }) => {
+  const [sort, setSort] = useState({ key: 'date', dir: 'desc' });
   if (!state || state.loading) return <div style={{ padding: 14, color: '#94a3b8', fontSize: '0.82rem' }}>⏳ Đang tải video…</div>;
   if (state.error) return <div style={{ padding: 14, color: '#b91c1c', fontSize: '0.82rem' }}>❌ {state.error}</div>;
   const vs = state.videos || [];
   if (!vs.length) return <div style={{ padding: 14, color: '#94a3b8', fontSize: '0.82rem' }}>Không có video kéo đơn trong khoảng này.</div>;
   const cell = { fontSize: '0.8rem', whiteSpace: 'nowrap' };
   const mlabel = ymShort(state.ym);
+  // Sắp xếp: bấm tiêu đề cột (cùng cột → đảo chiều). Mặc định ngày đăng mới nhất trước.
+  const dateVal = (v) => v.video_post_time ? (Date.parse(v.video_post_time) || 0) : (Number(v.first_order) || 0) * 1000;
+  const sortVal = (v) => sort.key === 'date' ? dateVal(v)
+    : sort.key === 'views' ? Number(v.views) || 0
+    : sort.key === 'month_views' ? Number(v.month_views) || 0
+    : sort.key === 'orders' ? Number(v.orders) || 0
+    : Number(v.gmv) || 0;
+  const sorted = [...vs].sort((a, b) => sort.dir === 'asc' ? sortVal(a) - sortVal(b) : sortVal(b) - sortVal(a));
+  const clickSort = (key) => setSort(s => s.key === key ? { key, dir: s.dir === 'desc' ? 'asc' : 'desc' } : { key, dir: 'desc' });
+  const arrow = (key) => sort.key === key ? (sort.dir === 'desc' ? ' ↓' : ' ↑') : '';
+  const sortTh = (key, label, align) => (
+    <span onClick={() => clickSort(key)} title="Bấm để sắp xếp"
+      style={{ cursor: 'pointer', userSelect: 'none', textAlign: align || 'left', color: sort.key === key ? ACCENT : '#94a3b8', fontWeight: sort.key === key ? 800 : 700 }}>
+      {label}{arrow(key)}
+    </span>
+  );
   return (
     <div style={{ padding: '4px 16px 14px' }}>
-      <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>🎬 Video KOC đã lên ({vs.length}) — mới nhất trước · 👁 Tổng = view toàn bộ · 👁 {mlabel} = view trong tháng được chọn</div>
+      <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>🎬 Video KOC đã lên ({vs.length}) · bấm tiêu đề cột để sắp xếp · 👁 Tổng = view toàn bộ · 👁 {mlabel} = view trong tháng được chọn</div>
       <div style={{ display: 'grid', gridTemplateColumns: VID_GRID, gap: 8, alignItems: 'center', padding: '0 10px 4px', fontSize: '0.64rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>
-        <span></span><span>Video</span><span>Sản phẩm</span><span>Ngày đăng</span><span style={{ textAlign: 'right' }}>👁 Tổng</span><span style={{ textAlign: 'right', color: '#0891b2' }}>👁 {mlabel}</span><span style={{ textAlign: 'right' }}>Đơn</span><span style={{ textAlign: 'right' }}>GMV</span>
+        <span></span><span>Video</span><span>Sản phẩm</span>{sortTh('date', 'Ngày đăng')}{sortTh('views', '👁 Tổng', 'right')}{sortTh('month_views', `👁 ${mlabel}`, 'right')}{sortTh('orders', 'Đơn', 'right')}{sortTh('gmv', 'GMV', 'right')}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {vs.map((v, i) => (
+        {sorted.map((v, i) => (
           <div key={v.content_id || i} style={{ display: 'grid', gridTemplateColumns: VID_GRID, gap: 8, alignItems: 'center', background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #f1f5f9' }}>
             <span style={{ fontWeight: 800, color: '#94a3b8', fontSize: '0.76rem' }}>{i + 1}</span>
             {v.content_type === 'VIDEO'
