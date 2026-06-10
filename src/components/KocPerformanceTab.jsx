@@ -6,6 +6,8 @@
 // bấm 1 KOC để xem sản phẩm họ làm video / kéo đơn.
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { supabase } from '../supabaseClient';
+import { useAppData } from '../context/AppDataContext';
 
 const API = '/api/tiktok-shop/analytics';
 const ACCENT = '#ff6a2c';
@@ -263,6 +265,101 @@ function DateRangePicker({ start, end, min, onChange }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// ── Định danh KOC: gán nhân sự theo brand (dùng chung bảng koc_brand_assignments với Booking) ──
+const ASSIGN_TABLE = 'koc_brand_assignments';
+const HIDDEN_STAFF = ['Anh Kiệt', 'Thiệu Huy'];
+// Shop seller_name → brand_name (khớp convention bên Booking: EHERB / MILAGANICS / ...)
+const brandOfShop = (sellerName) => {
+  const s = (sellerName || '').toUpperCase();
+  if (s.includes('BODY')) return 'BODYMISS';
+  if (s.includes('EHERB') && s.includes('HCM')) return 'EHERB HCM';
+  if (s.includes('EHERB')) return 'EHERB';
+  if (s.includes('MILAGANIC')) return 'MILAGANICS';
+  if (s.includes('MOAW')) return 'MOAW MOAWS';
+  if (s.includes('HEALMII')) return 'HEALMII';
+  return s.replace(/\s*VIỆT NAM\s*/g, '').trim() || '—';
+};
+
+function KocAssignCell({ username, brand, assignment, staffNames, currentUser, onChanged }) {
+  const role = currentUser?.role || 'guest';
+  const me = currentUser?.username || '';
+  const isAdmin = role === 'admin';
+  const isEcom = role === 'ecom';
+  const canInteract = isAdmin || isEcom;
+  const [open, setOpen] = useState(false);
+  const [staff, setStaff] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const status = assignment?.status; // 'proposed' | 'approved' | undefined
+  const color = status === 'approved' ? '#16a34a' : status === 'proposed' ? '#d97706' : '#94a3b8';
+  const bg = status === 'approved' ? '#f0fdf4' : status === 'proposed' ? '#fffbeb' : '#f8fafc';
+  const border = status === 'approved' ? '#bbf7d0' : status === 'proposed' ? '#fde68a' : '#e5e7eb';
+
+  const openModal = (e) => { e.stopPropagation(); if (!canInteract) return; setStaff(assignment?.staff_name || staffNames[0] || ''); setOpen(true); };
+  const close = (e) => { e?.stopPropagation?.(); setOpen(false); };
+
+  const save = async () => {
+    const sn = (staff || '').trim(); if (!sn) return;
+    setBusy(true);
+    const nowIso = new Date().toISOString();
+    const record = isAdmin
+      ? { koc_id: username, brand_name: brand, staff_name: sn, assigned_at: assignment?.assigned_at || nowIso, updated_at: nowIso, status: 'approved', approved_by: me, approved_at: nowIso, proposed_by: assignment?.proposed_by || null, proposed_at: assignment?.proposed_at || null }
+      : { koc_id: username, brand_name: brand, staff_name: sn, assigned_at: nowIso, updated_at: nowIso, status: 'proposed', proposed_by: me, proposed_at: nowIso, approved_by: null, approved_at: null };
+    await supabase.from(ASSIGN_TABLE).upsert(record, { onConflict: 'koc_id,brand_name' });
+    setBusy(false); setOpen(false); onChanged?.();
+  };
+  const approve = async () => {
+    if (!isAdmin || !assignment) return;
+    setBusy(true);
+    const nowIso = new Date().toISOString();
+    await supabase.from(ASSIGN_TABLE).upsert({ ...assignment, status: 'approved', approved_by: me, approved_at: nowIso, updated_at: nowIso }, { onConflict: 'koc_id,brand_name' });
+    setBusy(false); setOpen(false); onChanged?.();
+  };
+  const remove = async () => {
+    setBusy(true);
+    await supabase.from(ASSIGN_TABLE).delete().eq('koc_id', username).eq('brand_name', brand);
+    setBusy(false); setOpen(false); onChanged?.();
+  };
+
+  const canRemove = assignment && (isAdmin || (isEcom && status === 'proposed' && assignment.proposed_by === me));
+
+  return (
+    <>
+      <button onClick={openModal} disabled={!canInteract}
+        title={assignment ? `${status === 'proposed' ? 'Đề xuất' : 'Đang gán'}: ${assignment.staff_name}` : (canInteract ? 'Bấm để gán' : 'Chưa gán')}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 9px', borderRadius: 14, fontSize: '0.74rem', fontWeight: 700, cursor: canInteract ? 'pointer' : 'default', color, background: bg, border: `1px solid ${border}`, maxWidth: 132, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {assignment ? <>{status === 'proposed' ? '🟡' : '🟢'} {assignment.staff_name}</> : (canInteract ? '+ Gán' : '—')}
+      </button>
+      {open && (
+        <div onClick={close} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 22, width: 370, fontFamily: "'Outfit', sans-serif", boxShadow: '0 20px 50px rgba(0,0,0,0.25)' }}>
+            <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>{isAdmin ? 'Gán nhân sự' : 'Đề xuất nhân sự'}</div>
+            <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', margin: '4px 0 2px' }}>@{username}</div>
+            <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: 14 }}>Brand: <b style={{ color: ACCENT }}>{brand}</b></div>
+            <select value={staff} onChange={e => setStaff(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 9, border: '1.5px solid #e5e7eb', fontSize: '0.88rem', marginBottom: 10, boxSizing: 'border-box' }}>
+              {!staffNames.length && <option value="">Chưa có nhân sự</option>}
+              {staffNames.map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+            {assignment && (
+              <div style={{ fontSize: '0.74rem', color: '#64748b', background: '#f8fafc', borderRadius: 8, padding: '8px 10px', marginBottom: 12 }}>
+                {status === 'proposed'
+                  ? <>🟡 <b>Đề xuất</b>: {assignment.staff_name} — bởi <b>{assignment.proposed_by || '?'}</b></>
+                  : <>🟢 Đang gán <b>{assignment.staff_name}</b> từ {assignment.approved_at ? new Date(assignment.approved_at).toLocaleDateString('vi-VN') : '—'}</>}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button onClick={save} disabled={busy || !staff} style={{ flex: 1, padding: '9px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer', opacity: busy || !staff ? 0.6 : 1 }}>{isAdmin ? (status === 'proposed' ? 'Duyệt + lưu' : 'Lưu gán') : 'Gửi đề xuất'}</button>
+              {isAdmin && status === 'proposed' && <button onClick={approve} disabled={busy} style={{ padding: '9px 12px', borderRadius: 9, border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#16a34a', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer' }}>✓ Duyệt</button>}
+              {canRemove && <button onClick={remove} disabled={busy} style={{ padding: '9px 12px', borderRadius: 9, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer' }}>Loại</button>}
+              <button onClick={() => setOpen(false)} style={{ padding: '9px 12px', borderRadius: 9, border: '1px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer' }}>Đóng</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function KocPerformanceTab() {
   const [shops, setShops]   = useState([]);
   const [shopId, setShopId] = useState('');
@@ -318,6 +415,22 @@ export default function KocPerformanceTab() {
   }, [shopId, selSeller, start, end]);
 
   useEffect(() => { fetchSales(); }, [fetchSales]);
+
+  // ── Định danh KOC: nhân sự + brand (dùng chung bảng koc_brand_assignments) ──
+  const { nhanSus } = useAppData();
+  const currentUser = useMemo(() => { try { return JSON.parse(localStorage.getItem('sk_session')) || JSON.parse(sessionStorage.getItem('sk_session')); } catch { return null; } }, []);
+  const staffNames = useMemo(() => [...new Set((nhanSus || []).map(i => i?.ten_nhansu || i?.name || '').filter(n => n && !HIDDEN_STAFF.includes(n)))].sort((a, b) => a.localeCompare(b, 'vi')), [nhanSus]);
+  const brand = useMemo(() => brandOfShop(selSeller), [selSeller]);
+  const [assignMap, setAssignMap] = useState({});
+  const reloadAssignments = useCallback(async () => {
+    if (!brand) { setAssignMap({}); return; }
+    const { data } = await supabase.from(ASSIGN_TABLE)
+      .select('koc_id, brand_name, staff_name, status, proposed_by, proposed_at, approved_by, approved_at, assigned_at')
+      .eq('brand_name', brand);
+    const m = {}; (data || []).forEach(a => { m[(a.koc_id || '').toLowerCase()] = a; });
+    setAssignMap(m);
+  }, [brand]);
+  useEffect(() => { reloadAssignments(); }, [reloadAssignments]);
 
   // Lấy avatar thật (cache + fetch dần) cho top 60 KOC mỗi lần đổi data/shop
   useEffect(() => {
@@ -464,6 +577,7 @@ export default function KocPerformanceTab() {
                   <th style={th}>💵 Cast</th>
                   <th style={th} title="ROAS = GMV / (Hoa hồng + Cast) — doanh thu trên mỗi đồng chi phí">📊 ROAS</th>
                   <th style={th}>Gần nhất</th>
+                  <th style={{ ...th, textAlign: 'left' }}>👤 Nhân sự</th>
                 </tr>
               </thead>
               <tbody>
@@ -489,9 +603,12 @@ export default function KocPerformanceTab() {
                         <td style={{ ...td, color: c.cast > 0 ? '#16a34a' : '#cbd5e1', fontWeight: c.cast > 0 ? 700 : 400 }}>{c.cast > 0 ? `${fmtVnd(c.cast)} đ` : '—'}</td>
                         <td style={{ ...td, fontWeight: 800, color: roasColor(c.roas) }} title={c.roas != null ? `${fmtVnd(c.gmv)} / (${fmtVnd(c.commission)} + ${fmtVnd(c.cast)})` : 'Chưa có chi phí'}>{fmtRoas(c.roas)}</td>
                         <td style={{ ...td, color: '#94a3b8', fontSize: '0.78rem' }}>{fromUnix(c.last_order)}</td>
+                        <td style={{ ...td, textAlign: 'left' }} onClick={e => e.stopPropagation()}>
+                          <KocAssignCell username={(c.username || '').toLowerCase().replace(/^@/, '')} brand={brand} assignment={assignMap[(c.username || '').toLowerCase().replace(/^@/, '')]} staffNames={staffNames} currentUser={currentUser} onChanged={reloadAssignments} />
+                        </td>
                       </tr>
                       {open && (
-                        <tr><td colSpan={11} style={{ padding: 0, borderTop: `2px solid ${ACCENT}`, background: '#fafafa' }}>
+                        <tr><td colSpan={12} style={{ padding: 0, borderTop: `2px solid ${ACCENT}`, background: '#fafafa' }}>
                           <div style={{ display: 'flex', gap: 6, padding: '10px 16px 4px' }}>
                             <button onClick={() => switchDrill(c.username, 'products')} style={drillTabBtn(drillTab === 'products')}>📦 Sản phẩm</button>
                             <button onClick={() => switchDrill(c.username, 'videos')} style={drillTabBtn(drillTab === 'videos')}>🎬 Video</button>
