@@ -411,7 +411,6 @@ export default function KocPerformanceTab() {
       {!loading && data && (
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
           {[
-            { label: 'KOC có đơn', value: fmtNum(data.count), icon: '🧑‍🤝‍🧑' },
             { label: 'Tổng GMV', value: `${fmtVnd(totals.gmv)} đ`, icon: '💰' },
             { label: 'Tổng đơn', value: fmtNum(totals.orders), icon: '🛒' },
             { label: 'Tổng video', value: fmtNum(totals.vtotal || 0), icon: '🎬' },
