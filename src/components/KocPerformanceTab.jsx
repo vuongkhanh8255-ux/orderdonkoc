@@ -59,7 +59,8 @@ const SALES_SORTS = [
   { key: 'gmv',        label: 'GMV' },
   { key: 'views',      label: 'View' },
   { key: 'orders',     label: 'Số đơn' },
-  { key: 'videos',     label: 'Số video' },
+  { key: 'vtotal',     label: 'Video tổng' },
+  { key: 'vperiod',    label: 'Video kỳ' },
   { key: 'commission', label: 'Hoa hồng' },
   { key: 'cast',       label: 'Cast (chi phí)' },
 ];
@@ -69,7 +70,7 @@ const SALES_SORTS = [
 const SALES_CACHE = new Map();
 
 // ── Drill-down: sản phẩm 1 KOC kéo đơn (theo đúng khoảng ngày đang chọn) ─────────
-const PROD_GRID = '22px 36px 1fr 78px 78px 104px';
+const PROD_GRID = '22px 36px 1fr 62px 62px 72px 104px';
 const ProductBreakdown = ({ state }) => {
   if (!state || state.loading) return <div style={{ padding: 14, color: '#94a3b8', fontSize: '0.82rem' }}>⏳ Đang tải sản phẩm…</div>;
   if (state.error) return <div style={{ padding: 14, color: '#b91c1c', fontSize: '0.82rem' }}>❌ {state.error}</div>;
@@ -80,7 +81,7 @@ const ProductBreakdown = ({ state }) => {
     <div style={{ padding: '10px 16px', background: '#fafafa' }}>
       <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>📦 Sản phẩm KOC làm video / kéo đơn ({ps.length})</div>
       <div style={{ display: 'grid', gridTemplateColumns: PROD_GRID, gap: 8, alignItems: 'center', padding: '0 10px 4px', fontSize: '0.66rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>
-        <span></span><span></span><span>Sản phẩm</span><span style={{ textAlign: 'right' }}>Video</span><span style={{ textAlign: 'right' }}>Đơn</span><span style={{ textAlign: 'right' }}>GMV</span>
+        <span></span><span></span><span>Sản phẩm</span><span style={{ textAlign: 'right' }} title="Tổng clip đã đăng (toàn thời gian)">V.tổng</span><span style={{ textAlign: 'right' }} title="Clip đăng trong khoảng ngày đang chọn">V.kỳ</span><span style={{ textAlign: 'right' }}>Đơn</span><span style={{ textAlign: 'right' }}>GMV</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {ps.map((p, i) => (
@@ -93,7 +94,8 @@ const ProductBreakdown = ({ state }) => {
               style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, color: '#0f172a', textDecoration: 'none', fontSize: '0.82rem' }}>
               {shortName(p.name) || `SP ${p.product_id}`}
             </a>
-            <span style={{ ...cell, color: '#7c3aed', fontWeight: 700, textAlign: 'right' }}>🎬 {fmtNum(p.videos)}</span>
+            <span style={{ ...cell, color: '#7c3aed', fontWeight: 700, textAlign: 'right' }}>{fmtNum(p.vtotal)}</span>
+            <span style={{ ...cell, color: '#a855f7', fontWeight: 700, textAlign: 'right' }}>{p.vperiod > 0 ? fmtNum(p.vperiod) : '—'}</span>
             <span style={{ ...cell, color: '#64748b', textAlign: 'right' }}>{fmtNum(p.orders)}</span>
             <span style={{ ...cell, color: ACCENT, fontWeight: 800, textAlign: 'right' }}>{fmtVnd(p.gmv)} đ</span>
           </div>
@@ -388,6 +390,8 @@ export default function KocPerformanceTab() {
             { label: 'KOC có đơn', value: fmtNum(data.count), icon: '🧑‍🤝‍🧑' },
             { label: 'Tổng GMV', value: `${fmtVnd(totals.gmv)} đ`, icon: '💰' },
             { label: 'Tổng đơn', value: fmtNum(totals.orders), icon: '🛒' },
+            { label: 'Tổng video', value: fmtNum(totals.vtotal || 0), icon: '🎬' },
+            { label: 'Video kỳ này', value: fmtNum(totals.vperiod || 0), icon: '🎞️' },
             { label: 'Tổng view', value: fmtViews(totals.views), icon: '👁' },
             { label: 'Tổng hoa hồng', value: `${fmtVnd(totals.commission)} đ`, icon: '💸' },
             { label: 'Tổng cast', value: `${fmtVnd(totals.cast || 0)} đ`, icon: '💵' },
@@ -422,7 +426,8 @@ export default function KocPerformanceTab() {
                   <th style={{ ...th, textAlign: 'left' }}>KOC</th>
                   <th style={th}>GMV</th>
                   <th style={th}>Đơn</th>
-                  <th style={th}>🎬 Video</th>
+                  <th style={th} title="Tổng clip KOC đã đăng cho shop này (toàn thời gian)">🎬 Video tổng</th>
+                  <th style={th} title="Clip đăng trong khoảng ngày đang chọn">🎬 Video kỳ</th>
                   <th style={th}>👁 View</th>
                   <th style={th}>Hoa hồng</th>
                   <th style={th}>💵 Cast</th>
@@ -445,14 +450,15 @@ export default function KocPerformanceTab() {
                         </td>
                         <td style={{ ...td, fontWeight: 800 }}>{fmtVnd(c.gmv)} đ</td>
                         <td style={td}>{fmtNum(c.orders)}</td>
-                        <td style={{ ...td, color: '#7c3aed', fontWeight: 700 }}>{fmtNum(c.videos)}</td>
+                        <td style={{ ...td, color: '#7c3aed', fontWeight: 700 }}>{fmtNum(c.vtotal)}</td>
+                        <td style={{ ...td, color: '#a855f7', fontWeight: 700 }}>{c.vperiod > 0 ? fmtNum(c.vperiod) : '—'}</td>
                         <td style={{ ...td, color: '#0891b2', fontWeight: 700 }}>{fmtViews(c.views)}</td>
                         <td style={td}>{fmtVnd(c.commission)} đ</td>
                         <td style={{ ...td, color: c.cast > 0 ? '#16a34a' : '#cbd5e1', fontWeight: c.cast > 0 ? 700 : 400 }}>{c.cast > 0 ? `${fmtVnd(c.cast)} đ` : '—'}</td>
                         <td style={{ ...td, color: '#94a3b8', fontSize: '0.78rem' }}>{fromUnix(c.last_order)}</td>
                       </tr>
                       {open && (
-                        <tr><td colSpan={9} style={{ padding: 0, borderTop: `2px solid ${ACCENT}`, background: '#fafafa' }}>
+                        <tr><td colSpan={10} style={{ padding: 0, borderTop: `2px solid ${ACCENT}`, background: '#fafafa' }}>
                           <div style={{ display: 'flex', gap: 6, padding: '10px 16px 4px' }}>
                             <button onClick={() => switchDrill(c.username, 'products')} style={drillTabBtn(drillTab === 'products')}>📦 Sản phẩm</button>
                             <button onClick={() => switchDrill(c.username, 'videos')} style={drillTabBtn(drillTab === 'videos')}>🎬 Video</button>

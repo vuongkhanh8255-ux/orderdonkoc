@@ -689,7 +689,7 @@ async function handleKocOrders({ params, supabase, res }) {
 
   // ── Cache CHUNG: mọi máy vào là tức thì cho tới khi shop có data mới ──
   // sync_token đổi khi total_synced / high_water / backfill thay đổi → cache tự stale.
-  const syncToken = meta ? `${meta.total_synced || 0}|${meta.high_water_create_time || ''}|${meta.backfill_done ? 1 : 0}` : 'no-meta';
+  const syncToken = 'v2|' + (meta ? `${meta.total_synced || 0}|${meta.high_water_create_time || ''}|${meta.backfill_done ? 1 : 0}` : 'no-meta');
   const cacheKey = `${shopId || 'null'}|${start}|${end || 'null'}`;
   const force = params.force === '1';
   if (!force) {
@@ -699,11 +699,12 @@ async function handleKocOrders({ params, supabase, res }) {
     }
   }
 
-  const [{ data: stats, error }, { data: totRows }, { data: viewRows }, { data: castRows }] = await Promise.all([
+  const [{ data: stats, error }, { data: totRows }, { data: viewRows }, { data: castRows }, { data: vcRows }] = await Promise.all([
     supabase.rpc('koc_order_stats', { p_shop_id: shopId, p_start: start, p_end: end }),
     supabase.rpc('koc_order_totals', { p_shop_id: shopId, p_start: start, p_end: end }),
     supabase.rpc('koc_video_views', { p_shop_id: shopId, p_start: start, p_end: end }),
     supabase.rpc('koc_cast_by_creator', { p_shop_id: shopId, p_start: start, p_end: end }),
+    supabase.rpc('koc_video_counts', { p_shop_id: shopId, p_start: start, p_end: end }),
   ]);
   if (error) return res.status(200).json({ ok: false, error: error.message });
 
@@ -714,6 +715,9 @@ async function handleKocOrders({ params, supabase, res }) {
   // Cast (chi phí booking) mỗi KOC: link video air_links.cast ↔ video affiliate (chỉ video có fill cast)
   const castByUser = {};
   for (const r of (castRows || [])) castByUser[normU(r.creator_username)] = Number(r.cast_total) || 0;
+  // Số clip ĐÃ ĐĂNG mỗi KOC (nguồn tiktok_shop_videos): vtotal = toàn thời gian, vperiod = đăng trong kỳ
+  const vTotalByUser = {}, vPeriodByUser = {};
+  for (const r of (vcRows || [])) { const k = normU(r.username); vTotalByUser[k] = Number(r.v_total) || 0; vPeriodByUser[k] = Number(r.v_period) || 0; }
 
   const creators = (stats || []).map(s => ({
     username: s.creator_username,
@@ -722,6 +726,8 @@ async function handleKocOrders({ params, supabase, res }) {
     qty: Number(s.qty) || 0,
     commission: Number(s.commission) || 0,
     videos: Number(s.videos) || 0,
+    vtotal: vTotalByUser[normU(s.creator_username)] || 0,
+    vperiod: vPeriodByUser[normU(s.creator_username)] || 0,
     views: viewByUser[normU(s.creator_username)] || 0,
     cast: castByUser[normU(s.creator_username)] || 0,
     lives: Number(s.lives) || 0,
@@ -731,7 +737,10 @@ async function handleKocOrders({ params, supabase, res }) {
   const t = (totRows || [])[0] || {};
   const totalViews = (viewRows || []).reduce((a, r) => a + (Number(r.total_views) || 0), 0);
   const totalCast = (castRows || []).reduce((a, r) => a + (Number(r.cast_total) || 0), 0);
-  const totals = { gmv: Number(t.gmv) || 0, orders: Number(t.orders) || 0, commission: Number(t.commission) || 0, qty: Number(t.qty) || 0, views: totalViews, cast: totalCast };
+  // Tổng clip = cộng theo KOC affiliate đang hiển thị (đồng bộ với bảng), không gộp creator ngoài cohort
+  const totalVtotal = creators.reduce((a, c) => a + (c.vtotal || 0), 0);
+  const totalVperiod = creators.reduce((a, c) => a + (c.vperiod || 0), 0);
+  const totals = { gmv: Number(t.gmv) || 0, orders: Number(t.orders) || 0, commission: Number(t.commission) || 0, qty: Number(t.qty) || 0, views: totalViews, cast: totalCast, vtotal: totalVtotal, vperiod: totalVperiod };
   const totalCreators = Number(t.creators) || creators.length;
 
   const payload = {
@@ -761,12 +770,21 @@ async function handleKocProducts({ params, appKey, appSecret, supabase, res }) {
   const start = params.start_date || AFF_SYNC_FLOOR_DATE;
   const end = params.end_date || null;
 
-  const { data: rows, error } = await supabase.rpc('koc_product_breakdown', { p_shop_id: shopId, p_start: start, p_end: end, p_creator: creator });
+  const [{ data: rows, error }, { data: pvcRows }] = await Promise.all([
+    supabase.rpc('koc_product_breakdown', { p_shop_id: shopId, p_start: start, p_end: end, p_creator: creator }),
+    supabase.rpc('koc_product_video_counts', { p_shop_id: shopId, p_creator: creator, p_start: start, p_end: end }),
+  ]);
   if (error) return res.status(200).json({ ok: false, error: error.message });
+
+  // Số clip đã đăng cho từng SP (tiktok_shop_videos): vtotal toàn TG, vperiod trong kỳ
+  const vcByProduct = {};
+  for (const r of (pvcRows || [])) vcByProduct[String(r.product_id)] = { vtotal: Number(r.v_total) || 0, vperiod: Number(r.v_period) || 0 };
 
   let products = (rows || []).map(r => ({
     product_id: String(r.product_id), orders: Number(r.orders) || 0, gmv: Number(r.gmv) || 0,
     qty: Number(r.qty) || 0, videos: Number(r.videos) || 0, content_types: r.content_types || '',
+    vtotal: vcByProduct[String(r.product_id)]?.vtotal || 0,
+    vperiod: vcByProduct[String(r.product_id)]?.vperiod || 0,
   }));
 
   // Resolve product names/images (top 30) via the shop's Analytics connection
