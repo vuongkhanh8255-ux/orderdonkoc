@@ -167,7 +167,7 @@ export const ACCOUNTS = [
 
 // ── ROLE PERMISSIONS ──────────────────────────────────────
 export const ROLE_VIEWS = {
-    admin:      ['shop_analytics','overview_report','shopee_ads_dashboard','flash_sale','top_picks','shopee_livestream','shopee_video','shopee_ads','stella_dashboard','listed_price','costing','tiktok_orders','reviews','crm','cskh','livestream','dashboard','order','koc_performance','booking_performance','contract','airlinks','booking','data_archive','nhanh_products','expense','landing_orders','camp_registration','task_notes'],
+    admin:      ['shop_analytics','overview_report','shopee_ads_dashboard','flash_sale','top_picks','shopee_livestream','shopee_video','shopee_ads','stella_dashboard','listed_price','costing','tiktok_orders','reviews','crm','cskh','livestream','dashboard','order','koc_blacklist','koc_performance','booking_performance','contract','airlinks','booking','data_archive','nhanh_products','expense','landing_orders','camp_registration','task_notes'],
     // Minh Thư (trợ lí sếp) — full chức năng như admin NHƯNG bỏ 'costing' (Giá Cost). Role ≠ 'admin' nên cột Giá gốc trong Bảng giá niêm yết cũng tự ẩn.
     assistant:  ['shop_analytics','overview_report','shopee_ads_dashboard','flash_sale','top_picks','shopee_livestream','shopee_video','shopee_ads','stella_dashboard','listed_price','tiktok_orders','reviews','crm','cskh','livestream','dashboard','order','koc_performance','booking_performance','contract','airlinks','booking','data_archive','nhanh_products','expense','landing_orders','camp_registration','task_notes'],
     // BOOKING: chỉ Booking group + Ngân Sách Ecom. KHÔNG Ecom group, KHÔNG Task & Notes.

@@ -11,6 +11,7 @@ import BookingManagerTab from './components/BookingManagerTab';
 import DashboardTab from './components/DashboardTab';
 import BookingPerformanceTab from './components/BookingPerformanceTab';
 import KocPerformanceTab from './components/KocPerformanceTab';
+import KocBlacklistTab from './components/KocBlacklistTab';
 import DataArchiveTab from './components/DataArchiveTab';
 import NhanhProductsTab from './components/NhanhProductsTab';
 import GmvRealtimeTab from './components/GmvRealtimeTab';
@@ -277,6 +278,7 @@ function AppMain({ user, onLogout, allowedViews }) {
               { key: 'booking', label: '📅 Booking', emoji: '📅', items: [
                 { view: 'dashboard',           icon: '📊', name: 'Phân tích sản phẩm booking' },
                 { view: 'order',               icon: '🛒', name: 'Đơn Hàng KOC' },
+                { view: 'koc_blacklist',       icon: '🚫', name: 'Black List KOC' },
                 { view: 'koc_performance',     icon: '🌟', name: 'Hiệu suất KOC' },
                 { view: 'booking_performance', icon: '📈', name: 'Dashboard booking' },
                 { view: 'contract',            icon: '📝', name: 'Hợp Đồng' },
@@ -411,6 +413,7 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'camp_registration' && <CampRegistrationTab />}
           {currentView === 'task_notes' && <TaskNoteTab />}
           {currentView === 'crm' && <CrmTab />}
+          {currentView === 'koc_blacklist' && <KocBlacklistTab />}
           {currentView === 'koc_performance' && <KocPerformanceTab />}
           {currentView === 'shop_analytics' && <ShopAnalyticsTab />}
           {currentView === 'overview_report' && <ReportTab />}

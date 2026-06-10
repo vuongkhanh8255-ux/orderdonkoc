@@ -133,8 +133,7 @@ const AirLinksTab = () => {
     const [passwordModal, setPasswordModal] = useState({ isOpen: false, type: null, data: null, input: '' });
 
     // Blacklist state
-    const [blacklistChannels, setBlacklistChannels] = useState([]);
-    const [blacklistModal, setBlacklistModal] = useState({ isOpen: false, unlocked: false, pwInput: '', newChannel: '', search: '', page: 1 });
+    const [blacklistChannels, setBlacklistChannels] = useState([]); // dùng để CẢNH BÁO khi dán/import link KOC blacklisted (xem/sửa danh sách: tab "Black List KOC", admin-only)
 
     // Video blacklist (trùng lặp)
     const [videoBlacklist, setVideoBlacklist] = useState([]);
@@ -142,7 +141,6 @@ const AirLinksTab = () => {
     const [vblSearch, setVblSearch] = useState('');
     const [vblPage, setVblPage] = useState(1);
     const VBL_PAGE_SIZE = 20;
-    const BL_PAGE_SIZE = 20;
     const [kocOrderSet, setKocOrderSet] = useState(new Set());
 
     const openDeleteModal = (type, data = null) => {
@@ -177,18 +175,6 @@ const AirLinksTab = () => {
     };
     useEffect(() => { loadVideoBlacklist(); }, []);
 
-    const addToBlacklist = async (channelId) => {
-        const trimmed = channelId.trim();
-        if (!trimmed || blacklistChannels.includes(trimmed)) return;
-        const { error } = await supabase.from('koc_blacklist').insert({ id_kenh: trimmed });
-        if (!error) setBlacklistChannels(prev => [...prev, trimmed]);
-        else alert('Lỗi khi thêm vào blacklist: ' + error.message);
-    };
-    const removeFromBlacklist = async (channelId) => {
-        const { error } = await supabase.from('koc_blacklist').delete().eq('id_kenh', channelId);
-        if (!error) setBlacklistChannels(prev => prev.filter(c => c !== channelId));
-        else alert('Lỗi khi xóa khỏi blacklist: ' + error.message);
-    };
 
     // Auto xử lý tất cả video trùng: xóa khỏi air_links + lưu vào video_blacklist
     const handleAutoDeduplicate = async () => {
@@ -914,104 +900,6 @@ const AirLinksTab = () => {
                 <h3 style={{ borderBottom: '1px solid #f3f4f6', paddingBottom: '15px', marginBottom: '25px', color: '#ff6a2c', fontSize: '1.25rem', fontWeight: '700', textTransform: 'uppercase' }}>
                     ✏️ THÊM LINK AIR MỚI
                 </h3>
-                {/* ── BLACKLIST KOC ── */}
-                <div style={{ background: '#fff', border: '1px solid #fca5a5', borderRadius: 12, marginBottom: 16, overflow: 'hidden' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: '#fef2f2', cursor: 'pointer' }}
-                        onClick={() => setBlacklistModal(m => ({ ...m, isOpen: !m.isOpen }))}>
-                        <span style={{ fontWeight: 800, color: '#dc2626', fontSize: '0.88rem' }}>🚫 Black List KOC ({blacklistChannels.length} kênh)</span>
-                        <span style={{ fontSize: '0.75rem', color: '#ef4444' }}>{blacklistModal.isOpen ? '▲ Thu gọn' : '▼ Mở rộng'}</span>
-                    </div>
-                    {blacklistModal.isOpen && (() => {
-                        const blSearch = blacklistModal.search.trim().toLowerCase();
-                        const blFiltered = blSearch ? blacklistChannels.filter(c => c.toLowerCase().includes(blSearch)) : blacklistChannels;
-                        const blTotalPages = Math.max(1, Math.ceil(blFiltered.length / BL_PAGE_SIZE));
-                        const blPage = Math.min(blacklistModal.page, blTotalPages);
-                        const blPageItems = blFiltered.slice((blPage - 1) * BL_PAGE_SIZE, blPage * BL_PAGE_SIZE);
-                        return (
-                        <div style={{ padding: '16px' }}>
-                            {/* Thanh tìm kiếm */}
-                            <div style={{ marginBottom: 10 }}>
-                                <input type="text" placeholder="🔍 Tìm kiếm ID Kênh..." value={blacklistModal.search}
-                                    onChange={e => setBlacklistModal(m => ({ ...m, search: e.target.value, page: 1 }))}
-                                    style={{ width: '100%', padding: '7px 12px', borderRadius: 8, border: '1px solid #fca5a5', fontSize: '0.85rem', boxSizing: 'border-box' }} />
-                            </div>
-                            {/* Danh sách */}
-                            {blFiltered.length === 0 ? (
-                                <p style={{ color: '#9ca3af', fontSize: '0.82rem', textAlign: 'center', padding: '8px 0 12px' }}>
-                                    {blSearch ? 'Không tìm thấy kênh nào' : 'Chưa có kênh nào trong blacklist'}
-                                </p>
-                            ) : (
-                                <>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', marginBottom: 8 }}>
-                                    <thead>
-                                        <tr style={{ background: '#fef2f2' }}>
-                                            <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, color: '#dc2626' }}>
-                                                ID Kênh {blSearch && <span style={{ fontWeight: 400, color: '#9ca3af' }}>({blFiltered.length} kết quả)</span>}
-                                            </th>
-                                            <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, color: '#dc2626', width: 80 }}>Xoá</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {blPageItems.map((ch, i) => (
-                                            <tr key={i} style={{ borderBottom: '1px solid #fee2e2' }}>
-                                                <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontWeight: 600 }}>{ch}</td>
-                                                <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                                                    {blacklistModal.unlocked ? (
-                                                        <button type="button" onClick={() => removeFromBlacklist(ch)}
-                                                            style={{ padding: '3px 10px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 6, color: '#dc2626', fontWeight: 700, cursor: 'pointer', fontSize: '0.78rem' }}>
-                                                            Xoá
-                                                        </button>
-                                                    ) : <span style={{ color: '#d1d5db', fontSize: '0.78rem' }}>🔒</span>}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                                {/* Pagination */}
-                                {blTotalPages > 1 && (
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 10 }}>
-                                        <button type="button" onClick={() => setBlacklistModal(m => ({ ...m, page: Math.max(1, blPage - 1) }))} disabled={blPage === 1}
-                                            style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #fca5a5', background: blPage === 1 ? '#f9fafb' : '#fff', color: blPage === 1 ? '#d1d5db' : '#dc2626', cursor: blPage === 1 ? 'default' : 'pointer', fontWeight: 700, fontSize: '0.8rem' }}>‹</button>
-                                        <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>Trang {blPage}/{blTotalPages} ({blFiltered.length} kênh)</span>
-                                        <button type="button" onClick={() => setBlacklistModal(m => ({ ...m, page: Math.min(blTotalPages, blPage + 1) }))} disabled={blPage === blTotalPages}
-                                            style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #fca5a5', background: blPage === blTotalPages ? '#f9fafb' : '#fff', color: blPage === blTotalPages ? '#d1d5db' : '#dc2626', cursor: blPage === blTotalPages ? 'default' : 'pointer', fontWeight: 700, fontSize: '0.8rem' }}>›</button>
-                                    </div>
-                                )}
-                                </>
-                            )}
-                            {/* Phần chỉnh sửa cần mật khẩu */}
-                            {!blacklistModal.unlocked ? (
-                                <div style={{ display: 'flex', gap: 8, alignItems: 'center', borderTop: '1px solid #fee2e2', paddingTop: 12 }}>
-                                    <input type="password" placeholder="Nhập mật khẩu để thêm/xoá kênh..." value={blacklistModal.pwInput}
-                                        onChange={e => setBlacklistModal(m => ({ ...m, pwInput: e.target.value }))}
-                                        onKeyDown={e => { if (e.key === 'Enter') { if (blacklistModal.pwInput === 'Blacklist8255') setBlacklistModal(m => ({ ...m, unlocked: true, pwInput: '' })); else alert('Sai mật khẩu!'); }}}
-                                        style={{ flex: 1, padding: '7px 12px', borderRadius: 8, border: '1px solid #fca5a5', fontSize: '0.85rem' }} />
-                                    <button type="button" onClick={() => { if (blacklistModal.pwInput === 'Blacklist8255') setBlacklistModal(m => ({ ...m, unlocked: true, pwInput: '' })); else alert('Sai mật khẩu!'); }}
-                                        style={{ padding: '7px 16px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem' }}>
-                                        🔓 Mở khoá
-                                    </button>
-                                </div>
-                            ) : (
-                                <div style={{ borderTop: '1px solid #fee2e2', paddingTop: 12 }}>
-                                    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                                        <input type="text" placeholder="Nhập ID Kênh cần chặn (vd: @tenkenh hoặc 123456789)..." value={blacklistModal.newChannel}
-                                            onChange={e => setBlacklistModal(m => ({ ...m, newChannel: e.target.value }))}
-                                            onKeyDown={e => { if (e.key === 'Enter') { addToBlacklist(blacklistModal.newChannel); setBlacklistModal(m => ({ ...m, newChannel: '' })); }}}
-                                            style={{ flex: 1, padding: '7px 12px', borderRadius: 8, border: '1px solid #fca5a5', fontSize: '0.85rem' }} />
-                                        <button type="button" onClick={() => { addToBlacklist(blacklistModal.newChannel); setBlacklistModal(m => ({ ...m, newChannel: '' })); }}
-                                            style={{ padding: '7px 14px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>
-                                            + Thêm
-                                        </button>
-                                    </div>
-                                    <button type="button" onClick={() => setBlacklistModal(m => ({ ...m, unlocked: false }))}
-                                        style={{ padding: '5px 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, cursor: 'pointer', fontSize: '0.78rem', color: '#64748b' }}>
-                                        🔒 Khoá lại
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    )})()}
-                </div>
 
                 <form onSubmit={handleAddLink}>
                     {/* Consistent 2-column Grid */}
