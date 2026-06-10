@@ -459,7 +459,7 @@ export default function KocPerformanceTab() {
                   <th style={th}>Đơn</th>
                   <th style={th} title="Tổng clip KOC đã đăng cho shop này (toàn thời gian)">🎬 Video tổng</th>
                   <th style={th} title="Clip đăng trong khoảng ngày đang chọn">🎬 Video kỳ</th>
-                  <th style={th}>👁 View</th>
+                  <th style={th} title="View PHÁT SINH trong khoảng đang chọn (tăng thêm theo tháng, không phải tích luỹ)">👁 View</th>
                   <th style={th}>Hoa hồng</th>
                   <th style={th}>💵 Cast</th>
                   <th style={th} title="ROAS = GMV / (Hoa hồng + Cast) — doanh thu trên mỗi đồng chi phí">📊 ROAS</th>
