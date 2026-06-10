@@ -67,7 +67,7 @@ const KocPaymentTab = () => {
   const setPit = (v) => { const p = num(v); setForm(f => ({ ...f, pit: p, total: num(f.cast_net) + p })); };
 
   const startAdd = () => { setForm({ ...EMPTY, pay_date: todayYmd(), company: fCompany || 'STELLA' }); setEditingId(null); setShowForm(true); };
-  const startEdit = (r) => { setForm({ ...EMPTY, ...r, pay_date: (r.pay_date || '').slice(0, 10) }); setEditingId(r.id); setShowForm(true); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  const startEdit = (r) => { setForm({ ...EMPTY, ...r, pay_date: (r.pay_date || '').slice(0, 10) }); setEditingId(r.id); setShowForm(true); };
   const cancel = () => { setShowForm(false); setEditingId(null); setForm(EMPTY); };
 
   const save = async () => {
@@ -144,10 +144,11 @@ const KocPaymentTab = () => {
       <h2 style={{ margin: '0 0 2px', fontSize: '1.6rem', fontWeight: 900, color: '#0f172a' }}>💸 Thanh toán KOC</h2>
       <p style={{ margin: '0 0 16px', color: '#94a3b8', fontSize: '0.9rem' }}>Điền trực tiếp ở đây thay cho file Excel. PIT gợi ý = Cast/9 · Tổng = Cast + PIT (sửa tay được). Kế toán lọc theo tháng → tick duyệt → xuất Excel.</p>
 
-      {/* Form thêm/sửa */}
+      {/* Form thêm/sửa — modal popup (luôn hiện giữa màn hình, không lệ thuộc cuộn trang) */}
       {showForm && (
-        <div style={{ background: '#fff', border: `1px solid ${ACCENT}33`, borderLeft: `4px solid ${ACCENT}`, borderRadius: 14, padding: 18, marginBottom: 18, boxShadow: '0 1px 6px rgba(15,23,42,0.06)' }}>
-          <div style={{ fontWeight: 900, color: ACCENT, marginBottom: 14, fontSize: '1rem' }}>{editingId ? '✏️ Sửa thanh toán' : '➕ Thêm thanh toán'}</div>
+        <div onClick={cancel} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '4vh 16px' }}>
+        <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderTop: `4px solid ${ACCENT}`, borderRadius: 14, padding: 20, boxShadow: '0 24px 60px rgba(15,23,42,0.35)', width: 'min(940px, 96vw)', margin: 'auto' }}>
+          <div style={{ fontWeight: 900, color: ACCENT, marginBottom: 14, fontSize: '1.05rem' }}>{editingId ? `✏️ Sửa thanh toán${form.full_name || form.beneficiary ? ' — ' + (form.full_name || form.beneficiary) : ''}` : '➕ Thêm thanh toán'}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
             <Field label="Ngày"><input type="date" value={form.pay_date} onChange={e => setForm(f => ({ ...f, pay_date: e.target.value }))} style={inputStyle} /></Field>
             <Field label="Nhân sự booking"><input value={form.staff} onChange={e => setForm(f => ({ ...f, staff: e.target.value }))} placeholder="Tên người book" style={inputStyle} /></Field>
@@ -178,6 +179,7 @@ const KocPaymentTab = () => {
             <button onClick={save} disabled={saving} style={{ padding: '9px 22px', background: saving ? '#cbd5e1' : ACCENT, color: '#fff', border: 'none', borderRadius: 9, fontWeight: 800, cursor: saving ? 'default' : 'pointer' }}>{saving ? '⏳ Đang lưu…' : (editingId ? '💾 Cập nhật' : '➕ Lưu thanh toán')}</button>
             <button onClick={cancel} style={{ padding: '9px 18px', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 9, fontWeight: 700, cursor: 'pointer' }}>Huỷ</button>
           </div>
+        </div>
         </div>
       )}
 
