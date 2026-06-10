@@ -63,6 +63,10 @@ const SALES_SORTS = [
   { key: 'commission', label: 'Hoa hồng' },
 ];
 
+// Cache kết quả koc_orders theo (shop|seller|từ|đến) trong phiên → chọn lại khoảng đã xem là ra liền.
+// "Tải lại" ép lấy mới (bỏ qua cache). Module-level nên còn nguyên khi chuyển tab rồi quay lại.
+const SALES_CACHE = new Map();
+
 // ── Drill-down: sản phẩm 1 KOC kéo đơn (theo đúng khoảng ngày đang chọn) ─────────
 const PROD_GRID = '22px 36px 1fr 78px 78px 104px';
 const ProductBreakdown = ({ state }) => {
@@ -238,6 +242,7 @@ export default function KocPerformanceTab() {
   const [start, setStart]   = useState(FLOOR);
   const [end, setEnd]       = useState(toYmd(new Date()));
   const [data, setData]     = useState(null);
+  const [fromCache, setFromCache] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError]   = useState(null);
   const [sortKey, setSortKey] = useState('gmv');
@@ -266,13 +271,18 @@ export default function KocPerformanceTab() {
   // Tên shop đang chọn (để truyền kèm cho các action dùng seller). shop_id mới là khoá chính (duy nhất).
   const selSeller = shops.find(s => String(s.shop_id) === String(shopId))?.seller_name || '';
 
-  const fetchSales = useCallback(async () => {
-    setLoading(true); setError(null); setExpanded(null); setProdCache({}); setVidCache({}); setDrillTab('products');
+  const fetchSales = useCallback(async (force = false) => {
+    const key = `${shopId}|${selSeller}|${start}|${end}`;
+    setError(null); setExpanded(null); setProdCache({}); setVidCache({}); setDrillTab('products');
+    // Cache hit → ra liền, khỏi gọi server
+    if (!force && SALES_CACHE.has(key)) { setData(SALES_CACHE.get(key)); setFromCache(true); setLoading(false); return; }
+    setLoading(true); setFromCache(false);
     try {
       const qs = new URLSearchParams({ action: 'koc_orders', shop_id: shopId, seller: selSeller, start_date: start, end_date: end });
       const r = await fetch(`${API}?${qs}`);
       const j = await r.json();
       if (!j.ok) { setError(j.error || 'Lỗi tải dữ liệu'); setData(null); return; }
+      SALES_CACHE.set(key, j);
       setData(j);
     } catch (e) { setError(e.message); setData(null); } finally { setLoading(false); }
   }, [shopId, selSeller, start, end]);
@@ -358,7 +368,8 @@ export default function KocPerformanceTab() {
           {SALES_SORTS.map(s => <option key={s.key} value={s.key}>Sắp xếp: {s.label}</option>)}
         </select>
         <SearchBox value={search} onChange={setSearch} />
-        <button onClick={fetchSales} disabled={loading} style={{ ...selectStyle, background: ACCENT, color: '#fff', border: 'none', opacity: loading ? 0.6 : 1 }}>{loading ? '⏳' : '🔄'} Tải lại</button>
+        <button onClick={() => fetchSales(true)} disabled={loading} style={{ ...selectStyle, background: ACCENT, color: '#fff', border: 'none', opacity: loading ? 0.6 : 1 }}>{loading ? '⏳' : '🔄'} Tải lại</button>
+        {fromCache && !loading && <span style={{ fontSize: '0.72rem', color: '#0891b2', fontWeight: 600 }} title="Hiển thị tức thì từ bộ nhớ phiên — bấm Tải lại để cập nhật mới nhất">⚡ tức thì (cache)</span>}
       </div>
 
       {sync && (
@@ -389,7 +400,7 @@ export default function KocPerformanceTab() {
       {loading && <div style={{ textAlign: 'center', padding: 60, color: '#94a3b8' }}>⏳ Đang tải doanh số…</div>}
       {!loading && error && (
         <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, padding: 20, color: '#b91c1c', fontSize: '0.86rem' }}>
-          ❌ {error}<button onClick={fetchSales} style={{ marginLeft: 12, padding: '4px 12px', borderRadius: 8, border: '1px solid #fecaca', background: '#fff', color: '#b91c1c', fontWeight: 700, cursor: 'pointer' }}>Thử lại</button>
+          ❌ {error}<button onClick={() => fetchSales(true)} style={{ marginLeft: 12, padding: '4px 12px', borderRadius: 8, border: '1px solid #fecaca', background: '#fff', color: '#b91c1c', fontWeight: 700, cursor: 'pointer' }}>Thử lại</button>
         </div>
       )}
       {!loading && !error && data && rows.length === 0 && (
