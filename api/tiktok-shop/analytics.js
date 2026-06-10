@@ -687,6 +687,18 @@ async function handleKocOrders({ params, supabase, res }) {
   const start = params.start_date || AFF_SYNC_FLOOR_DATE;
   const end = params.end_date || null;
 
+  // ── Cache CHUNG: mọi máy vào là tức thì cho tới khi shop có data mới ──
+  // sync_token đổi khi total_synced / high_water / backfill thay đổi → cache tự stale.
+  const syncToken = meta ? `${meta.total_synced || 0}|${meta.high_water_create_time || ''}|${meta.backfill_done ? 1 : 0}` : 'no-meta';
+  const cacheKey = `${shopId || 'null'}|${start}|${end || 'null'}`;
+  const force = params.force === '1';
+  if (!force) {
+    const { data: cc } = await supabase.from('koc_orders_cache').select('payload, sync_token').eq('cache_key', cacheKey).maybeSingle();
+    if (cc && cc.sync_token === syncToken && cc.payload) {
+      return res.status(200).json({ ...cc.payload, cached: true });
+    }
+  }
+
   const [{ data: stats, error }, { data: totRows }, { data: viewRows }, { data: castRows }] = await Promise.all([
     supabase.rpc('koc_order_stats', { p_shop_id: shopId, p_start: start, p_end: end }),
     supabase.rpc('koc_order_totals', { p_shop_id: shopId, p_start: start, p_end: end }),
@@ -722,12 +734,15 @@ async function handleKocOrders({ params, supabase, res }) {
   const totals = { gmv: Number(t.gmv) || 0, orders: Number(t.orders) || 0, commission: Number(t.commission) || 0, qty: Number(t.qty) || 0, views: totalViews, cast: totalCast };
   const totalCreators = Number(t.creators) || creators.length;
 
-  return res.status(200).json({
+  const payload = {
     ok: true, shop: meta?.seller_name || params.seller, shop_id: shopId,
     start_date: start, end_date: end, floor: AFF_SYNC_FLOOR_DATE,
     sync: meta ? { last_run_at: meta.last_run_at, total_synced: meta.total_synced, backfill_done: meta.backfill_done, oldest_date: vnDate(meta.oldest_create_time), newest_date: vnDate(meta.high_water_create_time), status: meta.last_status } : null,
     count: totalCreators, shown: creators.length, totals, creators, shops: shopList,
-  });
+  };
+  // Lưu cache chung (best-effort) → máy khác vào là tức thì tới lần sync kế
+  try { await supabase.from('koc_orders_cache').upsert({ cache_key: cacheKey, payload, sync_token: syncToken, built_at: new Date().toISOString() }, { onConflict: 'cache_key' }); } catch { /* cache lỗi không chặn response */ }
+  return res.status(200).json(payload);
 }
 
 // Drill-down: which products one KOC drove (+ videos per product). Product names

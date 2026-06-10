@@ -280,6 +280,7 @@ export default function KocPerformanceTab() {
     setLoading(true); setFromCache(false);
     try {
       const qs = new URLSearchParams({ action: 'koc_orders', shop_id: shopId, seller: selSeller, start_date: start, end_date: end });
+      if (force) qs.set('force', '1'); // Tải lại → server bỏ qua cache chung, tính mới + cập nhật cache
       const r = await fetch(`${API}?${qs}`);
       const j = await r.json();
       if (!j.ok) { setError(j.error || 'Lỗi tải dữ liệu'); setData(null); return; }
