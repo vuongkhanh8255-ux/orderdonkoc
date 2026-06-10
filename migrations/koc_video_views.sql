@@ -3,6 +3,9 @@
 -- (khớp đúng tập content_id với cột "Video" = count distinct content_id VIDEO trong đơn).
 -- Lấy distinct content_id từ tiktok_affiliate_orders rồi join tiktok_shop_videos.views.
 -- Match KOC bằng username đã bỏ '@' + lowercase (merge ở backend handleKocOrders).
+-- LƯU Ý: bỏ bản overload cũ (text,text,text) — nếu còn, Supabase gọi bằng string sẽ
+-- chọn nhầm bản đó (post_date) và trả 0. Chỉ giữ bản (text, date, date) dưới đây.
+drop function if exists koc_video_views(text, text, text);
 create or replace function koc_video_views(p_shop_id text, p_start date, p_end date)
 returns table(uname text, total_views bigint)
 language sql stable as $$
