@@ -111,7 +111,7 @@ const ProductBreakdown = ({ state }) => {
 };
 
 // ── Drill-down: từng video của KOC + sản phẩm + ngày đăng + tổng view + view tháng ─
-const VID_GRID = '20px 60px 1fr 82px 64px 70px 38px 78px';
+const VID_GRID = '20px 56px 1fr 76px 56px 60px 34px 70px 76px';
 const ymShort = (ym) => ym ? 'T' + Number(ym.split('-')[1]) : 'Tháng';
 const VideoBreakdown = ({ state, username }) => {
   const [sort, setSort] = useState({ key: 'date', dir: 'desc' });
@@ -127,6 +127,7 @@ const VideoBreakdown = ({ state, username }) => {
     : sort.key === 'views' ? Number(v.views) || 0
     : sort.key === 'month_views' ? Number(v.month_views) || 0
     : sort.key === 'orders' ? Number(v.orders) || 0
+    : sort.key === 'cast' ? Number(v.cast) || 0
     : Number(v.gmv) || 0;
   const sorted = [...vs].sort((a, b) => sort.dir === 'asc' ? sortVal(a) - sortVal(b) : sortVal(b) - sortVal(a));
   const clickSort = (key) => setSort(s => s.key === key ? { key, dir: s.dir === 'desc' ? 'asc' : 'desc' } : { key, dir: 'desc' });
@@ -141,7 +142,7 @@ const VideoBreakdown = ({ state, username }) => {
     <div style={{ padding: '4px 16px 14px' }}>
       <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>🎬 Video KOC đã lên ({vs.length}) · bấm tiêu đề cột để sắp xếp · 👁 Tổng = view toàn bộ · 👁 {mlabel} = view trong tháng được chọn</div>
       <div style={{ display: 'grid', gridTemplateColumns: VID_GRID, gap: 8, alignItems: 'center', padding: '0 10px 4px', fontSize: '0.64rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>
-        <span></span><span>Video</span><span>Sản phẩm</span>{sortTh('date', 'Ngày đăng')}{sortTh('views', '👁 Tổng', 'right')}{sortTh('month_views', `👁 ${mlabel}`, 'right')}{sortTh('orders', 'Đơn', 'right')}{sortTh('gmv', 'GMV', 'right')}
+        <span></span><span>Video</span><span>Sản phẩm</span>{sortTh('date', 'Ngày đăng')}{sortTh('views', '👁 Tổng', 'right')}{sortTh('month_views', `👁 ${mlabel}`, 'right')}{sortTh('orders', 'Đơn', 'right')}{sortTh('gmv', 'GMV', 'right')}{sortTh('cast', '💵 Cast', 'right')}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {sorted.map((v, i) => (
@@ -161,6 +162,7 @@ const VideoBreakdown = ({ state, username }) => {
             <span style={{ ...cell, color: '#0891b2', fontWeight: 800, textAlign: 'right' }}>{fmtViews(v.month_views)}</span>
             <span style={{ ...cell, color: '#64748b', textAlign: 'right' }}>{fmtNum(v.orders)}</span>
             <span style={{ ...cell, color: ACCENT, fontWeight: 800, textAlign: 'right' }}>{fmtVnd(v.gmv)} đ</span>
+            <span style={{ ...cell, color: v.cast > 0 ? '#16a34a' : '#cbd5e1', fontWeight: 700, textAlign: 'right' }}>{v.cast > 0 ? `${fmtVnd(v.cast)} đ` : '—'}</span>
           </div>
         ))}
       </div>

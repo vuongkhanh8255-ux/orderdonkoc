@@ -689,7 +689,7 @@ async function handleKocOrders({ params, supabase, res }) {
 
   // ── Cache CHUNG: mọi máy vào là tức thì cho tới khi shop có data mới ──
   // sync_token đổi khi total_synced / high_water / backfill thay đổi → cache tự stale.
-  const syncToken = 'v2|' + (meta ? `${meta.total_synced || 0}|${meta.high_water_create_time || ''}|${meta.backfill_done ? 1 : 0}` : 'no-meta');
+  const syncToken = 'v3|' + (meta ? `${meta.total_synced || 0}|${meta.high_water_create_time || ''}|${meta.backfill_done ? 1 : 0}` : 'no-meta');
   const cacheKey = `${shopId || 'null'}|${start}|${end || 'null'}`;
   const force = params.force === '1';
   if (!force) {
@@ -821,6 +821,14 @@ async function handleKocVideos({ params, appKey, appSecret, supabase, res }) {
     orders: Number(r.orders) || 0, gmv: Number(r.gmv) || 0, qty: Number(r.qty) || 0,
     top_product_id: String(r.top_product_id || ''), product_count: Number(r.product_count) || 0,
   }));
+
+  // Cast (giá đã thanh toán) mỗi video — map từ koc_payments (+ air_links fallback) theo video id
+  try {
+    const { data: castRows } = await supabase.rpc('koc_video_cast', { p_shop_id: shopId, p_creator: creator });
+    const castById = {};
+    for (const r of (castRows || [])) castById[String(r.content_id)] = Number(r.cast_amount) || 0;
+    videos = videos.map(v => ({ ...v, cast: castById[v.content_id] || 0 }));
+  } catch { /* cast optional */ }
 
   // Resolve product name/image for the dominant product of each video (distinct, top 30)
   try {
