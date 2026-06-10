@@ -687,10 +687,11 @@ async function handleKocOrders({ params, supabase, res }) {
   const start = params.start_date || AFF_SYNC_FLOOR_DATE;
   const end = params.end_date || null;
 
-  const [{ data: stats, error }, { data: totRows }, { data: viewRows }] = await Promise.all([
+  const [{ data: stats, error }, { data: totRows }, { data: viewRows }, { data: castRows }] = await Promise.all([
     supabase.rpc('koc_order_stats', { p_shop_id: shopId, p_start: start, p_end: end }),
     supabase.rpc('koc_order_totals', { p_shop_id: shopId, p_start: start, p_end: end }),
     supabase.rpc('koc_video_views', { p_shop_id: shopId, p_start: start, p_end: end }),
+    supabase.rpc('koc_cast_by_creator', { p_shop_id: shopId, p_start: start, p_end: end }),
   ]);
   if (error) return res.status(200).json({ ok: false, error: error.message });
 
@@ -698,6 +699,9 @@ async function handleKocOrders({ params, supabase, res }) {
   const normU = (u) => (u || '').toLowerCase().replace(/^@/, '');
   const viewByUser = {};
   for (const r of (viewRows || [])) viewByUser[r.uname] = Number(r.total_views) || 0;
+  // Cast (chi phí booking) mỗi KOC: link video air_links.cast ↔ video affiliate (chỉ video có fill cast)
+  const castByUser = {};
+  for (const r of (castRows || [])) castByUser[normU(r.creator_username)] = Number(r.cast_total) || 0;
 
   const creators = (stats || []).map(s => ({
     username: s.creator_username,
@@ -707,13 +711,15 @@ async function handleKocOrders({ params, supabase, res }) {
     commission: Number(s.commission) || 0,
     videos: Number(s.videos) || 0,
     views: viewByUser[normU(s.creator_username)] || 0,
+    cast: castByUser[normU(s.creator_username)] || 0,
     lives: Number(s.lives) || 0,
     products: Number(s.products) || 0,
     last_order: Number(s.last_order) || 0,
   }));
   const t = (totRows || [])[0] || {};
   const totalViews = (viewRows || []).reduce((a, r) => a + (Number(r.total_views) || 0), 0);
-  const totals = { gmv: Number(t.gmv) || 0, orders: Number(t.orders) || 0, commission: Number(t.commission) || 0, qty: Number(t.qty) || 0, views: totalViews };
+  const totalCast = (castRows || []).reduce((a, r) => a + (Number(r.cast_total) || 0), 0);
+  const totals = { gmv: Number(t.gmv) || 0, orders: Number(t.orders) || 0, commission: Number(t.commission) || 0, qty: Number(t.qty) || 0, views: totalViews, cast: totalCast };
   const totalCreators = Number(t.creators) || creators.length;
 
   return res.status(200).json({

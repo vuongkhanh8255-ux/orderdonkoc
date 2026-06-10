@@ -61,6 +61,7 @@ const SALES_SORTS = [
   { key: 'orders',     label: 'Số đơn' },
   { key: 'videos',     label: 'Số video' },
   { key: 'commission', label: 'Hoa hồng' },
+  { key: 'cast',       label: 'Cast (chi phí)' },
 ];
 
 // Cache kết quả koc_orders theo (shop|seller|từ|đến) trong phiên → chọn lại khoảng đã xem là ra liền.
@@ -331,7 +332,7 @@ export default function KocPerformanceTab() {
     const cs = (data?.creators || []).filter(c => !q || (c.username || '').toLowerCase().includes(q));
     return [...cs].sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0));
   }, [data, sortKey, search]);
-  const totals = data?.totals || { gmv: 0, orders: 0, commission: 0 };
+  const totals = data?.totals || { gmv: 0, orders: 0, commission: 0, views: 0, cast: 0 };
   const sync = data?.sync;
 
   const today = toYmd(new Date());
@@ -388,6 +389,7 @@ export default function KocPerformanceTab() {
             { label: 'Tổng đơn', value: fmtNum(totals.orders), icon: '🛒' },
             { label: 'Tổng view', value: fmtViews(totals.views), icon: '👁' },
             { label: 'Tổng hoa hồng', value: `${fmtVnd(totals.commission)} đ`, icon: '💸' },
+            { label: 'Tổng cast', value: `${fmtVnd(totals.cast || 0)} đ`, icon: '💵' },
           ].map(s => (
             <div key={s.label} style={{ flex: '1 1 180px', background: '#fff', borderRadius: 14, padding: '14px 18px', border: '1px solid #f1f5f9', borderLeft: `4px solid ${ACCENT}`, boxShadow: '0 1px 4px rgba(15,23,42,0.05)' }}>
               <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>{s.icon} {s.label}</div>
@@ -422,6 +424,7 @@ export default function KocPerformanceTab() {
                   <th style={th}>🎬 Video</th>
                   <th style={th}>👁 View</th>
                   <th style={th}>Hoa hồng</th>
+                  <th style={th}>💵 Cast</th>
                   <th style={th}>Gần nhất</th>
                 </tr>
               </thead>
@@ -444,10 +447,11 @@ export default function KocPerformanceTab() {
                         <td style={{ ...td, color: '#7c3aed', fontWeight: 700 }}>{fmtNum(c.videos)}</td>
                         <td style={{ ...td, color: '#0891b2', fontWeight: 700 }}>{fmtViews(c.views)}</td>
                         <td style={td}>{fmtVnd(c.commission)} đ</td>
+                        <td style={{ ...td, color: c.cast > 0 ? '#16a34a' : '#cbd5e1', fontWeight: c.cast > 0 ? 700 : 400 }}>{c.cast > 0 ? `${fmtVnd(c.cast)} đ` : '—'}</td>
                         <td style={{ ...td, color: '#94a3b8', fontSize: '0.78rem' }}>{fromUnix(c.last_order)}</td>
                       </tr>
                       {open && (
-                        <tr><td colSpan={8} style={{ padding: 0, borderTop: `2px solid ${ACCENT}`, background: '#fafafa' }}>
+                        <tr><td colSpan={9} style={{ padding: 0, borderTop: `2px solid ${ACCENT}`, background: '#fafafa' }}>
                           <div style={{ display: 'flex', gap: 6, padding: '10px 16px 4px' }}>
                             <button onClick={() => switchDrill(c.username, 'products')} style={drillTabBtn(drillTab === 'products')}>📦 Sản phẩm</button>
                             <button onClick={() => switchDrill(c.username, 'videos')} style={drillTabBtn(drillTab === 'videos')}>🎬 Video</button>
