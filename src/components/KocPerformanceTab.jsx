@@ -754,7 +754,7 @@ export default function KocPerformanceTab() {
                 {rows.slice(0, assignShow).map((c, i) => {
                   const uname = (c.username || '').toLowerCase().replace(/^@/, '');
                   return (
-                    <div key={c.username || i} style={{ border: '1px solid #eef1f5', borderRadius: 12, padding: 12, background: '#fcfcfd' }}>
+                    <div key={c.username || i} style={{ border: '1.5px solid #fed7aa', borderRadius: 12, padding: 12, background: '#fffdfb', boxShadow: '0 1px 3px rgba(255,106,44,0.06)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
                         <span style={{ fontSize: '0.72rem', fontWeight: 800, color: i < 3 ? ACCENT : '#cbd5e1', width: 18, flexShrink: 0 }}>{i + 1}</span>
                         <KocAvatar username={c.username} url={avatarMap[c.username]?.avatar} size={34} />
