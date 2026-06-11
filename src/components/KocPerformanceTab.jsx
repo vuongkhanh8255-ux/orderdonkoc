@@ -24,7 +24,7 @@ const fmtVnd = (v) => {
 };
 const fmtViews = (v) => { const n = Number(v); if (!Number.isFinite(n) || v === null || v === undefined) return '—'; if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`; if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`; return String(n); };
 // ROAS = GMV / (Chi phí AFF + Chi phí CAST + CHI PHÍ MẪU). null khi tổng chi phí = 0.
-// Chi phí mẫu = Σ(cost×1.08×SL) + 5k vận hành + ship (Thường 20k / Hỏa tốc 50k) cho TẤT CẢ đơn mẫu KOC (backend RPC koc_sample_cost tính).
+// Chi phí mẫu = Σ(cost×1.08×SL) + 5k vận hành + ship (Thường 20k / Hỏa tốc 50k) cho đơn mẫu KOC TRONG KỲ đang chọn (backend RPC koc_sample_cost tính).
 const roasOf = (gmv, commission, cast, sample) => { const cost = (Number(commission) || 0) + (Number(cast) || 0) + (Number(sample) || 0); return cost > 0 ? (Number(gmv) || 0) / cost : null; };
 const fmtRoas = (v) => { if (v == null || !Number.isFinite(v)) return '—'; return (v >= 10 ? v.toFixed(1) : v.toFixed(2)) + 'x'; };
 const roasColor = (v) => v == null ? '#cbd5e1' : v >= 3 ? '#16a34a' : v >= 1 ? '#d97706' : '#dc2626';
@@ -686,7 +686,7 @@ export default function KocPerformanceTab() {
                   <th style={th} title="View PHÁT SINH trong khoảng đang chọn (tăng thêm theo tháng, không phải tích luỹ)">👁 View</th>
                   <th style={th}>Hoa hồng</th>
                   <th style={th}>💵 Cast</th>
-                  <th style={th} title="Chi phí hàng mẫu gửi KOC: cost×1.08 + 5k vận hành + ship (Thường 20k/Hỏa tốc 50k), tất cả đơn mẫu">🎁 Chi phí mẫu</th>
+                  <th style={th} title="Chi phí hàng mẫu gửi KOC trong kỳ đang chọn: cost×1.08 + 5k vận hành + ship (Thường 20k/Hỏa tốc 50k)">🎁 Chi phí mẫu</th>
                   <th style={th} title="ROAS = GMV / (Hoa hồng + Cast + Chi phí mẫu) — doanh thu trên mỗi đồng chi phí">📊 ROAS</th>
                   <th style={th}>Gần nhất</th>
                 </tr>

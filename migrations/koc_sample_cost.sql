@@ -1,9 +1,11 @@
--- Chi phí mẫu mỗi KOC (vào ROAS ở Hiệu suất KOC).
--- = Σ(cost×1.08×SL) + 5.000 vận hành + ship (Hỏa tốc 50k / Thường 20k) — tính PER ĐƠN, gom TẤT CẢ đơn mẫu của KOC.
+-- Chi phí mẫu mỗi KOC (vào ROAS ở Hiệu suất KOC) — THEO KỲ đang chọn.
+-- = Σ(cost×1.08×SL) + 5.000 vận hành + ship (Hỏa tốc 50k / Thường 20k) — tính PER ĐƠN.
+-- Lọc đơn mẫu theo ngay_gui (giờ VN) trong [p_start, p_end]; null = tất cả (mode "Tất cả").
 -- Cost lấy từ costing_data, cột "...file" THÁNG MỚI NHẤT (tự dò). Map sanphams.barcode ↔ costing "Mã".
 -- KOC khớp theo donguis.koc_id_kenh (lowercase) ↔ creator_username affiliate.
 -- LƯU Ý: đơn mẫu không có chitiettonguis (chỉ có text san_pham_chi_tiet) sẽ KHÔNG tính được (thiếu barcode).
-create or replace function koc_sample_cost()
+drop function if exists koc_sample_cost();
+create or replace function koc_sample_cost(p_start date default null, p_end date default null)
 returns table(uname text, sample_cost numeric)
 language sql stable as $$
   with latest_col as (
@@ -27,6 +29,8 @@ language sql stable as $$
     join sanphams sp on sp.id = ct.sanpham_id
     left join cost_map cm on cm.barcode = sp.barcode
     where coalesce(d.koc_id_kenh, '') <> ''
+      and (p_start is null or (d.ngay_gui at time zone 'Asia/Ho_Chi_Minh')::date >= p_start)
+      and (p_end   is null or (d.ngay_gui at time zone 'Asia/Ho_Chi_Minh')::date <= p_end)
     group by d.id, lower(d.koc_id_kenh), d.loai_ship
   )
   select uname,

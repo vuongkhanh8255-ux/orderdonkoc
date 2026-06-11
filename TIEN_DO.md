@@ -20,7 +20,7 @@
 
 ### 🌟 Hiệu suất KOC (`src/components/KocPerformanceTab.jsx`)
 - Cột **View** = view PHÁT SINH theo kỳ (view-tháng), scale theo khoảng ngày. Cột **Cast** (chi phí booking), **🎁 Chi phí mẫu**, **ROAS** = GMV/(hoa hồng+cast+chi phí mẫu), tách **Video tổng / Video kỳ**.
-- **🎁 Chi phí mẫu** (RPC `koc_sample_cost`): mỗi đơn mẫu = `Σ(cost×1.08×SL) + 5k vận hành + ship (Thường 20k/Hỏa tốc 50k)`, gom TẤT CẢ đơn mẫu của KOC. Cost lấy `costing_data` cột "...file" tháng mới nhất (tự dò), map `sanphams.barcode` ↔ costing "Mã". Đơn chỉ có text (không chitiettonguis) → chưa tính được.
+- **🎁 Chi phí mẫu** (RPC `koc_sample_cost(p_start,p_end)`): mỗi đơn mẫu = `Σ(cost×1.08×SL) + 5k vận hành + ship (Thường 20k/Hỏa tốc 50k)`, gom đơn mẫu **TRONG KỲ** đang chọn (theo `ngay_gui` giờ VN; "Tất cả" = hết). Cost lấy `costing_data` cột "...file" tháng mới nhất (tự dò), map `sanphams.barcode` ↔ costing "Mã". Đơn chỉ có text (không chitiettonguis) → chưa tính được.
 - **Phân trang** 20 dòng/trang (đổi 10/20/50/100). **Date picker** gọn + lịch popup.
 - **Tăng tốc:** cache phiên (trình duyệt) + cache chung server (`koc_orders_cache`) + index → "Tất cả" từ ~2.1s xuống ~0.8s. Auto-retry khi lỗi tạm thời lúc deploy.
 - **🏷️ ĐỊNH DANH KOC** (gán nhân sự quản lý theo brand) — dùng chung bảng `koc_brand_assignments` với Dashboard booking:

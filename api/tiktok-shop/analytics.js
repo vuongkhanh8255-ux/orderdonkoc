@@ -706,7 +706,7 @@ async function handleKocOrders({ params, supabase, res }) {
     supabase.rpc('koc_order_totals', { p_shop_id: shopId, p_start: start, p_end: end }),
     supabase.rpc('koc_video_views', { p_shop_id: shopId, p_start: start, p_end: end }),
     supabase.rpc('koc_cast_by_creator', { p_shop_id: shopId, p_start: castAll ? null : start, p_end: castAll ? null : end }),
-    supabase.rpc('koc_sample_cost'), // chi phí mẫu (tất cả đơn mẫu của KOC) — vào ROAS
+    supabase.rpc('koc_sample_cost', { p_start: castAll ? null : start, p_end: castAll ? null : end }), // chi phí mẫu THEO KỲ (ngay_gui); "Tất cả" → null = hết — vào ROAS
   ]);
   if (error) return res.status(200).json({ ok: false, error: error.message });
 
@@ -717,7 +717,7 @@ async function handleKocOrders({ params, supabase, res }) {
   // Cast (chi phí booking) mỗi KOC: link video air_links.cast ↔ video affiliate (chỉ video có fill cast)
   const castByUser = {};
   for (const r of (castRows || [])) castByUser[normU(r.creator_username)] = Number(r.cast_total) || 0;
-  // Chi phí mẫu mỗi KOC (cost×1.08 + vận hành + ship, tất cả đơn mẫu). uname đã lowercase + bỏ '@'.
+  // Chi phí mẫu mỗi KOC (cost×1.08 + vận hành + ship, đơn mẫu TRONG KỲ). uname đã lowercase + bỏ '@'.
   const sampleByUser = {};
   for (const r of (sampleRows || [])) sampleByUser[r.uname] = Number(r.sample_cost) || 0;
 
