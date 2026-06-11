@@ -451,8 +451,14 @@ export default function KocPerformanceTab() {
       const isAll = start === FLOOR && end === toYmd(new Date());
       const qs = new URLSearchParams({ action: 'koc_orders', shop_id: shopId, seller: selSeller, start_date: start, end_date: end, cast_all: isAll ? '1' : '0' });
       if (force) qs.set('force', '1'); // Tải lại → server bỏ qua cache chung, tính mới + cập nhật cache
-      const r = await fetch(`${API}?${qs}`);
-      const j = await r.json();
+      // Thử tối đa 2 lần — lỗi tạm thời (vd server đang deploy → "Missing env config") tự retry, staff khỏi thấy lỗi
+      let j = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const r = await fetch(`${API}?${qs}`);
+        j = await r.json().catch(() => ({ ok: false, error: 'Phản hồi không hợp lệ' }));
+        if (j.ok) break;
+        if (attempt === 0) await new Promise(res => setTimeout(res, 1500));
+      }
       if (!j.ok) { setError(j.error || 'Lỗi tải dữ liệu'); setData(null); return; }
       SALES_CACHE.set(key, j);
       setData(j);
