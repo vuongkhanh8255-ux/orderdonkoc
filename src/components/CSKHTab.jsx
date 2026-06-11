@@ -818,7 +818,7 @@ function TikTokReviewsTab() {
       const { data } = await supabase
         .from('tiktok_reviews_connections')
         .select('shop_id, seller_name, shop_cipher, access_token_expires_at, updated_at')
-        .not('access_token', 'is', null)
+        .not('access_token_expires_at', 'is', null)
         .order('seller_name');
       setConnections(data || []);
     } catch { /* ignore */ }

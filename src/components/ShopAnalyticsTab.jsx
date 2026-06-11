@@ -463,13 +463,13 @@ const ShopAnalyticsTab = () => {
     const { data: analytics } = await supabase
       .from('tiktok_analytics_connections')
       .select('shop_id, seller_name, access_token_expires_at, shop_cipher')
-      .not('access_token', 'is', null);
+      .not('access_token_expires_at', 'is', null);
     if (analytics?.length > 0) setConnections(analytics);
     else {
       const { data: orders } = await supabase
         .from('tiktok_shop_connections')
         .select('shop_id, seller_name, access_token_expires_at, shop_cipher')
-        .not('access_token', 'is', null).not('shop_cipher', 'is', null);
+        .not('access_token_expires_at', 'is', null).not('shop_cipher', 'is', null);
       setConnections(orders || []);
     }
     // Shopee connections (deduplicate by shop_id)
