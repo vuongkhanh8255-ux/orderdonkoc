@@ -612,7 +612,20 @@ async function handleProductModels(supabase, shopId, params) {
   );
 
   if (result.error) return { ok: false, error: result.error, message: result.message };
-  return { ok: true, data: result.response };
+
+  // Lấy thêm TÊN SP thật (để đắp khi file Excel để tên trống/vô nghĩa như "a")
+  let item_name = '';
+  try {
+    const info = await shopeeGet(
+      creds.partnerKey, creds.partnerId,
+      '/api/v2/product/get_item_base_info',
+      creds.accessToken, creds.shopId,
+      { item_id_list: String(itemId) },
+    );
+    item_name = info.response?.item_list?.[0]?.item_name || '';
+  } catch { /* tên optional, không chặn models */ }
+
+  return { ok: true, data: { ...result.response, item_name } };
 }
 
 /** 4. Create a Flash Sale */

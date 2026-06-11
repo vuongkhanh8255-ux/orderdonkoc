@@ -243,12 +243,12 @@ export default function FlashSaleTab() {
     try {
       const res = await apiCall('product_models', { item_id: itemId });
       if (res.ok) {
-        return res.data?.model || res.data || [];
+        return { models: res.data?.model || (Array.isArray(res.data) ? res.data : []), itemName: res.data?.item_name || '' };
       }
     } catch (e) {
       console.error('loadModels error:', e);
     }
-    return [];
+    return { models: [], itemName: '' };
   }, []);
 
   // ── Start creation wizard ──────────────────────────────────────────────
@@ -300,7 +300,7 @@ export default function FlashSaleTab() {
       });
     } else {
       // Add — load models
-      const models = await loadModels(product.item_id);
+      const { models } = await loadModels(product.item_id);
       const newProduct = { ...product, models };
       setSelectedProducts(prev => [...prev, newProduct]);
 
@@ -525,7 +525,7 @@ export default function FlashSaleTab() {
       let done = 0;
       await runChunked(ids, 5, async (itemId) => {
         const itemRows = byItem.get(itemId);
-        const models = await loadModels(itemId);
+        const { models, itemName } = await loadModels(itemId);
         const modelById = new Map(models.map(m => [String(m.model_id), m]));
         const cfg = {};
         for (const r of itemRows) {
@@ -541,7 +541,12 @@ export default function FlashSaleTab() {
           };
         }
         if (Object.keys(cfg).length) {
-          newSelected.push({ item_id: itemId, item_name: itemRows[0].item_name || `SP ${itemId}`, models });
+          const xlsName = (itemRows[0].item_name || '').trim();
+          const shopeeName = (itemName || '').trim();
+          const firstModel = (models[0]?.model_name || models[0]?.name || '').trim();
+          // Tên file ≤2 ký tự (vd "a"/"â") hoặc trống → ưu tiên tên item Shopee, rồi tới tên phân loại đầu
+          const displayName = (xlsName.length > 2 ? xlsName : '') || (shopeeName.length > 2 ? shopeeName : '') || firstModel || `SP ${itemId}`;
+          newSelected.push({ item_id: itemId, item_name: displayName, models });
           newConfigs[itemId] = cfg;
         } else { missing.push(`SP ${itemId}`); }
         done++; setExpProg({ done, total: ids.length, phase: 'Đang khớp sản phẩm…' });
@@ -595,7 +600,7 @@ export default function FlashSaleTab() {
       if (!all.length) { setError('Shop chưa có sản phẩm để xuất.'); return; }
       const rows = []; let done = 0;
       await runChunked(all, 6, async (p) => {
-        const models = await loadModels(p.item_id);
+        const { models } = await loadModels(p.item_id);
         const iName = p.item_name || p.name || `SP ${p.item_id}`;
         if (models.length) {
           for (const m of models) rows.push({
