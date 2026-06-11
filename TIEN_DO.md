@@ -50,6 +50,9 @@
 ---
 
 ## 3. ĐANG DỞ / TODO
+- **📊 ROAS — đổi công thức (yêu cầu sếp 11/06):** `ROAS = GMV / (Chi phí AFF + Chi phí CAST + CHI PHÍ MẪU)`.
+  - Hiện đang là `GMV / (aff + cast)`. Cần cộng thêm **chi phí mẫu** (tiền hàng mẫu gửi KOC).
+  - **"Chi phí mẫu" CHƯA có cách tính** → sẽ bàn + code sau. Vị trí sửa: hàm `roasOf` trong `src/components/KocPerformanceTab.jsx` (đã có comment 📌 TODO ở đó).
 - **🔒 Bảo mật RLS toàn diện** (lớn, chưa làm): 19 bảng còn tắt RLS → ai có anon key vẫn đọc/sửa data. Cần đưa thao tác DB của frontend về backend (service key) HOẶC thêm Supabase Auth + policy. Làm dần từng nhóm bảng, test kỹ.
 - **Storage buckets** (2 bucket cho liệt kê công khai) — tắt.
 - **Re-authorize kết nối TikTok** (phòng token đã lộ trước khi vá).

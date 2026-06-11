@@ -24,6 +24,9 @@ const fmtVnd = (v) => {
 };
 const fmtViews = (v) => { const n = Number(v); if (!Number.isFinite(n) || v === null || v === undefined) return '—'; if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`; if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`; return String(n); };
 // ROAS = Doanh thu (GMV) / (Hoa hồng + Cast). null khi chưa có chi phí (commission+cast = 0).
+// 📌 TODO (yêu cầu sếp 11/06): công thức MỚI = GMV / (Chi phí AFF + Chi phí CAST + CHI PHÍ MẪU).
+//    "Chi phí mẫu" = tiền hàng mẫu gửi KOC — CHƯA có cách tính, sẽ code sau cùng sếp.
+//    Khi có: thêm tham số sampleCost → cost = commission + cast + sampleCost.
 const roasOf = (gmv, commission, cast) => { const cost = (Number(commission) || 0) + (Number(cast) || 0); return cost > 0 ? (Number(gmv) || 0) / cost : null; };
 const fmtRoas = (v) => { if (v == null || !Number.isFinite(v)) return '—'; return (v >= 10 ? v.toFixed(1) : v.toFixed(2)) + 'x'; };
 const roasColor = (v) => v == null ? '#cbd5e1' : v >= 3 ? '#16a34a' : v >= 1 ? '#d97706' : '#dc2626';
