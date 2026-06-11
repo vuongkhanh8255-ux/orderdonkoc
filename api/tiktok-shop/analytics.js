@@ -701,11 +701,12 @@ async function handleKocOrders({ params, supabase, res }) {
 
   // Cast scope theo NGÀY AIR của video; "Tất cả" (cast_all=1) → cộng hết (không lọc ngày)
   const castAll = params.cast_all === '1';
-  const [{ data: stats, error }, { data: totRows }, { data: viewRows }, { data: castRows }] = await Promise.all([
+  const [{ data: stats, error }, { data: totRows }, { data: viewRows }, { data: castRows }, { data: sampleRows }] = await Promise.all([
     supabase.rpc('koc_order_stats', { p_shop_id: shopId, p_start: start, p_end: end }),
     supabase.rpc('koc_order_totals', { p_shop_id: shopId, p_start: start, p_end: end }),
     supabase.rpc('koc_video_views', { p_shop_id: shopId, p_start: start, p_end: end }),
     supabase.rpc('koc_cast_by_creator', { p_shop_id: shopId, p_start: castAll ? null : start, p_end: castAll ? null : end }),
+    supabase.rpc('koc_sample_cost'), // chi phí mẫu (tất cả đơn mẫu của KOC) — vào ROAS
   ]);
   if (error) return res.status(200).json({ ok: false, error: error.message });
 
@@ -716,6 +717,9 @@ async function handleKocOrders({ params, supabase, res }) {
   // Cast (chi phí booking) mỗi KOC: link video air_links.cast ↔ video affiliate (chỉ video có fill cast)
   const castByUser = {};
   for (const r of (castRows || [])) castByUser[normU(r.creator_username)] = Number(r.cast_total) || 0;
+  // Chi phí mẫu mỗi KOC (cost×1.08 + vận hành + ship, tất cả đơn mẫu). uname đã lowercase + bỏ '@'.
+  const sampleByUser = {};
+  for (const r of (sampleRows || [])) sampleByUser[r.uname] = Number(r.sample_cost) || 0;
 
   const creators = (stats || []).map(s => ({
     username: s.creator_username,
@@ -728,6 +732,7 @@ async function handleKocOrders({ params, supabase, res }) {
     vperiod: Number(s.vperiod) || 0,
     views: viewByUser[normU(s.creator_username)] || 0,
     cast: castByUser[normU(s.creator_username)] || 0,
+    sample_cost: sampleByUser[normU(s.creator_username)] || 0,
     lives: Number(s.lives) || 0,
     products: Number(s.products) || 0,
     last_order: Number(s.last_order) || 0,
@@ -738,7 +743,8 @@ async function handleKocOrders({ params, supabase, res }) {
   // Tổng clip = cộng theo KOC affiliate đang hiển thị (đồng bộ với bảng), không gộp creator ngoài cohort
   const totalVtotal = creators.reduce((a, c) => a + (c.vtotal || 0), 0);
   const totalVperiod = creators.reduce((a, c) => a + (c.vperiod || 0), 0);
-  const totals = { gmv: Number(t.gmv) || 0, orders: Number(t.orders) || 0, commission: Number(t.commission) || 0, qty: Number(t.qty) || 0, views: totalViews, cast: totalCast, vtotal: totalVtotal, vperiod: totalVperiod };
+  const totalSample = creators.reduce((a, c) => a + (c.sample_cost || 0), 0);
+  const totals = { gmv: Number(t.gmv) || 0, orders: Number(t.orders) || 0, commission: Number(t.commission) || 0, qty: Number(t.qty) || 0, views: totalViews, cast: totalCast, sample_cost: totalSample, vtotal: totalVtotal, vperiod: totalVperiod };
   const totalCreators = Number(t.creators) || creators.length;
 
   const payload = {

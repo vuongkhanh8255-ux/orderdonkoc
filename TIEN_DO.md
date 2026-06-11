@@ -19,7 +19,8 @@
 ## 2. ĐÃ LÀM (gần đây)
 
 ### 🌟 Hiệu suất KOC (`src/components/KocPerformanceTab.jsx`)
-- Cột **View** = view PHÁT SINH theo kỳ (view-tháng), scale theo khoảng ngày. Cột **Cast** (chi phí booking), **ROAS** = GMV/(hoa hồng+cast), tách **Video tổng / Video kỳ**.
+- Cột **View** = view PHÁT SINH theo kỳ (view-tháng), scale theo khoảng ngày. Cột **Cast** (chi phí booking), **🎁 Chi phí mẫu**, **ROAS** = GMV/(hoa hồng+cast+chi phí mẫu), tách **Video tổng / Video kỳ**.
+- **🎁 Chi phí mẫu** (RPC `koc_sample_cost`): mỗi đơn mẫu = `Σ(cost×1.08×SL) + 5k vận hành + ship (Thường 20k/Hỏa tốc 50k)`, gom TẤT CẢ đơn mẫu của KOC. Cost lấy `costing_data` cột "...file" tháng mới nhất (tự dò), map `sanphams.barcode` ↔ costing "Mã". Đơn chỉ có text (không chitiettonguis) → chưa tính được.
 - **Phân trang** 20 dòng/trang (đổi 10/20/50/100). **Date picker** gọn + lịch popup.
 - **Tăng tốc:** cache phiên (trình duyệt) + cache chung server (`koc_orders_cache`) + index → "Tất cả" từ ~2.1s xuống ~0.8s. Auto-retry khi lỗi tạm thời lúc deploy.
 - **🏷️ ĐỊNH DANH KOC** (gán nhân sự quản lý theo brand) — dùng chung bảng `koc_brand_assignments` với Dashboard booking:
@@ -50,9 +51,6 @@
 ---
 
 ## 3. ĐANG DỞ / TODO
-- **📊 ROAS — đổi công thức (yêu cầu sếp 11/06):** `ROAS = GMV / (Chi phí AFF + Chi phí CAST + CHI PHÍ MẪU)`.
-  - Hiện đang là `GMV / (aff + cast)`. Cần cộng thêm **chi phí mẫu** (tiền hàng mẫu gửi KOC).
-  - **"Chi phí mẫu" CHƯA có cách tính** → sẽ bàn + code sau. Vị trí sửa: hàm `roasOf` trong `src/components/KocPerformanceTab.jsx` (đã có comment 📌 TODO ở đó).
 - **🔒 Bảo mật RLS toàn diện** (lớn, chưa làm): 19 bảng còn tắt RLS → ai có anon key vẫn đọc/sửa data. Cần đưa thao tác DB của frontend về backend (service key) HOẶC thêm Supabase Auth + policy. Làm dần từng nhóm bảng, test kỹ.
 - **Storage buckets** (2 bucket cho liệt kê công khai) — tắt.
 - **Re-authorize kết nối TikTok** (phòng token đã lộ trước khi vá).
