@@ -1,0 +1,43 @@
+name: Shopee Auto Flash Sale
+
+on:
+  workflow_dispatch:
+    inputs:
+      shop_id:
+        description: 'Shop ID cụ thể, hoặc "all" để chạy tất cả shop có template (mặc định all)'
+        required: false
+        default: 'all'
+      dry_run:
+        description: 'Chỉ thử (báo kế hoạch, KHÔNG tạo FS thật)? 1 = dry-run, 0 = tạo thật'
+        required: false
+        default: '0'
+      max_items:
+        description: 'Số sản phẩm tối đa mỗi FS (mặc định 20)'
+        required: false
+        default: '20'
+  schedule:
+    # 2h sáng giờ VN (UTC+7) = 19:00 UTC hôm trước. Mỗi shop có template tự lấp hết khung trống.
+    - cron: '0 19 * * *'
+
+jobs:
+  auto-fs:
+    name: Trigger auto flash sale
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Call auto flash sale endpoint
+        env:
+          BOOST_CRON_SECRET: ${{ secrets.BOOST_CRON_SECRET }}
+          SHOP_ID: ${{ github.event.inputs.shop_id || 'all' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || '0' }}
+          MAX_ITEMS: ${{ github.event.inputs.max_items || '20' }}
+        run: |
+          BASE="https://koc-tool.vercel.app/api/shopee/flash-sale"
+          URL="${BASE}?action=auto_flash_sale_all&source=cron&shop_id=${SHOP_ID}&max_items=${MAX_ITEMS}"
+          if [ "$DRY_RUN" = "1" ]; then URL="${URL}&dry_run=1"; fi
+          echo "Calling: $URL"
+          RESPONSE=$(curl -sS --max-time 290 --retry 2 --retry-delay 10 \
+            -H "x-boost-secret: ${BOOST_CRON_SECRET}" \
+            "$URL")
+          echo "Response: $RESPONSE"
+          echo "$RESPONSE" | grep -q '"ok":true' || { echo "::error::Auto flash sale call failed"; exit 1; }

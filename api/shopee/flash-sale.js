@@ -765,6 +765,117 @@ async function handleListShops(supabase) {
   return { ok: true, data: { shops } };
 }
 
+// ── AUTO FLASH SALE (cron ~2h sáng) ───────────────────────────────────────────
+// Mỗi shop có template: lấp TẤT CẢ khung trống. Mỗi FS bốc NGẪU NHIÊN ~max_items
+// variant từ 1 template ngẫu nhiên của shop; add lỗi vượt giới hạn → tự giảm dần;
+// lỗi → xoá FS rỗng (rollback). dry_run=1 → chỉ báo kế hoạch, không tạo thật.
+function fsShuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+function fsBuildItems(rows) {
+  const byItem = {};
+  for (const r of rows) {
+    const iid = String(r.item_id || '');
+    if (!iid) continue;
+    (byItem[iid] = byItem[iid] || []).push(r);
+  }
+  return Object.entries(byItem).map(([iid, rs]) => ({
+    item_id: Number(iid),
+    purchase_limit: 0,
+    models: rs.map((r) => ({
+      model_id: (String(r.model_id) === '0' || !r.model_id) ? 0 : Number(r.model_id),
+      input_promo_price: Number(r.price) || 0,
+      stock: Number(r.stock) || 100,
+    })),
+  }));
+}
+
+async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun) {
+  const out = [];
+  const slotsRes = await handleTimeSlots(supabase, shopId);
+  const sd = slotsRes.ok ? slotsRes.data : null;
+  const slots = Array.isArray(sd) ? sd : (sd?.time_slot_list || sd?.time_slot || []);
+  if (!slots.length) return [{ shopId, status: 'no_slots' }];
+
+  let used = new Set();
+  try {
+    const lr = await handleList(supabase, shopId);
+    const ld = lr.data;
+    const fsList = Array.isArray(ld) ? ld : (ld?.flash_sale_list || ld?.flash_sale || []);
+    used = new Set((fsList || []).map((f) => String(f.timeslot_id || f.time_slot_id)));
+  } catch { /* list lỗi không chặn */ }
+
+  for (const slot of slots) {
+    const slotId = slot.timeslot_id || slot.time_slot_id;
+    if (!slotId || used.has(String(slotId))) continue;
+
+    const tmpl = templates[Math.floor(Math.random() * templates.length)];
+    let picked = fsShuffle(Array.isArray(tmpl.rows) ? tmpl.rows : []).slice(0, maxItems);
+    let items = fsBuildItems(picked);
+    if (!items.length) { out.push({ shopId, slotId, status: 'no_items' }); continue; }
+
+    if (dryRun) { out.push({ shopId, slotId, status: 'dry_run', variants: picked.length, template: tmpl.name }); continue; }
+
+    const createRes = await handleCreate(supabase, shopId, { time_slot_id: slotId });
+    if (!createRes.ok) { out.push({ shopId, slotId, status: 'create_fail', error: createRes.error || createRes.message }); continue; }
+    const fsId = createRes.data?.flash_sale_id;
+    if (!fsId) { out.push({ shopId, slotId, status: 'no_fsid' }); continue; }
+
+    let addRes = await handleAddItems(supabase, shopId, { flash_sale_id: fsId, items });
+    let tries = 0;
+    while (!addRes.ok && /exceed_max_item|max number of item/i.test(JSON.stringify(addRes)) && picked.length > 1 && tries < 8) {
+      picked = picked.slice(0, Math.max(1, Math.floor(picked.length * 0.6)));
+      items = fsBuildItems(picked);
+      addRes = await handleAddItems(supabase, shopId, { flash_sale_id: fsId, items });
+      tries++;
+    }
+    if (!addRes.ok) {
+      try { await handleDelete(supabase, shopId, { flash_sale_id: fsId }); } catch { /* rollback */ }
+      out.push({ shopId, slotId, status: 'add_fail', error: addRes.error || addRes.message, template: tmpl.name });
+    } else {
+      out.push({ shopId, slotId, status: 'ok', fsId, variants: picked.length, template: tmpl.name });
+    }
+    await new Promise((r) => setTimeout(r, 300)); // giãn nhịp tránh rate-limit
+  }
+  return out;
+}
+
+async function handleAutoFlashSaleAll(supabase, reqUrl, req) {
+  const secret = (process.env.BOOST_CRON_SECRET || '').trim();
+  const provided = (req.headers['x-boost-secret'] || reqUrl.searchParams.get('secret') || '').toString().trim();
+  const isVercelCron = !!(req.headers['x-vercel-cron'] || (req.headers['user-agent'] || '').toLowerCase().includes('vercel-cron'));
+  if (secret && provided !== secret && !isVercelCron) return { ok: false, error: 'unauthorized' };
+
+  const maxItems = Math.max(1, Number(reqUrl.searchParams.get('max_items')) || 20);
+  const source = reqUrl.searchParams.get('source') || 'cron';
+  const dryRun = reqUrl.searchParams.get('dry_run') === '1';
+  const onlyShop = reqUrl.searchParams.get('shop_id');
+
+  const { data: tmpls } = await supabase.from('flash_sale_templates').select('id, name, shop_id, rows');
+  const byShop = {};
+  for (const t of (tmpls || [])) {
+    if (onlyShop && onlyShop !== 'all' && String(t.shop_id) !== String(onlyShop)) continue;
+    if (!Array.isArray(t.rows) || !t.rows.length) continue;
+    (byShop[String(t.shop_id)] = byShop[String(t.shop_id)] || []).push(t);
+  }
+
+  const perShop = await Promise.all(Object.entries(byShop).map(([sid, tmps]) =>
+    runAutoFsForShop(supabase, sid, tmps, maxItems, dryRun).catch((e) => [{ shopId: sid, status: 'shop_error', error: e.message }])
+  ));
+  const results = perShop.flat();
+  const summary = {
+    shops: Object.keys(byShop).length,
+    ok: results.filter((r) => r.status === 'ok').length,
+    dry: results.filter((r) => r.status === 'dry_run').length,
+    fail: results.filter((r) => (r.status || '').includes('fail') || r.status === 'shop_error').length,
+    total: results.length,
+  };
+  if (!dryRun) { try { await supabase.from('fs_auto_log').insert({ source, summary, results }); } catch (e) { console.error('fs_auto_log err', e.message); } }
+  return { ok: true, dry_run: dryRun, ...summary, results };
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Main handler
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -837,6 +948,9 @@ export default async function handler(req, res) {
       case 'delete':
         if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST required for delete' });
         result = await handleDelete(supabase, shopId, req.body);
+        break;
+      case 'auto_flash_sale_all':
+        result = await handleAutoFlashSaleAll(supabase, reqUrl, req);
         break;
       default:
         return res.status(400).json({
