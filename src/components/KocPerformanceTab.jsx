@@ -348,18 +348,6 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
           {assignment ? <>{status === 'proposed' ? '🟡' : '🟢'} {assignment.staff_name}</> : (canInteract ? '+ Gán' : '—')}
         </button>
         {assignment && <span style={{ fontSize: '0.66rem', color: '#94a3b8', paddingLeft: 2 }}>📅 từ {assignDate(assignment)}</span>}
-        {others.length > 0 && (
-          <span title={others.map(o => `${o.brand_name}: ${o.staff_name}${o.status === 'proposed' ? ' (đề xuất)' : ''}`).join('\n')}
-            style={{ fontSize: '0.66rem', color: '#64748b', background: '#fff', border: '1px dashed #cbd5e1', borderRadius: 10, padding: '2px 8px', maxWidth: 230, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            ↗ đã định danh: {others.map(o => o.brand_name).join(', ')}
-          </span>
-        )}
-        {unassigned.length > 0 && (
-          <span title={'Chưa gán nhân sự ở: ' + unassigned.join(', ')}
-            style={{ fontSize: '0.64rem', color: '#94a3b8', maxWidth: 230, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            ○ chưa định danh: {unassigned.join(', ')}
-          </span>
-        )}
       </div>
       {open && (
         <div onClick={close} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -511,18 +499,30 @@ export default function KocPerformanceTab() {
       setBlacklist(new Set((data || []).map(r => (r.id_kenh || '').toLowerCase().replace(/^@/, ''))));
     }, () => {});
   }, []);
-  useEffect(() => {
-    if (currentUser?.role !== 'admin' || !blacklist.size) return;
-    const toRemove = Object.keys(assignMap).filter(k => blacklist.has(k));
-    if (!toRemove.length) return;
-    (async () => {
-      for (const koc of toRemove) {
-        await supabase.from(ASSIGN_TABLE).delete().eq('koc_id', koc);
-        supabase.from(HIST_TABLE).insert({ koc_id: koc, action: 'remove', actor: 'blacklist' }).then(() => {}, () => {});
-      }
-      reloadAssignments();
-    })();
-  }, [blacklist, assignMap, currentUser, reloadAssignments]);
+  // ── Admin chờ duyệt: đề xuất GÁN (ecom) + đề xuất GỠ (hệ thống: blacklist / 45 ngày) ──
+  const pendingProposals = useMemo(() => {
+    if (currentUser?.role !== 'admin') return [];
+    const out = [];
+    for (const [koc, arr] of Object.entries(assignMap)) for (const a of (arr || [])) if (a.brand_name === brand && a.status === 'proposed') out.push({ koc, ...a });
+    return out;
+  }, [assignMap, brand, currentUser]);
+  const blacklistAssigned = useMemo(() => {
+    if (currentUser?.role !== 'admin' || !blacklist.size) return [];
+    return Object.entries(assignMap)
+      .filter(([koc, arr]) => blacklist.has(koc) && (arr || []).some(a => a.brand_name === brand))
+      .map(([koc, arr]) => ({ koc, staff_name: (arr.find(a => a.brand_name === brand) || {}).staff_name || '' }));
+  }, [assignMap, blacklist, brand, currentUser]);
+  const approveProposal = async (p) => {
+    const nowIso = new Date().toISOString();
+    await supabase.from(ASSIGN_TABLE).upsert({ koc_id: p.koc, brand_name: brand, staff_name: p.staff_name, status: 'approved', approved_by: currentUser?.username || '', approved_at: nowIso, updated_at: nowIso, assigned_at: p.assigned_at, proposed_by: p.proposed_by, proposed_at: p.proposed_at }, { onConflict: 'koc_id,brand_name' });
+    supabase.from(HIST_TABLE).insert({ koc_id: p.koc, brand_name: brand, staff_name: p.staff_name, action: 'approve', actor: currentUser?.username || '' }).then(() => {}, () => {});
+    refreshAssign();
+  };
+  const rejectProposal = async (p) => {
+    await supabase.from(ASSIGN_TABLE).delete().eq('koc_id', p.koc).eq('brand_name', brand);
+    supabase.from(HIST_TABLE).insert({ koc_id: p.koc, brand_name: brand, staff_name: p.staff_name, action: 'remove', actor: (currentUser?.username || '') + ' (từ chối)' }).then(() => {}, () => {});
+    refreshAssign();
+  };
 
   // Lấy avatar thật (cache + fetch dần) cho top 60 KOC mỗi lần đổi data/shop
   useEffect(() => {
@@ -779,18 +779,46 @@ export default function KocPerformanceTab() {
                 </button>
                 <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>⛔ viền đỏ = KOC blacklist (không gán được)</span>
               </div>
-              {currentUser?.role === 'admin' && overdueWarns.length > 0 && (
-                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
-                  <div style={{ fontWeight: 800, color: '#dc2626', fontSize: '0.86rem', marginBottom: 8 }}>⚠️ Cần xử lý — {overdueWarns.length} KOC gán ≥45 ngày mà 0 video <span style={{ color: '#94a3b8', fontWeight: 600 }}>(brand {brand})</span></div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {overdueWarns.map(w => (
-                      <div key={w.koc_id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.78rem', background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #fee2e2', flexWrap: 'wrap' }}>
-                        <a href={`https://www.tiktok.com/@${w.koc_id}`} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontWeight: 700, textDecoration: 'none' }}>@{w.koc_id}</a>
-                        <span style={{ color: '#64748b' }}>NS: <b>{w.staff_name}</b> · gán <b>{w.days_since}</b> ngày trước · 0 video</span>
-                        <button onClick={() => removeAssign(w.koc_id)} style={{ marginLeft: 'auto', padding: '5px 14px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>Loại</button>
+              {currentUser?.role === 'admin' && (pendingProposals.length > 0 || blacklistAssigned.length > 0 || overdueWarns.length > 0) && (
+                <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {pendingProposals.length > 0 && (
+                    <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px' }}>
+                      <div style={{ fontWeight: 800, color: '#b45309', fontSize: '0.86rem', marginBottom: 8 }}>🔔 {pendingProposals.length} đề xuất GÁN chờ duyệt <span style={{ color: '#94a3b8', fontWeight: 600 }}>(brand {brand})</span></div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {pendingProposals.map(p => (
+                          <div key={'pp-' + p.koc} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.78rem', background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #fde68a', flexWrap: 'wrap' }}>
+                            <a href={`https://www.tiktok.com/@${p.koc}`} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontWeight: 700, textDecoration: 'none' }}>@{p.koc}</a>
+                            <span style={{ color: '#64748b' }}>NS: <b>{p.staff_name}</b> · đề xuất bởi <b>{p.proposed_by || '?'}</b></span>
+                            <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                              <button onClick={() => approveProposal(p)} style={{ padding: '5px 14px', borderRadius: 7, border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#16a34a', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>✓ Duyệt</button>
+                              <button onClick={() => rejectProposal(p)} style={{ padding: '5px 12px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>✕ Từ chối</button>
+                            </span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  )}
+                  {(blacklistAssigned.length > 0 || overdueWarns.length > 0) && (
+                    <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 14px' }}>
+                      <div style={{ fontWeight: 800, color: '#dc2626', fontSize: '0.86rem', marginBottom: 8 }}>🗑️ Đề xuất GỠ chờ duyệt — {blacklistAssigned.length + overdueWarns.length} KOC <span style={{ color: '#94a3b8', fontWeight: 600 }}>(brand {brand})</span></div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {blacklistAssigned.map(b => (
+                          <div key={'bl-' + b.koc} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.78rem', background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #fee2e2', flexWrap: 'wrap' }}>
+                            <a href={`https://www.tiktok.com/@${b.koc}`} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontWeight: 700, textDecoration: 'none' }}>@{b.koc}</a>
+                            <span style={{ color: '#dc2626', fontWeight: 700 }}>⛔ BLACKLIST</span><span style={{ color: '#64748b' }}>· NS: <b>{b.staff_name}</b></span>
+                            <button onClick={() => removeAssign(b.koc)} style={{ marginLeft: 'auto', padding: '5px 14px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>Duyệt gỡ</button>
+                          </div>
+                        ))}
+                        {overdueWarns.map(w => (
+                          <div key={'od-' + w.koc_id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.78rem', background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #fee2e2', flexWrap: 'wrap' }}>
+                            <a href={`https://www.tiktok.com/@${w.koc_id}`} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontWeight: 700, textDecoration: 'none' }}>@{w.koc_id}</a>
+                            <span style={{ color: '#64748b' }}>NS: <b>{w.staff_name}</b> · gán <b>{w.days_since}</b> ngày · 0 video</span>
+                            <button onClick={() => removeAssign(w.koc_id)} style={{ marginLeft: 'auto', padding: '5px 14px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>Duyệt gỡ</button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(248px, 1fr))', gap: 12 }}>
