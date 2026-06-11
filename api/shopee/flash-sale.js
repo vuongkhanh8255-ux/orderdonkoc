@@ -792,8 +792,9 @@ function fsBuildItems(rows) {
   }));
 }
 
-async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun) {
+async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, maxSlots) {
   const out = [];
+  let processed = 0;
   const slotsRes = await handleTimeSlots(supabase, shopId);
   const sd = slotsRes.ok ? slotsRes.data : null;
   const slots = Array.isArray(sd) ? sd : (sd?.time_slot_list || sd?.time_slot || []);
@@ -810,6 +811,8 @@ async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun) {
   for (const slot of slots) {
     const slotId = slot.timeslot_id || slot.time_slot_id;
     if (!slotId || used.has(String(slotId))) continue;
+    if (processed >= maxSlots) break; // giới hạn số FS/shop/lần để không quá hạn hàm (cron mỗi ngày tự lấp tiếp)
+    processed++;
 
     const tmpl = templates[Math.floor(Math.random() * templates.length)];
     let picked = fsShuffle(Array.isArray(tmpl.rows) ? tmpl.rows : []).slice(0, maxItems);
@@ -849,6 +852,7 @@ async function handleAutoFlashSaleAll(supabase, reqUrl, req) {
   if (secret && provided !== secret && !isVercelCron) return { ok: false, error: 'unauthorized' };
 
   const maxItems = Math.max(1, Number(reqUrl.searchParams.get('max_items')) || 20);
+  const maxSlots = Math.max(1, Number(reqUrl.searchParams.get('max_slots')) || 15);
   const source = reqUrl.searchParams.get('source') || 'cron';
   const dryRun = reqUrl.searchParams.get('dry_run') === '1';
   const onlyShop = reqUrl.searchParams.get('shop_id');
@@ -862,12 +866,12 @@ async function handleAutoFlashSaleAll(supabase, reqUrl, req) {
   }
 
   const perShop = await Promise.all(Object.entries(byShop).map(([sid, tmps]) =>
-    runAutoFsForShop(supabase, sid, tmps, maxItems, dryRun).catch((e) => [{ shopId: sid, status: 'shop_error', error: e.message }])
+    runAutoFsForShop(supabase, sid, tmps, maxItems, dryRun, maxSlots).catch((e) => [{ shopId: sid, status: 'shop_error', error: e.message }])
   ));
   const results = perShop.flat();
   const summary = {
     shops: Object.keys(byShop).length,
-    ok: results.filter((r) => r.status === 'ok').length,
+    created: results.filter((r) => r.status === 'ok').length,
     dry: results.filter((r) => r.status === 'dry_run').length,
     fail: results.filter((r) => (r.status || '').includes('fail') || r.status === 'shop_error').length,
     total: results.length,
