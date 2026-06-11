@@ -503,6 +503,27 @@ export default function KocPerformanceTab() {
     refreshAssign();
   };
 
+  // KOC blacklist → đỏ cảnh báo + (admin) tự gỡ TOÀN BỘ định danh của KOC đó
+  const [blacklist, setBlacklist] = useState(() => new Set());
+  const [onlyUnassigned, setOnlyUnassigned] = useState(false);
+  useEffect(() => {
+    supabase.from('koc_blacklist').select('id_kenh').then(({ data }) => {
+      setBlacklist(new Set((data || []).map(r => (r.id_kenh || '').toLowerCase().replace(/^@/, ''))));
+    }, () => {});
+  }, []);
+  useEffect(() => {
+    if (currentUser?.role !== 'admin' || !blacklist.size) return;
+    const toRemove = Object.keys(assignMap).filter(k => blacklist.has(k));
+    if (!toRemove.length) return;
+    (async () => {
+      for (const koc of toRemove) {
+        await supabase.from(ASSIGN_TABLE).delete().eq('koc_id', koc);
+        supabase.from(HIST_TABLE).insert({ koc_id: koc, action: 'remove', actor: 'blacklist' }).then(() => {}, () => {});
+      }
+      reloadAssignments();
+    })();
+  }, [blacklist, assignMap, currentUser, reloadAssignments]);
+
   // Lấy avatar thật (cache + fetch dần) cho top 60 KOC mỗi lần đổi data/shop
   useEffect(() => {
     const users = (data?.creators || []).slice(0, 60).map(r => r.username).filter(Boolean);
@@ -554,6 +575,15 @@ export default function KocPerformanceTab() {
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const pageOffset = (kocPage - 1) * pageSize;
   const pagedRows = rows.slice(pageOffset, pageOffset + pageSize);
+  // Panel định danh: lọc "chỉ KOC chưa định danh (brand này) + không blacklist" để gán nhanh
+  const assignRows = useMemo(() => {
+    if (!onlyUnassigned) return rows;
+    return rows.filter(c => {
+      const u = (c.username || '').toLowerCase().replace(/^@/, '');
+      if (blacklist.has(u)) return false;
+      return !((assignMap[u] || []).some(a => a.brand_name === brand));
+    });
+  }, [rows, onlyUnassigned, assignMap, brand, blacklist]);
   const totals = data?.totals || { gmv: 0, orders: 0, commission: 0, views: 0, cast: 0 };
   const sync = data?.sync;
 
@@ -742,6 +772,13 @@ export default function KocPerformanceTab() {
               <p style={{ margin: '0 0 12px', fontSize: '0.74rem', color: '#94a3b8' }}>
                 Gán nhân sự quản lý KOC cho brand này. {currentUser?.role === 'admin' ? 'Bạn gán là duyệt luôn 🟢.' : currentUser?.role === 'ecom' ? 'Bạn gửi đề xuất 🟡, admin duyệt sau.' : 'Chỉ admin/ecom thao tác được.'} Chip viền đứt = đã định danh ở brand khác.
               </p>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+                <button onClick={() => { setOnlyUnassigned(v => !v); setAssignShow(48); }}
+                  style={{ padding: '6px 14px', borderRadius: 9, border: `1.5px solid ${onlyUnassigned ? ACCENT : '#e5e7eb'}`, background: onlyUnassigned ? '#fff7ed' : '#fff', color: onlyUnassigned ? '#e85518' : '#64748b', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}>
+                  🔎 {onlyUnassigned ? `Chỉ chưa định danh (${fmtNum(assignRows.length)})` : 'Chỉ KOC chưa định danh'}
+                </button>
+                <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>⛔ viền đỏ = KOC blacklist (không gán được)</span>
+              </div>
               {currentUser?.role === 'admin' && overdueWarns.length > 0 && (
                 <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
                   <div style={{ fontWeight: 800, color: '#dc2626', fontSize: '0.86rem', marginBottom: 8 }}>⚠️ Cần xử lý — {overdueWarns.length} KOC gán ≥45 ngày mà 0 video <span style={{ color: '#94a3b8', fontWeight: 600 }}>(brand {brand})</span></div>
@@ -757,10 +794,11 @@ export default function KocPerformanceTab() {
                 </div>
               )}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(248px, 1fr))', gap: 12 }}>
-                {rows.slice(0, assignShow).map((c, i) => {
+                {assignRows.slice(0, assignShow).map((c, i) => {
                   const uname = (c.username || '').toLowerCase().replace(/^@/, '');
+                  const isBlack = blacklist.has(uname);
                   return (
-                    <div key={c.username || i} style={{ border: '1.5px solid #fed7aa', borderRadius: 12, padding: 12, background: '#fffdfb', boxShadow: '0 1px 3px rgba(255,106,44,0.06)' }}>
+                    <div key={c.username || i} style={{ border: isBlack ? '2px solid #ef4444' : '1.5px solid #fed7aa', borderRadius: 12, padding: 12, background: isBlack ? '#fef2f2' : '#fffdfb', boxShadow: isBlack ? '0 1px 4px rgba(239,68,68,0.14)' : '0 1px 3px rgba(255,106,44,0.06)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
                         <span style={{ fontSize: '0.72rem', fontWeight: 800, color: i < 3 ? ACCENT : '#cbd5e1', width: 18, flexShrink: 0 }}>{i + 1}</span>
                         <KocAvatar username={c.username} url={avatarMap[c.username]?.avatar} size={34} />
@@ -769,7 +807,9 @@ export default function KocPerformanceTab() {
                           <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>{fmtVnd(c.gmv)}đ · {c.vperiod > 0 ? `${fmtNum(c.vperiod)} video kỳ` : '0 video kỳ'}</div>
                         </div>
                       </div>
-                      <KocAssignCell username={uname} brand={brand} assignments={assignMap[uname]} staffNames={staffNames} currentUser={currentUser} onChanged={refreshAssign} allBrands={allBrands} />
+                      {isBlack
+                        ? <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 14, fontSize: '0.76rem', fontWeight: 800, color: '#fff', background: '#ef4444' }}>⛔ BLACKLIST — không gán</div>
+                        : <KocAssignCell username={uname} brand={brand} assignments={assignMap[uname]} staffNames={staffNames} currentUser={currentUser} onChanged={refreshAssign} allBrands={allBrands} />}
                       {(() => {
                         const w = warnMap[uname];
                         if (!w || (w.video_count || 0) > 0) return null;
@@ -781,10 +821,10 @@ export default function KocPerformanceTab() {
                   );
                 })}
               </div>
-              {rows.length > assignShow && (
+              {assignRows.length > assignShow && (
                 <div style={{ textAlign: 'center', marginTop: 14 }}>
                   <button onClick={() => setAssignShow(n => n + 48)} style={{ padding: '8px 22px', borderRadius: 9, border: '1px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer' }}>
-                    Xem thêm ({fmtNum(rows.length - assignShow)} KOC)
+                    Xem thêm ({fmtNum(assignRows.length - assignShow)} KOC)
                   </button>
                 </div>
               )}
