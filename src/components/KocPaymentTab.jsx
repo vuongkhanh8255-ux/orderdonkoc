@@ -48,6 +48,7 @@ const KocPaymentTab = () => {
   const [editingId, setEditingId] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -72,6 +73,7 @@ const KocPaymentTab = () => {
 
   const save = async () => {
     if (!form.channel_link && !form.full_name && !form.beneficiary) { alert('Cần ít nhất Link kênh hoặc Họ tên / Người thụ hưởng.'); return; }
+    if (!form.air_link || !form.air_link.trim()) { alert('⚠️ Bắt buộc phải có LINK AIR mới tạo được lệnh thanh toán.'); return; }
     setSaving(true);
     const payload = {
       pay_date: form.pay_date || null, staff: form.staff || null, company: form.company || null,
@@ -89,6 +91,46 @@ const KocPaymentTab = () => {
       cancel(); load();
     } catch (e) { alert('Lỗi khi lưu: ' + (e.message || e)); }
     finally { setSaving(false); }
+  };
+
+  // Upload ảnh trực tiếp lên Supabase Storage (bucket expense-files) → trả URL công khai
+  const uploadImage = async (file, key) => {
+    if (!file) return;
+    setUploading(key);
+    try {
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+      const path = `koc_payment/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error } = await supabase.storage.from('expense-files').upload(path, file, { upsert: false });
+      if (error) throw error;
+      const { data } = supabase.storage.from('expense-files').getPublicUrl(path);
+      setForm((f) => ({ ...f, [key]: data.publicUrl }));
+    } catch (e) { alert('Lỗi upload ảnh: ' + (e.message || e)); }
+    finally { setUploading(''); }
+  };
+  // Ô ảnh: trống → chọn ảnh từ máy; có rồi → thumbnail (link Drive cũ thì hiện "Xem"), nút Đổi
+  const renderImgField = (label, fkey) => {
+    const value = form[fkey];
+    return (
+      <Field label={label}>
+        {value ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <a href={value} target="_blank" rel="noreferrer">
+              <img src={value} alt="" referrerPolicy="no-referrer"
+                onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'inline-block'; }}
+                style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 8, border: '1px solid #e5e7eb' }} />
+              <span style={{ display: 'none', fontSize: '0.8rem', color: '#0891b2', fontWeight: 600 }}>📎 Xem</span>
+            </a>
+            <button type="button" onClick={() => setForm((f) => ({ ...f, [fkey]: '' }))}
+              style={{ border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', borderRadius: 7, padding: '5px 10px', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 700 }}>✕ Đổi</button>
+          </div>
+        ) : (
+          <label style={{ ...inputStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: uploading === fkey ? 'wait' : 'pointer', color: '#64748b', borderStyle: 'dashed' }}>
+            {uploading === fkey ? '⏳ Đang tải…' : '📷 Chọn ảnh từ máy'}
+            <input type="file" accept="image/*" disabled={uploading === fkey} onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; uploadImage(f, fkey); }} style={{ display: 'none' }} />
+          </label>
+        )}
+      </Field>
+    );
   };
 
   const del = async (r) => {
@@ -156,7 +198,7 @@ const KocPaymentTab = () => {
             <Field label="Brand"><input list="koc-brands" value={form.brand} onChange={e => setForm(f => ({ ...f, brand: e.target.value }))} placeholder="Chọn / gõ brand" style={inputStyle} /><datalist id="koc-brands">{BRANDS.map(b => <option key={b} value={b} />)}</datalist></Field>
 
             <Field label="Link kênh"><input value={form.channel_link} onChange={e => setForm(f => ({ ...f, channel_link: e.target.value }))} placeholder="https://tiktok.com/@..." style={inputStyle} /></Field>
-            <div style={{ gridColumn: 'span 3' }}><Field label="Link air (mỗi video 1 dòng)"><textarea value={form.air_link} onChange={e => setForm(f => ({ ...f, air_link: e.target.value }))} rows={1} placeholder="https://tiktok.com/@.../video/..." style={{ ...inputStyle, resize: 'vertical' }} /></Field></div>
+            <div style={{ gridColumn: 'span 3' }}><Field label="Link air (*) — BẮT BUỘC · mỗi video 1 dòng"><textarea value={form.air_link} onChange={e => setForm(f => ({ ...f, air_link: e.target.value }))} rows={1} placeholder="https://tiktok.com/@.../video/..." style={{ ...inputStyle, resize: 'vertical' }} /></Field></div>
 
             <Field label="Cast (net)"><input value={form.cast_net ? fmtMoney(form.cast_net) : ''} onChange={e => setCast(e.target.value)} inputMode="numeric" placeholder="vd 2.000.000" style={inputStyle} /></Field>
             <Field label="PIT (thuế TNCN)"><input value={form.pit ? fmtMoney(form.pit) : '0'} onChange={e => setPit(e.target.value)} inputMode="numeric" style={inputStyle} /></Field>
@@ -170,8 +212,8 @@ const KocPaymentTab = () => {
 
             <Field label="Số CCCD"><input value={form.cccd} onChange={e => setForm(f => ({ ...f, cccd: e.target.value }))} style={inputStyle} /></Field>
             <Field label="Mã số thuế"><input value={form.tax_code} onChange={e => setForm(f => ({ ...f, tax_code: e.target.value }))} style={inputStyle} /></Field>
-            <Field label="Hình ảnh CCCD (link)"><input value={form.cccd_image} onChange={e => setForm(f => ({ ...f, cccd_image: e.target.value }))} placeholder="link Drive" style={inputStyle} /></Field>
-            <Field label="Hợp đồng / tin nhắn (link)"><input value={form.contract_link} onChange={e => setForm(f => ({ ...f, contract_link: e.target.value }))} placeholder="link Drive" style={inputStyle} /></Field>
+            {renderImgField('📷 Ảnh CCCD (tải từ máy)', 'cccd_image')}
+            {renderImgField('📷 Hợp đồng / tin nhắn (ảnh)', 'contract_link')}
 
             <div style={{ gridColumn: 'span 4' }}><Field label="Ghi chú"><input value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} style={inputStyle} /></Field></div>
           </div>
@@ -232,7 +274,7 @@ const KocPaymentTab = () => {
                     <td style={{ ...td, textAlign: 'right' }}>{fmtMoney(r.cast_net)}</td>
                     <td style={{ ...td, textAlign: 'right', color: '#94a3b8' }}>{fmtMoney(r.pit)}</td>
                     <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: ACCENT }}>{fmtMoney(r.total)}</td>
-                    <td style={{ ...td, textAlign: 'center' }}>{r.air_link ? <a href={r.air_link.split('\n')[0]} target="_blank" rel="noreferrer" style={{ color: '#7c3aed', textDecoration: 'none' }}>🎬</a> : '—'}{r.contract_link ? <a href={r.contract_link} target="_blank" rel="noreferrer" style={{ color: '#0891b2', textDecoration: 'none', marginLeft: 6 }}>📄</a> : ''}</td>
+                    <td style={{ ...td, textAlign: 'center' }}>{r.air_link ? <a href={r.air_link.split('\n')[0]} target="_blank" rel="noreferrer" style={{ color: '#7c3aed', textDecoration: 'none' }}>🎬</a> : '—'}{r.contract_link ? <a href={r.contract_link} target="_blank" rel="noreferrer" style={{ color: '#0891b2', textDecoration: 'none', marginLeft: 6 }}>📄</a> : ''}{r.cccd_image ? <a href={r.cccd_image} target="_blank" rel="noreferrer" style={{ color: '#16a34a', textDecoration: 'none', marginLeft: 6 }}>🪪</a> : ''}</td>
                     <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={!!r.accountant_approved} onChange={() => toggleApproved(r)} style={{ width: 17, height: 17, accentColor: '#16a34a', cursor: 'pointer' }} /></td>
                     <td style={{ ...td, textAlign: 'center', whiteSpace: 'nowrap' }}>
                       <button onClick={() => startEdit(r)} title="Sửa" style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.95rem' }}>✏️</button>
