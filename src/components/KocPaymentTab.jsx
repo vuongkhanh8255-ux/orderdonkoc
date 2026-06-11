@@ -93,42 +93,53 @@ const KocPaymentTab = () => {
     finally { setSaving(false); }
   };
 
-  // Upload ảnh trực tiếp lên Supabase Storage (bucket expense-files) → trả URL công khai
-  const uploadImage = async (file, key) => {
-    if (!file) return;
+  // Upload NHIỀU ảnh 1 lúc lên Supabase Storage → nối thêm URL vào field (mỗi URL 1 dòng)
+  const uploadImages = async (files, key) => {
+    const list = [...(files || [])];
+    if (!list.length) return;
     setUploading(key);
     try {
-      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-      const path = `koc_payment/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error } = await supabase.storage.from('expense-files').upload(path, file, { upsert: false });
-      if (error) throw error;
-      const { data } = supabase.storage.from('expense-files').getPublicUrl(path);
-      setForm((f) => ({ ...f, [key]: data.publicUrl }));
+      const urls = [];
+      for (const file of list) {
+        const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+        const path = `koc_payment/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error } = await supabase.storage.from('expense-files').upload(path, file, { upsert: false });
+        if (error) throw error;
+        const { data } = supabase.storage.from('expense-files').getPublicUrl(path);
+        urls.push(data.publicUrl);
+      }
+      setForm((f) => {
+        const existing = (f[key] || '').split('\n').map((s) => s.trim()).filter(Boolean);
+        return { ...f, [key]: [...existing, ...urls].join('\n') };
+      });
     } catch (e) { alert('Lỗi upload ảnh: ' + (e.message || e)); }
     finally { setUploading(''); }
   };
-  // Ô ảnh: trống → chọn ảnh từ máy; có rồi → thumbnail (link Drive cũ thì hiện "Xem"), nút Đổi
+  // Gallery nhiều ảnh: mỗi ảnh 1 thumbnail (xoá từng cái), ô "＋" thêm ảnh (chọn nhiều cùng lúc)
   const renderImgField = (label, fkey) => {
-    const value = form[fkey];
+    const imgs = (form[fkey] || '').split('\n').map((s) => s.trim()).filter(Boolean);
+    const removeImg = (url) => setForm((f) => ({ ...f, [fkey]: (f[fkey] || '').split('\n').map((s) => s.trim()).filter((u) => u && u !== url).join('\n') }));
     return (
-      <Field label={label}>
-        {value ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <a href={value} target="_blank" rel="noreferrer">
-              <img src={value} alt="" referrerPolicy="no-referrer"
-                onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'inline-block'; }}
-                style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 8, border: '1px solid #e5e7eb' }} />
-              <span style={{ display: 'none', fontSize: '0.8rem', color: '#0891b2', fontWeight: 600 }}>📎 Xem</span>
-            </a>
-            <button type="button" onClick={() => setForm((f) => ({ ...f, [fkey]: '' }))}
-              style={{ border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', borderRadius: 7, padding: '5px 10px', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 700 }}>✕ Đổi</button>
-          </div>
-        ) : (
-          <label style={{ ...inputStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: uploading === fkey ? 'wait' : 'pointer', color: '#64748b', borderStyle: 'dashed' }}>
-            {uploading === fkey ? '⏳ Đang tải…' : '📷 Chọn ảnh từ máy'}
-            <input type="file" accept="image/*" disabled={uploading === fkey} onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; uploadImage(f, fkey); }} style={{ display: 'none' }} />
+      <Field label={`${label}${imgs.length ? ` (${imgs.length})` : ''}`}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+          {imgs.map((url, i) => (
+            <div key={i} style={{ position: 'relative' }}>
+              <a href={url} target="_blank" rel="noreferrer">
+                <img src={url} alt="" referrerPolicy="no-referrer"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'inline-flex'; }}
+                  style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 8, border: '1px solid #e5e7eb', display: 'block' }} />
+                <span style={{ display: 'none', width: 46, height: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: '1px solid #e5e7eb', background: '#f8fafc', fontSize: '0.7rem', color: '#0891b2' }}>📎 Xem</span>
+              </a>
+              <button type="button" onClick={() => removeImg(url)} title="Xoá ảnh này"
+                style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: '50%', border: 'none', background: '#dc2626', color: '#fff', fontSize: '0.66rem', cursor: 'pointer', lineHeight: '18px', padding: 0 }}>✕</button>
+            </div>
+          ))}
+          <label title="Thêm ảnh — chọn nhiều cùng lúc được"
+            style={{ width: 46, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: '1.5px dashed #cbd5e1', cursor: uploading === fkey ? 'wait' : 'pointer', color: '#94a3b8', fontSize: '1.2rem', flexShrink: 0 }}>
+            {uploading === fkey ? '⏳' : '＋'}
+            <input type="file" accept="image/*" multiple disabled={uploading === fkey} onChange={(e) => { const fs = [...e.target.files]; e.target.value = ''; uploadImages(fs, fkey); }} style={{ display: 'none' }} />
           </label>
-        )}
+        </div>
       </Field>
     );
   };
@@ -274,7 +285,7 @@ const KocPaymentTab = () => {
                     <td style={{ ...td, textAlign: 'right' }}>{fmtMoney(r.cast_net)}</td>
                     <td style={{ ...td, textAlign: 'right', color: '#94a3b8' }}>{fmtMoney(r.pit)}</td>
                     <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: ACCENT }}>{fmtMoney(r.total)}</td>
-                    <td style={{ ...td, textAlign: 'center' }}>{r.air_link ? <a href={r.air_link.split('\n')[0]} target="_blank" rel="noreferrer" style={{ color: '#7c3aed', textDecoration: 'none' }}>🎬</a> : '—'}{r.contract_link ? <a href={r.contract_link} target="_blank" rel="noreferrer" style={{ color: '#0891b2', textDecoration: 'none', marginLeft: 6 }}>📄</a> : ''}{r.cccd_image ? <a href={r.cccd_image} target="_blank" rel="noreferrer" style={{ color: '#16a34a', textDecoration: 'none', marginLeft: 6 }}>🪪</a> : ''}</td>
+                    <td style={{ ...td, textAlign: 'center' }}>{r.air_link ? <a href={r.air_link.split('\n')[0]} target="_blank" rel="noreferrer" style={{ color: '#7c3aed', textDecoration: 'none' }}>🎬</a> : '—'}{r.contract_link ? <a href={r.contract_link.split('\n')[0]} target="_blank" rel="noreferrer" style={{ color: '#0891b2', textDecoration: 'none', marginLeft: 6 }}>📄</a> : ''}{r.cccd_image ? <a href={r.cccd_image.split('\n')[0]} target="_blank" rel="noreferrer" style={{ color: '#16a34a', textDecoration: 'none', marginLeft: 6 }}>🪪{(() => { const n = r.cccd_image.split('\n').filter(Boolean).length; return n > 1 ? n : ''; })()}</a> : ''}</td>
                     <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={!!r.accountant_approved} onChange={() => toggleApproved(r)} style={{ width: 17, height: 17, accentColor: '#16a34a', cursor: 'pointer' }} /></td>
                     <td style={{ ...td, textAlign: 'center', whiteSpace: 'nowrap' }}>
                       <button onClick={() => startEdit(r)} title="Sửa" style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.95rem' }}>✏️</button>
