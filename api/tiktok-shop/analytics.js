@@ -968,8 +968,11 @@ export default async function handler(req, res) {
   const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL)?.trim();
   const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY)?.trim();
 
-  if (!appKey || !appSecret || !supabaseUrl || !supabaseKey) {
-    return res.status(500).json({ error: 'Missing env config', missing: { appKey: !appKey, appSecret: !appSecret, supabaseUrl: !supabaseUrl, supabaseKey: !supabaseKey } });
+  // Chỉ Supabase là BẮT BUỘC cho mọi action đọc (koc_orders/products/videos…) vì chúng chạy bằng RPC.
+  // Key TikTok chỉ cần cho action gọi API TikTok (sync/avatar) — các action đó tự kiểm tra. Nhờ vậy
+  // tab Hiệu suất KOC vẫn load dù bản build/đối tượng thiếu key TikTok (vd build cũ chưa có ANALYTICS key).
+  if (!supabaseUrl || !supabaseKey) {
+    return res.status(500).json({ error: 'Missing env config', missing: { supabaseUrl: !supabaseUrl, supabaseKey: !supabaseKey } });
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey, {
