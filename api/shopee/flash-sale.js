@@ -795,6 +795,7 @@ function fsBuildItems(rows) {
 async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, maxSlots) {
   const out = [];
   let processed = 0;
+  let lastGood = maxItems; // số variant lần add gần nhất THÀNH CÔNG → khung sau khỏi dò lại từ đầu
   const slotsRes = await handleTimeSlots(supabase, shopId);
   const sd = slotsRes.ok ? slotsRes.data : null;
   const slots = Array.isArray(sd) ? sd : (sd?.time_slot_list || sd?.time_slot || []);
@@ -815,7 +816,7 @@ async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, m
     processed++;
 
     const tmpl = templates[Math.floor(Math.random() * templates.length)];
-    let picked = fsShuffle(Array.isArray(tmpl.rows) ? tmpl.rows : []).slice(0, maxItems);
+    let picked = fsShuffle(Array.isArray(tmpl.rows) ? tmpl.rows : []).slice(0, lastGood);
     let items = fsBuildItems(picked);
     if (!items.length) { out.push({ shopId, slotId, status: 'no_items' }); continue; }
 
@@ -838,6 +839,7 @@ async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, m
       try { await handleDelete(supabase, shopId, { flash_sale_id: fsId }); } catch { /* rollback */ }
       out.push({ shopId, slotId, status: 'add_fail', error: addRes.error || addRes.message, template: tmpl.name });
     } else {
+      lastGood = picked.length; // học giới hạn shop → khung sau bắt đầu từ số này, khỏi dò lại
       out.push({ shopId, slotId, status: 'ok', fsId, variants: picked.length, template: tmpl.name });
     }
     await new Promise((r) => setTimeout(r, 300)); // giãn nhịp tránh rate-limit
