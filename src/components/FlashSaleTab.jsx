@@ -120,6 +120,65 @@ const BADGE = (color = '#ff6a2c', bg = '#fff7ed') => ({
 // ══════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════════════════
+// ── Panel lịch sử Auto Flash Sale (đọc bảng fs_auto_log) ──────────────────────
+const FS_ST_COLOR = { ok: '#16a34a', dry_run: '#0891b2', create_fail: '#dc2626', add_fail: '#dc2626', shop_error: '#dc2626', no_fsid: '#dc2626', no_slots: '#94a3b8', no_items: '#94a3b8' };
+function AutoFsLog() {
+  const [logs, setLogs] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [exp, setExp] = useState(null);
+  useEffect(() => {
+    if (!open) return;
+    supabase.from('fs_auto_log').select('*').order('created_at', { ascending: false }).limit(30)
+      .then(({ data }) => setLogs(data || []));
+  }, [open]);
+  const fmtDt = (s) => { try { return new Date(s).toLocaleString('vi-VN'); } catch { return s; } };
+  return (
+    <div style={{ ...CARD, marginBottom: 16, padding: 0, overflow: 'hidden' }}>
+      <div onClick={() => setOpen((o) => !o)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 18px', cursor: 'pointer', background: '#fafafa' }}>
+        <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.9rem' }}>📋 Lịch sử Auto Flash Sale (tự chạy 2h sáng)</span>
+        <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>{open ? '▲ Thu gọn' : '▼ Xem'}</span>
+      </div>
+      {open && (
+        <div style={{ padding: '4px 12px 14px', maxHeight: '50vh', overflowY: 'auto' }}>
+          {logs.length === 0 ? (
+            <div style={{ padding: 16, textAlign: 'center', color: '#94a3b8', fontSize: '0.84rem' }}>Chưa có lần chạy auto nào.</div>
+          ) : logs.map((lg) => {
+            const s = lg.summary || {};
+            const isOpen = exp === lg.id;
+            return (
+              <div key={lg.id} style={{ borderBottom: '1px solid #f1f5f9', padding: '8px 4px' }}>
+                <div onClick={() => setExp(isOpen ? null : lg.id)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', gap: 10 }}>
+                  <span style={{ fontSize: '0.8rem', color: '#475569' }}>{isOpen ? '▼' : '▶'} {fmtDt(lg.created_at)} <span style={{ color: '#cbd5e1' }}>· {lg.source || ''}</span></span>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                    <span style={{ color: '#16a34a' }}>✓ {s.created || 0}</span>
+                    {(s.fail || 0) > 0 && <span style={{ color: '#dc2626', marginLeft: 8 }}>✗ {s.fail}</span>}
+                    {(s.dry || 0) > 0 && <span style={{ color: '#0891b2', marginLeft: 8 }}>dry {s.dry}</span>}
+                    <span style={{ color: '#94a3b8', marginLeft: 8 }}>/ {s.total || 0}</span>
+                  </span>
+                </div>
+                {isOpen && (
+                  <div style={{ marginTop: 6, display: 'grid', gap: 3 }}>
+                    {(lg.results || []).map((r, i) => (
+                      <div key={i} style={{ fontSize: '0.74rem', color: '#64748b', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ color: FS_ST_COLOR[r.status] || '#475569', fontWeight: 700, minWidth: 64 }}>{r.status}</span>
+                        <span>shop {r.shopId}</span>
+                        {r.slotId && <span>· slot …{String(r.slotId).slice(-6)}</span>}
+                        {r.variants != null && <span>· {r.variants} SP</span>}
+                        {r.template && <span>· {r.template}</span>}
+                        {r.error && <span style={{ color: '#dc2626' }}>· {r.error}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function FlashSaleTab() {
   const [step, setStep] = useState(0); // 0=list, 1=slots, 2=products, 3=config, 4=review
   const [loading, setLoading] = useState(false);
@@ -699,6 +758,8 @@ export default function FlashSaleTab() {
           )}
         </div>
       </div>
+
+      {step === 0 && <AutoFsLog />}
 
       {/* Shop Selector */}
       {step === 0 && shops.length > 1 && (
