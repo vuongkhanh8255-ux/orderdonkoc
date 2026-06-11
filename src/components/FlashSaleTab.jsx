@@ -413,7 +413,11 @@ export default function FlashSaleTab() {
         if (!fsId) throw new Error('không nhận được flash_sale_id');
 
         const addRes = await apiCall('add_items', {}, { flash_sale_id: fsId, items });
-        if (!addRes.ok) throw new Error(addRes.message ? `${addRes.error}: ${addRes.message}` : (addRes.error || 'lỗi thêm SP'));
+        if (!addRes.ok) {
+          // Rollback: thêm SP lỗi (vd vượt giới hạn item) → xoá FS rỗng vừa tạo, tránh để lại FS trống trong shop
+          try { await apiCall('delete', {}, { flash_sale_id: fsId }); } catch { /* xoá lỗi không chặn */ }
+          throw new Error(addRes.message ? `${addRes.error}: ${addRes.message}` : (addRes.error || 'lỗi thêm SP'));
+        }
 
         lastFsId = fsId;
         results.push({ label, ok: true, fsId });
