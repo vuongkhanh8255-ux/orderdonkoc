@@ -7,6 +7,13 @@
       "runtimeArgs": ["vite", "--port", "5173"],
       "cwd": "C:\\Users\\ASUS\\koc-tool",
       "port": 5173
+    },
+    {
+      "name": "cvi-ecom-hub",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--port", "5180"],
+      "cwd": "D:\\TƯ VẤN",
+      "port": 5180
     }
   ]
 }

@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root{
+    --o:#ea580c; --o2:#f97316; --o3:#fb923c;
+    --ink:#0f172a; --slate:#334155; --mut:#64748b; --line:#f1f5f9;
+    --tint:#fff7ed; --tint2:#ffedd5;
+  }
+  body{ font-family:'Segoe UI',-apple-system,Roboto,Arial,sans-serif; color:var(--ink); line-height:1.6; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .page{ width:210mm; min-height:297mm; padding:14mm 16mm; position:relative; page-break-after:always; }
+  .page:last-child{ page-break-after:auto; }
+
+  /* ---------- COVER ---------- */
+  .cover{ padding:0; background:linear-gradient(155deg,#7c2d12 0%,#ea580c 45%,#f97316 100%); color:#fff; display:flex; flex-direction:column; overflow:hidden; }
+  .cover .deco1{ position:absolute; width:420px; height:420px; border-radius:50%; background:rgba(255,255,255,.08); top:-140px; right:-120px; }
+  .cover .deco2{ position:absolute; width:300px; height:300px; border-radius:50%; background:rgba(255,255,255,.06); bottom:-90px; left:-80px; }
+  .cover-inner{ padding:20mm 18mm; position:relative; z-index:2; flex:1; display:flex; flex-direction:column; }
+  .badge{ display:inline-flex; align-items:center; gap:8px; background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.3); padding:7px 16px; border-radius:30px; font-size:12px; font-weight:600; letter-spacing:.5px; width:fit-content; }
+  .mark{ width:50px; height:50px; border-radius:14px; background:#fff; color:var(--o); display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:900; margin-bottom:18px; }
+  .cover h1{ font-size:39px; font-weight:800; line-height:1.12; margin:16px 0 0; letter-spacing:-.5px; }
+  .cover .sub{ font-size:16px; opacity:.95; margin-top:14px; font-weight:500; max-width:560px; }
+  .cover .rule{ width:80px; height:5px; background:#fff; border-radius:4px; margin:18px 0; }
+  .hero-img{ width:100%; border-radius:16px; margin:18px 0 0; box-shadow:0 16px 36px rgba(0,0,0,.28); }
+  .cover .meta{ font-size:14px; opacity:.95; margin-top:18px; }
+  .cover .meta b{ font-weight:700; }
+  .cover-foot{ position:relative; z-index:2; background:rgba(0,0,0,.18); padding:14px 18mm; font-size:12.5px; display:flex; justify-content:space-between; }
+
+  /* ---------- GENERIC ---------- */
+  .kicker{ color:var(--o); font-weight:800; font-size:12px; letter-spacing:2px; text-transform:uppercase; }
+  h2.sec{ font-size:26px; font-weight:800; margin:6px 0 4px; letter-spacing:-.3px; }
+  .lead{ color:var(--mut); font-size:14px; margin-bottom:22px; }
+  .hr{ height:3px; width:54px; background:var(--o); border-radius:3px; margin:9px 0 16px; }
+
+  table{ width:100%; border-collapse:collapse; margin:6px 0 14px; font-size:13px; }
+  th{ background:var(--o); color:#fff; text-align:left; padding:9px 14px; font-weight:700; font-size:12.5px; }
+  td{ padding:8px 14px; border-bottom:1px solid var(--line); color:var(--slate); vertical-align:top; }
+  tr:nth-child(even) td{ background:#fffaf6; }
+
+  /* ---------- PILLAR (1 per page, with banner image) ---------- */
+  .phead{ display:flex; align-items:center; gap:16px; margin-bottom:10px; }
+  .pnum{ width:50px; height:50px; flex:none; border-radius:14px; background:linear-gradient(135deg,var(--o2),var(--o)); color:#fff; display:flex; align-items:center; justify-content:center; font-size:25px; font-weight:800; box-shadow:0 4px 12px rgba(234,88,12,.25); }
+  .ptitle{ font-size:23px; font-weight:800; letter-spacing:-.3px; line-height:1.15; }
+  .pimg{ display:block; width:100%; border-radius:14px; border:1px solid #fde4cf; box-shadow:0 10px 26px rgba(234,88,12,.16); margin:6px 0 18px; }
+  .pimg.sm{ width:74%; margin-left:auto; margin-right:auto; }
+  .pbody p{ font-size:13.5px; color:var(--slate); margin:4px 0 10px; }
+  .pbody ul{ margin:6px 0 8px 20px; }
+  .pbody li{ font-size:13px; color:var(--slate); margin-bottom:6px; }
+
+  .tagrow{ display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+  .tag{ background:var(--tint); color:var(--o); border:1px solid var(--tint2); font-size:11px; font-weight:700; padding:5px 11px; border-radius:20px; }
+  .deliver{ background:var(--tint); border-left:4px solid var(--o); border-radius:0 8px 8px 0; padding:10px 14px; font-size:12.6px; color:var(--ink); margin-top:12px; }
+  .deliver b{ color:var(--o); }
+
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .out{ display:flex; gap:12px; align-items:flex-start; padding:11px 15px; background:#fffaf6; border:1px solid var(--tint2); border-radius:12px; }
+  .out .ck{ width:24px; height:24px; flex:none; border-radius:50%; background:var(--o); color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:900; }
+  .out span{ font-size:13px; color:var(--slate); }
+  .kcard{ background:#fffaf6; border:1px solid var(--tint2); border-radius:14px; padding:16px 18px; }
+  .kcard .kn{ width:32px; height:32px; border-radius:9px; background:linear-gradient(135deg,var(--o2),var(--o)); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:16px; margin-bottom:10px; }
+  .kcard p{ font-size:13px; color:var(--slate); margin:0; line-height:1.65; }
+
+  .quote{ background:var(--ink); color:#fff; border-radius:14px; padding:18px 22px; margin:18px 0; font-size:13.5px; }
+  .quote b{ color:var(--o3); }
+  .pagenum{ position:absolute; bottom:10mm; right:16mm; font-size:11px; color:var(--mut); }
+  .foot-brand{ position:absolute; bottom:10mm; left:16mm; font-size:11px; color:var(--mut); font-weight:700; }
+  .foot-brand span{ color:var(--o); }
+</style>
+</head>
+<body>
+
+<!-- ============ PAGE 1 — COVER ============ -->
+<div class="page cover">
+  <div class="deco1"></div><div class="deco2"></div>
+  <div class="cover-inner">
+    <div class="mark">✦</div>
+    <div class="badge">⚡ ĐỀ XUẤT TƯ VẤN & CHUYỂN GIAO HỆ THỐNG</div>
+    <h1>Tối ưu vận hành<br/>E-Commerce đa thương hiệu</h1>
+    <div class="rule"></div>
+    <div class="sub">Tái cấu trúc đội ngũ · Tối ưu chi phí sàn · Dashboard điều hành tập trung · Chuyển giao quy trình trọn gói</div>
+    <img class="hero-img" src="img/01-bia-hero.jpg" alt="dashboard" />
+    <div class="meta">
+      <div style="font-size:16px"><b>Quốc Khánh</b></div>
+      <div style="font-size:13.5px;opacity:.9">Ecommerce Executive</div>
+      <div style="font-size:16px;margin-top:9px"><b>Hoàn Hiếu</b></div>
+      <div style="font-size:13.5px;opacity:.9;line-height:1.55">E-commerce Accounting &amp; Operating Manager · Stella Kinetics<br/>Sales Director · WIKI FINANCIAL TECHNOLOGY SOLUTIONS CO., LTD</div>
+      <div style="margin-top:9px;opacity:.82;font-size:13px">Tư vấn vận hành, số hoá &amp; kế toán e-commerce đa thương hiệu</div>
+    </div>
+  </div>
+  <div class="cover-foot">
+    <span>Thực chiến trên 6 shop Shopee + nhiều shop TikTok</span>
+    <span>appcash.app</span>
+  </div>
+</div>
+
+<!-- ============ PAGE 2 — PROBLEM + OVERVIEW ============ -->
+<div class="page">
+  <div class="kicker">Bối cảnh</div>
+  <h2 class="sec">Vấn đề các đội E-commerce đang gặp</h2>
+  <div class="hr"></div>
+  <p class="lead">Các đội bán hàng multi-brand trên TikTok Shop &amp; Shopee gần như đều vướng đúng 4 nút thắt khiến doanh thu tăng nhưng lợi nhuận &amp; sự kiểm soát thì không.</p>
+
+  <table>
+    <tr><th style="width:32%">Nút thắt</th><th>Biểu hiện thường thấy</th></tr>
+    <tr><td><b>Mô hình team rối</b></td><td>Một người ôm nhiều brand, không rõ ai chịu trách nhiệm con số nào → khó quy trách nhiệm, khó tuyển &amp; scale.</td></tr>
+    <tr><td><b>Chi phí mất kiểm soát</b></td><td>Ads, voucher, flash sale, hoa hồng KOC… tiêu liên tục mà không soi được hiệu quả từng đồng — chi phí thực còn <b>rộng hơn cả phí sàn</b> (vận hành, nhân sự, hàng hoá) nhưng chưa được tối ưu.</td></tr>
+    <tr><td><b>Dữ liệu phân mảnh</b></td><td>Booking, livestream, CSKH, đơn hàng nằm rải rác ở Excel &amp; từng sàn → không có một chỗ nhìn tổng.</td></tr>
+    <tr><td><b>Phụ thuộc cá nhân</b></td><td>Quy trình nằm trong đầu vài người — nghỉ là gãy; sếp không có report để ra quyết định nhanh.</td></tr>
+  </table>
+
+  <div class="quote">💡 <b>Giá trị của giải pháp tư vấn:</b> một hệ thống <b>đã chạy thật, đã tối ưu qua thực chiến</b> trên 6 shop Shopee + nhiều shop TikTok — không phải lý thuyết, mà là quy trình &amp; công cụ đang vận hành hằng ngày.</div>
+
+  <div class="kicker" style="margin-top:22px">Phạm vi</div>
+  <h2 class="sec" style="font-size:22px">6 hạng mục tư vấn trọn gói</h2>
+  <div class="hr"></div>
+  <div class="grid2">
+    <div class="out"><div class="ck">1</div><span><b>Tái cấu trúc mô hình team Ecom</b> — chuẩn hoá vai trò, KPI, phối hợp.</span></div>
+    <div class="out"><div class="ck">2</div><span><b>Review &amp; tối ưu chi phí</b> — rộng hơn cả phí sàn.</span></div>
+    <div class="out"><div class="ck">3</div><span><b>Tích hợp &amp; số hoá</b> booking, livestream, CSKH, công cụ Shopee.</span></div>
+    <div class="out"><div class="ck">4</div><span><b>Chuyển giao</b> quy trình + dashboard + report cho team.</span></div>
+    <div class="out"><div class="ck">5</div><span><b>Đồng bộ &amp; chuẩn hoá quy trình kế toán – vận hành</b> trên nền tảng ERP.</span></div>
+    <div class="out"><div class="ck">6</div><span><b>Công cụ đối soát dữ liệu sàn độc lập</b> — đối chiếu với hệ thống ERP.</span></div>
+  </div>
+  <div class="foot-brand">QUỐC <span>KHÁNH</span></div>
+  <div class="pagenum">02</div>
+</div>
+
+<!-- ============ PAGE 3 — PILLAR 1 ============ -->
+<div class="page">
+  <div class="kicker">Phạm vi tư vấn · Hạng mục 1 / 6</div>
+  <div class="phead"><div class="pnum">1</div><div class="ptitle">Tái cấu trúc mô hình team Ecom</div></div>
+  <img class="pimg" src="img/02-tai-cau-truc-team.jpg" alt="team" />
+  <div class="pbody">
+    <p>Chuẩn hoá mô hình <b>"1 brand = 1 cụm vận hành"</b>: 1 Ecom + 1 Booking + 1 Livestream + 1 CSKH — mỗi người một vai rõ ràng, ăn số theo brand mình phụ trách.</p>
+    <ul>
+      <li>Bảng phân vai (RACI): ai làm gì, báo cáo cho ai, KPI từng vị trí.</li>
+      <li>Cơ chế phối hợp chéo — booking gửi đơn cho brand khác vẫn track được.</li>
+    </ul>
+    <div class="deliver"><b>Deliverable:</b> Sơ đồ tổ chức + mô tả công việc từng vai + bộ KPI mẫu + quy trình phối hợp.</div>
+    <div class="tagrow"><span class="tag">Quy trách nhiệm rõ</span><span class="tag">Dễ tuyển / thay người</span><span class="tag">Scale không loạn</span></div>
+  </div>
+  <div class="foot-brand">QUỐC <span>KHÁNH</span></div>
+  <div class="pagenum">03</div>
+</div>
+
+<!-- ============ PAGE 4 — PILLAR 2 ============ -->
+<div class="page">
+  <div class="kicker">Hạng mục 2 / 6</div>
+  <div class="phead"><div class="pnum">2</div><div class="ptitle">Review &amp; tối ưu chi phí từng hạng mục</div></div>
+  <img class="pimg" src="img/03-toi-uu-chi-phi.jpg" alt="cost" />
+  <div class="pbody">
+    <p>Soát từng dòng chi phí — không chỉ phí sàn, mà cả ads (Shopee/TikTok), voucher, flash sale, hoa hồng KOC/affiliate, livestream, vận hành &amp; hàng hoá.</p>
+    <ul>
+      <li>Phân tích theo <b>danh mục sản phẩm</b>: cost theo SKU / brand / kênh → biết SP nào lãi, SP nào lỗ ngầm.</li>
+      <li><b>Cắt các đầu mục chi phí không cần thiết</b> — điểm rò rỉ: ads tiêu không ra đơn, voucher chồng khuyến mãi, giá final âm…</li>
+      <li>Khung giá niêm yết chuẩn: giá gốc → promotion → flash sale → voucher → giá final.</li>
+    </ul>
+    <div class="deliver"><b>Deliverable:</b> Bảng phân tích chi phí + danh sách điểm tối ưu + khung tính giá.</div>
+    <div class="tagrow"><span class="tag">Cắt chi phí thừa</span><span class="tag">Tăng biên lợi nhuận</span><span class="tag">Định giá có cơ sở</span></div>
+  </div>
+  <div class="foot-brand">QUỐC <span>KHÁNH</span></div>
+  <div class="pagenum">04</div>
+</div>
+
+<!-- ============ PAGE 5 — PILLAR 3 ============ -->
+<div class="page">
+  <div class="kicker">Hạng mục 3 / 6</div>
+  <div class="phead"><div class="pnum">3</div><div class="ptitle">Tích hợp &amp; số hoá chức năng vận hành sàn</div></div>
+  <img class="pimg sm" src="img/04-tich-hop-he-thong.jpg" alt="integration" />
+  <div class="pbody">
+    <p>Phần "xương sống" — gom mọi nghiệp vụ về một hệ thống duy nhất:</p>
+    <table style="margin-top:2px">
+      <tr><th style="width:30%">Module</th><th>Chức năng</th></tr>
+      <tr><td><b>Booking / KOC</b></td><td>Theo dõi đơn gửi KOC, hiệu suất từng KOC (GMV/đơn/hoa hồng/video), quản lý link air, hợp đồng.</td></tr>
+      <tr><td><b>Report Livestream</b></td><td>Tổng hợp số liệu live theo phiên/ngày, gắn người phụ trách.</td></tr>
+      <tr><td><b>CSKH / CRM</b></td><td>Quản lý khách, đánh giá sàn, xử lý phản hồi.</td></tr>
+      <tr><td><b>Shopee Tools</b></td><td>Đẩy sản phẩm (top picks), tạo &amp; quản lý Flash Sale, theo dõi ads Shopee.</td></tr>
+      <tr><td><b>Dashboard Ecom</b></td><td>Doanh thu / đơn / AOV theo từng gian hàng, gộp &amp; tách brand.</td></tr>
+      <tr><td><b>Báo cáo tổng quan</b></td><td>Chọn brand + ngày → report doanh thu, xếp hạng SP, booking đầy đủ nhân sự, xuất PDF/Excel.</td></tr>
+    </table>
+    <div class="deliver"><b>Deliverable:</b> Đặc tả tính năng theo nhu cầu đối tác + lộ trình tích hợp + bản chạy thật.</div>
+  </div>
+  <div class="foot-brand">QUỐC <span>KHÁNH</span></div>
+  <div class="pagenum">05</div>
+</div>
+
+<!-- ============ PAGE 6 — PILLAR 4 ============ -->
+<div class="page">
+  <div class="kicker">Hạng mục 4 / 6</div>
+  <div class="phead"><div class="pnum">4</div><div class="ptitle">Chuyển giao quy trình + dashboard + report</div></div>
+  <img class="pimg" src="img/05-chuyen-giao-dao-tao.jpg" alt="handover" />
+  <div class="pbody">
+    <div class="deliver" style="background:var(--tint2);border-left-color:var(--o);margin-top:0;margin-bottom:12px;font-size:12.8px">⭐ <b>Phần chính:</b> Chuyển giao <b>FULL cách quản lý booking</b> sao cho hiệu quả &amp; tiết kiệm thời gian — quy trình, công cụ &amp; mẹo vận hành thực chiến.</div>
+    <ul>
+      <li>Đào tạo từng vai cách dùng hệ thống (booking, livestream, CSKH, ecom).</li>
+      <li>Bộ tài liệu vận hành (SOP) + video hướng dẫn.</li>
+      <li>Phân quyền theo vai — mỗi người chỉ thấy phần của mình.</li>
+      <li>Hand-over + thời gian hỗ trợ sau bàn giao để team tự đứng được.</li>
+    </ul>
+    <div class="deliver"><b>Deliverable:</b> Bộ SOP + tài liệu phân quyền + buổi training + giai đoạn support.</div>
+    <div class="tagrow"><span class="tag">Team tự vận hành</span><span class="tag">Không phụ thuộc cá nhân</span><span class="tag">Hệ thống "sống" lâu dài</span></div>
+  </div>
+  <div class="foot-brand">QUỐC <span>KHÁNH</span></div>
+  <div class="pagenum">06</div>
+</div>
+
+<!-- ============ PAGE 7 — HẠNG MỤC 5: ĐỒNG BỘ QUY TRÌNH KẾ TOÁN ============ -->
+<div class="page">
+  <div class="kicker">Hạng mục 5 / 6 · Phối hợp đối tác kế toán</div>
+  <div class="phead"><div class="pnum">5</div><div class="ptitle">Đồng bộ &amp; chuẩn hoá quy trình kế toán – vận hành cùng các phòng ban trên nền tảng ERP</div></div>
+  <img class="pimg" src="img/08-dong-bo-erp.jpg" alt="erp-sync" />
+  <div class="pbody">
+    <div class="grid2" style="gap:14px">
+      <div class="kcard"><div class="kn">1</div><p>Tư vấn, chuẩn hoá định dạng hoá đơn bán – khuyến mãi – tặng liên quan đến bán sàn TMĐT.</p></div>
+      <div class="kcard"><div class="kn">2</div><p>Tư vấn thuế, hạch toán doanh thu, chi phí, công nợ, trích trước, tồn kho,… liên quan đến sàn TMĐT nhằm đảm bảo nguyên tắc kế toán.</p></div>
+      <div class="kcard"><div class="kn">3</div><p>Tư vấn, chuẩn hoá quy trình xuất HĐ sàn TMĐT tự động.</p></div>
+      <div class="kcard"><div class="kn">4</div><p>Tư vấn, chuẩn hoá quy trình vận hành đồng bộ và tự động nhất có thể giữa các bộ phận Kho – CSKH – Kế toán – Marketing để luồng vận hành sàn được trơn tru. Tránh công việc bị chồng chéo, lặp đi lặp lại nhằm tiết kiệm thời gian cũng như số liệu giữa thực tế và sàn giống nhau.</p></div>
+    </div>
+  </div>
+  <div class="foot-brand">QUỐC <span>KHÁNH</span></div>
+  <div class="pagenum">07</div>
+</div>
+
+<!-- ============ PAGE 8 — HẠNG MỤC 6: CÔNG CỤ ĐỐI SOÁT ============ -->
+<div class="page">
+  <div class="kicker">Hạng mục 6 / 6 · Phối hợp đối tác kế toán</div>
+  <div class="phead"><div class="pnum">6</div><div class="ptitle">Công cụ đối soát dữ liệu sàn độc lập để đối chiếu với hệ thống ERP</div></div>
+  <img class="pimg" src="img/07-doi-soat-ke-toan.jpg" alt="reconciliation" />
+  <div class="pbody">
+    <ol style="margin:2px 0 0 22px">
+      <li>Viết phần mềm đối soát sàn độc lập dựa trên dữ liệu tải từ sàn về để đối chiếu với dữ liệu trên ERP.</li>
+      <li>Đào tạo kế toán kiến thức về sàn TMĐT để kế toán có thể hiểu, sử dụng được phần mềm và trong trường hợp phát sinh chênh lệch sẽ tìm ra được nguyên nhân chênh lệch.</li>
+    </ol>
+    <div class="deliver" style="margin-top:16px"><b>⇒ Tư vấn, chuẩn hoá và đồng hành cùng doanh nghiệp.</b></div>
+  </div>
+  <div class="foot-brand">QUỐC <span>KHÁNH</span></div>
+  <div class="pagenum">08</div>
+</div>
+
+<!-- ============ PAGE 8 — OUTCOMES + CONTACT (closing) ============ -->
+<div class="page" style="display:flex;flex-direction:column;justify-content:center">
+  <div class="kicker">Kết quả kỳ vọng</div>
+  <div class="hr"></div>
+  <div class="grid2">
+    <div class="out"><div class="ck">✓</div><span>Mô hình team rõ vai, dễ scale, quy trách nhiệm được.</span></div>
+    <div class="out"><div class="ck">✓</div><span>Giảm chi phí thừa, tăng biên lợi nhuận.</span></div>
+    <div class="out"><div class="ck">✓</div><span>Một dashboard điều hành + report tự động cho sếp.</span></div>
+    <div class="out"><div class="ck">✓</div><span>Quy trình thuộc về công ty, không phụ thuộc cá nhân.</span></div>
+  </div>
+
+  <div style="margin-top:18px;padding:15px 24px;background:linear-gradient(135deg,#fff7ed,#ffedd5);border:1px solid var(--tint2);border-left:5px solid var(--o);border-radius:14px;display:flex;align-items:center;justify-content:space-between">
+    <div style="font-size:16px;font-weight:800;color:var(--ink)">Quốc Khánh <span style="color:var(--o);font-weight:700">· Ecommerce Executive</span></div>
+    <div style="font-size:17px;font-weight:800;color:var(--o)">📞 0852 318 255</div>
+  </div>
+  <div class="foot-brand">QUỐC <span>KHÁNH</span></div>
+  <div class="pagenum">09</div>
+</div>
+
+</body>
+</html>
