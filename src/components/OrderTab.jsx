@@ -8,6 +8,28 @@ import SearchableDropdown from './SearchableDropdown'; // Shared component
 // Import thư viện biểu đồ
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Label, LabelList } from 'recharts';
 
+// Tách 1 chuỗi địa chỉ thành các phần rõ ràng: Tỉnh/TP - Quận/Huyện - Phường/Xã - Số nhà/Đường.
+// Quy ước nhập: ngăn cách bằng dấu phẩy, phần cuối là Tỉnh/Thành phố.
+const parseDiaChi = (raw) => {
+    const parts = String(raw || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length < 2) return null; // chưa đủ để tách (cần ít nhất "..., Tỉnh/TP")
+    const tinh = parts[parts.length - 1];
+    const middle = parts.slice(0, -1);
+    const phuongRe = /^(phường|xã|thị trấn|p\.|x\.)\s/i;
+    const quanRe = /^(quận|huyện|thị xã|q\.|h\.)\s/i;
+    let phuong = '', quan = '';
+    const soNhaParts = [];
+    middle.forEach(p => {
+        if (!phuong && phuongRe.test(p)) phuong = p;
+        else if (!quan && quanRe.test(p)) quan = p;
+        else soNhaParts.push(p);
+    });
+    // Nếu không có từ khoá "Phường/Xã" mà còn dư phần giữa → coi phần cuối cùng của số nhà là phường (định dạng "đường, phường, tỉnh")
+    if (!phuong && soNhaParts.length > 1) phuong = soNhaParts.pop();
+    const soNha = soNhaParts.join(', ');
+    return { tinh, quan, phuong, soNha };
+};
+
 const OrderTab = () => {
     const {
         brands, nhanSus, sanPhams,
@@ -329,7 +351,28 @@ const OrderTab = () => {
 
                         <div>
                             <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151' }}>Địa chỉ nhận hàng</label>
-                            <input type="text" value={diaChi} onChange={e => setDiaChi(e.target.value)} required placeholder="Địa chỉ..." style={{ width: '100%' }} />
+                            <input type="text" value={diaChi} onChange={e => setDiaChi(e.target.value)} required placeholder="Số nhà/đường, Phường/Xã, Tỉnh/Thành phố..." style={{ width: '100%' }} />
+                            {(() => {
+                                const p = parseDiaChi(diaChi);
+                                if (!p) return null;
+                                const rows = [
+                                    { icon: '🏙️', label: 'Tỉnh / Thành phố', value: p.tinh },
+                                    { icon: '🏘️', label: 'Quận / Huyện', value: p.quan },
+                                    { icon: '📍', label: 'Phường / Xã', value: p.phuong },
+                                    { icon: '🏠', label: 'Số nhà / Đường', value: p.soNha },
+                                ].filter(r => r.value);
+                                return (
+                                    <div style={{ marginTop: '10px', padding: '12px 16px', background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: '8px' }}>
+                                        <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#9A3412', marginBottom: '8px' }}>🔎 Địa chỉ đã tách:</div>
+                                        {rows.map((r, i) => (
+                                            <div key={i} style={{ display: 'flex', gap: '8px', fontSize: '0.9rem', color: '#374151', padding: '3px 0' }}>
+                                                <span style={{ minWidth: '150px', color: '#6B7280' }}>{r.icon} {r.label}:</span>
+                                                <span style={{ fontWeight: '600' }}>{r.value}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                );
+                            })()}
                         </div>
 
                         <div style={{ display: 'flex', gap: '30px' }}>
