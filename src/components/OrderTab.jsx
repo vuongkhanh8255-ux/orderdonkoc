@@ -71,6 +71,7 @@ const OrderTab = () => {
     const [cms, setCms] = useState('10%');
     const [videoCounts, setVideoCounts] = useState({});
     const [productCache, setProductCache] = useState({});
+    const [confirmOpen, setConfirmOpen] = useState(false); // modal xác nhận lại đơn bất thường
 
     // --- CUSTOM AXIS TICK (HIGHLIGHT T7, CN) ---
     const CustomizedAxisTick = (props) => {
@@ -233,6 +234,19 @@ const OrderTab = () => {
             return;
         }
 
+        // ⚠️ Đơn bất thường → bắt xác nhận lại 1 lần nữa (tránh kế toán phải hỏi lại):
+        //   - có sản phẩm số lượng > 2, HOẶC  - đơn có từ 2 sản phẩm trở lên
+        const hasHighQty = previewList.some(it => it.so_luong > 2);
+        const multiProduct = previewList.length >= 2;
+        if (hasHighQty || multiProduct) {
+            setConfirmOpen(true);
+            return;
+        }
+        doCreateOrder();
+    };
+
+    const doCreateOrder = async () => {
+        setConfirmOpen(false);
         try {
             const summaryString = previewList.map(item => `${item.ten_sanpham} (SL: ${item.so_luong})`).join(', ');
             const orderData = {
@@ -704,6 +718,45 @@ const OrderTab = () => {
                     </table>
                 </div>
             </div>
+
+            {confirmOpen && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }} onClick={() => setConfirmOpen(false)}>
+                    <div style={{ background: '#fff', borderRadius: '12px', padding: '28px', width: '90%', maxWidth: '560px', boxShadow: '0 10px 40px rgba(0,0,0,0.3)' }} onClick={e => e.stopPropagation()}>
+                        <h2 style={{ margin: '0 0 6px', color: '#D97706', fontSize: '1.4rem' }}>⚠️ XÁC NHẬN LẠI ĐƠN HÀNG</h2>
+                        <p style={{ margin: '0 0 16px', color: '#6B7280', fontSize: '0.92rem' }}>
+                            Đơn này cần kiểm tra kỹ vì:
+                        </p>
+                        <ul style={{ margin: '0 0 16px', paddingLeft: '20px', color: '#374151', fontSize: '0.92rem' }}>
+                            {previewList.length >= 2 && <li>Đơn có <b>{previewList.length} sản phẩm</b> khác nhau.</li>}
+                            {previewList.some(it => it.so_luong > 2) && <li>Có sản phẩm <b>số lượng &gt; 2</b> (đánh dấu đỏ bên dưới).</li>}
+                        </ul>
+                        <div style={{ maxHeight: '260px', overflowY: 'auto', border: '1px solid #eee', borderRadius: '8px' }}>
+                            <table style={{ width: '100%', fontSize: '0.9rem', borderCollapse: 'collapse' }}>
+                                <thead style={{ backgroundColor: '#FFF7ED', position: 'sticky', top: 0 }}>
+                                    <tr><th style={{ padding: '8px', textAlign: 'left' }}>Brand</th><th style={{ padding: '8px', textAlign: 'left' }}>Sản phẩm</th><th style={{ padding: '8px', textAlign: 'center' }}>SL</th><th style={{ padding: '8px', textAlign: 'center' }}>Clip</th></tr>
+                                </thead>
+                                <tbody>
+                                    {previewList.map((item, idx) => {
+                                        const high = item.so_luong > 2;
+                                        return (
+                                            <tr key={idx} style={{ borderBottom: '1px solid #eee', background: high ? '#FEF2F2' : 'transparent' }}>
+                                                <td style={{ padding: '8px', fontWeight: 'bold', color: '#333' }}>{item.ten_brand}</td>
+                                                <td style={{ padding: '8px' }}>{item.ten_sanpham}</td>
+                                                <td style={{ padding: '8px', textAlign: 'center', fontWeight: 'bold', color: high ? '#DC2626' : '#333' }}>{high ? `⚠️ ${item.so_luong}` : item.so_luong}</td>
+                                                <td style={{ padding: '8px', textAlign: 'center', color: '#D42426', fontWeight: 'bold' }}>{item.sl_video}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '20px' }}>
+                            <button type="button" onClick={() => setConfirmOpen(false)} style={{ padding: '10px 18px', borderRadius: '8px', border: '1px solid #D1D5DB', background: '#fff', color: '#374151', fontWeight: 600, cursor: 'pointer' }}>← Kiểm tra lại</button>
+                            <button type="button" onClick={doCreateOrder} style={{ padding: '10px 22px', borderRadius: '8px', border: 'none', background: '#16A34A', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>✅ Xác nhận tạo đơn</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 };
