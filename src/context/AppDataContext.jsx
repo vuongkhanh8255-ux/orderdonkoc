@@ -519,6 +519,25 @@ export const AppDataProvider = ({ children }) => {
     const orderedData = data.map(row => { const newRow = {}; headers.forEach(header => { if (header.key) { newRow[header.label] = row[header.key]; } }); return newRow; });
     const worksheet = XLSX.utils.json_to_sheet(orderedData); const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1"); XLSX.writeFile(workbook, filename);
   };
+  // Tách địa chỉ thành Tỉnh/TP - Quận/Huyện - Phường/Xã - Số nhà/Đường (cho file Excel kho dùng)
+  const splitDiaChi = (raw) => {
+    const parts = String(raw || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length < 2) return { tinh: '', quan: '', phuong: '', soNha: raw || '' };
+    const tinh = parts[parts.length - 1];
+    const middle = parts.slice(0, -1);
+    const phuongRe = /^(phường|xã|thị trấn|p\.|x\.)\s/i;
+    const quanRe = /^(quận|huyện|thị xã|q\.|h\.)\s/i;
+    let phuong = '', quan = '';
+    const soNhaParts = [];
+    middle.forEach(p => {
+      if (!phuong && phuongRe.test(p)) phuong = p;
+      else if (!quan && quanRe.test(p)) quan = p;
+      else soNhaParts.push(p);
+    });
+    if (!phuong && soNhaParts.length > 1) phuong = soNhaParts.pop();
+    return { tinh, quan, phuong, soNha: soNhaParts.join(', ') };
+  };
+
   const handleExportAll = async () => {
     setIsLoading(true); const hasProductFilter = !!filterBrand || !!filterSanPham; const ctRelation = hasProductFilter ?
       'chitiettonguis!chitiettonguis_dongui_id_fkey_final!inner' : 'chitiettonguis!chitiettonguis_dongui_id_fkey_final'; const spRelation = hasProductFilter ? 'sanphams!inner' : 'sanphams';
@@ -533,8 +552,8 @@ export const AppDataProvider = ({ children }) => {
     const { data, error } = await query; if (error) {
       alert("Lỗi tải dữ liệu để xuất file: " + error.message);
       setIsLoading(false); return;
-    } let exportData = data || []; const finalExportData = exportData.flatMap((donHang, index) => { const baseData = { stt: index + 1, ngayGui: new Date(donHang.ngay_gui).toLocaleString('vi-VN'), tenKOC: donHang.koc_ho_ten, cccd: donHang.koc_cccd, idKenh: donHang.koc_id_kenh, sdt: donHang.koc_sdt, diaChi: donHang.koc_dia_chi, nhanSu: donHang.nhansu?.ten_nhansu, loaiShip: donHang.loai_ship, trangThai: donHang.trang_thai }; if (donHang.chitiettonguis.length === 0) { return [{ ...baseData, sanPham: 'N/A', soLuong: 0, brand: 'N/A', barcode: 'N/A' }]; } return donHang.chitiettonguis.map(ct => ({ ...baseData, sanPham: ct.sanphams?.ten_sanpham, soLuong: ct.so_luong, brand: ct.sanphams?.brands?.ten_brand, barcode: ct.sanphams?.barcode, })); });
-    const mainExportHeaders = [{ label: "STT", key: "stt" }, { label: "Ngày Gửi", key: "ngayGui" }, { label: "Tên KOC", key: "tenKOC" }, { label: "CCCD", key: "cccd" }, { label: "ID Kênh", key: "idKenh" }, { label: "SĐT", key: "sdt" }, { label: "Địa chỉ", key: "diaChi" }, { label: "Sản Phẩm", key: "sanPham" }, { label: "Số Lượng", key: "soLuong" }, { label: "Brand", key: "brand" }, { label: "Barcode", key: "barcode" }, { label: "Nhân Sự Gửi", key: "nhanSu" }, { label: "Loại Ship", key: "loaiShip" }, { label: "Trạng Thái", key: "trangThai" },];
+    } let exportData = data || []; const finalExportData = exportData.flatMap((donHang, index) => { const dc = splitDiaChi(donHang.koc_dia_chi); const baseData = { stt: index + 1, ngayGui: new Date(donHang.ngay_gui).toLocaleString('vi-VN'), tenKOC: donHang.koc_ho_ten, cccd: donHang.koc_cccd, idKenh: donHang.koc_id_kenh, sdt: donHang.koc_sdt, diaChi: donHang.koc_dia_chi, tinhTP: dc.tinh, quanHuyen: dc.quan, phuongXa: dc.phuong, soNhaDuong: dc.soNha, nhanSu: donHang.nhansu?.ten_nhansu, loaiShip: donHang.loai_ship, trangThai: donHang.trang_thai }; if (donHang.chitiettonguis.length === 0) { return [{ ...baseData, sanPham: 'N/A', soLuong: 0, brand: 'N/A', barcode: 'N/A' }]; } return donHang.chitiettonguis.map(ct => ({ ...baseData, sanPham: ct.sanphams?.ten_sanpham, soLuong: ct.so_luong, brand: ct.sanphams?.brands?.ten_brand, barcode: ct.sanphams?.barcode, })); });
+    const mainExportHeaders = [{ label: "STT", key: "stt" }, { label: "Ngày Gửi", key: "ngayGui" }, { label: "Tên KOC", key: "tenKOC" }, { label: "CCCD", key: "cccd" }, { label: "ID Kênh", key: "idKenh" }, { label: "SĐT", key: "sdt" }, { label: "Địa chỉ", key: "diaChi" }, { label: "Tỉnh/TP", key: "tinhTP" }, { label: "Quận/Huyện", key: "quanHuyen" }, { label: "Phường/Xã", key: "phuongXa" }, { label: "Số nhà/Đường", key: "soNhaDuong" }, { label: "Sản Phẩm", key: "sanPham" }, { label: "Số Lượng", key: "soLuong" }, { label: "Brand", key: "brand" }, { label: "Barcode", key: "barcode" }, { label: "Nhân Sự Gửi", key: "nhanSu" }, { label: "Loại Ship", key: "loaiShip" }, { label: "Trạng Thái", key: "trangThai" },];
     handleExport({ data: finalExportData, headers: mainExportHeaders, filename: 'danh-sach-don-hang-FULL.xlsx' }); setIsLoading(false);
   };
 

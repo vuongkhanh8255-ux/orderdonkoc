@@ -709,7 +709,19 @@ const OrderTab = () => {
                                                 <td style={{ width: `${columnWidths.cccd}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.koc_cccd, donHang.original_koc_cccd) }}>{donHang.koc_cccd}</td>
                                                 <td style={{ width: `${columnWidths.idKenh}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.koc_id_kenh, donHang.original_koc_id_kenh) }}>{donHang.koc_id_kenh}</td>
                                                 <td style={{ width: `${columnWidths.sdt}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.koc_sdt, donHang.original_koc_sdt) }}>{donHang.koc_sdt}</td>
-                                                <td style={{ width: `${columnWidths.diaChi}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.koc_dia_chi, donHang.original_koc_dia_chi) }}>{donHang.koc_dia_chi}</td>
+                                                <td style={{ width: `${columnWidths.diaChi}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.koc_dia_chi, donHang.original_koc_dia_chi) }}>
+                                                    <div>{donHang.koc_dia_chi}</div>
+                                                    {(() => {
+                                                        const p = parseDiaChi(donHang.koc_dia_chi);
+                                                        if (!p) return null;
+                                                        const rows = [['🏙️', p.tinh], ['🏘️', p.quan], ['📍', p.phuong], ['🏠', p.soNha]].filter(r => r[1]);
+                                                        return (
+                                                            <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #ddd', fontSize: '0.78rem', color: '#6B7280', lineHeight: 1.5 }}>
+                                                                {rows.map((r, i) => <div key={i}>{r[0]} {r[1]}</div>)}
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                </td>
                                                 <td style={{ width: `${columnWidths.brand}px`, padding: '12px', border: '1px solid #ddd' }}>{[...new Set(donHang.chitiettonguis?.map(ct => ct.sanphams?.brands?.ten_brand))].map(tenBrand => (<div key={tenBrand}>{tenBrand}</div>))}</td>
                                                 <td style={{ width: `${columnWidths.sanPham}px`, padding: '12px', border: '1px solid #ddd' }}>{sanPhamDisplay}</td>
                                                 <td style={{ width: `${columnWidths.nhanSu}px`, padding: '12px', border: '1px solid #ddd' }}>{donHang.nhansu?.ten_nhansu}</td>
