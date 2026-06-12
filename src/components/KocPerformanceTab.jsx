@@ -464,6 +464,7 @@ export default function KocPerformanceTab() {
   const allBrands = useMemo(() => [...new Set((shops || []).map(s => brandOfShop(s.seller_name)))].filter(b => b && b !== '—'), [shops]);
   const [assignMap, setAssignMap] = useState({});
   const [showAssignPanel, setShowAssignPanel] = useState(true);
+  const [showPendingTop, setShowPendingTop] = useState(false);
   const [assignShow, setAssignShow] = useState(48);
   const reloadAssignments = useCallback(async () => {
     // Load TẤT CẢ assignment (mọi brand) → mỗi KOC biết được gán ở brand hiện tại + brand khác
@@ -507,6 +508,13 @@ export default function KocPerformanceTab() {
     for (const [koc, arr] of Object.entries(assignMap)) for (const a of (arr || [])) if (a.brand_name === brand && a.status === 'proposed') out.push({ koc, ...a });
     return out;
   }, [assignMap, brand, currentUser]);
+  // ── TẤT CẢ đề xuất GÁN chờ duyệt (MỌI brand) → bảng thông báo đầu trang cho admin ──
+  const allPendingProposals = useMemo(() => {
+    if (currentUser?.role !== 'admin') return [];
+    const out = [];
+    for (const [koc, arr] of Object.entries(assignMap)) for (const a of (arr || [])) if (a.status === 'proposed') out.push({ koc, ...a });
+    return out.sort((x, y) => new Date(y.proposed_at || 0) - new Date(x.proposed_at || 0));
+  }, [assignMap, currentUser]);
   const blacklistAssigned = useMemo(() => {
     if (currentUser?.role !== 'admin' || !blacklist.size) return [];
     return Object.entries(assignMap)
@@ -522,6 +530,18 @@ export default function KocPerformanceTab() {
   const rejectProposal = async (p) => {
     await supabase.from(ASSIGN_TABLE).delete().eq('koc_id', p.koc).eq('brand_name', brand);
     supabase.from(HIST_TABLE).insert({ koc_id: p.koc, brand_name: brand, staff_name: p.staff_name, action: 'remove', actor: (currentUser?.username || '') + ' (từ chối)' }).then(() => {}, () => {});
+    refreshAssign();
+  };
+  // Duyệt / từ chối theo ĐÚNG brand của đề xuất (dùng cho bảng thông báo đầu trang — gom mọi brand)
+  const approveProposalAny = async (p) => {
+    const nowIso = new Date().toISOString();
+    await supabase.from(ASSIGN_TABLE).upsert({ koc_id: p.koc, brand_name: p.brand_name, staff_name: p.staff_name, status: 'approved', approved_by: currentUser?.username || '', approved_at: nowIso, updated_at: nowIso, assigned_at: p.assigned_at, proposed_by: p.proposed_by, proposed_at: p.proposed_at }, { onConflict: 'koc_id,brand_name' });
+    supabase.from(HIST_TABLE).insert({ koc_id: p.koc, brand_name: p.brand_name, staff_name: p.staff_name, action: 'approve', actor: currentUser?.username || '' }).then(() => {}, () => {});
+    refreshAssign();
+  };
+  const rejectProposalAny = async (p) => {
+    await supabase.from(ASSIGN_TABLE).delete().eq('koc_id', p.koc).eq('brand_name', p.brand_name);
+    supabase.from(HIST_TABLE).insert({ koc_id: p.koc, brand_name: p.brand_name, staff_name: p.staff_name, action: 'remove', actor: (currentUser?.username || '') + ' (từ chối)' }).then(() => {}, () => {});
     refreshAssign();
   };
 
@@ -605,10 +625,49 @@ export default function KocPerformanceTab() {
 
   return (
     <div style={{ padding: '20px 24px', maxWidth: 1280, margin: '0 auto' }}>
-      <h1 style={{ fontSize: '1.5rem', fontWeight: 900, color: '#0f172a', margin: '0 0 4px' }}>🌟 Hiệu suất KOC</h1>
-      <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: '0 0 14px' }}>
-        Doanh số thật KOC mang về cho shop (đơn affiliate) {data?.shop && <b style={{ color: ACCENT }}>· {data.shop}</b>}
-      </p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+        <div>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 900, color: '#0f172a', margin: '0 0 4px' }}>🌟 Hiệu suất KOC</h1>
+          <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: '0 0 14px' }}>
+            Doanh số thật KOC mang về cho shop (đơn affiliate) {data?.shop && <b style={{ color: ACCENT }}>· {data.shop}</b>}
+          </p>
+        </div>
+        {/* 🔔 Nút chuông thông báo — đề xuất gắn KOC chờ duyệt (chỉ admin) */}
+        {currentUser?.role === 'admin' && (
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <button onClick={() => setShowPendingTop(v => !v)} title="Đề xuất gắn KOC chờ duyệt"
+              style={{ position: 'relative', width: 46, height: 46, borderRadius: 12, border: `1px solid ${allPendingProposals.length > 0 ? '#fcd34d' : '#e5e7eb'}`, background: allPendingProposals.length > 0 ? '#fffbeb' : '#fff', cursor: 'pointer', fontSize: '1.35rem', lineHeight: 1, boxShadow: '0 1px 3px rgba(15,23,42,0.06)' }}>
+              🔔
+              {allPendingProposals.length > 0 && (
+                <span style={{ position: 'absolute', top: -7, right: -7, background: '#dc2626', color: '#fff', fontSize: '0.7rem', fontWeight: 800, borderRadius: 999, minWidth: 21, height: 21, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px', border: '2px solid #fff' }}>{allPendingProposals.length}</span>
+              )}
+            </button>
+            {showPendingTop && (
+              <div style={{ position: 'absolute', right: 0, top: 54, width: 460, maxWidth: '92vw', background: '#fff', border: '1px solid #fcd34d', borderRadius: 14, boxShadow: '0 12px 34px rgba(15,23,42,0.20)', zIndex: 60, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #fef3c7', background: '#fffbeb' }}>
+                  <span style={{ fontWeight: 800, color: '#b45309', fontSize: '0.9rem' }}>🔔 {allPendingProposals.length} đề xuất gắn KOC chờ duyệt</span>
+                  <span onClick={() => setShowPendingTop(false)} style={{ cursor: 'pointer', color: '#b45309', fontWeight: 800, fontSize: '1rem', lineHeight: 1 }}>✕</span>
+                </div>
+                <div style={{ maxHeight: 420, overflowY: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  {allPendingProposals.length === 0 ? (
+                    <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.82rem', padding: '18px 0' }}>🎉 Không có đề xuất nào chờ duyệt.</div>
+                  ) : allPendingProposals.map(p => (
+                    <div key={'topp-' + p.brand_name + '-' + p.koc} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.79rem', background: '#fffdf7', borderRadius: 9, padding: '9px 11px', border: '1px solid #fde68a', flexWrap: 'wrap' }}>
+                      <a href={`https://www.tiktok.com/@${p.koc}`} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontWeight: 800, textDecoration: 'none' }}>@{p.koc}</a>
+                      <span style={{ background: '#fff7ed', color: '#e85518', fontWeight: 700, fontSize: '0.7rem', borderRadius: 7, padding: '2px 8px', border: '1px solid #fed7aa' }}>{p.brand_name}</span>
+                      <span style={{ width: '100%', color: '#475569', fontSize: '0.74rem' }}>Gắn cho NS <b style={{ color: '#0f172a' }}>{p.staff_name}</b> · đề xuất bởi <b style={{ color: '#64748b' }}>{p.proposed_by || '?'}</b>{p.proposed_at ? ` · ${new Date(p.proposed_at).toLocaleString('vi-VN')}` : ''}</span>
+                      <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                        <button onClick={() => approveProposalAny(p)} style={{ padding: '5px 14px', borderRadius: 7, border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#16a34a', fontWeight: 800, fontSize: '0.76rem', cursor: 'pointer' }}>✓ Duyệt</button>
+                        <button onClick={() => rejectProposalAny(p)} style={{ padding: '5px 12px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>✕ Từ chối</button>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Filter bar — nằm ngang */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>

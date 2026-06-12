@@ -1,7 +1,7 @@
 -- Chi phí mẫu mỗi KOC (vào ROAS ở Hiệu suất KOC) — THEO KỲ đang chọn.
 -- = Σ(cost×1.08×SL) + 5.000 vận hành + ship (Hỏa tốc 50k / Thường 20k) — tính PER ĐƠN.
 -- Lọc đơn mẫu theo ngay_gui (giờ VN) trong [p_start, p_end]; null = tất cả (mode "Tất cả").
--- Cost lấy từ costing_data, cột "...file" THÁNG MỚI NHẤT (tự dò). Map sanphams.barcode ↔ costing "Mã".
+-- Cost lấy từ costing_data, cột "... AMIS V2" THÁNG MỚI NHẤT (tự dò). Map sanphams.barcode ↔ costing "Mã".
 -- KOC khớp theo donguis.koc_id_kenh (lowercase) ↔ creator_username affiliate.
 -- LƯU Ý: đơn mẫu không có chitiettonguis (chỉ có text san_pham_chi_tiet) sẽ KHÔNG tính được (thiếu barcode).
 drop function if exists koc_sample_cost();
@@ -10,14 +10,17 @@ returns table(uname text, sample_cost numeric)
 language sql stable as $$
   with latest_col as (
     select h as col from costing_data, jsonb_array_elements_text(headers) h
-    where h like 'COSTING T%file'
-    order by (regexp_match(h, 'T(\d+)\.(\d+) file'))[2]::int desc,
-             (regexp_match(h, 'T(\d+)\.(\d+) file'))[1]::int desc
+    where h like 'COSTING T% AMIS V2'
+    order by (regexp_match(h, 'T(\d+)\.(\d+) AMIS V2'))[2]::int desc,
+             (regexp_match(h, 'T(\d+)\.(\d+) AMIS V2'))[1]::int desc
     limit 1
   ),
+  -- Ô có chữ (vd "CHƯA SẢN XUẤT") → coi như chưa có giá (NULL), không làm lỗi.
   cost_map as (
     select r->>'Mã' as barcode,
-           nullif(replace((r->>lc.col), ',', ''), '')::numeric as cost
+           case when trim(replace((r->>lc.col), ',', '')) ~ '^[0-9]+(\.[0-9]+)?$'
+                then trim(replace((r->>lc.col), ',', ''))::numeric
+                else null end as cost
     from costing_data cd, latest_col lc, jsonb_array_elements(cd.rows) r
     where cd.key = 'latest'
   ),

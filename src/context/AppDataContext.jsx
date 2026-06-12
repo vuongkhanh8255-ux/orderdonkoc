@@ -1082,6 +1082,8 @@ export const AppDataProvider = ({ children }) => {
   useEffect(() => { loadInitialData(); }, [currentPage, filterIdKenh, filterSdt, filterNhanSu, filterNgayStart, filterNgayEnd, filterLoaiShip, filterEditedStatus, filterBrand, filterSanPham]);
   useEffect(() => { if (currentPage !== 1) { setCurrentPage(1); } }, [filterIdKenh, filterSdt, filterNhanSu, filterNgayStart, filterNgayEnd, filterLoaiShip, filterEditedStatus, filterBrand, filterSanPham]);
   useEffect(() => { loadSanPhamsByBrand(selectedBrand); setProductSearchTerm(''); }, [selectedBrand]);
+  // Báo cáo hiệu suất nhân sự: tự chạy khi mở trang & khi đổi tháng/năm (không cần bấm nút).
+  useEffect(() => { handleGenerateReport(); }, [reportMonth, reportYear]);
   // [MODIFIED] Removed airLinksCurrentPage dependency. Page change handled client-side now.
   useEffect(() => { loadAirLinks(); }, [filterAlKenh, filterAlBrand, filterAlNhanSu, filterAlMonth, filterAlLinkAir]);
 
