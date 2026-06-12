@@ -362,6 +362,26 @@ export const AppDataProvider = ({ children }) => {
       setHoTen(data.ho_ten); setSdt(data.sdt); setDiaChi(data.dia_chi); setCccd(data.cccd);
     }
   };
+  // Auto-fill thông tin KOC theo SĐT: khớp 9 số cuối (xử lý cả số có/không số 0 đầu)
+  // hoặc trùng 100%, lấy đơn ĐÃ GỬI gần nhất rồi điền lại địa chỉ + thông tin.
+  const handleSdtBlur = async () => {
+    const clean = String(sdt || '').replace(/\D/g, '');
+    if (clean.length < 9) return; // cần đủ 9 số mới tra cho khỏi nhầm
+    const last9 = clean.slice(-9);
+    const { data } = await supabase
+      .from('donguis')
+      .select('koc_ho_ten, koc_id_kenh, koc_dia_chi, koc_cccd, koc_sdt, ngay_gui')
+      .ilike('koc_sdt', `%${last9}`)
+      .order('ngay_gui', { ascending: false })
+      .limit(1);
+    if (data && data.length > 0) {
+      const k = data[0];
+      if (k.koc_ho_ten) setHoTen(k.koc_ho_ten);
+      if (k.koc_id_kenh) setIdKenh(k.koc_id_kenh);
+      if (k.koc_dia_chi) setDiaChi(k.koc_dia_chi);
+      if (k.koc_cccd) setCccd(k.koc_cccd);
+    }
+  };
   const clearFilters = () => { setFilterIdKenh(''); setFilterSdt(''); setFilterBrand(''); setFilterSanPham(''); setFilterNhanSu(''); setFilterNgayStart(''); setFilterNgayEnd(''); setFilterLoaiShip(''); setFilterEditedStatus('all'); };
 
   // =========================================================================
@@ -1201,7 +1221,7 @@ export const AppDataProvider = ({ children }) => {
     columnWidths, setColumnWidths,
 
     // Logic Tab Order
-    handleResize, loadInitialData, loadSanPhamsByBrand, handleQuantityChange, handleSubmit, handleIdKenhBlur,
+    handleResize, loadInitialData, loadSanPhamsByBrand, handleQuantityChange, handleSubmit, handleIdKenhBlur, handleSdtBlur,
     clearFilters, handleGetSummary, handleGenerateReport, requestSort, handleEdit, handleCancelEdit,
     handleUpdate, handleSelect, handleSelectAll, handleBulkUpdateStatus, handleExport, handleExportAll,
 

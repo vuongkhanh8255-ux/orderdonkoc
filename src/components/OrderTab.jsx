@@ -23,7 +23,7 @@ const OrderTab = () => {
         reportMonth, setReportMonth, reportYear, setReportYear,
         reportData, isReportLoading, sortConfig, editingDonHang, setEditingDonHang, isPastDeadlineForNewOrders,
         columnWidths, handleResize, handleQuantityChange,
-        filterSanPhams, handleIdKenhBlur,
+        filterSanPhams, handleIdKenhBlur, handleSdtBlur,
         clearFilters, handleGetSummary, handleGenerateReport, requestSort, handleEdit,
         handleCancelEdit, handleUpdate, handleSelect, handleSelectAll, handleBulkUpdateStatus,
         handleExport, handleExportAll, sortedReportRows, totalsRow, totalPages,
@@ -307,23 +307,23 @@ const OrderTab = () => {
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                             <div>
-                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151' }}>ID Kênh (*)</label>
-                                <input type="text" value={idKenh} onChange={e => setIdKenh(e.target.value)} onBlur={handleIdKenhBlur} required placeholder="Nhập ID kênh..." style={{ width: '100%' }} />
+                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151' }}>Số điện thoại</label>
+                                <input type="text" value={sdt} onChange={e => setSdt(e.target.value)} onBlur={handleSdtBlur} required placeholder="SĐT... (nhập xong tự điền lại thông tin cũ)" style={{ width: '100%' }} />
                             </div>
                             <div>
-                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151' }}>Họ tên KOC (*)</label>
-                                <input type="text" value={hoTen} onChange={e => setHoTen(e.target.value)} required placeholder="Họ và tên..." style={{ width: '100%' }} />
+                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151' }}>ID Kênh (*)</label>
+                                <input type="text" value={idKenh} onChange={e => setIdKenh(e.target.value)} onBlur={handleIdKenhBlur} required placeholder="Nhập ID kênh..." style={{ width: '100%' }} />
                             </div>
                         </div>
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                             <div>
-                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151' }}>CCCD (12 số)</label>
-                                <input type="text" value={cccd} onChange={e => setCccd(e.target.value)} required maxLength="12" minLength="12" pattern="[0-9]*" title="Vui lòng nhập đủ 12 chữ số." placeholder="CCCD..." style={{ width: '100%' }} />
+                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151' }}>Họ tên KOC (*)</label>
+                                <input type="text" value={hoTen} onChange={e => setHoTen(e.target.value)} required placeholder="Họ và tên..." style={{ width: '100%' }} />
                             </div>
                             <div>
-                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151' }}>Số điện thoại</label>
-                                <input type="text" value={sdt} onChange={e => setSdt(e.target.value)} required placeholder="SĐT..." style={{ width: '100%' }} />
+                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151' }}>CCCD (12 số)</label>
+                                <input type="text" value={cccd} onChange={e => setCccd(e.target.value)} required maxLength="12" minLength="12" pattern="[0-9]*" title="Vui lòng nhập đủ 12 chữ số." placeholder="CCCD..." style={{ width: '100%' }} />
                             </div>
                         </div>
 
