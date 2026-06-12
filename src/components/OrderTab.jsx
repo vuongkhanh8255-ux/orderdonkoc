@@ -464,6 +464,20 @@ const OrderTab = () => {
                             </div>
                         </div>
 
+                        {previewList.length > 0 && (() => {
+                            const highQty = previewList.some(it => it.so_luong > 2);
+                            const multi = previewList.length >= 2;
+                            if (!highQty && !multi) return null;
+                            return (
+                                <div style={{ marginTop: '1rem', padding: '12px 16px', background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: '10px', color: '#92400E', fontSize: '0.92rem', fontWeight: 600, animation: 'fadeIn 0.4s', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <span style={{ fontSize: '1.3rem' }}>🔔</span>
+                                    <span>
+                                        Đơn này {multi && <b>có {previewList.length} sản phẩm</b>}{multi && highQty && ' và '}{highQty && <b>có sản phẩm số lượng &gt; 2</b>} → khi bấm <b>Gửi Đơn</b> sẽ phải <b>xác nhận lại 1 lần nữa</b>.
+                                    </span>
+                                </div>
+                            );
+                        })()}
+
                         <button type="submit" disabled={isLoading || isPastDeadlineForNewOrders} className="btn-primary" style={{ marginTop: '1rem', padding: '16px', fontSize: '1.1rem', fontWeight: '800', borderRadius: '50px', boxShadow: '0 4px 15px rgba(255, 102, 0, 0.3)' }}>
                             {isLoading ? '⏳ ĐANG XỬ LÝ...' : '🎁 GỬI ĐƠN & TẠO BOOKING'}
                         </button>
