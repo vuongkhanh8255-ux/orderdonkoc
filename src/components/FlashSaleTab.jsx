@@ -518,6 +518,26 @@ export default function FlashSaleTab() {
     setLoading(false);
   };
 
+  // Xóa hàng loạt nhiều Flash Sale đã chọn (chạy theo lô 3 cái 1 để khỏi quá tải API)
+  const deleteFlashSalesBulk = async (fsIds) => {
+    if (!fsIds || fsIds.length === 0) return;
+    if (!confirm(`Bạn có chắc muốn xóa ${fsIds.length} Flash Sale đã chọn?`)) return;
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    let ok = 0, fail = 0;
+    await runChunked(fsIds, 3, async (fsId) => {
+      try {
+        const res = await apiCall('delete', {}, { flash_sale_id: fsId });
+        if (res.ok) ok++; else fail++;
+      } catch { fail++; }
+    });
+    if (fail === 0) setSuccess(`Đã xóa ${ok} Flash Sale`);
+    else setError(`Đã xóa ${ok} cái, ${fail} cái bị lỗi`);
+    await loadFlashSales();
+    setLoading(false);
+  };
+
   // ── Back to list ───────────────────────────────────────────────────────
   const backToList = () => {
     setStep(0);
@@ -865,6 +885,7 @@ export default function FlashSaleTab() {
         <FlashSaleList
           flashSales={flashSales}
           onDelete={deleteFlashSale}
+          onBulkDelete={deleteFlashSalesBulk}
           onRefresh={loadFlashSales}
         />
       )}
@@ -1014,7 +1035,23 @@ export default function FlashSaleTab() {
 // ══════════════════════════════════════════════════════════════════════════════
 
 // ── Flash Sale List ──────────────────────────────────────────────────────────
-function FlashSaleList({ flashSales, onDelete, onRefresh }) {
+function FlashSaleList({ flashSales, onDelete, onBulkDelete, onRefresh }) {
+  const [selected, setSelected] = useState(new Set());
+
+  const toggleOne = (id) => setSelected(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const allIds = (flashSales || []).map(fs => fs.flash_sale_id).filter(Boolean);
+  const allSelected = allIds.length > 0 && allIds.every(id => selected.has(id));
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(allIds));
+  const handleBulkDelete = async () => {
+    const ids = allIds.filter(id => selected.has(id));
+    await onBulkDelete(ids);
+    setSelected(new Set());
+  };
+
   if (!flashSales || flashSales.length === 0) {
     return (
       <div style={{ ...CARD, textAlign: 'center', padding: '60px 40px' }}>
@@ -1029,22 +1066,41 @@ function FlashSaleList({ flashSales, onDelete, onRefresh }) {
 
   return (
     <div style={{ ...CARD }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
         <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
           Danh sách Flash Sale ({flashSales.length})
         </h3>
-        <button onClick={onRefresh} style={{ ...BTN_SECONDARY, padding: '6px 14px', fontSize: '0.78rem' }}>
-          🔄 Làm mới
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', color: '#475569', cursor: 'pointer', userSelect: 'none' }}>
+            <input type="checkbox" checked={allSelected} onChange={toggleAll} style={{ width: 16, height: 16, cursor: 'pointer' }} />
+            Chọn tất cả
+          </label>
+          {selected.size > 0 && (
+            <button onClick={handleBulkDelete} style={{ ...BTN_DANGER, padding: '6px 14px', fontSize: '0.78rem', fontWeight: 700 }}>
+              🗑️ Xóa {selected.size} cái đã chọn
+            </button>
+          )}
+          <button onClick={onRefresh} style={{ ...BTN_SECONDARY, padding: '6px 14px', fontSize: '0.78rem' }}>
+            🔄 Làm mới
+          </button>
+        </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {flashSales.map((fs, i) => (
           <div key={fs.flash_sale_id || i} style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '14px 18px', borderRadius: 12, border: '1px solid #e5e7eb',
-            background: '#fafafa', transition: 'border-color 0.2s',
+            padding: '14px 18px', borderRadius: 12,
+            border: selected.has(fs.flash_sale_id) ? '1px solid #f87171' : '1px solid #e5e7eb',
+            background: selected.has(fs.flash_sale_id) ? '#fef2f2' : '#fafafa', transition: 'all 0.2s',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <input
+                type="checkbox"
+                checked={selected.has(fs.flash_sale_id)}
+                onChange={() => toggleOne(fs.flash_sale_id)}
+                disabled={!fs.flash_sale_id}
+                style={{ width: 18, height: 18, cursor: 'pointer', flexShrink: 0 }}
+              />
               <div style={{
                 width: 40, height: 40, borderRadius: 10, background: '#fff7ed', border: '1px solid #fed7aa',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem',
