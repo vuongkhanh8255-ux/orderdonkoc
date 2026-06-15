@@ -8,7 +8,7 @@
  * Query params:
  *   start_date  — YYYY-MM-DD (default: 3 days ago for cron)
  *   end_date    — YYYY-MM-DD (default: today)
- *   full_sync   — "1" to sync from 2026-04-01 (initial load)
+ *   full_sync   — "1" to sync from 2026-01-01 (initial load)
  *
  * Cron: runs daily at 4am VN (21:00 UTC)
  */
@@ -125,7 +125,7 @@ export default async function handler(req, res) {
 
   let startDate, endDate;
   if (fullSync) {
-    startDate = '2026-04-01';
+    startDate = '2026-01-01';
     endDate   = addDays(today, 1); // end_date_lt is exclusive
   } else if (params.start_date && params.end_date) {
     startDate = params.start_date;
