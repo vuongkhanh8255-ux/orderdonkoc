@@ -701,14 +701,15 @@ async function handleKocOrders({ params, supabase, res }) {
 
   // Cast scope theo NGÀY AIR của video; "Tất cả" (cast_all=1) → cộng hết (không lọc ngày)
   const castAll = params.cast_all === '1';
-  const [{ data: stats, error }, { data: totRows }, { data: viewRows }, { data: castRows }, { data: sampleRows }] = await Promise.all([
-    supabase.rpc('koc_order_stats', { p_shop_id: shopId, p_start: start, p_end: end }),
-    supabase.rpc('koc_order_totals', { p_shop_id: shopId, p_start: start, p_end: end }),
-    supabase.rpc('koc_video_views', { p_shop_id: shopId, p_start: start, p_end: end }),
-    supabase.rpc('koc_cast_by_creator', { p_shop_id: shopId, p_start: castAll ? null : start, p_end: castAll ? null : end }),
-    supabase.rpc('koc_sample_cost', { p_start: castAll ? null : start, p_end: castAll ? null : end }), // chi phí mẫu THEO KỲ (ngay_gui); "Tất cả" → null = hết — vào ROAS
-  ]);
+  // CHẠY TUẦN TỰ (không Promise.all): trên phạm vi rộng (vd "Tất cả"), 5 RPC chạy cùng lúc
+  // tranh tài nguyên DB → cái chậm nhất vượt statement_timeout. Chạy lần lượt thì mỗi query
+  // đứng 1 mình (~2s) + cache buffer ấm dần → nhanh & không timeout. Xong cache lại tức thì.
+  const { data: stats, error } = await supabase.rpc('koc_order_stats', { p_shop_id: shopId, p_start: start, p_end: end });
   if (error) return res.status(200).json({ ok: false, error: error.message });
+  const { data: totRows } = await supabase.rpc('koc_order_totals', { p_shop_id: shopId, p_start: start, p_end: end });
+  const { data: viewRows } = await supabase.rpc('koc_video_views', { p_shop_id: shopId, p_start: start, p_end: end });
+  const { data: castRows } = await supabase.rpc('koc_cast_by_creator', { p_shop_id: shopId, p_start: castAll ? null : start, p_end: castAll ? null : end });
+  const { data: sampleRows } = await supabase.rpc('koc_sample_cost', { p_start: castAll ? null : start, p_end: castAll ? null : end }); // chi phí mẫu THEO KỲ (ngay_gui); "Tất cả" → null = hết — vào ROAS
 
   // Tổng view video mỗi KOC (khớp username bỏ '@' + lowercase) theo khoảng đang chọn
   const normU = (u) => (u || '').toLowerCase().replace(/^@/, '');
