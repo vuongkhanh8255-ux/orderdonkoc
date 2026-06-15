@@ -339,11 +339,11 @@ async function handleKocCreators({ params, supabase, res }) {
 // action=koc_orders. Only data from AFF_SYNC_FLOOR_DATE onward is kept (lighter).
 // ════════════════════════════════════════════════════════════════════════════
 const AFF_ORDERS_VERSION = '202410';
-const AFF_SYNC_FLOOR_DATE = '2026-04-01';
-const AFF_SYNC_FLOOR_TS   = Math.floor(new Date('2026-04-01T00:00:00+07:00').getTime() / 1000);
+const AFF_SYNC_FLOOR_DATE = '2026-01-01';
+const AFF_SYNC_FLOOR_TS   = Math.floor(new Date('2026-01-01T00:00:00+07:00').getTime() / 1000);
 const AFF_PAGE_SIZE = '100';
 const AFF_FWD_PAGES  = 6;   // pages from top each run (refresh recent + settlement status)
-const AFF_BACK_PAGES = 26;  // deeper backfill pages each run (resumes via saved cursor)
+const AFF_BACK_PAGES = 40;  // deeper backfill pages each run (resumes via saved cursor)
 
 const vnDate = (ct) => { const n = Number(ct) || 0; return n ? new Date((n + 7 * 3600) * 1000).toISOString().slice(0, 10) : null; };
 

@@ -11,7 +11,7 @@ import { useAppData } from '../context/AppDataContext';
 
 const API = '/api/tiktok-shop/analytics';
 const ACCENT = '#ff6a2c';
-const FLOOR = '2026-04-01';
+const FLOOR = '2026-01-01';
 
 // ── Formatters ───────────────────────────────────────────────────────────────
 const fmtNum = (v) => { const n = Number(v); return Number.isFinite(n) ? n.toLocaleString('vi-VN') : '0'; };

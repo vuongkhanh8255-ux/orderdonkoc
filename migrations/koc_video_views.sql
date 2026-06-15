@@ -21,7 +21,7 @@ language sql stable as $$
   months as (
     select to_char(gs, 'YYYY-MM') ym
     from generate_series(
-      date_trunc('month', coalesce(p_start, date '2026-04-01')),
+      date_trunc('month', coalesce(p_start, date '2026-01-01')),
       date_trunc('month', coalesce(p_end, current_date)),
       interval '1 month') gs
   )
