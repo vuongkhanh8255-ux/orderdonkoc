@@ -941,7 +941,7 @@ export const AppDataProvider = ({ children }) => {
             ngay_air, san_pham, ngay_booking,
             brands ( ten_brand ),
             nhansu ( ten_nhansu )
-        `, { count: 'exact' });
+        `, { count: 'estimated' }); // 'estimated' = không quét cả bảng -> không timeout khi DB bận (tổng ~chính xác; set nhỏ vẫn đếm thật)
 
       if (filterAlKenh) {
         const term = filterAlKenh.trim();
