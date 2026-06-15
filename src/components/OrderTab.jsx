@@ -11,7 +11,11 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 // Tách 1 chuỗi địa chỉ thành các phần rõ ràng: Tỉnh/TP - Quận/Huyện - Phường/Xã - Số nhà/Đường.
 // Quy ước nhập: ngăn cách bằng dấu phẩy, phần cuối là Tỉnh/Thành phố.
 const parseDiaChi = (raw) => {
-    const parts = String(raw || '').split(',').map(s => s.trim()).filter(Boolean);
+    let s = String(raw || '').replace(/\s+/g, ' ').trim();
+    if (!s) return null;
+    // Chèn dấu phẩy trước từ khoá hành chính để tách được cả địa chỉ viết LIỀN (không có dấu phẩy)
+    s = s.replace(/\s+(phường|xã|thị trấn|quận|huyện|thị xã|tỉnh|thành phố|tp)\b/gi, ', $1');
+    const parts = s.split(',').map(p => p.trim()).filter(Boolean);
     if (parts.length < 2) return null; // chưa đủ để tách (cần ít nhất "..., Tỉnh/TP")
     const tinh = parts[parts.length - 1];
     const middle = parts.slice(0, -1);

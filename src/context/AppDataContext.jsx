@@ -521,7 +521,10 @@ export const AppDataProvider = ({ children }) => {
   };
   // Tách địa chỉ thành Tỉnh/TP - Quận/Huyện - Phường/Xã - Số nhà/Đường (cho file Excel kho dùng)
   const splitDiaChi = (raw) => {
-    const parts = String(raw || '').split(',').map(s => s.trim()).filter(Boolean);
+    let s = String(raw || '').replace(/\s+/g, ' ').trim();
+    // Chèn dấu phẩy trước từ khoá hành chính để tách được cả địa chỉ viết LIỀN (không dấu phẩy)
+    s = s.replace(/\s+(phường|xã|thị trấn|quận|huyện|thị xã|tỉnh|thành phố|tp)\b/gi, ', $1');
+    const parts = s.split(',').map(x => x.trim()).filter(Boolean);
     if (parts.length < 2) return { tinh: '', quan: '', phuong: '', soNha: raw || '' };
     const tinh = parts[parts.length - 1];
     const middle = parts.slice(0, -1);
