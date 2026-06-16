@@ -510,7 +510,7 @@ const syncShopVideosAllMonths = async ({ appKey, appSecret, shop_id, supabase, m
 // Lượt sync "VIDEO MỚI NHẤT": cửa sổ ngày hẹp (vài ngày qua) + sort theo NGÀY ĐĂNG giảm dần →
 // bắt video vừa air dù 0 GMV (đường sort-GMV phải cày tới đáy 45k video mới tới → rất lâu).
 // sortField cho phép thử nghiệm (param vsort) vì chưa chắc TikTok hỗ trợ field nào.
-const syncShopVideosRecent = async ({ appKey, appSecret, shop_id, supabase, days = 14, maxPages = 3, sortField = 'video_post_time' }) => {
+const syncShopVideosRecent = async ({ appKey, appSecret, shop_id, supabase, days = 14, maxPages = 8, sortField = 'views' }) => {
   const { data: aconns } = await supabase.from('tiktok_analytics_connections').select('access_token, refresh_token, shop_cipher, shop_id').not('access_token', 'is', null);
   const aconn = (aconns || []).find(c => String(c.shop_id) === String(shop_id));
   if (!aconn) return { videos: 0, skipped: 'no analytics conn' };
@@ -724,12 +724,13 @@ async function handleSyncAffVideos({ params, appKey, appSecret, supabase, res })
   }
 
   const vpages = Math.min(Math.max(Number(params.vpages) || 12, 1), 40);
-  const vsort = params.vsort ? String(params.vsort) : 'video_post_time'; // cho phép test field sort khác nhau
+  const vsort = params.vsort ? String(params.vsort) : 'views'; // TikTok chỉ cho sort theo metric (views/gmv/...), không theo ngày
+  const vrpages = Math.min(Math.max(Number(params.vrpages) || 8, 1), 20);
   const results = [];
   for (const m of targets) {
     try {
-      // Lượt "video mới nhất" TRƯỚC (nhẹ, bắt video vừa air dù 0 GMV)
-      const recent = await syncShopVideosRecent({ appKey, appSecret, shop_id: m.shop_id, supabase, sortField: vsort });
+      // Lượt "video mới nhất" TRƯỚC (cửa sổ ngày hẹp + sort views → bắt video vừa air dù ít/không đơn)
+      const recent = await syncShopVideosRecent({ appKey, appSecret, shop_id: m.shop_id, supabase, sortField: vsort, maxPages: vrpages });
       const win = await syncShopVideos({ appKey, appSecret, shop_id: m.shop_id, supabase, maxPages: 6 });
       const mon = await syncShopVideosAllMonths({ appKey, appSecret, shop_id: m.shop_id, supabase, maxPages: vpages });
       await supabase.from('tiktok_affiliate_sync_meta').update({ video_last_run_at: new Date().toISOString() }).eq('shop_id', m.shop_id);
