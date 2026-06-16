@@ -725,7 +725,7 @@ async function handleSyncAffVideos({ params, appKey, appSecret, supabase, res })
 
   const vpages = Math.min(Math.max(Number(params.vpages) || 12, 1), 40);
   const vsort = params.vsort ? String(params.vsort) : 'views'; // TikTok chỉ cho sort theo metric (views/gmv/...), không theo ngày
-  const vrpages = Math.min(Math.max(Number(params.vrpages) || 8, 1), 20);
+  const vrpages = Math.min(Math.max(Number(params.vrpages) || 15, 1), 20);
   const results = [];
   for (const m of targets) {
     try {
@@ -764,7 +764,7 @@ async function handleKocOrders({ params, supabase, res }) {
   // ── Cache CHUNG: mọi máy vào là tức thì cho tới khi shop có data mới ──
   // sync_token đổi khi total_synced / high_water / OLDEST / backfill thay đổi → cache tự stale.
   // (thêm oldest_create_time: backfill chạy nốt làm ngày cũ nhất lùi mà total không đổi → nhãn "đã đủ từ" phải refresh)
-  const syncToken = 'v7|' + (meta ? `${meta.total_synced || 0}|${meta.high_water_create_time || ''}|${meta.oldest_create_time || ''}|${meta.backfill_done ? 1 : 0}` : 'no-meta');
+  const syncToken = 'v8|' + (meta ? `${meta.total_synced || 0}|${meta.high_water_create_time || ''}|${meta.oldest_create_time || ''}|${meta.video_synced || 0}|${meta.backfill_done ? 1 : 0}` : 'no-meta');
   const cacheKey = `${shopId || 'null'}|${start}|${end || 'null'}`;
   const force = params.force === '1';
   if (!force) {
