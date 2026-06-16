@@ -904,6 +904,27 @@ async function handleKocVideos({ params, appKey, appSecret, supabase, res }) {
     top_product_id: String(r.top_product_id || ''), product_count: Number(r.product_count) || 0,
   }));
 
+  // Bổ sung video KOC đã ĐĂNG trong kỳ nhưng CHƯA ra đơn (lấy từ bảng video) → "VIDEO ĐÃ LÊN" hiện đủ
+  try {
+    const cn = norm(creator).replace(/^@/, '');
+    let vq = supabase.from('tiktok_shop_videos').select('id, post_date, video_post_time, product_id')
+      .eq('shop_id', shopId).or(`username.ilike.${cn},username.ilike.@${cn}`);
+    if (start) vq = vq.gte('post_date', start);
+    if (end)   vq = vq.lte('post_date', end);
+    const { data: tvids } = await vq;
+    const have = new Set(videos.map(v => v.content_id));
+    for (const tv of (tvids || [])) {
+      const id = String(tv.id);
+      if (have.has(id)) continue;
+      have.add(id);
+      const fo = tv.video_post_time ? Math.floor(new Date(tv.video_post_time).getTime() / 1000)
+               : (tv.post_date ? Math.floor(new Date(tv.post_date + 'T00:00:00Z').getTime() / 1000) : 0);
+      videos.push({ content_id: id, content_type: 'VIDEO', first_order: fo, last_order: fo,
+        orders: 0, gmv: 0, qty: 0, top_product_id: String(tv.product_id || ''), product_count: tv.product_id ? 1 : 0 });
+    }
+    videos.sort((a, b) => (b.first_order || 0) - (a.first_order || 0));
+  } catch { /* bổ sung video best-effort, không chặn */ }
+
   // Cast (giá đã thanh toán) mỗi video — map từ koc_payments (+ air_links fallback) theo video id
   try {
     const { data: castRows } = await supabase.rpc('koc_video_cast', { p_shop_id: shopId, p_creator: creator });
