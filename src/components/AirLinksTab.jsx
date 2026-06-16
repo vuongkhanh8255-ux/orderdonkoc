@@ -278,6 +278,17 @@ const AirLinksTab = () => {
     const [dupFilterStaff, setDupFilterStaff] = useState('');
     const [dupFilterLink, setDupFilterLink] = useState('');
 
+    // Gom nhóm video trùng MỘT LẦN theo airLinks (trước đây tính lại trên ~80k dòng mỗi render → giật)
+    const duplicateGroups = useMemo(() => {
+        const dupMap = {};
+        airLinks.forEach(item => {
+            let key = item.id_video ? item.id_video.trim() : null;
+            if (!key && item.link_air_koc) key = item.link_air_koc.trim();
+            if (key) { (dupMap[key] = dupMap[key] || []).push(item); }
+        });
+        return Object.values(dupMap).filter(group => group.length > 1);
+    }, [airLinks]);
+
     // State bộ lọc biểu đồ
     const [chart1Brand, setChart1Brand] = useState('All');
     const [chart2Brand, setChart2Brand] = useState('All');
@@ -995,18 +1006,7 @@ const AirLinksTab = () => {
 
             {/* DUPLICATE WARNING TABLE */}
             {(() => {
-                const dupMap = {};
-                airLinks.forEach(item => {
-                    let key = item.id_video ? item.id_video.trim() : null;
-                    if (!key && item.link_air_koc) key = item.link_air_koc.trim();
-
-                    if (key) {
-                        if (!dupMap[key]) dupMap[key] = [];
-                        dupMap[key].push(item);
-                    }
-                });
-
-                const duplicates = Object.values(dupMap).filter(group => group.length > 1);
+                const duplicates = duplicateGroups; // đã tính bằng useMemo([airLinks]) — không tính lại mỗi render
 
                 if (duplicates.length === 0) return null;
 

@@ -152,6 +152,42 @@ const fetchProductDetails = async ({ appKey, appSecret, conn, ids }) => {
   return map;
 };
 
+// Lấy {name,image} cho product_id: ưu tiên CACHE local + tên đã sync; chỉ gọi TikTok cho cái CHƯA có ảnh,
+// rồi upsert vào cache → lần sau 0 lần gọi TikTok (giảm chậm + hết rủi ro rate-limit 36009002).
+async function resolveProductMeta({ supabase, appKey, appSecret, conn, shopId, ids }) {
+  const out = {};
+  const uniq = [...new Set((ids || []).map(String).filter(Boolean))];
+  if (!uniq.length) return out;
+  try {
+    // 1) Cache (name + image)
+    const { data: cached } = await supabase.from('tiktok_product_cache').select('product_id, name, image').in('product_id', uniq);
+    for (const c of (cached || [])) out[String(c.product_id)] = { name: c.name || '', image: c.image || '' };
+    // 2) Tên từ video đã sync (fallback cho tên)
+    const needName = uniq.filter(id => !out[id]?.name);
+    if (needName.length) {
+      const { data: vids } = await supabase.from('tiktok_shop_videos').select('product_id, product_name').in('product_id', needName).not('product_name', 'is', null);
+      for (const v of (vids || [])) { const id = String(v.product_id); if (v.product_name && !out[id]?.name) out[id] = { name: v.product_name, image: out[id]?.image || '' }; }
+    }
+  } catch { /* lỗi đọc cache → để bước fetch lo */ }
+  // 3) Chỉ gọi TikTok cho cái CHƯA có ảnh, rồi cache lại
+  const missing = uniq.filter(id => !out[id] || !out[id].image);
+  if (missing.length && conn) {
+    try {
+      const meta = await fetchProductDetails({ appKey, appSecret, conn, ids: missing });
+      const upserts = [];
+      for (const id of missing) {
+        const m = meta[id];
+        if (m && (m.name || m.image)) {
+          out[id] = { name: m.name || out[id]?.name || '', image: m.image || out[id]?.image || '' };
+          upserts.push({ product_id: id, shop_id: shopId, name: out[id].name, image: out[id].image, updated_at: new Date().toISOString() });
+        }
+      }
+      if (upserts.length) { try { await supabase.from('tiktok_product_cache').upsert(upserts, { onConflict: 'product_id' }); } catch { /* ghi cache lỗi không chặn */ } }
+    } catch { /* tên/ảnh optional */ }
+  }
+  return out;
+}
+
 const loadProductConnections = async (supabase) => {
   const a = await supabase.from('tiktok_analytics_connections').select('access_token, refresh_token, shop_cipher, shop_id, seller_name').not('access_token', 'is', null);
   if (a.data?.length) return { rows: a.data, table: 'tiktok_analytics_connections' };
@@ -795,15 +831,13 @@ async function handleKocProducts({ params, appKey, appSecret, supabase, res }) {
     vperiod: vcByProduct[String(r.product_id)]?.vperiod || 0,
   }));
 
-  // Resolve product names/images (top 30) via the shop's Analytics connection
+  // Tên/ảnh sản phẩm (top 30): cache local trước, chỉ gọi TikTok cho cái chưa cache
   try {
     const { data: aconns } = await supabase.from('tiktok_analytics_connections').select('access_token, shop_cipher, shop_id').not('access_token', 'is', null);
     const conn = (aconns || []).find(c => String(c.shop_id) === String(shopId));
-    if (conn) {
-      const ids = products.slice(0, 30).map(p => p.product_id);
-      const meta = await fetchProductDetails({ appKey, appSecret, conn, ids });
-      products = products.map(p => ({ ...p, name: meta[p.product_id]?.name || '', image: meta[p.product_id]?.image || '' }));
-    }
+    const ids = products.slice(0, 30).map(p => p.product_id);
+    const meta = await resolveProductMeta({ supabase, appKey, appSecret, conn, shopId, ids });
+    products = products.map(p => ({ ...p, name: meta[p.product_id]?.name || '', image: meta[p.product_id]?.image || '' }));
   } catch { /* names optional */ }
 
   return res.status(200).json({ ok: true, creator, shop_id: shopId, count: products.length, products });
@@ -842,16 +876,14 @@ async function handleKocVideos({ params, appKey, appSecret, supabase, res }) {
     videos = videos.map(v => ({ ...v, cast: castById[v.content_id] || 0 }));
   } catch { /* cast optional */ }
 
-  // Resolve product name/image for the dominant product of each video (distinct, top 30)
+  // Tên/ảnh SP chính của mỗi video (distinct, top 30): cache local trước, chỉ gọi TikTok cho cái chưa cache
   try {
     const ids = [...new Set(videos.map(v => v.top_product_id).filter(Boolean))].slice(0, 30);
     if (ids.length) {
       const { data: aconns } = await supabase.from('tiktok_analytics_connections').select('access_token, shop_cipher, shop_id').not('access_token', 'is', null);
       const conn = (aconns || []).find(c => String(c.shop_id) === String(shopId));
-      if (conn) {
-        const meta = await fetchProductDetails({ appKey, appSecret, conn, ids });
-        videos = videos.map(v => ({ ...v, product_name: meta[v.top_product_id]?.name || '', product_image: meta[v.top_product_id]?.image || '' }));
-      }
+      const meta = await resolveProductMeta({ supabase, appKey, appSecret, conn, shopId, ids });
+      videos = videos.map(v => ({ ...v, product_name: meta[v.top_product_id]?.name || '', product_image: meta[v.top_product_id]?.image || '' }));
     }
   } catch { /* names optional */ }
 
