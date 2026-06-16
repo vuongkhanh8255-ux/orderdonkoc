@@ -659,11 +659,12 @@ async function handleSyncAffOrders({ params, appKey, appSecret, supabase, res })
   } else {
     const { data: metas } = await supabase.from('tiktok_affiliate_sync_meta').select('seller_name, last_run_at, backfill_done');
     const metaBy = {}; (metas || []).forEach(m => { metaBy[norm(m.seller_name)] = m; });
-    const score = (m) => !m ? 0 : (!m.backfill_done ? 1 : 2);
+    // Xoay vòng CÔNG BẰNG theo độ cũ (last_run_at): shop chưa sync / lâu nhất tới lượt trước.
+    // (Trước đây ưu tiên TUYỆT ĐỐI shop đang backfill → 1 shop backfill khổng lồ (eHerb VN) giành
+    //  hết mọi lượt, bỏ đói incremental sync của 5 shop kia. Giờ ai cũ nhất thì sync; backfill của
+    //  shop đó vẫn tiến tiếp khi tới lượt nó.)
     targets = [...conns].sort((a, b) => {
       const ma = metaBy[norm(a.seller_name)], mb = metaBy[norm(b.seller_name)];
-      const sa = score(ma), sb = score(mb);
-      if (sa !== sb) return sa - sb;
       return (ma?.last_run_at ? new Date(ma.last_run_at).getTime() : 0) - (mb?.last_run_at ? new Date(mb.last_run_at).getTime() : 0);
     }).slice(0, 1);
   }
