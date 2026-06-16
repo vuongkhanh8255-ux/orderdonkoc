@@ -1,42 +1,45 @@
 // src/App.jsx
 
-import { useState, useEffect, Component } from 'react';
+import { useState, useEffect, Component, lazy, Suspense } from 'react';
 import { AppDataProvider } from './context/AppDataContext';
 import { supabase } from './supabaseClient';
-import OrderTab from './components/OrderTab';
-import ContractTab from './components/ContractTab';
-import AirLinksTab from './components/AirLinksTab';
-import ExpenseEcomTab from './components/ExpenseEcomTab';
-import BookingManagerTab from './components/BookingManagerTab';
-import DashboardTab from './components/DashboardTab';
-import BookingPerformanceTab from './components/BookingPerformanceTab';
-import KocPerformanceTab from './components/KocPerformanceTab';
-import KocBlacklistTab from './components/KocBlacklistTab';
-import KocPaymentTab from './components/KocPaymentTab';
-import DataArchiveTab from './components/DataArchiveTab';
-import NhanhProductsTab from './components/NhanhProductsTab';
-import GmvRealtimeTab from './components/GmvRealtimeTab';
-import StellaDashboardTab from './components/StellaDashboardTab';
-import CSKHTab from './components/CSKHTab';
-import LivestreamTab from './components/LivestreamTab';
-import LandingOrders from './components/LandingOrders';
-import AIChat from './components/AIChat';
+// Giữ EAGER: cần ngay khi vào trang / có named export dùng đồng bộ
 import LoginPage, { ROLE_VIEWS } from './components/LoginPage';
-import CampRegistrationTab from './components/CampRegistrationTab';
-import TaskNoteTab from './components/TaskNoteTab';
 import TikTokShopCallback from './components/TikTokShopCallback';
-import ListedPriceTab from './components/ListedPriceTab';
-import TikTokOrdersTab from './components/TikTokOrdersTab';
-import CostingTab from './components/CostingTab';
-import CrmTab from './components/CrmTab';
-import ShopAnalyticsTab from './components/ShopAnalyticsTab';
-import ReportTab from './components/ReportTab';
-import FlashSaleTab from './components/FlashSaleTab';
-import TopPicksTab from './components/TopPicksTab';
-import ReviewsTab from './components/ReviewsTab';
-import ShopeeAdsDashboard from './components/ShopeeAdsDashboard';
 import PublicLandingPage from './components/PublicLandingPage';
 import CompanySite from './components/CompanySite';
+
+// LAZY-LOAD: chỉ tải code của tab khi người dùng mở tab đó → bundle lần đầu nhẹ hơn nhiều
+const OrderTab = lazy(() => import('./components/OrderTab'));
+const ContractTab = lazy(() => import('./components/ContractTab'));
+const AirLinksTab = lazy(() => import('./components/AirLinksTab'));
+const ExpenseEcomTab = lazy(() => import('./components/ExpenseEcomTab'));
+const BookingManagerTab = lazy(() => import('./components/BookingManagerTab'));
+const DashboardTab = lazy(() => import('./components/DashboardTab'));
+const BookingPerformanceTab = lazy(() => import('./components/BookingPerformanceTab'));
+const KocPerformanceTab = lazy(() => import('./components/KocPerformanceTab'));
+const KocBlacklistTab = lazy(() => import('./components/KocBlacklistTab'));
+const KocPaymentTab = lazy(() => import('./components/KocPaymentTab'));
+const DataArchiveTab = lazy(() => import('./components/DataArchiveTab'));
+const NhanhProductsTab = lazy(() => import('./components/NhanhProductsTab'));
+const GmvRealtimeTab = lazy(() => import('./components/GmvRealtimeTab'));
+const StellaDashboardTab = lazy(() => import('./components/StellaDashboardTab'));
+const CSKHTab = lazy(() => import('./components/CSKHTab'));
+const LivestreamTab = lazy(() => import('./components/LivestreamTab'));
+const LandingOrders = lazy(() => import('./components/LandingOrders'));
+const AIChat = lazy(() => import('./components/AIChat'));
+const CampRegistrationTab = lazy(() => import('./components/CampRegistrationTab'));
+const TaskNoteTab = lazy(() => import('./components/TaskNoteTab'));
+const ListedPriceTab = lazy(() => import('./components/ListedPriceTab'));
+const TikTokOrdersTab = lazy(() => import('./components/TikTokOrdersTab'));
+const CostingTab = lazy(() => import('./components/CostingTab'));
+const CrmTab = lazy(() => import('./components/CrmTab'));
+const ShopAnalyticsTab = lazy(() => import('./components/ShopAnalyticsTab'));
+const ReportTab = lazy(() => import('./components/ReportTab'));
+const FlashSaleTab = lazy(() => import('./components/FlashSaleTab'));
+const TopPicksTab = lazy(() => import('./components/TopPicksTab'));
+const ReviewsTab = lazy(() => import('./components/ReviewsTab'));
+const ShopeeAdsDashboard = lazy(() => import('./components/ShopeeAdsDashboard'));
 
 const SESSION_KEY = 'sk_session';
 
@@ -62,6 +65,16 @@ class AppErrorBoundary extends Component {
       </div>
     );
   }
+}
+
+// Spinner nhẹ hiển thị trong lúc code của 1 tab (lazy) đang được tải
+function TabLoadingFallback() {
+  return (
+    <div style={{ padding: '60px 24px', textAlign: 'center', color: '#94a3b8', fontFamily: "'Outfit', sans-serif" }}>
+      <div style={{ fontSize: '1.6rem', marginBottom: 8 }}>⏳</div>
+      <div style={{ fontSize: '0.9rem' }}>Đang tải...</div>
+    </div>
+  );
 }
 
 function App() {
@@ -214,7 +227,7 @@ function AppMain({ user, onLogout, allowedViews }) {
 
   return (
     <AppDataProvider>
-      <AIChat />
+      <Suspense fallback={null}><AIChat /></Suspense>
 
       <div style={{ display: 'flex' }}>
         {/* --- SIDEBAR --- */}
@@ -396,6 +409,7 @@ function AppMain({ user, onLogout, allowedViews }) {
           {/* Tabs render bình thường (mount/unmount theo active).
               Bọc Error Boundary key theo view → đổi tab là reset, 1 tab lỗi không kéo trắng cả app. */}
           <AppErrorBoundary key={currentView}>
+          <Suspense fallback={<TabLoadingFallback />}>
           {currentView === 'dashboard' && <DashboardTab />}
           {currentView === 'order' && <OrderTab />}
           {currentView === 'contract' && <ContractTab />}
@@ -427,6 +441,7 @@ function AppMain({ user, onLogout, allowedViews }) {
             <ComingSoonPlaceholder icon="📺" title="Shopee Livestream" description="Quản lý phiên livestream, theo dõi GMV, đơn hàng, người xem trực tiếp" />
           )}
           {currentView === 'shopee_ads_dashboard' && <ShopeeAdsDashboard />}
+          </Suspense>
           </AppErrorBoundary>
 
           {/* BookingPerformanceTab luôn mounted, chỉ ẩn/hiện bằng display
@@ -434,7 +449,9 @@ function AppMain({ user, onLogout, allowedViews }) {
           {canView('booking_performance') && (
             <div style={{ display: currentView === 'booking_performance' ? 'block' : 'none' }}>
               <AppErrorBoundary>
-                <BookingPerformanceTab currentUser={user} />
+                <Suspense fallback={<TabLoadingFallback />}>
+                  <BookingPerformanceTab currentUser={user} />
+                </Suspense>
               </AppErrorBoundary>
             </div>
           )}

@@ -670,6 +670,8 @@ async function handleSyncAffVideos({ params, appKey, appSecret, supabase, res })
 
 // Read + aggregate per-KOC sales from the synced table.
 async function handleKocOrders({ params, supabase, res }) {
+  // Chống CDN/proxy cache nhầm dữ liệu động (nhân viên thấy số cũ). App tự cache qua koc_orders_cache.
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
   const norm = (s) => (s || '').toLowerCase().trim();
   const { data: conns } = await supabase.from('tiktok_creator_connections').select('seller_name, shop_id, open_id').not('access_token', 'is', null);
   const { data: metas } = await supabase.from('tiktok_affiliate_sync_meta').select('*');

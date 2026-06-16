@@ -1075,9 +1075,12 @@ export const AppDataProvider = ({ children }) => {
   // =================================================================
   useEffect(() => {
     async function getCommonData() {
-      const { data: brandsData } = await supabase.from('brands').select();
+      // Song song 2 truy vấn độc lập (trước đây chạy nối tiếp, phí ~1 vòng mạng)
+      const [{ data: brandsData }, { data: nhanSusData }] = await Promise.all([
+        supabase.from('brands').select(),
+        supabase.from('nhansu').select(),
+      ]);
       if (brandsData) setBrands(brandsData);
-      const { data: nhanSusData } = await supabase.from('nhansu').select();
       if (nhanSusData) setNhanSus(nhanSusData);
     }
     getCommonData();
