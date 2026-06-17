@@ -2,6 +2,7 @@
 // Báo cáo Booking theo nhân sự — dashboard hiện đại. Gộp Module 1 (đơn gửi) + Hiệu suất KOC (affiliate)
 // + CAST đã dùng (koc_payments). Ngân sách CAST = max(15tr, GMV×2.2%) (định mức cũ).
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ScatterChart, Scatter, ZAxis, Cell } from 'recharts';
 import { supabase } from '../supabaseClient';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -199,7 +200,29 @@ function BookingStaffReportTab() {
 }
 
 // ── Modal chi tiết nhân sự ────────────────────────────────────────────────────
+const LINE_METRICS = [
+  { key: 'gmv', label: 'GMV', color: '#16a34a', fmt: fmtVnd },
+  { key: 'don', label: 'Đơn gửi', color: '#f97316', fmt: fmt },
+  { key: 'mau', label: 'Mẫu', color: '#fb923c', fmt: fmt },
+  { key: 'video', label: 'Video', color: '#7c3aed', fmt: fmt },
+  { key: 'views', label: 'View', color: '#0891b2', fmt: fmtView },
+];
+
 function StaffDetailModal({ r, month, year, onClose }) {
+  const [det, setDet] = useState(null);
+  const [loadingDet, setLoadingDet] = useState(true);
+  const [metric, setMetric] = useState('gmv');
+  useEffect(() => {
+    let alive = true;
+    setLoadingDet(true);
+    supabase.rpc('staff_booking_detail', { p_nhansu_id: r.nhansu_id, p_month: month, p_year: year })
+      .then(({ data }) => { if (alive) { setDet(data || { daily: [], kocs: [] }); setLoadingDet(false); } });
+    return () => { alive = false; };
+  }, [r.nhansu_id, month, year]);
+  const daily = Array.isArray(det?.daily) ? det.daily : [];
+  const kocs = Array.isArray(det?.kocs) ? det.kocs : [];
+  const mCfg = LINE_METRICS.find(m => m.key === metric) || LINE_METRICS[0];
+
   const budget = BUDGET(r.aff_gmv);
   const cast = num(r.cast_used);
   const remain = budget - cast;
@@ -261,6 +284,39 @@ function StaffDetailModal({ r, month, year, onClose }) {
             ))}
           </div>
 
+          {/* Line chart hiệu suất theo ngày */}
+          <div style={{ ...card, padding: '16px 18px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+              <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.9rem' }}>📈 Hiệu suất theo ngày</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {LINE_METRICS.map(m => (
+                  <button key={m.key} onClick={() => setMetric(m.key)} style={{
+                    fontSize: '0.72rem', fontWeight: 700, padding: '4px 11px', borderRadius: 20, cursor: 'pointer',
+                    border: `1.5px solid ${metric === m.key ? m.color : '#e2e8f0'}`,
+                    background: metric === m.key ? m.color : '#fff', color: metric === m.key ? '#fff' : '#64748b',
+                  }}>{m.label}</button>
+                ))}
+              </div>
+            </div>
+            {loadingDet ? <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>⏳ Đang tải biểu đồ...</div> : daily.length === 0 ? <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>Không có dữ liệu.</div> : (
+              <ResponsiveContainer width="100%" height={220}>
+                <AreaChart data={daily} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={mCfg.color} stopOpacity={0.35} />
+                      <stop offset="100%" stopColor={mCfg.color} stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                  <XAxis dataKey="d" tick={{ fontSize: 10, fill: '#94a3b8' }} interval={Math.max(0, Math.floor(daily.length / 10))} tickLine={false} axisLine={{ stroke: '#e2e8f0' }} />
+                  <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={mCfg.fmt} tickLine={false} axisLine={false} width={48} />
+                  <Tooltip formatter={(v) => [mCfg.fmt(v), mCfg.label]} labelFormatter={(l) => `Ngày ${l}`} contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: '0.8rem' }} />
+                  <Area type="monotone" dataKey={metric} stroke={mCfg.color} strokeWidth={2.2} fill="url(#lineGrad)" dot={false} activeDot={{ r: 4 }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
           {/* Funnel */}
           <div style={{ ...card, padding: '16px 18px' }}>
             <div style={{ fontWeight: 800, color: '#0f172a', marginBottom: 12, fontSize: '0.9rem' }}>🔻 Funnel hoạt động</div>
@@ -306,6 +362,70 @@ function StaffDetailModal({ r, month, year, onClose }) {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Scatter GMV vs CAST theo KOC */}
+          <div style={{ ...card, padding: '16px 18px' }}>
+            <div style={{ fontWeight: 800, color: '#0f172a', marginBottom: 4, fontSize: '0.9rem' }}>🎯 GMV vs CAST theo KOC</div>
+            <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginBottom: 10 }}>Mỗi chấm = 1 KOC · trục X = CAST đã chi · trục Y = GMV · kích thước = view · màu = hiệu suất</div>
+            {loadingDet ? <div style={{ height: 240, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>⏳ Đang tải biểu đồ...</div> : kocs.length === 0 ? <div style={{ height: 240, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>Không có dữ liệu KOC.</div> : (
+              <ResponsiveContainer width="100%" height={240}>
+                <ScatterChart margin={{ top: 6, right: 12, left: 6, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis type="number" dataKey="cast" name="CAST" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={fmtVnd} tickLine={false} axisLine={{ stroke: '#e2e8f0' }} />
+                  <YAxis type="number" dataKey="gmv" name="GMV" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={fmtVnd} tickLine={false} axisLine={false} width={48} />
+                  <ZAxis type="number" dataKey="views" range={[50, 420]} name="View" />
+                  <Tooltip cursor={{ strokeDasharray: '3 3' }} content={({ active, payload }) => {
+                    if (!active || !payload || !payload.length) return null;
+                    const k = payload[0].payload;
+                    return (
+                      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 12px', fontSize: '0.78rem', boxShadow: '0 4px 16px rgba(0,0,0,0.1)' }}>
+                        <div style={{ fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>@{k.uname}</div>
+                        <div style={{ color: '#16a34a' }}>GMV: {fmtVnd(k.gmv)} đ</div>
+                        <div style={{ color: '#ea580c' }}>CAST: {fmtVnd(k.cast)} đ</div>
+                        <div style={{ color: '#0891b2' }}>View: {fmtView(k.views)} · {fmt(k.videos)} video</div>
+                      </div>
+                    );
+                  }} />
+                  <Scatter data={kocs} fillOpacity={0.75}>
+                    {kocs.map((k, i) => <Cell key={i} fill={perfBadge(k.gmv, k.cast).color} />)}
+                  </Scatter>
+                </ScatterChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          {/* Top KOC theo GMV */}
+          <div style={{ ...card, padding: '16px 18px' }}>
+            <div style={{ fontWeight: 800, color: '#0f172a', marginBottom: 12, fontSize: '0.9rem' }}>🏅 Top KOC theo GMV ({kocs.length})</div>
+            {loadingDet ? <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>⏳ Đang tải...</div> : kocs.length === 0 ? <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Không có dữ liệu.</div> : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead><tr>
+                    <th style={{ ...th, padding: '8px 8px' }}>#</th><th style={{ ...th, padding: '8px 8px' }}>KOC</th>
+                    <th style={{ ...th, padding: '8px 8px', textAlign: 'right' }}>GMV</th><th style={{ ...th, padding: '8px 8px', textAlign: 'right' }}>View</th>
+                    <th style={{ ...th, padding: '8px 8px', textAlign: 'right' }}>Video</th><th style={{ ...th, padding: '8px 8px', textAlign: 'right' }}>CAST</th>
+                    <th style={{ ...th, padding: '8px 8px', textAlign: 'right' }}>ROAS</th>
+                  </tr></thead>
+                  <tbody>
+                    {kocs.slice(0, 20).map((k, i) => {
+                      const kb = perfBadge(k.gmv, k.cast);
+                      return (
+                        <tr key={k.uname}>
+                          <td style={{ ...td, padding: '9px 8px', color: '#94a3b8', fontWeight: 700 }}>{i + 1}</td>
+                          <td style={{ ...td, padding: '9px 8px' }}><a href={`https://www.tiktok.com/@${k.uname}`} target="_blank" rel="noreferrer" style={{ color: '#475569', textDecoration: 'none', fontWeight: 600 }}>@{k.uname}</a></td>
+                          <td style={{ ...td, padding: '9px 8px', textAlign: 'right', fontWeight: 800, color: '#16a34a' }}>{fmtVnd(k.gmv)}</td>
+                          <td style={{ ...td, padding: '9px 8px', textAlign: 'right', color: '#0891b2' }}>{fmtView(k.views)}</td>
+                          <td style={{ ...td, padding: '9px 8px', textAlign: 'right', color: '#7c3aed', fontWeight: 700 }}>{fmt(k.videos)}</td>
+                          <td style={{ ...td, padding: '9px 8px', textAlign: 'right', color: '#ea580c' }}>{num(k.cast) > 0 ? fmtVnd(k.cast) : '—'}</td>
+                          <td style={{ ...td, padding: '9px 8px', textAlign: 'right' }}><span style={{ color: kb.color, fontWeight: 800 }}>{kb.roas === Infinity ? '∞' : kb.roas.toFixed(1) + 'x'}</span></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* Brand */}
