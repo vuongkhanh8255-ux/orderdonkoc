@@ -1037,19 +1037,55 @@ export default function FlashSaleTab() {
 // ── Flash Sale List ──────────────────────────────────────────────────────────
 function FlashSaleList({ flashSales, onDelete, onBulkDelete, onRefresh }) {
   const [selected, setSelected] = useState(new Set());
+  const [dayFilter, setDayFilter] = useState('');        // #2 lọc theo ngày ('' = tất cả)
+  const [expanded, setExpanded] = useState(null);        // #3 fsId đang bung xem SP
+  const [itemsByFs, setItemsByFs] = useState({});        // #3 cache: fsId -> {loading|items|error}
+  const [removing, setRemoving] = useState(null);        // #4 item_id đang xóa
 
   const toggleOne = (id) => setSelected(prev => {
     const next = new Set(prev);
     if (next.has(id)) next.delete(id); else next.add(id);
     return next;
   });
-  const allIds = (flashSales || []).map(fs => fs.flash_sale_id).filter(Boolean);
+
+  // #2 — nhóm/lọc theo NGÀY
+  const dayOf = (ts) => { const d = new Date((Number(ts) || 0) * 1000); return isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const fmtDay = (ymd) => { const [y, m, dd] = ymd.split('-'); return `${dd}/${m}/${y}`; };
+  const days = useMemo(() => [...new Set((flashSales || []).map(fs => dayOf(fs.start_time)).filter(Boolean))].sort(), [flashSales]);
+  const shown = useMemo(() => dayFilter ? (flashSales || []).filter(fs => dayOf(fs.start_time) === dayFilter) : (flashSales || []), [flashSales, dayFilter]);
+
+  const allIds = shown.map(fs => fs.flash_sale_id).filter(Boolean);
   const allSelected = allIds.length > 0 && allIds.every(id => selected.has(id));
   const toggleAll = () => setSelected(allSelected ? new Set() : new Set(allIds));
   const handleBulkDelete = async () => {
     const ids = allIds.filter(id => selected.has(id));
     await onBulkDelete(ids);
     setSelected(new Set());
+  };
+
+  // #3 — bung xem SP trong 1 khung giờ
+  const toggleItems = async (fsId) => {
+    if (expanded === fsId) { setExpanded(null); return; }
+    setExpanded(fsId);
+    if (!itemsByFs[fsId]) {
+      setItemsByFs(p => ({ ...p, [fsId]: { loading: true } }));
+      try {
+        const res = await apiCall('item_list', { flash_sale_id: fsId });
+        setItemsByFs(p => ({ ...p, [fsId]: res.ok ? { items: res.data?.item_info || [] } : { error: res.error || res.message || 'Lỗi tải sản phẩm' } }));
+      } catch (e) { setItemsByFs(p => ({ ...p, [fsId]: { error: e.message } })); }
+    }
+  };
+
+  // #4 — xóa 1 SP khỏi MỌI khung giờ chưa kết thúc
+  const removeItemEverywhere = async (itemId, itemName) => {
+    if (!confirm(`Xóa sản phẩm "${itemName || ('#' + itemId)}" khỏi TẤT CẢ khung giờ Flash Sale chưa kết thúc?\n(Các sản phẩm khác giữ nguyên)`)) return;
+    setRemoving(itemId);
+    try {
+      const res = await apiCall('delete_item_all', {}, { item_id: itemId });
+      if (res.ok) { alert(`✅ Đã xóa SP khỏi ${res.data?.removed_count || 0} khung giờ.`); setItemsByFs({}); setExpanded(null); onRefresh?.(); }
+      else alert('Lỗi: ' + (res.error || res.message || 'không xóa được'));
+    } catch (e) { alert('Lỗi: ' + e.message); }
+    setRemoving(null);
   };
 
   if (!flashSales || flashSales.length === 0) {
@@ -1068,9 +1104,14 @@ function FlashSaleList({ flashSales, onDelete, onBulkDelete, onRefresh }) {
     <div style={{ ...CARD }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
         <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
-          Danh sách Flash Sale ({flashSales.length})
+          Danh sách Flash Sale ({dayFilter ? `${shown.length}/${flashSales.length}` : flashSales.length})
         </h3>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <select value={dayFilter} onChange={e => { setDayFilter(e.target.value); setSelected(new Set()); }}
+            style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: '0.78rem', fontWeight: 600, color: '#475569', background: '#fff', cursor: 'pointer' }}>
+            <option value="">📅 Tất cả ngày ({flashSales.length})</option>
+            {days.map(d => <option key={d} value={d}>{fmtDay(d)} ({(flashSales || []).filter(fs => dayOf(fs.start_time) === d).length})</option>)}
+          </select>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', color: '#475569', cursor: 'pointer', userSelect: 'none' }}>
             <input type="checkbox" checked={allSelected} onChange={toggleAll} style={{ width: 16, height: 16, cursor: 'pointer' }} />
             Chọn tất cả
@@ -1086,51 +1127,85 @@ function FlashSaleList({ flashSales, onDelete, onBulkDelete, onRefresh }) {
         </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {flashSales.map((fs, i) => (
-          <div key={fs.flash_sale_id || i} style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '14px 18px', borderRadius: 12,
-            border: selected.has(fs.flash_sale_id) ? '1px solid #f87171' : '1px solid #e5e7eb',
-            background: selected.has(fs.flash_sale_id) ? '#fef2f2' : '#fafafa', transition: 'all 0.2s',
+        {shown.map((fs, i) => {
+          const fsId = fs.flash_sale_id;
+          const it = itemsByFs[fsId];
+          const isOpen = expanded === fsId;
+          return (
+          <div key={fsId || i} style={{
+            borderRadius: 12, overflow: 'hidden',
+            border: selected.has(fsId) ? '1px solid #f87171' : '1px solid #e5e7eb',
+            background: selected.has(fsId) ? '#fef2f2' : '#fafafa', transition: 'all 0.2s',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <input
-                type="checkbox"
-                checked={selected.has(fs.flash_sale_id)}
-                onChange={() => toggleOne(fs.flash_sale_id)}
-                disabled={!fs.flash_sale_id}
-                style={{ width: 18, height: 18, cursor: 'pointer', flexShrink: 0 }}
-              />
-              <div style={{
-                width: 40, height: 40, borderRadius: 10, background: '#fff7ed', border: '1px solid #fed7aa',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem',
-              }}>⚡</div>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#0f172a' }}>
-                  {fmtDateTime(fs.start_time)} — {fmtTime(fs.end_time)}
-                </div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
-                  <span style={BADGE(
-                    fs.type === 2 ? '#16a34a' : fs.type === 1 ? '#d97706' : '#64748b',
-                    fs.type === 2 ? '#f0fdf4' : fs.type === 1 ? '#fffbeb' : '#f8fafc',
-                  )}>
-                    {fs.type === 2 ? '🟢 Đang diễn ra' : fs.type === 1 ? '🟡 Sắp diễn ra' : '⚪ Đã kết thúc'}
-                  </span>
-                  {(fs.item_count > 0 || fs.enabled_item_count > 0) && (
-                    <span style={BADGE('#475569', '#f1f5f9')}>
-                      📦 {fs.enabled_item_count || 0}/{fs.item_count || 0} SP
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <input
+                  type="checkbox"
+                  checked={selected.has(fsId)}
+                  onChange={() => toggleOne(fsId)}
+                  disabled={!fsId}
+                  style={{ width: 18, height: 18, cursor: 'pointer', flexShrink: 0 }}
+                />
+                <div style={{
+                  width: 40, height: 40, borderRadius: 10, background: '#fff7ed', border: '1px solid #fed7aa',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem',
+                }}>⚡</div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#0f172a' }}>
+                    {fmtDateTime(fs.start_time)} — {fmtTime(fs.end_time)}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                    <span style={BADGE(
+                      fs.type === 2 ? '#16a34a' : fs.type === 1 ? '#d97706' : '#64748b',
+                      fs.type === 2 ? '#f0fdf4' : fs.type === 1 ? '#fffbeb' : '#f8fafc',
+                    )}>
+                      {fs.type === 2 ? '🟢 Đang diễn ra' : fs.type === 1 ? '🟡 Sắp diễn ra' : '⚪ Đã kết thúc'}
                     </span>
-                  )}
+                    {(fs.item_count > 0 || fs.enabled_item_count > 0) && (
+                      <span style={BADGE('#475569', '#f1f5f9')}>
+                        📦 {fs.enabled_item_count || 0}/{fs.item_count || 0} SP
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => toggleItems(fsId)} disabled={!fsId} style={{ ...BTN_SECONDARY, padding: '6px 14px', fontSize: '0.76rem' }}>
+                  {isOpen ? '▲ Ẩn SP' : '👁️ Xem SP'}
+                </button>
+                <button onClick={() => onDelete(fsId)} style={{ ...BTN_DANGER, padding: '6px 14px', fontSize: '0.76rem' }}>
+                  🗑️ Xóa
+                </button>
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => onDelete(fs.flash_sale_id)} style={{ ...BTN_DANGER, padding: '6px 14px', fontSize: '0.76rem' }}>
-                🗑️ Xóa
-              </button>
-            </div>
+            {isOpen && (
+              <div style={{ borderTop: '1px solid #e5e7eb', background: '#fff', padding: '12px 18px' }}>
+                {it?.loading && <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Đang tải sản phẩm…</div>}
+                {it?.error && <div style={{ fontSize: '0.8rem', color: '#dc2626' }}>Lỗi: {it.error}</div>}
+                {it?.items && it.items.length === 0 && <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Khung giờ này chưa có sản phẩm.</div>}
+                {it?.items && it.items.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {it.items.map((p, k) => {
+                      const pid = p.item_id; const pname = p.item_name || p.name || `SP #${pid}`;
+                      return (
+                      <div key={pid || k} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 10px', borderRadius: 8, border: '1px solid #f1f5f9', background: '#fafbfc' }}>
+                        <span style={{ fontSize: '0.8rem', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {pname} <span style={{ color: '#94a3b8', fontSize: '0.72rem' }}>#{pid}</span>
+                        </span>
+                        <button onClick={() => removeItemEverywhere(pid, pname)} disabled={removing === pid}
+                          style={{ ...BTN_DANGER, padding: '4px 10px', fontSize: '0.72rem', whiteSpace: 'nowrap', flexShrink: 0, opacity: removing === pid ? 0.6 : 1 }}>
+                          {removing === pid ? '⏳ Đang xóa…' : '🗑️ Xóa khỏi mọi khung giờ'}
+                        </button>
+                      </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
