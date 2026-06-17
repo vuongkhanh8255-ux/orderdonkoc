@@ -694,28 +694,105 @@ async function handleAddItems(supabase, shopId, body) {
   return { ok: true, data: result.response };
 }
 
-/** 6. List existing Flash Sales */
+/** 6. List existing Flash Sales — PHÂN TRANG lấy HẾT (không còn cứng 50) */
 async function handleList(supabase, shopId) {
   const creds = await getCredentials(supabase, shopId, 'marketing');
+  const all = [];
+  let offset = 0; const limit = 100; let total = Infinity;
+  for (let page = 0; page < 40 && offset < total; page++) {
+    const result = await shopeeGet(
+      creds.partnerKey, creds.partnerId,
+      '/api/v2/shop_flash_sale/get_shop_flash_sale_list',
+      creds.accessToken, creds.shopId,
+      { type: 0, offset, limit },
+    );
+    if (result.error === 'error_not_found' || result.error === 'error_param'
+        || result.error === 'shop_flash_sale_param_error') {
+      if (offset === 0) return { ok: true, data: { flash_sale_list: [] } };
+      break;
+    }
+    if (result.error) {
+      if (offset === 0) return { ok: false, error: result.error, message: result.message };
+      break; // đã lấy được 1 phần → dừng, trả phần đã có
+    }
+    const resp = result.response || {};
+    const list = resp.flash_sale_list || resp.flash_sale || [];
+    all.push(...list);
+    total = Number(resp.total_count) || (list.length < limit ? offset + list.length : total);
+    if (list.length < limit) break;
+    offset += limit;
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  console.log('[FS List] tong cong:', all.length);
+  return { ok: true, data: { flash_sale_list: all, total_count: all.length } };
+}
 
-  // Correct params: type (0=all,1=upcoming,2=ongoing,3=expired), offset, limit
-  const result = await shopeeGet(
-    creds.partnerKey, creds.partnerId,
-    '/api/v2/shop_flash_sale/get_shop_flash_sale_list',
-    creds.accessToken, creds.shopId,
-    { type: 0, offset: 0, limit: 50 },
-  );
+/** 6b. Danh sách SẢN PHẨM trong 1 Flash Sale (xem SP trong khung giờ) */
+async function handleItemList(supabase, shopId, params) {
+  const flashSaleId = Number(params?.flash_sale_id || 0);
+  if (!flashSaleId) return { ok: false, error: 'Missing flash_sale_id' };
+  const creds = await getCredentials(supabase, shopId, 'marketing');
+  const items = []; const models = [];
+  let offset = 0; const limit = 100;
+  for (let page = 0; page < 20; page++) {
+    const result = await shopeeGet(
+      creds.partnerKey, creds.partnerId,
+      '/api/v2/shop_flash_sale/get_shop_flash_sale_item_list',
+      creds.accessToken, creds.shopId,
+      { flash_sale_id: flashSaleId, offset, limit },
+    );
+    if (result.error) { if (offset === 0) return { ok: false, error: result.error, message: result.message }; break; }
+    const resp = result.response || {};
+    const pageItems = resp.item_info || resp.items || [];
+    items.push(...pageItems);
+    if (Array.isArray(resp.models)) models.push(...resp.models);
+    if (pageItems.length < limit) break;
+    offset += limit;
+    await new Promise((r) => setTimeout(r, 120));
+  }
+  return { ok: true, data: { flash_sale_id: flashSaleId, item_info: items, models } };
+}
 
-  console.log('[FS List] result:', JSON.stringify(result).slice(0, 500));
+/** 6c. Xóa 1 SẢN PHẨM khỏi MỌI khung giờ chưa kết thúc — không đụng SP khác.
+ *  body: { item_id, flash_sale_ids?: [] } (FE truyền sẵn list FS có SP thì nhanh hơn). */
+async function handleDeleteItemAll(supabase, shopId, body) {
+  const itemId = Number(body?.item_id || 0);
+  if (!itemId) return { ok: false, error: 'Missing item_id' };
+  const creds = await getCredentials(supabase, shopId, 'marketing');
 
-  // If param error or no flash sales, return empty list
-  if (result.error === 'error_not_found' || result.error === 'error_param'
-      || result.error === 'shop_flash_sale_param_error') {
-    return { ok: true, data: { flash_sale_list: [] } };
+  let targetFs = Array.isArray(body?.flash_sale_ids) ? body.flash_sale_ids.map(Number).filter(Boolean) : null;
+  if (!targetFs) {
+    const lr = await handleList(supabase, shopId);
+    const ld = lr.data; const fsList = Array.isArray(ld) ? ld : (ld?.flash_sale_list || []);
+    targetFs = (fsList || []).filter((f) => Number(f.type) !== 3 && f.status !== 3).map((f) => Number(f.flash_sale_id)).filter(Boolean);
   }
 
-  if (result.error) return { ok: false, error: result.error, message: result.message };
-  return { ok: true, data: result.response };
+  const removed = []; const skipped = [];
+  for (const fsId of targetFs) {
+    let has = true;
+    try {
+      const itRes = await shopeeGet(
+        creds.partnerKey, creds.partnerId,
+        '/api/v2/shop_flash_sale/get_shop_flash_sale_item_list',
+        creds.accessToken, creds.shopId,
+        { flash_sale_id: fsId, offset: 0, limit: 100 },
+      );
+      const its = itRes.response?.item_info || itRes.response?.items || [];
+      if (its.length) has = its.some((it) => Number(it.item_id) === itemId);
+    } catch { /* không chắc → vẫn thử xóa */ }
+    if (!has) continue;
+
+    const delRes = await shopeePost(
+      creds.partnerKey, creds.partnerId,
+      '/api/v2/shop_flash_sale/delete_shop_flash_sale_items',
+      creds.accessToken, creds.shopId,
+      { flash_sale_id: fsId, item_ids: [itemId] },
+    );
+    if (delRes.error) skipped.push({ flash_sale_id: fsId, error: delRes.error, message: delRes.message });
+    else removed.push(fsId);
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  return { ok: true, data: { item_id: itemId, removed_count: removed.length, removed, skipped } };
 }
 
 /** 7. Delete a Flash Sale */
@@ -815,8 +892,9 @@ async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, m
     if (processed >= maxSlots) break; // giới hạn số FS/shop/lần để không quá hạn hàm (cron mỗi ngày tự lấp tiếp)
     processed++;
 
+    // FORM (template) random; PHÂN LOẠI khoá theo file — lấy đúng thứ tự, KHÔNG shuffle.
     const tmpl = templates[Math.floor(Math.random() * templates.length)];
-    let picked = fsShuffle(Array.isArray(tmpl.rows) ? tmpl.rows : []).slice(0, lastGood);
+    let picked = (Array.isArray(tmpl.rows) ? tmpl.rows : []).slice(0, lastGood);
     let items = fsBuildItems(picked);
     if (!items.length) { out.push({ shopId, slotId, status: 'no_items' }); continue; }
 
@@ -954,6 +1032,13 @@ export default async function handler(req, res) {
       case 'delete':
         if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST required for delete' });
         result = await handleDelete(supabase, shopId, req.body);
+        break;
+      case 'item_list':
+        result = await handleItemList(supabase, shopId, params);
+        break;
+      case 'delete_item_all':
+        if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST required for delete_item_all' });
+        result = await handleDeleteItemAll(supabase, shopId, req.body);
         break;
       case 'auto_flash_sale_all':
         result = await handleAutoFlashSaleAll(supabase, reqUrl, req);
