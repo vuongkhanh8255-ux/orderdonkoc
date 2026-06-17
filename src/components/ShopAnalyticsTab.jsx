@@ -749,9 +749,9 @@ const ShopAnalyticsTab = () => {
         const labelStyle = { fontSize: '0.65rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 };
         return (
         <div style={{
-          background: '#fff', border: '1px solid #f1f5f9', borderRadius: 14, padding: '14px 20px',
+          background: 'linear-gradient(135deg, #fff6f0 0%, #ffffff 55%)', border: '1px solid #ffe2d2', borderRadius: 16, padding: '15px 20px',
           marginBottom: 16, display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap',
-          boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
+          boxShadow: '0 8px 22px -12px rgba(255,106,44,0.38), 0 1px 3px rgba(15,23,42,0.04)',
         }}>
           {/* Sàn */}
           <div>
@@ -797,7 +797,7 @@ const ShopAnalyticsTab = () => {
                 };
                 return (
                   <button key={r.label} onClick={handleClick}
-                    style={{ padding: '6px 16px', borderRadius: 6, fontSize: '0.78rem', fontWeight: 600, border: 'none', background: isActive ? '#ff6a2c' : 'transparent', color: isActive ? '#fff' : '#64748b', cursor: 'pointer', transition: 'all 0.15s' }}>
+                    style={{ padding: '6px 16px', borderRadius: 6, fontSize: '0.78rem', fontWeight: 600, border: 'none', background: isActive ? 'linear-gradient(135deg, #ff8a4c, #ff6a2c)' : 'transparent', color: isActive ? '#fff' : '#64748b', cursor: 'pointer', transition: 'all 0.15s', boxShadow: isActive ? '0 4px 12px rgba(255,106,44,0.45)' : 'none' }}>
                     {r.label}
                   </button>
                 );
@@ -905,7 +905,7 @@ const ShopAnalyticsTab = () => {
           </div>
 
           {/* ── Biểu đồ tổng hợp: chọn tối đa 2 chỉ số (bấm thẻ phía trên) ──────── */}
-          <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 16, padding: '20px 22px', marginBottom: 24, boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
+          <div style={{ background: 'linear-gradient(180deg, #ffffff 0%, #fbfaff 100%)', border: '1px solid #eef0f6', borderRadius: 18, padding: '20px 22px', marginBottom: 24, boxShadow: '0 8px 24px -12px rgba(15,23,42,0.16), 0 1px 3px rgba(15,23,42,0.04)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800 }}>📈 Biểu đồ theo ngày</h3>
@@ -962,7 +962,7 @@ const ShopAnalyticsTab = () => {
 
           {/* ── Doanh thu theo kênh (đưa xuống dưới) ───────────────────────────── */}
           {computed.channelTotal > 0 && (
-            <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 16, padding: '20px 22px', marginBottom: 24, boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
+            <div style={{ background: 'linear-gradient(180deg, #ffffff 0%, #fbfaff 100%)', border: '1px solid #eef0f6', borderRadius: 18, padding: '20px 22px', marginBottom: 24, boxShadow: '0 8px 24px -12px rgba(15,23,42,0.16), 0 1px 3px rgba(15,23,42,0.04)' }}>
               <h3 style={{ margin: '0 0 4px', fontSize: '0.92rem', fontWeight: 800 }}>🎯 Doanh thu theo kênh</h3>
               <p style={{ margin: '0 0 20px', fontSize: '0.72rem', color: '#94a3b8' }}>Tỷ trọng GMV trên tổng {periodLabel}</p>
               {computed.channelList.map((ch, i) => (
@@ -982,12 +982,12 @@ const ShopAnalyticsTab = () => {
             const pageRows = computed.dailyTable.slice(tablePage * TABLE_PAGE_SIZE, (tablePage + 1) * TABLE_PAGE_SIZE);
             const pgBtn = (pg, label, disabled) => (
               <button key={label} onClick={() => !disabled && setTablePage(pg)} disabled={disabled}
-                style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #e5e7eb', background: pg === tablePage && typeof label === 'number' ? '#ff6a2c' : '#fff', color: pg === tablePage && typeof label === 'number' ? '#fff' : disabled ? '#cbd5e1' : '#374151', fontSize: '0.76rem', fontWeight: 600, cursor: disabled ? 'default' : 'pointer', minWidth: 32 }}>
+                style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #e5e7eb', background: pg === tablePage && typeof label === 'number' ? 'linear-gradient(135deg, #ff8a4c, #ff6a2c)' : '#fff', color: pg === tablePage && typeof label === 'number' ? '#fff' : disabled ? '#cbd5e1' : '#374151', fontSize: '0.76rem', fontWeight: 600, cursor: disabled ? 'default' : 'pointer', minWidth: 32 }}>
                 {typeof label === 'number' ? label + 1 : label}
               </button>
             );
             return (
-            <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 16, overflow: 'hidden', marginBottom: 24, boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
+            <div style={{ background: 'linear-gradient(180deg, #ffffff 0%, #fbfaff 100%)', border: '1px solid #eef0f6', borderRadius: 18, overflow: 'hidden', marginBottom: 24, boxShadow: '0 8px 24px -12px rgba(15,23,42,0.16), 0 1px 3px rgba(15,23,42,0.04)' }}>
               <div style={{ padding: '16px 22px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 800 }}>📋 Thống kê chi tiết theo ngày</h3>
                 <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>{computed.dailyTable.length} ngày · Trang {tablePage + 1}/{totalPages}</span>
@@ -995,7 +995,7 @@ const ShopAnalyticsTab = () => {
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr style={{ background: '#f8fafc' }}>
+                    <tr style={{ background: 'linear-gradient(135deg, #fff1e9, #f5f6fb)' }}>
                       <th style={th}>Ngày</th>
                       <th style={{ ...th, textAlign: 'right' }}>GMV</th>
                       <th style={{ ...th, textAlign: 'right' }}>Đơn hàng</th>
@@ -1078,14 +1078,14 @@ const ShopAnalyticsTab = () => {
 
           {/* ── Hiệu suất theo Shop ──────────────────────────────────────────── */}
           {computed.shopList.length > 0 && (
-            <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 16, overflow: 'hidden', marginBottom: 24, boxShadow: '0 1px 4px rgba(15,23,42,0.04)' }}>
+            <div style={{ background: 'linear-gradient(180deg, #ffffff 0%, #fbfaff 100%)', border: '1px solid #eef0f6', borderRadius: 18, overflow: 'hidden', marginBottom: 24, boxShadow: '0 8px 24px -12px rgba(15,23,42,0.16), 0 1px 3px rgba(15,23,42,0.04)' }}>
               <div style={{ padding: '16px 22px', borderBottom: '1px solid #f1f5f9' }}>
                 <h3 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 800 }}>🏪 Hiệu suất theo Shop</h3>
               </div>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr style={{ background: '#f8fafc' }}>
+                    <tr style={{ background: 'linear-gradient(135deg, #fff1e9, #f5f6fb)' }}>
                       {['Shop','GMV','Đơn hàng','Người mua','Khách truy cập','Lượt xem','CVR','AOV'].map(h => (
                         <th key={h} style={th}>{h}</th>
                       ))}
