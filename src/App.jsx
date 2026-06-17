@@ -17,6 +17,7 @@ const ExpenseEcomTab = lazy(() => import('./components/ExpenseEcomTab'));
 const BookingManagerTab = lazy(() => import('./components/BookingManagerTab'));
 const DashboardTab = lazy(() => import('./components/DashboardTab'));
 const BookingPerformanceTab = lazy(() => import('./components/BookingPerformanceTab'));
+const BookingStaffReportTab = lazy(() => import('./components/BookingStaffReportTab'));
 const KocPerformanceTab = lazy(() => import('./components/KocPerformanceTab'));
 const KocBlacklistTab = lazy(() => import('./components/KocBlacklistTab'));
 const KocPaymentTab = lazy(() => import('./components/KocPaymentTab'));
@@ -292,7 +293,7 @@ function AppMain({ user, onLogout, allowedViews }) {
               { key: 'booking', label: '📅 Booking', emoji: '📅', items: [
                 { view: 'koc_performance',     icon: '🌟', name: 'Hiệu suất KOC' },
                 { view: 'booking_performance', icon: '📈', name: 'Dashboard booking' },
-                { view: 'dashboard',           icon: '📊', name: 'Phân tích sản phẩm booking' },
+                { view: 'staff_report',        icon: '📑', name: 'Báo cáo nhân sự' },
                 { view: 'order',               icon: '🛒', name: 'Module 1: Order đơn hàng' },
                 { view: 'contract',            icon: '📝', name: 'Module 2: Hợp đồng tự động' },
                 { view: 'koc_payment',         icon: '💸', name: 'Module 3: Thanh toán KOC' },
@@ -411,6 +412,7 @@ function AppMain({ user, onLogout, allowedViews }) {
           <AppErrorBoundary key={currentView}>
           <Suspense fallback={<TabLoadingFallback />}>
           {currentView === 'dashboard' && <DashboardTab />}
+          {currentView === 'staff_report' && <BookingStaffReportTab />}
           {currentView === 'order' && <OrderTab />}
           {currentView === 'contract' && <ContractTab />}
           {currentView === 'airlinks' && <AirLinksTab />}
