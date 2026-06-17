@@ -109,18 +109,16 @@ const ChangeBadge = ({ value }) => {
 // ── Stat Card (Stella-style — gradient + glow + icon badge nổi khối) ───────────
 const StatCard = ({ icon, label, value, unit, sub, change, sparkData, sparkKey, accentColor = '#ff6a2c', selected = false, onClick }) => (
   <div onClick={onClick} style={{
-    background: `linear-gradient(145deg, ${accentColor}16 0%, #ffffff 55%)`,
+    background: `linear-gradient(145deg, ${accentColor}12 0%, #ffffff 62%)`,
     borderRadius: 18, padding: '20px 22px', flex: '1 1 240px', minWidth: 230,
     boxShadow: selected
-      ? `0 14px 32px -8px ${accentColor}88, 0 2px 6px rgba(15,23,42,0.06)`
-      : `0 10px 26px -10px ${accentColor}55, 0 1px 3px rgba(15,23,42,0.05)`,
+      ? `0 12px 28px -10px ${accentColor}66, 0 2px 6px rgba(15,23,42,0.06)`
+      : `0 8px 22px -12px ${accentColor}40, 0 1px 3px rgba(15,23,42,0.05)`,
     border: `1px solid ${selected ? accentColor : accentColor + '33'}`,
     position: 'relative', overflow: 'hidden',
     cursor: onClick ? 'pointer' : 'default',
     transition: 'box-shadow 0.2s, transform 0.2s',
   }}>
-    {/* đốm sáng góc trên phải (glow blob) */}
-    <div aria-hidden style={{ position: 'absolute', top: -34, right: -34, width: 124, height: 124, borderRadius: '50%', background: `radial-gradient(circle, ${accentColor}45, transparent 70%)`, filter: 'blur(6px)', pointerEvents: 'none' }} />
     <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
         {onClick && (
