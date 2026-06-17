@@ -210,14 +210,13 @@ function BookingStaffReportTab() {
                 <th style={{ ...th, textAlign: 'right' }}>KOC</th><th style={{ ...th, textAlign: 'right' }}>Video</th>
                 <th style={{ ...th, textAlign: 'right' }}>View</th><th style={{ ...th, textAlign: 'right' }}>GMV</th>
                 <th style={{ ...th, textAlign: 'right' }}>CAST dùng</th><th style={{ ...th, textAlign: 'right' }}>CAST còn</th>
-                <th style={{ ...th, textAlign: 'center' }}>Hiệu suất</th>
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={14} style={{ ...td, textAlign: 'center', color: '#94a3b8', padding: 40 }}>⏳ Đang tải...</td></tr>}
-              {!loading && filtered.length === 0 && <tr><td colSpan={14} style={{ ...td, textAlign: 'center', color: '#94a3b8', padding: 40 }}>Không có dữ liệu.</td></tr>}
+              {loading && <tr><td colSpan={13} style={{ ...td, textAlign: 'center', color: '#94a3b8', padding: 40 }}>⏳ Đang tải...</td></tr>}
+              {!loading && filtered.length === 0 && <tr><td colSpan={13} style={{ ...td, textAlign: 'center', color: '#94a3b8', padding: 40 }}>Không có dữ liệu.</td></tr>}
               {!loading && filtered.map((r, i) => {
-                const b = perfBadge(r.aff_gmv, r.cast_used); const budget = BUDGET(r.aff_gmv); const remain = budget - num(r.cast_used);
+                const budget = BUDGET(r.aff_gmv); const remain = budget - num(r.cast_used);
                 const isSel = selectedRow && r.nhansu_id === selectedRow.nhansu_id;
                 return (
                   <tr key={r.nhansu_id} onClick={() => setSelectedId(r.nhansu_id)} style={{ cursor: 'pointer', background: isSel ? '#fff7ed' : '#fff', boxShadow: isSel ? 'inset 3px 0 0 #f97316' : 'none' }}
@@ -235,9 +234,6 @@ function BookingStaffReportTab() {
                     <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: '#16a34a' }}>{fmtVnd(r.aff_gmv)}</td>
                     <td style={{ ...td, textAlign: 'right', color: '#ea580c', fontWeight: 700 }}>{fmtVnd(r.cast_used)}</td>
                     <td style={{ ...td, textAlign: 'right', color: remain < 0 ? '#dc2626' : '#0ea5e9', fontWeight: 700 }}>{fmtVnd(remain)}</td>
-                    <td style={{ ...td, textAlign: 'center' }}>
-                      <span style={{ background: b.bg, color: b.color, fontWeight: 800, fontSize: '0.72rem', padding: '4px 10px', borderRadius: 20, whiteSpace: 'nowrap' }}>{b.label}</span>
-                    </td>
                   </tr>
                 );
               })}
