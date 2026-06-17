@@ -737,7 +737,7 @@ async function handleItemList(supabase, shopId, params) {
   for (let page = 0; page < 20; page++) {
     const result = await shopeeGet(
       creds.partnerKey, creds.partnerId,
-      '/api/v2/shop_flash_sale/get_shop_flash_sale_item_list',
+      '/api/v2/shop_flash_sale/get_shop_flash_sale_items',
       creds.accessToken, creds.shopId,
       { flash_sale_id: flashSaleId, offset, limit },
     );
@@ -773,7 +773,7 @@ async function handleDeleteItemAll(supabase, shopId, body) {
     try {
       const itRes = await shopeeGet(
         creds.partnerKey, creds.partnerId,
-        '/api/v2/shop_flash_sale/get_shop_flash_sale_item_list',
+        '/api/v2/shop_flash_sale/get_shop_flash_sale_items',
         creds.accessToken, creds.shopId,
         { flash_sale_id: fsId, offset: 0, limit: 100 },
       );
