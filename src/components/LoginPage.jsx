@@ -172,7 +172,7 @@ export const ROLE_VIEWS = {
     assistant:  ['shop_analytics','overview_report','shopee_ads_dashboard','flash_sale','top_picks','shopee_livestream','shopee_video','shopee_ads','stella_dashboard','listed_price','tiktok_orders','reviews','crm','cskh','livestream','staff_report','order','koc_performance','booking_performance','contract','koc_payment','airlinks','booking','data_archive','nhanh_products','expense','landing_orders','camp_registration','task_notes'],
     // BOOKING: chỉ Booking group + Ngân Sách Ecom. KHÔNG Ecom group, KHÔNG Task & Notes.
     booking:    ['staff_report','order','koc_performance','booking_performance','contract','koc_payment','airlinks','booking','expense'],
-    cs:         ['crm','cskh','order','airlinks','expense','task_notes'],
+    cs:         ['crm','cskh','reviews','order','airlinks','expense','task_notes'],
     livestream: ['stella_dashboard','livestream','expense','task_notes'],
     // ECOM: full Ecom group + CSKH + Livestream + Booking group (trừ Hợp Đồng) + Ngân Sách Ecom
     //       booking_performance chỉ được "đề xuất" (yellow), admin duyệt mới thành red
