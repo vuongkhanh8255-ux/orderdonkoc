@@ -2139,6 +2139,10 @@ ${txtFormat}
                                 <div style={{ color: '#666' }}>VIDEO AIR</div>
                                 <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#10b981' }}>{formatNumber(calculatedStats.videoAirMonth)}</div>
                             </div>
+                            <div style={{ ...cardStyle, flex: 1, alignItems: 'center', borderColor: '#8b5cf6' }} title="Tổng chi phí booking (cast) ÷ tổng số video air trong tháng (gồm cả video 0đ)">
+                                <div style={{ color: '#666' }}>CHI PHÍ TB / VIDEO</div>
+                                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#8b5cf6' }}>{formatNumber(calculatedStats.videoAirMonth > 0 ? Math.round(calculatedStats.castMonth / calculatedStats.videoAirMonth) : 0)}</div>
+                            </div>
                             <div style={{ ...cardStyle, flex: 1, alignItems: 'center', borderColor: '#f43f5e', boxShadow: 'none' }}>
                                 <div style={{ color: '#666' }}>TỔNG VIEW</div>
                                 <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#f43f5e' }}>{formatNumber(calculatedStats.totalViews)}</div>
