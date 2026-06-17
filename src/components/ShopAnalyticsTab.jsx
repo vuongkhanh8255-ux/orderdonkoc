@@ -106,19 +106,23 @@ const ChangeBadge = ({ value }) => {
   );
 };
 
-// ── Stat Card (Stella-style) ──────────────────────────────────────────────────
+// ── Stat Card (Stella-style — gradient + glow + icon badge nổi khối) ───────────
 const StatCard = ({ icon, label, value, unit, sub, change, sparkData, sparkKey, accentColor = '#ff6a2c', selected = false, onClick }) => (
   <div onClick={onClick} style={{
-    background: '#fff', borderRadius: 16, padding: '20px 22px', flex: '1 1 240px', minWidth: 230,
-    boxShadow: selected ? `0 2px 14px ${accentColor}40` : '0 1px 4px rgba(15,23,42,0.06)',
-    border: `1px solid ${selected ? accentColor : '#f1f5f9'}`,
-    borderLeft: `4px solid ${accentColor}`, position: 'relative', overflow: 'hidden',
+    background: `linear-gradient(145deg, ${accentColor}16 0%, #ffffff 55%)`,
+    borderRadius: 18, padding: '20px 22px', flex: '1 1 240px', minWidth: 230,
+    boxShadow: selected
+      ? `0 14px 32px -8px ${accentColor}88, 0 2px 6px rgba(15,23,42,0.06)`
+      : `0 10px 26px -10px ${accentColor}55, 0 1px 3px rgba(15,23,42,0.05)`,
+    border: `1px solid ${selected ? accentColor : accentColor + '33'}`,
+    position: 'relative', overflow: 'hidden',
     cursor: onClick ? 'pointer' : 'default',
-    outline: selected ? `2px solid ${accentColor}` : 'none', outlineOffset: -2,
-    transition: 'box-shadow 0.15s, border-color 0.15s',
+    transition: 'box-shadow 0.2s, transform 0.2s',
   }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    {/* đốm sáng góc trên phải (glow blob) */}
+    <div aria-hidden style={{ position: 'absolute', top: -34, right: -34, width: 124, height: 124, borderRadius: '50%', background: `radial-gradient(circle, ${accentColor}45, transparent 70%)`, filter: 'blur(6px)', pointerEvents: 'none' }} />
+    <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
         {onClick && (
           <span style={{
             width: 16, height: 16, borderRadius: 4, flexShrink: 0,
@@ -126,15 +130,21 @@ const StatCard = ({ icon, label, value, unit, sub, change, sparkData, sparkKey, 
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff', fontWeight: 900,
           }}>{selected ? '✓' : ''}</span>
         )}
-        <span style={{ fontSize: '1rem' }}>{icon}</span>
-        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.6px' }}>{label}</span>
+        {/* icon bọc badge gradient — cảm giác 3D nổi khối */}
+        <span style={{
+          width: 34, height: 34, borderRadius: 11, flexShrink: 0,
+          background: `linear-gradient(135deg, ${accentColor}, ${accentColor}bb)`,
+          boxShadow: `0 5px 12px ${accentColor}66, inset 0 1px 1px rgba(255,255,255,0.45)`,
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem',
+        }}>{icon}</span>
+        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
       </div>
       <ChangeBadge value={change} />
     </div>
-    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
       <div style={{ flex: '1 1 auto', minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-          <span style={{ fontSize: '1.7rem', fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>{value}</span>
+          <span style={{ fontSize: '1.75rem', fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>{value}</span>
           {unit && <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#94a3b8' }}>{unit}</span>}
         </div>
         {sub && <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: 6, lineHeight: 1.4 }}>{sub}</div>}
