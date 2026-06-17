@@ -3,7 +3,7 @@
 // Drawer chi tiết chia 3 mục: 📦 Gửi hàng · 🎯 Hiệu suất · 🔥 Cast. Mỗi mục kèm biểu đồ phù hợp.
 // Chi phí mẫu = giống Module 1 Order (cost cột AMIS V2 ×1.08×SL + 5k + ship). CAST ngân sách = max(15tr, GMV×2.2%).
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, ScatterChart, Scatter, ZAxis, Cell } from 'recharts';
+import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, ScatterChart, Scatter, ZAxis, Cell, LabelList } from 'recharts';
 import { supabase } from '../supabaseClient';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -175,16 +175,23 @@ function BookingStaffReportTab() {
       {/* KPI cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14, marginBottom: 20 }}>
         {KPIS.map((k, i) => (
-          <div key={i} style={{ ...card, padding: '16px 18px', position: 'relative', overflow: 'hidden' }}>
-            <div style={{ position: 'absolute', top: -10, right: -10, width: 56, height: 56, borderRadius: '50%', background: k.color, opacity: 0.08 }} />
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.02em' }}>{k.icon} {k.label}</span>
+          <div key={i} style={{
+            background: `linear-gradient(145deg, ${k.color}12 0%, #ffffff 62%)`,
+            borderRadius: 18, padding: '16px 18px', position: 'relative', overflow: 'hidden',
+            border: `1px solid ${k.color}33`,
+            boxShadow: `0 8px 22px -12px ${k.color}55, 0 1px 3px rgba(15,23,42,0.05)`,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                <span style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, background: `linear-gradient(135deg, ${k.color}, ${k.color}bb)`, boxShadow: `0 5px 12px ${k.color}66, inset 0 1px 1px rgba(255,255,255,0.45)`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.95rem' }}>{k.icon}</span>
+                <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k.label}</span>
+              </div>
               {k.d !== null && Number.isFinite(k.d) && prevRows.length > 0 && (
-                <span style={{ fontSize: '0.72rem', fontWeight: 800, color: k.d >= 0 ? '#16a34a' : '#dc2626' }}>{k.d >= 0 ? '▲' : '▼'} {Math.abs(k.d).toFixed(0)}%</span>
+                <span style={{ fontSize: '0.68rem', fontWeight: 800, color: k.d >= 0 ? '#16a34a' : '#dc2626', background: k.d >= 0 ? '#dcfce7' : '#fef2f2', padding: '2px 8px', borderRadius: 20, whiteSpace: 'nowrap' }}>{k.d >= 0 ? '▲' : '▼'} {Math.abs(k.d).toFixed(0)}%</span>
               )}
             </div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', margin: '6px 0 2px' }}>{k.val}</div>
-            <div style={{ fontSize: '0.74rem', color: '#94a3b8', fontWeight: 600 }}>{k.sub}</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>{k.val}</div>
+            <div style={{ fontSize: '0.74rem', color: '#94a3b8', fontWeight: 600, marginTop: 2 }}>{k.sub}</div>
           </div>
         ))}
       </div>
@@ -256,10 +263,17 @@ const Section = ({ icon, title, hint, accent, children }) => (
     <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>{children}</div>
   </div>
 );
-const Mini = ({ label, val, color }) => (
-  <div style={{ background: '#f8fafc', borderRadius: 10, padding: '11px 13px', border: '1px solid #f1f5f9' }}>
-    <div style={{ fontSize: '0.66rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.02em' }}>{label}</div>
-    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: color || '#0f172a', marginTop: 2 }}>{val}</div>
+const Mini = ({ label, val, color = '#475569', icon }) => (
+  <div style={{
+    background: `linear-gradient(145deg, ${color}16 0%, #ffffff 70%)`,
+    borderRadius: 14, padding: '12px 14px', border: `1px solid ${color}2e`,
+    boxShadow: `0 6px 16px -10px ${color}66, 0 1px 2px rgba(15,23,42,0.04)`,
+  }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
+      {icon && <span style={{ width: 24, height: 24, borderRadius: 8, flexShrink: 0, background: `linear-gradient(135deg, ${color}, ${color}bb)`, boxShadow: `0 4px 9px ${color}55, inset 0 1px 1px rgba(255,255,255,0.45)`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.78rem' }}>{icon}</span>}
+      <div style={{ fontSize: '0.64rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.02em' }}>{label}</div>
+    </div>
+    <div style={{ fontSize: '1.2rem', fontWeight: 800, color }}>{val}</div>
   </div>
 );
 
@@ -321,10 +335,10 @@ function StaffDetailPanel({ r, range }) {
           {/* ═══ 1. GỬI HÀNG ═══ */}
           <Section icon="📦" title="Gửi hàng" hint={`${fmt(r.so_don)} đơn · ${fmt(r.so_mau)} mẫu`} accent={ACC.send}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-              <Mini label="Đơn gửi" val={fmt(r.so_don)} color="#f97316" />
-              <Mini label="Số mẫu" val={fmt(r.so_mau)} color="#fb923c" />
-              <Mini label="Chi phí mẫu" val={fmtVnd(r.chi_phi_mau) + 'đ'} color="#e11d48" />
-              <Mini label="TS / ngày" val={r.tan_suat} color="#0ea5e9" />
+              <Mini icon="📦" label="Đơn gửi" val={fmt(r.so_don)} color="#f97316" />
+              <Mini icon="🧪" label="Số mẫu" val={fmt(r.so_mau)} color="#fb923c" />
+              <Mini icon="🧾" label="Chi phí mẫu" val={fmtVnd(r.chi_phi_mau) + 'đ'} color="#e11d48" />
+              <Mini icon="⚡" label="TS / ngày" val={r.tan_suat} color="#0ea5e9" />
             </div>
 
             {/* Tỷ trọng brand (donut) */}
@@ -340,12 +354,12 @@ function StaffDetailPanel({ r, range }) {
                       <Tooltip formatter={(v, n) => [`${fmt(v)} mẫu`, n]} contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: '0.8rem' }} />
                     </PieChart>
                   </ResponsiveContainer>
-                  <div style={{ flex: 1, minWidth: 180 }}>
+                  <div style={{ flex: '0 1 auto', minWidth: 220 }}>
                     {brandData.map((e, i) => (
                       <div key={e.name} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, fontSize: '0.8rem' }}>
-                        <span style={{ width: 11, height: 11, borderRadius: 3, background: BRAND_COLOR[e.name] || PIE_PALETTE[i % PIE_PALETTE.length] }} />
-                        <span style={{ fontWeight: 600, color: '#334155', flex: 1 }}>{e.name}</span>
-                        <span style={{ fontWeight: 700, color: '#64748b' }}>{fmt(e.value)} ({(e.value / brandTot * 100).toFixed(0)}%)</span>
+                        <span style={{ width: 11, height: 11, borderRadius: 3, flexShrink: 0, background: BRAND_COLOR[e.name] || PIE_PALETTE[i % PIE_PALETTE.length] }} />
+                        <span style={{ fontWeight: 600, color: '#334155', width: 124, flexShrink: 0 }}>{e.name}</span>
+                        <span style={{ fontWeight: 700, color: '#64748b', flexShrink: 0 }}>{fmt(e.value)} <span style={{ color: '#94a3b8' }}>({(e.value / brandTot * 100).toFixed(0)}%)</span></span>
                       </div>
                     ))}
                   </div>
@@ -371,7 +385,9 @@ function StaffDetailPanel({ r, range }) {
                     <XAxis dataKey="d" tick={{ fontSize: 10, fill: '#94a3b8' }} interval={Math.max(0, Math.floor(daily.length / 12))} tickLine={false} axisLine={{ stroke: '#e2e8f0' }} />
                     <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} allowDecimals={false} tickLine={false} axisLine={false} width={34} />
                     <Tooltip formatter={(v) => [fmt(v), sendCfg.label]} labelFormatter={(l) => `Ngày ${l}`} contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: '0.8rem' }} />
-                    <Area type="monotone" dataKey={sendMetric} stroke={sendCfg.color} strokeWidth={2.2} fill="url(#sendGrad)" dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
+                    <Area type="monotone" dataKey={sendMetric} stroke={sendCfg.color} strokeWidth={2.2} fill="url(#sendGrad)" dot={false} activeDot={{ r: 4 }} isAnimationActive={false}>
+                      <LabelList dataKey={sendMetric} position="top" offset={8} formatter={(v) => v > 0 ? v : ''} fill={sendCfg.color} fontSize={9} fontWeight={700} />
+                    </Area>
                   </AreaChart>
                 </ResponsiveContainer>
               )}
@@ -381,10 +397,10 @@ function StaffDetailPanel({ r, range }) {
           {/* ═══ 2. HIỆU SUẤT ═══ */}
           <Section icon="🎯" title="Hiệu suất" hint={`${fmt(r.koc_count)} KOC · ${fmt(r.aff_videos)} video`} accent={ACC.perf}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-              <Mini label="KOC gắn" val={fmt(r.koc_count)} color="#9333ea" />
-              <Mini label="Video" val={fmt(r.aff_videos)} color="#7c3aed" />
-              <Mini label="View" val={fmtView(r.aff_views)} color="#0891b2" />
-              <Mini label="GMV" val={fmtVnd(r.aff_gmv) + 'đ'} color="#16a34a" />
+              <Mini icon="🏷️" label="KOC gắn" val={fmt(r.koc_count)} color="#9333ea" />
+              <Mini icon="🎬" label="Video" val={fmt(r.aff_videos)} color="#7c3aed" />
+              <Mini icon="👁️" label="View" val={fmtView(r.aff_views)} color="#0891b2" />
+              <Mini icon="💰" label="GMV" val={fmtVnd(r.aff_gmv) + 'đ'} color="#16a34a" />
             </div>
 
             {/* Video / View theo ngày (bar) */}
@@ -404,7 +420,9 @@ function StaffDetailPanel({ r, range }) {
                     <XAxis dataKey="d" tick={{ fontSize: 10, fill: '#94a3b8' }} interval={Math.max(0, Math.floor(daily.length / 12))} tickLine={false} axisLine={{ stroke: '#e2e8f0' }} />
                     <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={perfCfg.fmt} tickLine={false} axisLine={false} width={40} />
                     <Tooltip formatter={(v) => [perfCfg.fmt(v), perfCfg.label]} labelFormatter={(l) => `Ngày ${l}`} contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: '0.8rem' }} />
-                    <Bar dataKey={perfMetric} fill={perfCfg.color} radius={[4, 4, 0, 0]} maxBarSize={26} isAnimationActive={false} />
+                    <Bar dataKey={perfMetric} fill={perfCfg.color} radius={[4, 4, 0, 0]} maxBarSize={26} isAnimationActive={false}>
+                      <LabelList dataKey={perfMetric} position="top" formatter={(v) => v > 0 ? perfCfg.fmt(v) : ''} fill={perfCfg.color} fontSize={9} fontWeight={700} />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -463,15 +481,15 @@ function StaffDetailPanel({ r, range }) {
                 </div>
               </div>
               <div style={{ flex: 1, minWidth: 220, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
-                <Mini label="Tổng ngân sách" val={fmtVnd(budget) + 'đ'} color="#475569" />
-                <Mini label="Đã xài" val={fmtVnd(cast) + 'đ'} color="#ea580c" />
-                <Mini label="Còn lại" val={fmtVnd(remain) + 'đ'} color={remain < 0 ? '#dc2626' : '#16a34a'} />
-                <Mini label="TB / 1 KOC" val={fmtVnd(avgKoc) + 'đ'} color="#9333ea" />
+                <Mini icon="💰" label="Tổng ngân sách" val={fmtVnd(budget) + 'đ'} color="#475569" />
+                <Mini icon="🔥" label="Đã xài" val={fmtVnd(cast) + 'đ'} color="#ea580c" />
+                <Mini icon="💵" label="Còn lại" val={fmtVnd(remain) + 'đ'} color={remain < 0 ? '#dc2626' : '#16a34a'} />
+                <Mini icon="👤" label="TB / 1 KOC" val={fmtVnd(avgKoc) + 'đ'} color="#9333ea" />
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
-              <Mini label="Burn rate / ngày" val={fmtVnd(burn) + 'đ'} color="#475569" />
-              <Mini label="CAST / GMV" val={num(r.aff_gmv) > 0 ? (cast / num(r.aff_gmv) * 100).toFixed(1) + '%' : '—'} color="#475569" />
+              <Mini icon="⏱️" label="Burn rate / ngày" val={fmtVnd(burn) + 'đ'} color="#475569" />
+              <Mini icon="⚖️" label="CAST / GMV" val={num(r.aff_gmv) > 0 ? (cast / num(r.aff_gmv) * 100).toFixed(1) + '%' : '—'} color="#475569" />
             </div>
 
             {/* Scatter GMV vs CAST theo KOC */}
