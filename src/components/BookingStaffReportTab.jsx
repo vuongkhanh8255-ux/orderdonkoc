@@ -63,7 +63,7 @@ function BookingStaffReportTab() {
   const [err, setErr] = useState('');
   const [selStaff, setSelStaff] = useState('');
   const [fProduct, setFProduct] = useState('');
-  const [detail, setDetail] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
 
   const setQuick = (p) => {
     if (p.single) { const d = new Date(); d.setDate(d.getDate() - p.days); setRange({ start: toYmd(d), end: toYmd(d) }); }
@@ -90,6 +90,8 @@ function BookingStaffReportTab() {
     (!selStaff || r.ten_nhansu === selStaff) &&
     (!fProduct || (r.top_product || '').toLowerCase().includes(fProduct.toLowerCase()))
   ), [rows, selStaff, fProduct]);
+  // Nhân sự đang xem chi tiết: theo dòng đã bấm, mặc định dòng đầu (GMV cao nhất) → luôn hiện chi tiết bên dưới.
+  const selectedRow = useMemo(() => filtered.find(r => r.nhansu_id === selectedId) || filtered[0] || null, [filtered, selectedId]);
 
   const sumRows = (rs) => rs.reduce((a, r) => ({
     don: a.don + num(r.so_don), mau: a.mau + num(r.so_mau), koc: a.koc + num(r.koc_count),
@@ -209,9 +211,10 @@ function BookingStaffReportTab() {
               {!loading && filtered.length === 0 && <tr><td colSpan={14} style={{ ...td, textAlign: 'center', color: '#94a3b8', padding: 40 }}>Không có dữ liệu.</td></tr>}
               {!loading && filtered.map((r, i) => {
                 const b = perfBadge(r.aff_gmv, r.cast_used); const budget = BUDGET(r.aff_gmv); const remain = budget - num(r.cast_used);
+                const isSel = selectedRow && r.nhansu_id === selectedRow.nhansu_id;
                 return (
-                  <tr key={r.nhansu_id} onClick={() => setDetail(r)} style={{ cursor: 'pointer' }}
-                      onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
+                  <tr key={r.nhansu_id} onClick={() => setSelectedId(r.nhansu_id)} style={{ cursor: 'pointer', background: isSel ? '#fff7ed' : '#fff', boxShadow: isSel ? 'inset 3px 0 0 #f97316' : 'none' }}
+                      onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = '#f8fafc'; }} onMouseLeave={e => { e.currentTarget.style.background = isSel ? '#fff7ed' : '#fff'; }}>
                     <td style={{ ...td, color: '#94a3b8', fontWeight: 700 }}>{i + 1}</td>
                     <td style={{ ...td, fontWeight: 700, color: '#0f172a' }}>{r.ten_nhansu}</td>
                     <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{fmt(r.so_don)}</td>
@@ -235,9 +238,9 @@ function BookingStaffReportTab() {
           </table>
         </div>
       </div>
-      <p style={{ color: '#94a3b8', fontSize: '0.76rem', marginTop: 10 }}>* Chi phí mẫu = cost (cột AMIS V2) ×1.08×SL + 5k + ship (giống Module 1). CAST đã dùng = koc_payments. Ngân sách = max(15tr, GMV×2.2%). Bấm 1 dòng để xem chi tiết.</p>
+      <p style={{ color: '#94a3b8', fontSize: '0.76rem', marginTop: 10 }}>* Chi phí mẫu = cost (cột AMIS V2) ×1.08×SL + 5k + ship (giống Module 1). CAST đã dùng = koc_payments. Ngân sách = max(15tr, GMV×2.2%). Chi tiết hiện bên dưới — bấm dòng khác để đổi nhân sự.</p>
 
-      {detail && <StaffDetailModal r={detail} range={range} onClose={() => setDetail(null)} />}
+      {selectedRow && <StaffDetailPanel r={selectedRow} range={range} />}
     </div>
   );
 }
@@ -260,8 +263,8 @@ const Mini = ({ label, val, color }) => (
   </div>
 );
 
-// ── Modal chi tiết nhân sự ────────────────────────────────────────────────────
-function StaffDetailModal({ r, range, onClose }) {
+// ── Panel chi tiết nhân sự (hiện INLINE bên dưới bảng) ─────────────────────────
+function StaffDetailPanel({ r, range }) {
   const [det, setDet] = useState(null);
   const [loadingDet, setLoadingDet] = useState(true);
   const [sendMetric, setSendMetric] = useState('mau');   // tần suất gửi: don | mau
@@ -301,23 +304,19 @@ function StaffDetailModal({ r, range, onClose }) {
   const chartEmpty = (h, msg) => <div style={{ height: h, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>{msg}</div>;
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', zIndex: 9999, display: 'flex', justifyContent: 'flex-end' }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 760, height: '100%', background: '#f1f5f9', overflowY: 'auto', boxShadow: '-8px 0 40px rgba(0,0,0,0.2)' }}>
+    <div style={{ ...card, marginTop: 18, overflow: 'hidden' }}>
         {/* header */}
-        <div style={{ background: 'linear-gradient(135deg, #ff8c42, #f5591a)', padding: '22px 26px', color: '#fff', position: 'sticky', top: 0, zIndex: 2 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ background: 'linear-gradient(135deg, #ff8c42, #f5591a)', padding: '18px 24px', color: '#fff' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
             <div>
-              <div style={{ fontSize: '1.4rem', fontWeight: 800 }}>{r.ten_nhansu}</div>
+              <div style={{ fontSize: '1.3rem', fontWeight: 800 }}>📊 Chi tiết: {r.ten_nhansu}</div>
               <div style={{ fontSize: '0.82rem', opacity: 0.9 }}>{range.start} → {range.end} ({len} ngày)</div>
             </div>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <span style={{ background: '#fff', color: b.color, fontWeight: 800, fontSize: '0.8rem', padding: '5px 14px', borderRadius: 20 }}>{b.label}</span>
-              <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.25)', border: 'none', color: '#fff', width: 32, height: 32, borderRadius: '50%', fontSize: '1.1rem', cursor: 'pointer' }}>✕</button>
-            </div>
+            <span style={{ background: '#fff', color: b.color, fontWeight: 800, fontSize: '0.8rem', padding: '5px 14px', borderRadius: 20 }}>{b.label}</span>
           </div>
         </div>
 
-        <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18, background: '#f8fafc' }}>
 
           {/* ═══ 1. GỬI HÀNG ═══ */}
           <Section icon="📦" title="Gửi hàng" hint={`${fmt(r.so_don)} đơn · ${fmt(r.so_mau)} mẫu`} accent={ACC.send}>
@@ -508,7 +507,6 @@ function StaffDetailModal({ r, range, onClose }) {
           </Section>
 
         </div>
-      </div>
     </div>
   );
 }
