@@ -18,6 +18,7 @@ const KocBlacklistTab = () => {
   const [airedMap, setAiredMap] = useState({});   // id_kenh chuẩn hoá → { staff, total_air } (nhân sự đã từng air)
   const [loading, setLoading]   = useState(true);
   const [search, setSearch]     = useState('');
+  const [flag, setFlag]         = useState('all'); // all | aired | none
   const [page, setPage]         = useState(1);
   const [newChannel, setNewChannel] = useState('');
   const [busy, setBusy]         = useState(false);
@@ -71,10 +72,16 @@ const KocBlacklistTab = () => {
     setChannels(prev => prev.filter(c => c.id_kenh !== id));
   };
 
+  const norm = (s) => (s || '').toLowerCase().replace(/^@/, '');
+  const airedCount = useMemo(() => channels.filter(c => airedMap[norm(c.id_kenh)]).length, [channels, airedMap]);
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return q ? channels.filter(c => (c.id_kenh || '').toLowerCase().includes(q)) : channels;
-  }, [channels, search]);
+    let list = q ? channels.filter(c => (c.id_kenh || '').toLowerCase().includes(q)) : channels;
+    if (flag === 'aired') list = list.filter(c => airedMap[norm(c.id_kenh)]);
+    else if (flag === 'none') list = list.filter(c => !airedMap[norm(c.id_kenh)]);
+    if (flag === 'aired') list = [...list].sort((a, b) => (airedMap[norm(b.id_kenh)]?.total_air || 0) - (airedMap[norm(a.id_kenh)]?.total_air || 0));
+    return list;
+  }, [channels, search, flag, airedMap]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage   = Math.min(page, totalPages);
@@ -122,6 +129,21 @@ const KocBlacklistTab = () => {
             {busy ? '⏳' : '+ Thêm'}
           </button>
         </div>
+      </div>
+
+      {/* Bộ lọc nhân sự đã air */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        {[
+          { k: 'all', label: `Tất cả (${channels.length})`, c: '#dc2626' },
+          { k: 'aired', label: `⚠️ Có nhân sự air (${airedCount})`, c: '#d97706' },
+          { k: 'none', label: `Chưa ai air (${Math.max(0, channels.length - airedCount)})`, c: '#64748b' },
+        ].map(b => (
+          <button key={b.k} type="button" onClick={() => { setFlag(b.k); setPage(1); }}
+            style={{ padding: '7px 14px', borderRadius: 9, fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', border: `1.5px solid ${flag === b.k ? b.c : '#e5e7eb'}`, background: flag === b.k ? b.c : '#fff', color: flag === b.k ? '#fff' : '#64748b' }}>
+            {b.label}
+          </button>
+        ))}
+        {flag === 'aired' && <span style={{ fontSize: '0.76rem', color: '#94a3b8' }}>↓ sắp theo số video air nhiều nhất</span>}
       </div>
 
       {/* Tìm kiếm */}
