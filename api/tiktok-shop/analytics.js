@@ -783,6 +783,8 @@ async function handleKocOrders({ params, supabase, res }) {
   if (error) return res.status(200).json({ ok: false, error: error.message });
   const { data: totRows } = await supabase.rpc('koc_order_totals', { p_shop_id: shopId, p_start: start, p_end: end });
   const { data: viewRows } = await supabase.rpc('koc_video_views', { p_shop_id: shopId, p_start: start, p_end: end });
+  // TỔNG VIEW lấy từ hàm scalar (1 dòng) — tránh PostgREST cắt bớt dòng khi RPC per-KOC trả >1000 dòng.
+  const { data: viewTotal } = await supabase.rpc('koc_video_views_total', { p_shop_id: shopId, p_start: start, p_end: end });
   const { data: castRows } = await supabase.rpc('koc_cast_by_creator', { p_shop_id: shopId, p_start: castAll ? null : start, p_end: castAll ? null : end });
   const { data: sampleRows } = await supabase.rpc('koc_sample_cost', { p_start: castAll ? null : start, p_end: castAll ? null : end }); // chi phí mẫu THEO KỲ (ngay_gui); "Tất cả" → null = hết — vào ROAS
 
@@ -814,7 +816,7 @@ async function handleKocOrders({ params, supabase, res }) {
     last_order: Number(s.last_order) || 0,
   }));
   const t = (totRows || [])[0] || {};
-  const totalViews = (viewRows || []).reduce((a, r) => a + (Number(r.total_views) || 0), 0);
+  const totalViews = Number(viewTotal) || 0; // tổng đầy đủ (không bị cắt dòng); per-KOC viewRows chỉ để điền cột
   const totalCast = (castRows || []).reduce((a, r) => a + (Number(r.cast_total) || 0), 0);
   // Tổng clip = cộng theo KOC affiliate đang hiển thị (đồng bộ với bảng), không gộp creator ngoài cohort
   const totalVtotal = creators.reduce((a, c) => a + (c.vtotal || 0), 0);
