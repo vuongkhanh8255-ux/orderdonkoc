@@ -15,6 +15,7 @@ const PAGE_SIZE = 30;
 
 const KocBlacklistTab = () => {
   const [channels, setChannels] = useState([]);   // [{ id_kenh, created_at }]
+  const [airedMap, setAiredMap] = useState({});   // id_kenh chuẩn hoá → { staff, total_air } (nhân sự đã từng air)
   const [loading, setLoading]   = useState(true);
   const [search, setSearch]     = useState('');
   const [page, setPage]         = useState(1);
@@ -30,6 +31,13 @@ const KocBlacklistTab = () => {
         .order('created_at', { ascending: false });
       if (error) throw error;
       setChannels(data || []);
+      // Đối chiếu air_links: nhân sự nào đã từng air kênh blacklist này (kèm số video)
+      try {
+        const { data: aired } = await supabase.rpc('blacklist_aired_staff');
+        const m = {};
+        for (const r of (aired || [])) m[(r.id_kenh || '').toLowerCase().replace(/^@/, '')] = r;
+        setAiredMap(m);
+      } catch (e2) { console.error('aired staff failed:', e2); }
     } catch (e) {
       console.error('Load blacklist failed:', e);
       alert('Không tải được blacklist: ' + (e.message || e));
@@ -76,7 +84,7 @@ const KocBlacklistTab = () => {
   const inputStyle = { padding: '9px 13px', borderRadius: 9, border: '1px solid #fca5a5', fontSize: '0.88rem', boxSizing: 'border-box', outline: 'none' };
 
   return (
-    <div style={{ padding: '8px 4px', maxWidth: 760 }}>
+    <div style={{ padding: '8px 4px', maxWidth: 1100 }}>
       <h2 style={{ margin: '0 0 4px', fontSize: '1.6rem', fontWeight: 900, color: '#dc2626' }}>🚫 Black List KOC</h2>
       <p style={{ margin: '0 0 18px', color: '#94a3b8', fontSize: '0.9rem' }}>
         Danh sách kênh KOC bị chặn booking — chỉ <b style={{ color: '#dc2626' }}>Admin</b> xem &amp; chỉnh sửa.
@@ -89,6 +97,14 @@ const KocBlacklistTab = () => {
         <div>
           <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Tổng kênh blacklist</div>
           <div style={{ fontSize: '1.45rem', fontWeight: 900, color: '#dc2626' }}>{loading ? '…' : channels.length.toLocaleString('vi-VN')} kênh</div>
+        </div>
+      </div>
+
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: '#fff', border: '1px solid #fde68a', borderLeft: `4px solid #d97706`, borderRadius: 12, padding: '12px 18px', marginBottom: 16, marginLeft: 10, boxShadow: '0 1px 4px rgba(15,23,42,0.05)' }}>
+        <span style={{ fontSize: '1.3rem' }}>⚠️</span>
+        <div>
+          <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Đã từng bị nhân sự air</div>
+          <div style={{ fontSize: '1.45rem', fontWeight: 900, color: '#d97706' }}>{loading ? '…' : Object.keys(airedMap).length} kênh</div>
         </div>
       </div>
 
@@ -131,7 +147,8 @@ const KocBlacklistTab = () => {
                   <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 800, color: '#dc2626' }}>
                     ID Kênh {search && <span style={{ fontWeight: 400, color: '#9ca3af' }}>({filtered.length} kết quả)</span>}
                   </th>
-                  <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 800, color: '#dc2626', width: 130 }}>Ngày thêm</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 800, color: '#dc2626' }}>⚠️ Nhân sự đã từng air (số video)</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 800, color: '#dc2626', width: 120 }}>Ngày thêm</th>
                   <th style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 800, color: '#dc2626', width: 80 }}>Xoá</th>
                 </tr>
               </thead>
@@ -140,6 +157,12 @@ const KocBlacklistTab = () => {
                   <tr key={c.id_kenh || i} style={{ borderBottom: '1px solid #fee2e2' }}>
                     <td style={{ padding: '9px 14px', color: '#94a3b8', fontWeight: 700 }}>{(safePage - 1) * PAGE_SIZE + i + 1}</td>
                     <td style={{ padding: '9px 14px', fontFamily: 'monospace', fontWeight: 600, color: '#0f172a' }}>{c.id_kenh}</td>
+                    <td style={{ padding: '9px 14px', fontSize: '0.82rem' }}>{(() => {
+                      const a = airedMap[(c.id_kenh || '').toLowerCase().replace(/^@/, '')];
+                      return a
+                        ? <span style={{ color: '#dc2626', fontWeight: 600 }} title={`Tổng ${a.total_air} video đã air kênh này`}>{a.staff}</span>
+                        : <span style={{ color: '#cbd5e1' }}>— chưa ai air</span>;
+                    })()}</td>
                     <td style={{ padding: '9px 14px', color: '#64748b', fontSize: '0.8rem' }}>{fmtDate(c.created_at)}</td>
                     <td style={{ padding: '9px 14px', textAlign: 'center' }}>
                       <button type="button" onClick={() => remove(c.id_kenh)}
