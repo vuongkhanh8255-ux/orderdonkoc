@@ -11,6 +11,9 @@ import { supabase } from '../supabaseClient';
 const BUCKET = 'booking-materials';
 const ORANGE = '#ff6a2c';
 const MAX_BYTES = 50 * 1024 * 1024; // 50MB / file
+const API = '/api/tiktok-shop/analytics';
+// Chuẩn hoá tên để map brand ↔ gian hàng (bỏ dấu, "Việt Nam", "Hồ Chí Minh", khoảng trắng)
+const normName = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/VIETNAM/g, '').replace(/HOCHIMINH/g, '');
 
 const card = { background: '#fff', border: '1px solid #eef0f3', borderRadius: 14, padding: 20, boxShadow: '0 1px 3px rgba(15,23,42,0.05)' };
 const btn = (bg, c = '#fff') => ({ background: bg, color: c, border: 'none', borderRadius: 9, padding: '9px 16px', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', fontFamily: 'inherit' });
@@ -27,6 +30,7 @@ export default function BookingMaterialTab() {
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState('');   // '' | 'image_zip' | 'cert_pdf'
   const [products, setProducts] = useState([]); // SP của brand (từ dashboard booking: bảng sanphams)
+  const [picker, setPicker] = useState({ open: false, shops: [], shop: '', items: [], loading: false, err: '' }); // chọn SP từ gian TikTok (có ảnh)
 
   const load = async () => {
     setLoading(true);
@@ -170,6 +174,41 @@ export default function BookingMaterialTab() {
     finally { setBusy(''); }
   };
 
+  // ── Chọn SP từ gian hàng TikTok (có ảnh thật) ──────────────────────────
+  const fetchPicker = async (shopId) => {
+    setPicker(p => ({ ...p, loading: true, err: '', items: [], shop: shopId }));
+    try {
+      const ymd = d => d.toISOString().slice(0, 10);
+      const now = new Date();
+      const qs = new URLSearchParams({ action: 'products', shop_id: shopId, start_date: ymd(new Date(now - 30 * 86400000)), end_date: ymd(now), sort_field: 'units_sold', page_size: '50' });
+      const r = await fetch(`${API}?${qs}`); const j = await r.json();
+      if (!j.ok) { setPicker(p => ({ ...p, loading: false, err: j.error || 'Lỗi tải SP gian hàng' })); return; }
+      setPicker(p => ({ ...p, loading: false, items: j.products || [] }));
+    } catch (e) { setPicker(p => ({ ...p, loading: false, err: e.message })); }
+  };
+  const openPicker = async () => {
+    setPicker({ open: true, shops: [], shop: '', items: [], loading: true, err: '' });
+    try {
+      const r = await fetch(`${API}?action=shops`); const j = await r.json();
+      const shops = (j.ok && Array.isArray(j.data)) ? j.data : [];
+      const key = normName(sel);
+      const match = shops.find(s => normName(s.seller_name).startsWith(key)) || shops.find(s => normName(s.seller_name).includes(key));
+      const shopId = match?.shop_id || shops[0]?.shop_id || '';
+      setPicker(p => ({ ...p, shops, shop: shopId }));
+      if (shopId) fetchPicker(shopId);
+      else setPicker(p => ({ ...p, loading: false, err: 'Không tìm thấy gian hàng kết nối.' }));
+    } catch (e) { setPicker(p => ({ ...p, loading: false, err: e.message })); }
+  };
+  const addProductAsSku = async (p) => {
+    if (!cur) return;
+    const name = p.product_name || '';
+    if (draft.skus.some(s => (s.name || '').trim() === name.trim())) return;
+    const skus = [...draft.skus, { name, note: '', image: p.image || '' }];
+    setDraft(d => ({ ...d, skus }));
+    patchRow(cur.brand, { skus });
+    await supabase.from('booking_materials').update({ skus, updated_at: new Date().toISOString() }).eq('id', cur.id);
+  };
+
   const deleteFile = async (entry) => {
     if (!cur || !confirm(`Xoá file "${entry.name}"?`)) return;
     try {
@@ -233,7 +272,10 @@ export default function BookingMaterialTab() {
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '16px 0 8px' }}>
               <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151' }}>🏷️ Top 5 SKU (fill thiệp KOC)</label>
-              <button style={{ ...btn('#fff7ed', ORANGE), border: `1.5px solid ${ORANGE}`, padding: '5px 12px', fontSize: '0.78rem' }} onClick={addSku}>+ SKU</button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button style={{ ...btn('#1e293b'), padding: '5px 12px', fontSize: '0.78rem' }} onClick={openPicker}>📦 Chọn từ gian hàng</button>
+                <button style={{ ...btn('#fff7ed', ORANGE), border: `1.5px solid ${ORANGE}`, padding: '5px 12px', fontSize: '0.78rem' }} onClick={addSku}>+ thủ công</button>
+              </div>
             </div>
             {draft.skus.length === 0 && <div style={{ color: '#94a3b8', fontSize: '0.85rem', marginBottom: 8 }}>Chưa có SKU. Bấm "+ SKU" để thêm.</div>}
             {draft.skus.map((s, i) => (
@@ -266,6 +308,44 @@ export default function BookingMaterialTab() {
               files={filesOf('image_zip')} busy={busy === 'image_zip'} onUpload={f => uploadFile('image_zip', f)} onDelete={deleteFile} />
             <FileBox title="📄 Giấy kiểm định (.pdf)" hint="Up file PDF kiểm định" accept=".pdf,application/pdf"
               files={filesOf('cert_pdf')} busy={busy === 'cert_pdf'} onUpload={f => uploadFile('cert_pdf', f)} onDelete={deleteFile} />
+          </div>
+        </div>
+      )}
+
+      {/* Modal: chọn SP từ gian hàng TikTok (có ảnh) */}
+      {picker.open && (
+        <div onClick={() => setPicker(p => ({ ...p, open: false }))} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: 'min(920px,96vw)', maxHeight: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid #eef0f3', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, flex: 1 }}>📦 Chọn SP từ gian hàng <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '0.82rem' }}>(click để thêm vào SKU)</span></h3>
+              <select value={picker.shop} onChange={e => fetchPicker(e.target.value)} style={{ ...inputStyle, width: 'auto', padding: '8px 10px' }}>
+                {picker.shops.map(s => <option key={s.shop_id} value={s.shop_id}>{s.seller_name}</option>)}
+              </select>
+              <button style={{ ...btn('#f1f5f9', '#475569') }} onClick={() => setPicker(p => ({ ...p, open: false }))}>✕ Đóng</button>
+            </div>
+            <div style={{ padding: 16, overflow: 'auto' }}>
+              {picker.loading && <div style={{ color: '#94a3b8', padding: 20 }}>⏳ Đang tải sản phẩm từ gian hàng…</div>}
+              {picker.err && <div style={{ color: '#ef4444', padding: 20 }}>⚠️ {picker.err}</div>}
+              {!picker.loading && !picker.err && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 12 }}>
+                  {picker.items.map(p => {
+                    const added = draft.skus.some(s => (s.name || '').trim() === (p.product_name || '').trim());
+                    return (
+                      <button key={p.product_id} onClick={() => addProductAsSku(p)} disabled={added}
+                        style={{ textAlign: 'left', background: added ? '#f0fdf4' : '#fff', border: `1.5px solid ${added ? '#86efac' : '#eef0f3'}`, borderRadius: 12, padding: 8, cursor: added ? 'default' : 'pointer', fontFamily: 'inherit' }}>
+                        <div style={{ position: 'relative', width: '100%', aspectRatio: '1', borderRadius: 9, overflow: 'hidden', background: '#f8fafc', marginBottom: 6 }}>
+                          {p.image ? <img src={p.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#cbd5e1' }}>🖼️</div>}
+                          {added && <div style={{ position: 'absolute', top: 4, right: 4, background: '#22c55e', color: '#fff', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem' }}>✓</div>}
+                        </div>
+                        <div style={{ fontSize: '0.74rem', fontWeight: 600, color: '#334155', lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.product_name}</div>
+                        <div style={{ fontSize: '0.7rem', color: ORANGE, fontWeight: 700, marginTop: 3 }}>Đã bán: {Number(p.units_sold || 0).toLocaleString('vi-VN')}</div>
+                      </button>
+                    );
+                  })}
+                  {!picker.items.length && <div style={{ color: '#94a3b8', padding: 20 }}>Gian này chưa có sản phẩm trong 30 ngày.</div>}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
