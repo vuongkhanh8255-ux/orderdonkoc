@@ -298,11 +298,13 @@ const AirLinksTab = () => {
                 }
                 const m = new Map();
                 for (const r of all) {
-                    const mt = String(r.air_link || '').match(/video\/(\d+)/);
-                    if (mt) {
-                        const v = parseMoney(r.cast_net);
-                        // 1 video có thể có nhiều lệnh → giữ cast lớn nhất
-                        if (!m.has(mt[1]) || v > m.get(mt[1])) m.set(mt[1], v);
+                    // 1 lệnh có thể chứa NHIỀU link video → lấy hết
+                    const vids = [...String(r.air_link || '').matchAll(/video\/(\d+)/g)].map(x => x[1]);
+                    if (vids.length === 0) continue;
+                    // 1 số tiền cho N clip → chia TRUNG BÌNH cho từng clip (cast_net thuần, không PIT)
+                    const per = Math.round(parseMoney(r.cast_net) / vids.length);
+                    for (const v of vids) {
+                        m.set(v, (m.get(v) || 0) + per); // video xuất hiện ở nhiều lệnh thì cộng dồn
                     }
                 }
                 setPaidVideoMap(m);
@@ -1763,7 +1765,7 @@ const AirLinksTab = () => {
                                                     {isEditing
                                                         ? <input type="text" value={editFormData.cast} onChange={(e) => handleEditFormChange(e, 'cast')} style={tableInputStyle} />
                                                         : (isSotCast
-                                                            ? <span style={{ color: '#dc2626', fontWeight: 'bold', whiteSpace: 'nowrap' }} title="Đã trả tiền ở Module 3 (Thanh toán KOC) nhưng chưa điền cast ở đây">⚠️ Đã trả {formatCurrency(paidCast)}</span>
+                                                            ? <span style={{ color: '#dc2626', fontWeight: 'bold', whiteSpace: 'nowrap' }} title="Đã trả tiền ở Module 3 (Thanh toán KOC) nhưng chưa điền cast ở đây. Nếu 1 lệnh có nhiều clip thì số này đã chia trung bình cho từng clip.">⚠️ Đã trả {formatCurrency(paidCast)}</span>
                                                             : renderCast(link.cast))}
                                                 </td>
 
