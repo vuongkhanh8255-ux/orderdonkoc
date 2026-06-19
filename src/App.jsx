@@ -273,11 +273,13 @@ function AppMain({ user, onLogout, allowedViews }) {
                 { view: 'costing',           icon: '💰', name: 'Giá Cost' },
               ]},
               { key: 'shopee', label: '🟠 Shopee', emoji: '🟠', items: [
-                { view: 'flash_sale',        icon: '⚡', name: 'Tạo FS' },
-                { view: 'top_picks',         icon: '🚀', name: 'Đẩy SP' },
+                { view: 'shopee_database',      icon: '🗄️', name: 'Database' },
+                { view: 'shopee_ads_dashboard', icon: '📊', name: 'Dashboard' },
+                { view: 'flash_sale',           icon: '⚡', name: 'Module 1: Đăng kí Flashsale in shop' },
+                { view: 'top_picks',            icon: '🚀', name: 'Module 2: Đẩy sản phẩm' },
                 // { view: 'shopee_livestream', icon: '📺', name: 'Livestream' }, // tạm ẩn — chờ setup tài khoản Creator cho Shopee Video/Live
-                { view: 'shopee_ads_dashboard', icon: '📣', name: 'Quảng cáo' },
-                { view: 'shopee_autoreply',  icon: '💬', name: 'Tự trả lời đánh giá' },
+                { view: 'shopee_autoreply',     icon: '💬', name: 'Module 3: Trả lời đánh giá khách hàng tự động' },
+                { view: 'shopee_live_ai',       icon: '🤖', name: 'Module 4: Live AI' },
               ]},
               { key: 'tiktok', label: '🎵 TikTok', emoji: '🎵', items: [
                 { view: 'camp_registration', icon: '🎪', name: 'Đăng Kí Camp' },
@@ -446,6 +448,12 @@ function AppMain({ user, onLogout, allowedViews }) {
           )}
           {currentView === 'shopee_ads_dashboard' && <ShopeeAdsDashboard />}
           {currentView === 'shopee_autoreply' && <ShopeeAutoReplyTab />}
+          {currentView === 'shopee_database' && (
+            <ComingSoonPlaceholder icon="🗄️" title="Database Shopee" description="Đang bảo trì — sẽ cập nhật sau" />
+          )}
+          {currentView === 'shopee_live_ai' && (
+            <ComingSoonPlaceholder icon="🤖" title="Live AI" description="Đang bảo trì — sẽ cập nhật sau" />
+          )}
           </Suspense>
           </AppErrorBoundary>
 
