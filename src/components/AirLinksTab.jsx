@@ -41,6 +41,14 @@ const parseMoney = (str) => {
     return parseFloat(String(str).replace(/[^\d]/g, '')) || 0;
 };
 
+// Lấy video id từ 1 dòng air_link (ưu tiên cột id_video, fallback parse từ link)
+const extractVideoId = (l) => {
+    const v = l.id_video && String(l.id_video).trim();
+    if (v) return v;
+    const m = String(l.link_air_koc || '').match(/video\/(\d+)/);
+    return m ? m[1] : '';
+};
+
 // --- HÀM HELPER XỬ LÝ DATE EXCEL ---
 const processExcelDate = (input) => {
     if (!input) return null;
@@ -274,8 +282,34 @@ const AirLinksTab = () => {
     // --- STATE CHO BULK DELETE ---
     const [selectedRowIds, setSelectedRowIds] = useState([]);
 
-    // --- STATE: lọc/highlight các dòng SÓT CAST (cast = 0 / chưa điền) ---
+    // --- STATE: lọc/highlight các dòng SÓT CAST (đối chiếu Module 3) ---
     const [showSotCast, setShowSotCast] = useState(false);
+    // Map videoId -> cast đã trả (từ koc_payments / Module 3): video nào ĐÃ booking & trả tiền
+    const [paidVideoMap, setPaidVideoMap] = useState(() => new Map());
+    useEffect(() => {
+        const loadPaidVideos = async () => {
+            try {
+                let all = [];
+                for (let off = 0; ; off += 1000) {
+                    const { data, error } = await supabase.from('koc_payments').select('air_link, cast_net').range(off, off + 999);
+                    if (error || !data || data.length === 0) break;
+                    all = all.concat(data);
+                    if (data.length < 1000) break;
+                }
+                const m = new Map();
+                for (const r of all) {
+                    const mt = String(r.air_link || '').match(/video\/(\d+)/);
+                    if (mt) {
+                        const v = parseMoney(r.cast_net);
+                        // 1 video có thể có nhiều lệnh → giữ cast lớn nhất
+                        if (!m.has(mt[1]) || v > m.get(mt[1])) m.set(mt[1], v);
+                    }
+                }
+                setPaidVideoMap(m);
+            } catch (e) { console.error('Failed to load paid videos:', e); }
+        };
+        loadPaidVideos();
+    }, []);
 
     // --- STATE CHO DUPLICATE FILTERS ---
     const [dupFilterStaff, setDupFilterStaff] = useState('');
@@ -292,11 +326,13 @@ const AirLinksTab = () => {
         return Object.values(dupMap).filter(group => group.length > 1);
     }, [airLinks]);
 
-    // Các dòng bị SÓT CAST (cast <= 0) — để highlight + nút lọc nhanh.
-    // Lưu ý: chỉ tính dòng ĐÃ ON-AIR (có ngày air) vì video đã lên mà chưa điền cast mới là "quên".
+    // SÓT CAST (đối chiếu Module 3): video ĐÃ trả tiền (có trong koc_payments) nhưng air_links để cast = 0.
     const sotCastLinks = useMemo(
-        () => airLinks.filter(l => l.ngay_air && parseMoney(l.cast) <= 0),
-        [airLinks]
+        () => airLinks.filter(l => {
+            const vid = extractVideoId(l);
+            return vid && paidVideoMap.has(vid) && parseMoney(l.cast) <= 0;
+        }),
+        [airLinks, paidVideoMap]
     );
     const displayAirLinks = showSotCast ? sotCastLinks : airLinks;
 
@@ -1610,7 +1646,7 @@ const AirLinksTab = () => {
                     </div>
                     <button
                         onClick={() => { setShowSotCast(v => !v); setAirLinksCurrentPage(1); }}
-                        title="Hiện các video ĐÃ on-air nhưng chưa điền cast (nhân sự quên điền)"
+                        title="Video đã trả tiền ở Module 3 (Thanh toán KOC) nhưng chưa điền cast ở đây — nhân sự quên điền"
                         style={{
                             display: 'flex', alignItems: 'center', gap: '5px', padding: '8px 16px', borderRadius: '6px',
                             border: showSotCast ? 'none' : '1px solid #f97316', cursor: 'pointer', fontWeight: 700, fontSize: '0.9rem',
@@ -1656,7 +1692,9 @@ const AirLinksTab = () => {
                                     return paginatedLinks.map((link, index) => {
                                         const globalIndex = startIndex + index; // Correct global index
                                         const isEditing = String(editingRowId) === String(link.id);
-                                        const isSotCast = link.ngay_air && parseMoney(link.cast) <= 0; // đã on-air mà quên điền cast
+                                        const paidVid = extractVideoId(link);
+                                        const paidCast = paidVid ? paidVideoMap.get(paidVid) : undefined; // cast đã trả ở Module 3 (undefined = chưa book/trả)
+                                        const isSotCast = paidCast !== undefined && parseMoney(link.cast) <= 0; // đã trả tiền mà air_links còn để trống
                                         return (
                                             <tr key={link.id} style={{ borderBottom: '1px solid #eee', backgroundColor: isEditing ? '#fefce8' : (isSotCast ? '#fff1f2' : 'transparent') }}>
                                                 <td style={{ padding: '12px', textAlign: 'center' }}>
@@ -1725,7 +1763,7 @@ const AirLinksTab = () => {
                                                     {isEditing
                                                         ? <input type="text" value={editFormData.cast} onChange={(e) => handleEditFormChange(e, 'cast')} style={tableInputStyle} />
                                                         : (isSotCast
-                                                            ? <span style={{ color: '#dc2626', fontWeight: 'bold', whiteSpace: 'nowrap' }}>⚠️ Chưa điền</span>
+                                                            ? <span style={{ color: '#dc2626', fontWeight: 'bold', whiteSpace: 'nowrap' }} title="Đã trả tiền ở Module 3 (Thanh toán KOC) nhưng chưa điền cast ở đây">⚠️ Đã trả {formatCurrency(paidCast)}</span>
                                                             : renderCast(link.cast))}
                                                 </td>
 
