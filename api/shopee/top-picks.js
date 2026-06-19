@@ -586,6 +586,21 @@ function parseCronAuth(req, reqUrl) {
 /* ═══════════════════════════════════════════════════════════════════════════
    Main handler
    ═══════════════════════════════════════════════════════════════════════════ */
+/* ── ĐÁNH GIÁ: đọc (test quyền + xem cấu trúc Shopee trả về) ─────────────── */
+async function handleGetComment(supabase, shopId, params) {
+  const creds = await getCredentials(supabase, shopId, 'dashboard');
+  const raw = await shopeeGet(creds.partnerKey, creds.partnerId, '/api/v2/product/get_comment', creds.accessToken, creds.shopId,
+    { page_size: String(params.page_size || 10) });
+  if (raw.error) return { ok: false, error: raw.error, message: raw.message };
+  const list = raw.response?.item_comment_list || raw.response?.comment_list || [];
+  return { ok: true, data: {
+    shop_id: shopId,
+    so_danh_gia: list.length,
+    field_names: list[0] ? Object.keys(list[0]) : [],
+    mau: list.slice(0, 5),
+  } };
+}
+
 export default async function handler(req, res) {
   setCors(res);
 
@@ -644,6 +659,9 @@ export default async function handler(req, res) {
         break;
       case 'boost_log':
         result = await handleBoostLog(supabase, shopId, reqUrl.searchParams.get('limit'));
+        break;
+      case 'get_comment':
+        result = await handleGetComment(supabase, shopId, Object.fromEntries(reqUrl.searchParams.entries()));
         break;
       case 'list_shops':
         result = await handleListShops(supabase);
