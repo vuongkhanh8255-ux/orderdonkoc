@@ -117,11 +117,25 @@ export default function ShopeeAdsDashboard() {
   }, [displayShops]);
 
   /* ── small pieces ── */
-  const kpi = (label, value, sub, color = '#0f172a') => (
-    <div style={card}>
-      <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{label}</div>
-      <div style={{ fontSize: '1.45rem', fontWeight: 900, color, marginTop: 4 }}>{value}</div>
-      {sub && <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 2 }}>{sub}</div>}
+  // KPI card đồng bộ với Dashboard Ecom (StatCard: gradient + glow + icon badge nổi khối)
+  const kpi = (icon, label, value, sub, accent = '#ff6a2c') => (
+    <div style={{
+      background: `linear-gradient(145deg, ${accent}12 0%, #ffffff 62%)`,
+      borderRadius: 18, padding: '20px 22px', position: 'relative', overflow: 'hidden',
+      border: `1px solid ${accent}33`,
+      boxShadow: `0 8px 22px -12px ${accent}40, 0 1px 3px rgba(15,23,42,0.05)`,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 12 }}>
+        <span style={{
+          width: 34, height: 34, borderRadius: 11, flexShrink: 0,
+          background: `linear-gradient(135deg, ${accent}, ${accent}bb)`,
+          boxShadow: `0 5px 12px ${accent}66, inset 0 1px 1px rgba(255,255,255,0.45)`,
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem',
+        }}>{icon}</span>
+        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+      </div>
+      <div style={{ fontSize: '1.75rem', fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>{value}</div>
+      {sub && <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: 6, lineHeight: 1.4 }}>{sub}</div>}
     </div>
   );
   const chartCard = (title, subtitle, height, children) => (
@@ -138,8 +152,8 @@ export default function ShopeeAdsDashboard() {
 
   return (
     <div style={{ fontFamily: "'Outfit', sans-serif", maxWidth: 1400, margin: '0 auto', padding: '0 24px 48px' }}>
-      {/* HEADER + FILTER BAR */}
-      <div style={{ ...card, marginBottom: 18 }}>
+      {/* HEADER + FILTER BAR — gradient cam đồng bộ với Dashboard Ecom */}
+      <div style={{ background: 'linear-gradient(135deg, #fff6f0 0%, #ffffff 55%)', border: '1px solid #ffe2d2', borderRadius: 16, padding: '15px 20px', boxShadow: '0 8px 22px -12px rgba(255,106,44,0.38), 0 1px 3px rgba(15,23,42,0.04)', marginBottom: 18 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
           <div>
             <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 900, color: '#0f172a' }}>📣 Ads Shopee — Dashboard</h2>
@@ -216,13 +230,13 @@ export default function ShopeeAdsDashboard() {
       {hasFetched && displayShops.length > 0 && (
         <>
           {/* KPI cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12, marginBottom: 18 }}>
-            {kpi('Tổng chi phí QC', fmtVND(agg.expense), single ? single.shop_name : `${displayShops.length} shop`, '#dc2626')}
-            {kpi('Doanh thu Ads', fmtVND(agg.gmv), 'GMV quy cho QC', '#16a34a')}
-            {kpi('ROAS chung', fmtRoas(agg.roas), 'Doanh thu / Chi phí', '#7c3aed')}
-            {kpi('Tổng đơn Ads', fmtNum(agg.orders), null, '#0f172a')}
-            {kpi('Tổng click', fmtNum(agg.clicks), `CTR ${fmtPct(agg.ctr)}`, '#2563eb')}
-            {kpi('Số dư ví QC', fmtVND(agg.balance), single ? 'Shop này' : 'Tất cả shop', '#ff6a2c')}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 14, marginBottom: 18 }}>
+            {kpi('💸', 'Tổng chi phí QC', fmtVND(agg.expense), single ? single.shop_name : `${displayShops.length} shop`, '#dc2626')}
+            {kpi('💰', 'Doanh thu Ads', fmtVND(agg.gmv), 'GMV quy cho QC', '#16a34a')}
+            {kpi('📈', 'ROAS chung', fmtRoas(agg.roas), 'Doanh thu / Chi phí', '#7c3aed')}
+            {kpi('🛒', 'Tổng đơn Ads', fmtNum(agg.orders), null, '#ec4899')}
+            {kpi('👆', 'Tổng click', fmtNum(agg.clicks), `CTR ${fmtPct(agg.ctr)}`, '#2563eb')}
+            {kpi('👛', 'Số dư ví QC', fmtVND(agg.balance), single ? 'Shop này' : 'Tất cả shop', '#ff6a2c')}
           </div>
 
           {errShops.length > 0 && !shopFilter && (
