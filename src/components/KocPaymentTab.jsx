@@ -13,6 +13,9 @@ import { supabase } from '../supabaseClient';
 const ACCENT = '#ff6a2c';
 const COMPANIES = ['STELLA', 'OPTIMAX'];
 const BRANDS = ['BODYMISS', 'MILAGANICS', 'MOAWMOAWS', 'EHERB VN', 'HEALMI', 'MASUBE', 'REALSTEEL'];
+const ACTION_PW = 'STELLA8255$';        // mật khẩu để tick Duyệt / Đã thanh toán (1 lần/phiên)
+const PIT_THRESHOLD = 2_000_000;        // tổng chi 1 người/kỳ ≥ ngưỡng này → cảnh báo cần PIT (thuế TNCN)
+const personKeyOf = (r) => (r.cccd || r.full_name || r.beneficiary || r.channel_link || '').trim().toLowerCase();
 
 const num = (v) => { const n = Number(String(v ?? '').replace(/[^\d-]/g, '')); return Number.isFinite(n) ? n : 0; };
 const fmtMoney = (v) => (Number(v) || 0).toLocaleString('vi-VN');
@@ -26,7 +29,7 @@ const EMPTY = {
   pay_date: todayYmd(), staff: '', company: 'STELLA', brand: '', channel_link: '',
   cast_net: 0, pit: 0, total: 0, bank_account: '', bank_name: '', beneficiary: '',
   full_name: '', cccd: '', tax_code: '', cccd_image: '', contract_link: '', contract_file: '', air_link: '',
-  accountant_approved: false, note: '',
+  accountant_approved: false, paid: false, note: '',
 };
 
 const inputStyle = { padding: '8px 11px', borderRadius: 9, border: '1px solid #e5e7eb', background: '#fff', fontSize: '0.85rem', color: '#1f2937', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' };
@@ -35,6 +38,7 @@ const th = { padding: '9px 10px', fontSize: '0.68rem', fontWeight: 800, color: '
 const td = { padding: '8px 10px', fontSize: '0.82rem', color: '#0f172a', whiteSpace: 'nowrap', borderTop: '1px solid #f1f5f9' };
 
 const Field = ({ label, children }) => (<div><label style={labelStyle}>{label}</label>{children}</div>);
+const bulkBtn = (bg) => ({ padding: '6px 14px', background: bg, color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' });
 
 const KocPaymentTab = () => {
   const [rows, setRows] = useState([]);
@@ -43,6 +47,11 @@ const KocPaymentTab = () => {
   const [fCompany, setFCompany] = useState('');
   const [fBrand, setFBrand] = useState('');
   const [fApproved, setFApproved] = useState('');   // '', 'yes', 'no'
+  const [fPaid, setFPaid] = useState('');           // '', 'yes', 'no' — lọc theo "đã thanh toán"
+  const [fFrom, setFFrom] = useState('');           // lọc ngày TỪ (trong khoảng tháng đã chọn)
+  const [fTo, setFTo] = useState('');               // lọc ngày ĐẾN
+  const [selected, setSelected] = useState(() => new Set()); // chọn hàng loạt để thao tác
+  const [pwOk, setPwOk] = useState(false);          // đã nhập đúng mật khẩu thao tác (nhớ trong phiên)
   const [q, setQ] = useState('');
   const [form, setForm] = useState(EMPTY);
   const [editingId, setEditingId] = useState(null);
@@ -83,7 +92,7 @@ const KocPaymentTab = () => {
       beneficiary: form.beneficiary || null, full_name: form.full_name || null,
       cccd: form.cccd || null, tax_code: form.tax_code || null, cccd_image: form.cccd_image || null,
       contract_link: form.contract_link || null, contract_file: form.contract_file || null, air_link: form.air_link || null,
-      accountant_approved: !!form.accountant_approved, note: form.note || null,
+      accountant_approved: !!form.accountant_approved, paid: !!form.paid, note: form.note || null,
     };
     try {
       if (editingId) { const { error } = await supabase.from('koc_payments').update(payload).eq('id', editingId); if (error) throw error; }
@@ -178,24 +187,68 @@ const KocPaymentTab = () => {
     setRows(prev => prev.filter(x => x.id !== r.id));
   };
 
-  const toggleApproved = async (r) => {
-    const next = !r.accountant_approved;
-    setRows(prev => prev.map(x => x.id === r.id ? { ...x, accountant_approved: next } : x));   // optimistic
-    const { error } = await supabase.from('koc_payments').update({ accountant_approved: next }).eq('id', r.id);
-    if (error) { alert('Lỗi cập nhật duyệt: ' + error.message); load(); }
+  // Tick Duyệt / Đã thanh toán yêu cầu mật khẩu — nhập đúng 1 lần thì nhớ trong phiên.
+  const ensurePw = () => {
+    if (pwOk) return true;
+    const p = window.prompt('🔒 Nhập mật khẩu để tick Duyệt / Đã thanh toán:');
+    if (p === null) return false;
+    if (p === ACTION_PW) { setPwOk(true); return true; }
+    alert('❌ Sai mật khẩu!');
+    return false;
+  };
+  const setField = async (r, field, next) => {
+    setRows(prev => prev.map(x => x.id === r.id ? { ...x, [field]: next } : x));   // optimistic
+    const patch = { [field]: next };
+    if (field === 'paid') patch.paid_at = next ? new Date().toISOString() : null;
+    const { error } = await supabase.from('koc_payments').update(patch).eq('id', r.id);
+    if (error) { alert('Lỗi cập nhật: ' + error.message); load(); }
+  };
+  const toggleApproved = (r) => { if (!ensurePw()) return; setField(r, 'accountant_approved', !r.accountant_approved); };
+  const togglePaid     = (r) => { if (!ensurePw()) return; setField(r, 'paid', !r.paid); };
+
+  // ── Chọn hàng loạt + thao tác hàng loạt (cũng cần mật khẩu) ──
+  const toggleSel = (id) => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const clearSel = () => setSelected(new Set());
+  const bulkSet = async (field, value) => {
+    if (!selected.size) { alert('Chưa chọn dòng nào.'); return; }
+    if (!ensurePw()) return;
+    const ids = [...selected];
+    const extra = field === 'paid' ? { paid_at: value ? new Date().toISOString() : null } : {};
+    setRows(prev => prev.map(x => ids.includes(x.id) ? { ...x, [field]: value, ...extra } : x));
+    const { error } = await supabase.from('koc_payments').update({ [field]: value, ...extra }).in('id', ids);
+    if (error) { alert('Lỗi cập nhật hàng loạt: ' + error.message); load(); }
   };
 
   const filtered = useMemo(() => {
     const kw = q.trim().toLowerCase();
-    return rows.filter(r =>
-      (!fCompany || r.company === fCompany) &&
-      (!fBrand || r.brand === fBrand) &&
-      (!fApproved || (fApproved === 'yes' ? r.accountant_approved : !r.accountant_approved)) &&
-      (!kw || [r.full_name, r.beneficiary, r.channel_link, r.bank_account, r.staff].some(v => (v || '').toLowerCase().includes(kw)))
-    );
-  }, [rows, fCompany, fBrand, fApproved, q]);
+    return rows.filter(r => {
+      const d = (r.pay_date || '').slice(0, 10);
+      return (!fCompany || r.company === fCompany) &&
+        (!fBrand || r.brand === fBrand) &&
+        (!fApproved || (fApproved === 'yes' ? r.accountant_approved : !r.accountant_approved)) &&
+        (!fPaid || (fPaid === 'yes' ? r.paid : !r.paid)) &&
+        (!fFrom || d >= fFrom) && (!fTo || d <= fTo) &&
+        (!kw || [r.full_name, r.beneficiary, r.channel_link, r.bank_account, r.staff].some(v => (v || '').toLowerCase().includes(kw)));
+    });
+  }, [rows, fCompany, fBrand, fApproved, fPaid, fFrom, fTo, q]);
 
   const sum = useMemo(() => filtered.reduce((a, r) => ({ cast: a.cast + num(r.cast_net), pit: a.pit + num(r.pit), total: a.total + num(r.total) }), { cast: 0, pit: 0, total: 0 }), [filtered]);
+
+  // Rule PIT: gom theo người (CCCD / họ tên / kênh) trong kỳ → ai TỔNG ≥ 2tr mà CHƯA có PIT thì cảnh báo cần khấu trừ.
+  const { pitAlerts, pitFlagKeys } = useMemo(() => {
+    const map = new Map();
+    for (const r of filtered) {
+      const key = personKeyOf(r); if (!key) continue;
+      const e = map.get(key) || { key, name: r.full_name || r.beneficiary || r.channel_link || '—', total: 0, pit: 0, count: 0 };
+      e.total += num(r.total); e.pit += num(r.pit); e.count += 1;
+      map.set(key, e);
+    }
+    const alerts = [...map.values()].filter(e => e.total >= PIT_THRESHOLD && e.pit === 0).sort((a, b) => b.total - a.total);
+    return { pitAlerts: alerts, pitFlagKeys: new Set(alerts.map(a => a.key)) };
+  }, [filtered]);
+
+  const allVisibleSelected = filtered.length > 0 && filtered.every(r => selected.has(r.id));
+  const toggleSelAll = () => setSelected(allVisibleSelected ? new Set() : new Set(filtered.map(r => r.id)));
 
   const exportExcel = () => {
     const data = filtered.map(r => ({
@@ -204,7 +257,7 @@ const KocPaymentTab = () => {
       'SỐ TÀI KHOẢN': r.bank_account || '', 'NGÂN HÀNG': r.bank_name || '', 'NGƯỜI THỤ HƯỞNG': r.beneficiary || '',
       'HỌ VÀ TÊN': r.full_name || '', 'SỐ CCCD': r.cccd || '', 'MÃ SỐ THUẾ': r.tax_code || '',
       'HÌNH ẢNH CCCD': r.cccd_image || '', 'TIN NHẮN (ẢNH)': r.contract_link || '', 'HỢP ĐỒNG (FILE)': r.contract_file || '', 'LINK AIR': r.air_link || '',
-      'KẾ TOÁN DUYỆT': r.accountant_approved ? 'x' : '', 'GHI CHÚ': r.note || '',
+      'KẾ TOÁN DUYỆT': r.accountant_approved ? 'x' : '', 'ĐÃ THANH TOÁN': r.paid ? 'x' : '', 'GHI CHÚ': r.note || '',
     }));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
@@ -241,7 +294,10 @@ const KocPaymentTab = () => {
             <Field label="Cast (net)"><input value={form.cast_net ? fmtMoney(form.cast_net) : ''} onChange={e => setCast(e.target.value)} inputMode="numeric" placeholder="vd 2.000.000" style={inputStyle} /></Field>
             <Field label="PIT (thuế TNCN)"><input value={form.pit ? fmtMoney(form.pit) : '0'} onChange={e => setPit(e.target.value)} inputMode="numeric" style={inputStyle} /></Field>
             <Field label="Tổng (Cast + PIT)"><input value={fmtMoney(form.total)} readOnly style={{ ...inputStyle, background: '#f8fafc', fontWeight: 800, color: ACCENT }} /></Field>
-            <Field label="Kế toán duyệt"><label style={{ display: 'flex', alignItems: 'center', gap: 8, height: 36, cursor: 'pointer' }}><input type="checkbox" checked={!!form.accountant_approved} onChange={e => setForm(f => ({ ...f, accountant_approved: e.target.checked }))} style={{ width: 18, height: 18, accentColor: '#16a34a' }} /><span style={{ fontSize: '0.85rem', color: '#475569' }}>Đã duyệt / đã chi</span></label></Field>
+            <Field label="Trạng thái"><div style={{ display: 'flex', alignItems: 'center', gap: 16, height: 36 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}><input type="checkbox" checked={!!form.accountant_approved} onChange={e => setForm(f => ({ ...f, accountant_approved: e.target.checked }))} style={{ width: 18, height: 18, accentColor: '#16a34a' }} /><span style={{ fontSize: '0.82rem', color: '#475569' }}>Đã duyệt</span></label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}><input type="checkbox" checked={!!form.paid} onChange={e => setForm(f => ({ ...f, paid: e.target.checked }))} style={{ width: 18, height: 18, accentColor: '#ea580c' }} /><span style={{ fontSize: '0.82rem', color: '#475569' }}>Đã TT</span></label>
+            </div></Field>
 
             <Field label="Số tài khoản"><input value={form.bank_account} onChange={e => setForm(f => ({ ...f, bank_account: e.target.value }))} style={inputStyle} /></Field>
             <Field label="Ngân hàng"><input value={form.bank_name} onChange={e => setForm(f => ({ ...f, bank_name: e.target.value }))} placeholder="vd MB BANK" style={inputStyle} /></Field>
@@ -268,9 +324,15 @@ const KocPaymentTab = () => {
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
         {!showForm && <button onClick={startAdd} style={{ padding: '9px 18px', background: ACCENT, color: '#fff', border: 'none', borderRadius: 9, fontWeight: 800, cursor: 'pointer' }}>➕ Thêm thanh toán</button>}
         <select value={ym} onChange={e => setYm(e.target.value)} style={inputStyle.width ? { ...inputStyle, width: 'auto' } : inputStyle}>{monthOptions.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}</select>
+        <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700 }}>Ngày</span>
+        <input type="date" value={fFrom} onChange={e => setFFrom(e.target.value)} title="Từ ngày" style={{ ...inputStyle, width: 'auto' }} />
+        <span style={{ color: '#cbd5e1' }}>→</span>
+        <input type="date" value={fTo} onChange={e => setFTo(e.target.value)} title="Đến ngày" style={{ ...inputStyle, width: 'auto' }} />
+        {(fFrom || fTo) && <button onClick={() => { setFFrom(''); setFTo(''); }} title="Bỏ lọc ngày" style={{ padding: '6px 10px', background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: '0.78rem' }}>✕ ngày</button>}
         <select value={fCompany} onChange={e => setFCompany(e.target.value)} style={{ ...inputStyle, width: 'auto' }}><option value="">Tất cả công ty</option>{COMPANIES.map(c => <option key={c}>{c}</option>)}</select>
         <select value={fBrand} onChange={e => setFBrand(e.target.value)} style={{ ...inputStyle, width: 'auto' }}><option value="">Tất cả brand</option>{BRANDS.map(b => <option key={b}>{b}</option>)}</select>
         <select value={fApproved} onChange={e => setFApproved(e.target.value)} style={{ ...inputStyle, width: 'auto' }}><option value="">Tất cả duyệt</option><option value="no">Chưa duyệt</option><option value="yes">Đã duyệt</option></select>
+        <select value={fPaid} onChange={e => setFPaid(e.target.value)} style={{ ...inputStyle, width: 'auto' }}><option value="">Tất cả TT</option><option value="no">Chưa TT</option><option value="yes">Đã TT</option></select>
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 Tìm tên / kênh / STK…" style={{ ...inputStyle, width: 220 }} />
         <button onClick={exportExcel} disabled={!filtered.length} style={{ padding: '9px 16px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 9, fontWeight: 700, cursor: filtered.length ? 'pointer' : 'default', opacity: filtered.length ? 1 : 0.5 }}>📥 Xuất Excel</button>
         <button onClick={load} style={{ padding: '9px 14px', background: '#fff', color: ACCENT, border: `1px solid ${ACCENT}55`, borderRadius: 9, fontWeight: 700, cursor: 'pointer' }}>🔄</button>
@@ -286,35 +348,66 @@ const KocPaymentTab = () => {
         ))}
       </div>
 
+      {/* Cảnh báo PIT — người có tổng ≥ 2tr trong kỳ mà chưa khấu trừ thuế TNCN */}
+      {pitAlerts.length > 0 && (
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '12px 16px', marginBottom: 14 }}>
+          <div style={{ fontWeight: 800, color: '#b45309', fontSize: '0.9rem', marginBottom: 8 }}>⚠️ {pitAlerts.length} người có TỔNG ≥ {fmtMoney(PIT_THRESHOLD)}đ trong kỳ nhưng CHƯA có PIT — cần khấu trừ thuế TNCN</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {pitAlerts.map(a => (
+              <span key={a.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #fde68a', borderRadius: 20, padding: '4px 12px', fontSize: '0.78rem', fontWeight: 700, color: '#92400e' }}>
+                {a.name} · {fmtMoney(a.total)}đ{a.count > 1 ? ` (${a.count} lần)` : ''}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Thao tác hàng loạt — hiện khi đã chọn dòng */}
+      {selected.size > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '10px 16px', marginBottom: 14 }}>
+          <span style={{ fontWeight: 800, color: '#1d4ed8', fontSize: '0.86rem' }}>Đã chọn {selected.size} dòng:</span>
+          <button onClick={() => bulkSet('accountant_approved', true)} style={bulkBtn('#16a34a')}>✓ Duyệt</button>
+          <button onClick={() => bulkSet('accountant_approved', false)} style={bulkBtn('#94a3b8')}>Bỏ duyệt</button>
+          <button onClick={() => bulkSet('paid', true)} style={bulkBtn('#ea580c')}>💰 Đã TT</button>
+          <button onClick={() => bulkSet('paid', false)} style={bulkBtn('#94a3b8')}>Bỏ TT</button>
+          <button onClick={clearSel} style={{ padding: '6px 14px', background: '#fff', color: '#64748b', border: '1px solid #cbd5e1', borderRadius: 8, fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', marginLeft: 'auto' }}>Bỏ chọn</button>
+        </div>
+      )}
+
       {/* Bảng */}
       <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #f1f5f9', overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto', maxHeight: '64vh' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1100 }}>
             <thead>
               <tr>
+                <th style={{ ...th, textAlign: 'center', width: 34 }}><input type="checkbox" checked={allVisibleSelected} onChange={toggleSelAll} title="Chọn tất cả dòng đang hiện" style={{ width: 16, height: 16, cursor: 'pointer' }} /></th>
                 <th style={th}>Ngày</th><th style={th}>Nhân sự</th><th style={th}>Cty</th><th style={th}>Brand</th>
-                <th style={th}>Họ tên</th><th style={th}>Số TK</th><th style={th}>Ngân hàng</th>
+                <th style={th}>Họ tên</th><th style={th}>CCCD</th><th style={th}>MST</th><th style={th}>Số TK</th><th style={th}>Ngân hàng</th>
                 <th style={{ ...th, textAlign: 'right' }}>Cast</th><th style={{ ...th, textAlign: 'right' }}>PIT</th><th style={{ ...th, textAlign: 'right' }}>Tổng</th>
-                <th style={{ ...th, textAlign: 'center' }}>Link</th><th style={{ ...th, textAlign: 'center' }}>Duyệt</th><th style={{ ...th, textAlign: 'center' }}>⚙️</th>
+                <th style={{ ...th, textAlign: 'center' }}>Link</th><th style={{ ...th, textAlign: 'center' }}>Duyệt</th><th style={{ ...th, textAlign: 'center' }}>Đã TT</th><th style={{ ...th, textAlign: 'center' }}>⚙️</th>
               </tr>
             </thead>
             <tbody>
-              {loading ? (<tr><td colSpan={13} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải…</td></tr>)
-                : filtered.length === 0 ? (<tr><td colSpan={13} style={{ ...td, textAlign: 'center', padding: 36, color: '#9ca3af' }}>Chưa có thanh toán nào. Bấm “➕ Thêm thanh toán”.</td></tr>)
+              {loading ? (<tr><td colSpan={17} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải…</td></tr>)
+                : filtered.length === 0 ? (<tr><td colSpan={17} style={{ ...td, textAlign: 'center', padding: 36, color: '#9ca3af' }}>Chưa có thanh toán nào. Bấm “➕ Thêm thanh toán”.</td></tr>)
                 : filtered.map((r, i) => (
-                  <tr key={r.id} style={{ background: r.accountant_approved ? '#f0fdf4' : (i % 2 ? '#fcfcfd' : '#fff') }}>
+                  <tr key={r.id} style={{ background: selected.has(r.id) ? '#eff6ff' : r.paid ? '#fff7ed' : r.accountant_approved ? '#f0fdf4' : (i % 2 ? '#fcfcfd' : '#fff') }}>
+                    <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSel(r.id)} style={{ width: 15, height: 15, cursor: 'pointer' }} /></td>
                     <td style={td}>{fmtDate(r.pay_date)}</td>
                     <td style={td}>{r.staff || '—'}</td>
                     <td style={td}><span style={{ fontSize: '0.72rem', fontWeight: 700, color: r.company === 'OPTIMAX' ? '#7c3aed' : '#0891b2' }}>{r.company || '—'}</span></td>
                     <td style={td}>{r.brand || '—'}</td>
                     <td style={{ ...td, fontWeight: 600 }} title={r.beneficiary || ''}>{r.full_name || r.beneficiary || '—'}</td>
+                    <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.78rem' }}>{r.cccd || '—'}</td>
+                    <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.78rem' }}>{r.tax_code || '—'}</td>
                     <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.78rem' }}>{r.bank_account || '—'}</td>
                     <td style={td}>{r.bank_name || '—'}</td>
                     <td style={{ ...td, textAlign: 'right' }}>{fmtMoney(r.cast_net)}</td>
-                    <td style={{ ...td, textAlign: 'right', color: '#94a3b8' }}>{fmtMoney(r.pit)}</td>
+                    <td style={{ ...td, textAlign: 'right', color: pitFlagKeys.has(personKeyOf(r)) ? '#b45309' : '#94a3b8', fontWeight: pitFlagKeys.has(personKeyOf(r)) ? 800 : 400 }} title={pitFlagKeys.has(personKeyOf(r)) ? 'Người này có tổng ≥ 2tr trong kỳ nhưng chưa có PIT — cần khấu trừ thuế TNCN' : ''}>{pitFlagKeys.has(personKeyOf(r)) ? '⚠️ ' : ''}{fmtMoney(r.pit)}</td>
                     <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: ACCENT }}>{fmtMoney(r.total)}</td>
                     <td style={{ ...td, textAlign: 'center' }}>{r.air_link ? <a href={r.air_link.split('\n')[0]} target="_blank" rel="noreferrer" style={{ color: '#7c3aed', textDecoration: 'none' }}>🎬</a> : '—'}{r.contract_link ? <a href={r.contract_link.split('\n')[0]} target="_blank" rel="noreferrer" title="Tin nhắn (ảnh)" style={{ color: '#0891b2', textDecoration: 'none', marginLeft: 6 }}>💬</a> : ''}{r.contract_file ? <a href={r.contract_file.split('\n')[0]} target="_blank" rel="noreferrer" title="Hợp đồng (file)" style={{ color: '#ea580c', textDecoration: 'none', marginLeft: 6 }}>📄</a> : ''}{r.cccd_image ? <a href={r.cccd_image.split('\n')[0]} target="_blank" rel="noreferrer" style={{ color: '#16a34a', textDecoration: 'none', marginLeft: 6 }}>🪪{(() => { const n = r.cccd_image.split('\n').filter(Boolean).length; return n > 1 ? n : ''; })()}</a> : ''}</td>
                     <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={!!r.accountant_approved} onChange={() => toggleApproved(r)} style={{ width: 17, height: 17, accentColor: '#16a34a', cursor: 'pointer' }} /></td>
+                    <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={!!r.paid} onChange={() => togglePaid(r)} title="Đã thanh toán (cần mật khẩu)" style={{ width: 17, height: 17, accentColor: '#ea580c', cursor: 'pointer' }} /></td>
                     <td style={{ ...td, textAlign: 'center', whiteSpace: 'nowrap' }}>
                       <button onClick={() => startEdit(r)} title="Sửa" style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.95rem' }}>✏️</button>
                       <button onClick={() => del(r)} title="Xoá" style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.95rem', marginLeft: 4 }}>🗑️</button>
