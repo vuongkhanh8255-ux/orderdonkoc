@@ -167,9 +167,9 @@ export const ACCOUNTS = [
 
 // ── ROLE PERMISSIONS ──────────────────────────────────────
 export const ROLE_VIEWS = {
-    admin:      ['shop_analytics','overview_report','shopee_ads_dashboard','flash_sale','top_picks','shopee_livestream','shopee_video','shopee_ads','stella_dashboard','listed_price','costing','tiktok_orders','reviews','crm','cskh','livestream','staff_report','order','koc_blacklist','koc_performance','booking_performance','contract','koc_payment','airlinks','booking','data_archive','nhanh_products','expense','landing_orders','camp_registration','task_notes'],
+    admin:      ['shop_analytics','overview_report','shopee_ads_dashboard','flash_sale','top_picks','shopee_autoreply','shopee_livestream','shopee_video','shopee_ads','stella_dashboard','listed_price','costing','tiktok_orders','reviews','crm','cskh','livestream','staff_report','order','koc_blacklist','koc_performance','booking_performance','contract','koc_payment','airlinks','booking','data_archive','nhanh_products','expense','landing_orders','camp_registration','task_notes'],
     // Minh Thư (trợ lí sếp) — full chức năng như admin NHƯNG bỏ 'costing' (Giá Cost). Role ≠ 'admin' nên cột Giá gốc trong Bảng giá niêm yết cũng tự ẩn.
-    assistant:  ['shop_analytics','overview_report','shopee_ads_dashboard','flash_sale','top_picks','shopee_livestream','shopee_video','shopee_ads','stella_dashboard','listed_price','tiktok_orders','reviews','crm','cskh','livestream','staff_report','order','koc_performance','booking_performance','contract','koc_payment','airlinks','booking','data_archive','nhanh_products','expense','landing_orders','camp_registration','task_notes'],
+    assistant:  ['shop_analytics','overview_report','shopee_ads_dashboard','flash_sale','top_picks','shopee_autoreply','shopee_livestream','shopee_video','shopee_ads','stella_dashboard','listed_price','tiktok_orders','reviews','crm','cskh','livestream','staff_report','order','koc_performance','booking_performance','contract','koc_payment','airlinks','booking','data_archive','nhanh_products','expense','landing_orders','camp_registration','task_notes'],
     // BOOKING: chỉ Booking group + Ngân Sách Ecom. KHÔNG Ecom group, KHÔNG Task & Notes.
     booking:    ['staff_report','order','koc_performance','booking_performance','contract','koc_payment','airlinks','booking','expense'],
     cs:         ['crm','cskh','reviews','order','airlinks','expense','task_notes'],
@@ -179,7 +179,7 @@ export const ROLE_VIEWS = {
     //       KHÔNG có: Hợp Đồng, Lưu Trữ Data, Task & Notes
     reviewer:   ['shop_analytics','listed_price','reviews'],
     ecom:       [
-        'stella_dashboard','listed_price','tiktok_orders','shop_analytics','overview_report','shopee_ads_dashboard','flash_sale','top_picks','shopee_livestream','shopee_video','shopee_ads','camp_registration','reviews', // Ecom + Shopee + Reviews
+        'stella_dashboard','listed_price','tiktok_orders','shop_analytics','overview_report','shopee_ads_dashboard','flash_sale','top_picks','shopee_autoreply','shopee_livestream','shopee_video','shopee_ads','camp_registration','reviews', // Ecom + Shopee + Reviews
         'cskh',                                                                // CSKH
         'livestream',                                                          // Livestream
         'staff_report','order','koc_performance','booking_performance','airlinks','koc_payment', // Booking (no Hợp Đồng)

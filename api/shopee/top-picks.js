@@ -638,7 +638,33 @@ async function fetchAllComments(creds, maxPages = 6, pageSize = 100) {
   return { comments: all };
 }
 
-// Cron: quét đánh giá chưa trả lời, ≥4★ tự trả lời mẫu cảm ơn; ≤3★ bỏ qua (để người xử).
+// Chạy auto-trả-lời cho 1 shop: đọc đánh giá, ≥4★ chưa trả lời → trả lời theo mẫu.
+async function replyShopComments(supabase, creds, shopId, shopName, template, dryRun) {
+  const fc = await fetchAllComments(creds, 6, 100);
+  if (fc.error) return { shop_id: shopId, status: 'read_fail', error: fc.error };
+  const cand = (fc.comments || []).filter((c) => Number(c.rating_star || 0) >= 4 && c.comment_id);
+  const ids = cand.map((c) => Number(c.comment_id));
+  let already = new Set();
+  if (ids.length) {
+    const { data: done } = await supabase.from('shopee_replied_comments').select('comment_id').in('comment_id', ids);
+    already = new Set((done || []).map((d) => Number(d.comment_id)));
+  }
+  const todo = cand.filter((c) => !already.has(Number(c.comment_id)));
+  let replied = 0;
+  for (const c of todo) {
+    if (dryRun) { replied++; continue; }
+    const r = await replyOneComment(creds, c.comment_id, template || REPLY_TEMPLATE(shopName));
+    const dup = r.error && /replied|already|duplicate/i.test(JSON.stringify(r));
+    if (!r.error || dup) {
+      if (!r.error) replied++;
+      await supabase.from('shopee_replied_comments').upsert({ comment_id: Number(c.comment_id), shop_id: String(shopId), rating_star: Number(c.rating_star || 0), replied_at: new Date().toISOString() }, { onConflict: 'comment_id' }).then(() => {}, () => {});
+    }
+    await new Promise((res) => setTimeout(res, 350));
+  }
+  return { shop_id: shopId, shop: shopName, quet: (fc.comments || []).length, can_tra_loi: todo.length, da_tra_loi: replied, dry: dryRun };
+}
+
+// Cron: auto-trả-lời cho các shop ĐÃ BẬT (enabled) trong cài đặt.
 async function handleAutoReplyComments(supabase, reqUrl, req) {
   const secret = (process.env.BOOST_CRON_SECRET || '').trim();
   const provided = (req.headers['x-boost-secret'] || reqUrl.searchParams.get('secret') || '').toString().trim();
@@ -646,39 +672,58 @@ async function handleAutoReplyComments(supabase, reqUrl, req) {
   if (secret && provided !== secret && !isVercelCron) return { ok: false, error: 'unauthorized' };
 
   const dryRun = reqUrl.searchParams.get('dry_run') === '1';
-  const onlyShop = reqUrl.searchParams.get('shop_id');
+  const { data: settings } = await supabase.from('shopee_review_autoreply_settings').select('shop_id, template').eq('enabled', true);
+  const enabled = settings || [];
+  if (!enabled.length) return { ok: true, shops: 0, results: [], note: 'Chưa shop nào bật auto trả lời.' };
   const { data: toks } = await supabase.from('shopee_tokens').select('shop_id, shop_name').eq('app_type', 'dashboard').eq('status', 'active');
-  const shops = (toks || []).filter((t) => !onlyShop || onlyShop === 'all' || String(t.shop_id) === String(onlyShop));
+  const nameById = {}; (toks || []).forEach((t) => { nameById[String(t.shop_id)] = t.shop_name; });
 
   const out = [];
-  for (const t of shops) {
+  for (const s of enabled) {
     try {
-      const creds = await getCredentials(supabase, t.shop_id, 'dashboard');
-      const fc = await fetchAllComments(creds, 6, 100);
-      if (fc.error) { out.push({ shop_id: t.shop_id, status: 'read_fail', error: fc.error }); continue; }
-      const cand = (fc.comments || []).filter((c) => Number(c.rating_star || 0) >= 4 && c.comment_id);
-      const ids = cand.map((c) => Number(c.comment_id));
-      let already = new Set();
-      if (ids.length) {
-        const { data: done } = await supabase.from('shopee_replied_comments').select('comment_id').in('comment_id', ids);
-        already = new Set((done || []).map((d) => Number(d.comment_id)));
-      }
-      const todo = cand.filter((c) => !already.has(Number(c.comment_id)));
-      let replied = 0;
-      for (const c of todo) {
-        if (dryRun) { replied++; continue; }
-        const r = await replyOneComment(creds, c.comment_id, REPLY_TEMPLATE(t.shop_name));
-        const dup = r.error && /replied|already|duplicate/i.test(JSON.stringify(r));
-        if (!r.error || dup) {
-          if (!r.error) replied++;
-          await supabase.from('shopee_replied_comments').upsert({ comment_id: Number(c.comment_id), shop_id: String(t.shop_id), rating_star: Number(c.rating_star || 0), replied_at: new Date().toISOString() }, { onConflict: 'comment_id' }).then(() => {}, () => {});
-        }
-        await new Promise((res) => setTimeout(res, 350));
-      }
-      out.push({ shop_id: t.shop_id, shop: t.shop_name, quet: (fc.comments || []).length, can_tra_loi: todo.length, da_tra_loi: replied, dry: dryRun });
-    } catch (e) { out.push({ shop_id: t.shop_id, status: 'error', error: e.message }); }
+      const creds = await getCredentials(supabase, s.shop_id, 'dashboard');
+      out.push(await replyShopComments(supabase, creds, s.shop_id, nameById[String(s.shop_id)] || creds.shopName, s.template, dryRun));
+    } catch (e) { out.push({ shop_id: s.shop_id, status: 'error', error: e.message }); }
   }
-  return { ok: true, shops: shops.length, results: out };
+  return { ok: true, shops: enabled.length, results: out };
+}
+
+// Trả lời NGAY cho 1 shop (nút bấm trên trang) — bất kể bật/tắt.
+async function handleReviewRunNow(supabase, shopId, body) {
+  if (!shopId) return { ok: false, error: 'Thiếu shop_id' };
+  const creds = await getCredentials(supabase, shopId, 'dashboard');
+  const { data: st } = await supabase.from('shopee_review_autoreply_settings').select('template').eq('shop_id', String(shopId)).maybeSingle();
+  const r = await replyShopComments(supabase, creds, shopId, creds.shopName, st?.template, body?.dry_run === true || body?.dry_run === '1');
+  return { ok: true, data: r };
+}
+
+// Danh sách shop + cài đặt auto-trả-lời (cho trang quản lý).
+async function handleReviewSettings(supabase) {
+  const { data: toks } = await supabase.from('shopee_tokens').select('shop_id, shop_name').eq('app_type', 'dashboard').eq('status', 'active');
+  const { data: settings } = await supabase.from('shopee_review_autoreply_settings').select('*');
+  const byId = {}; (settings || []).forEach((s) => { byId[String(s.shop_id)] = s; });
+  const shops = (toks || []).map((t) => ({
+    shop_id: String(t.shop_id), shop_name: t.shop_name,
+    enabled: byId[String(t.shop_id)]?.enabled || false,
+    template: byId[String(t.shop_id)]?.template || '',
+  }));
+  return { ok: true, data: { shops, default_template: REPLY_TEMPLATE('') } };
+}
+
+// Lưu cài đặt 1 shop. body: { shop_id, enabled, template }
+async function handleReviewSettingsSave(supabase, body) {
+  const { shop_id, enabled, template } = body || {};
+  if (!shop_id) return { ok: false, error: 'Thiếu shop_id' };
+  await supabase.from('shopee_review_autoreply_settings').upsert({ shop_id: String(shop_id), enabled: !!enabled, template: template || null, updated_at: new Date().toISOString() }, { onConflict: 'shop_id' });
+  return { ok: true };
+}
+
+// Nhật ký đã auto-trả-lời (gần nhất).
+async function handleReviewLog(supabase, params) {
+  let q = supabase.from('shopee_replied_comments').select('comment_id, shop_id, rating_star, replied_at').order('replied_at', { ascending: false }).limit(Number(params.limit) || 50);
+  if (params.shop_id) q = q.eq('shop_id', String(params.shop_id));
+  const { data } = await q;
+  return { ok: true, data: data || [] };
 }
 
 export default async function handler(req, res) {
@@ -749,6 +794,20 @@ export default async function handler(req, res) {
         break;
       case 'auto_reply_comments':
         result = await handleAutoReplyComments(supabase, reqUrl, req);
+        break;
+      case 'review_settings':
+        result = await handleReviewSettings(supabase);
+        break;
+      case 'review_settings_save':
+        if (req.method !== 'POST') return res.status(200).json({ ok: false, error: 'POST required for review_settings_save' });
+        result = await handleReviewSettingsSave(supabase, req.body);
+        break;
+      case 'review_run_now':
+        if (req.method !== 'POST') return res.status(200).json({ ok: false, error: 'POST required for review_run_now' });
+        result = await handleReviewRunNow(supabase, shopId, req.body);
+        break;
+      case 'review_log':
+        result = await handleReviewLog(supabase, Object.fromEntries(reqUrl.searchParams.entries()));
         break;
       case 'list_shops':
         result = await handleListShops(supabase);

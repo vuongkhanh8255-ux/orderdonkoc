@@ -41,6 +41,7 @@ const FlashSaleTab = lazy(() => import('./components/FlashSaleTab'));
 const TopPicksTab = lazy(() => import('./components/TopPicksTab'));
 const ReviewsTab = lazy(() => import('./components/ReviewsTab'));
 const ShopeeAdsDashboard = lazy(() => import('./components/ShopeeAdsDashboard'));
+const ShopeeAutoReplyTab = lazy(() => import('./components/ShopeeAutoReplyTab'));
 
 const SESSION_KEY = 'sk_session';
 
@@ -276,6 +277,7 @@ function AppMain({ user, onLogout, allowedViews }) {
                 { view: 'top_picks',         icon: '🚀', name: 'Đẩy SP' },
                 // { view: 'shopee_livestream', icon: '📺', name: 'Livestream' }, // tạm ẩn — chờ setup tài khoản Creator cho Shopee Video/Live
                 { view: 'shopee_ads_dashboard', icon: '📣', name: 'Quảng cáo' },
+                { view: 'shopee_autoreply',  icon: '💬', name: 'Tự trả lời đánh giá' },
               ]},
               { key: 'tiktok', label: '🎵 TikTok', emoji: '🎵', items: [
                 { view: 'camp_registration', icon: '🎪', name: 'Đăng Kí Camp' },
@@ -443,6 +445,7 @@ function AppMain({ user, onLogout, allowedViews }) {
             <ComingSoonPlaceholder icon="📺" title="Shopee Livestream" description="Quản lý phiên livestream, theo dõi GMV, đơn hàng, người xem trực tiếp" />
           )}
           {currentView === 'shopee_ads_dashboard' && <ShopeeAdsDashboard />}
+          {currentView === 'shopee_autoreply' && <ShopeeAutoReplyTab />}
           </Suspense>
           </AppErrorBoundary>
 
