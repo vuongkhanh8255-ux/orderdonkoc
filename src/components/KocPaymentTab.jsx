@@ -14,7 +14,7 @@ const ACCENT = '#ff6a2c';
 const COMPANIES = ['STELLA', 'OPTIMAX'];
 const BRANDS = ['BODYMISS', 'MILAGANICS', 'MOAWMOAWS', 'EHERB VN', 'HEALMI', 'MASUBE', 'REALSTEEL'];
 
-const num = (v) => { const n = Number(String(v ?? '').replace(/[^\d.-]/g, '')); return Number.isFinite(n) ? n : 0; };
+const num = (v) => { const n = Number(String(v ?? '').replace(/[^\d-]/g, '')); return Number.isFinite(n) ? n : 0; };
 const fmtMoney = (v) => (Number(v) || 0).toLocaleString('vi-VN');
 const round = (v) => Math.round(Number(v) || 0);
 const todayYmd = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -25,7 +25,7 @@ const fmtDate = (s) => { if (!s) return ''; const p = String(s).slice(0, 10).spl
 const EMPTY = {
   pay_date: todayYmd(), staff: '', company: 'STELLA', brand: '', channel_link: '',
   cast_net: 0, pit: 0, total: 0, bank_account: '', bank_name: '', beneficiary: '',
-  full_name: '', cccd: '', tax_code: '', cccd_image: '', contract_link: '', air_link: '',
+  full_name: '', cccd: '', tax_code: '', cccd_image: '', contract_link: '', contract_file: '', air_link: '',
   accountant_approved: false, note: '',
 };
 
@@ -82,7 +82,7 @@ const KocPaymentTab = () => {
       bank_account: form.bank_account || null, bank_name: form.bank_name || null,
       beneficiary: form.beneficiary || null, full_name: form.full_name || null,
       cccd: form.cccd || null, tax_code: form.tax_code || null, cccd_image: form.cccd_image || null,
-      contract_link: form.contract_link || null, air_link: form.air_link || null,
+      contract_link: form.contract_link || null, contract_file: form.contract_file || null, air_link: form.air_link || null,
       accountant_approved: !!form.accountant_approved, note: form.note || null,
     };
     try {
@@ -112,8 +112,35 @@ const KocPaymentTab = () => {
         const existing = (f[key] || '').split('\n').map((s) => s.trim()).filter(Boolean);
         return { ...f, [key]: [...existing, ...urls].join('\n') };
       });
-    } catch (e) { alert('Lỗi upload ảnh: ' + (e.message || e)); }
+    } catch (e) { alert('Lỗi tải lên: ' + (e.message || e)); }
     finally { setUploading(''); }
+  };
+  // File hợp đồng (PDF/Excel/Word…): mỗi file 1 chip có tên + tải lên nhiều file cùng lúc. Dùng chung uploadImages.
+  const renderDocField = (label, fkey) => {
+    const files = (form[fkey] || '').split('\n').map((s) => s.trim()).filter(Boolean);
+    const removeFile = (url) => setForm((f) => ({ ...f, [fkey]: (f[fkey] || '').split('\n').map((s) => s.trim()).filter((u) => u && u !== url).join('\n') }));
+    const nameOf = (url) => { try { return decodeURIComponent((url.split('/').pop() || 'file').split('?')[0]); } catch { return 'file'; } };
+    return (
+      <Field label={`${label}${files.length ? ` (${files.length})` : ''}`}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+          {files.map((url, i) => (
+            <div key={i} style={{ position: 'relative' }}>
+              <a href={url} target="_blank" rel="noreferrer" title={nameOf(url)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: 160, padding: '8px 12px', borderRadius: 8, border: '1px solid #fed7aa', background: '#fff7ed', fontSize: '0.74rem', fontWeight: 700, color: '#c2410c', textDecoration: 'none' }}>
+                📄 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameOf(url)}</span>
+              </a>
+              <button type="button" onClick={() => removeFile(url)} title="Xoá file này"
+                style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: '50%', border: 'none', background: '#dc2626', color: '#fff', fontSize: '0.66rem', cursor: 'pointer', lineHeight: '18px', padding: 0 }}>✕</button>
+            </div>
+          ))}
+          <label title="Thêm file hợp đồng (PDF / Excel / Word) — chọn nhiều cùng lúc được"
+            style={{ width: 46, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: '1.5px dashed #cbd5e1', cursor: uploading === fkey ? 'wait' : 'pointer', color: '#94a3b8', fontSize: '1.2rem', flexShrink: 0 }}>
+            {uploading === fkey ? '⏳' : '＋'}
+            <input type="file" accept=".pdf,.xls,.xlsx,.csv,.doc,.docx,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple disabled={uploading === fkey} onChange={(e) => { const fs = [...e.target.files]; e.target.value = ''; uploadImages(fs, fkey); }} style={{ display: 'none' }} />
+          </label>
+        </div>
+      </Field>
+    );
   };
   // Gallery nhiều ảnh: mỗi ảnh 1 thumbnail (xoá từng cái), ô "＋" thêm ảnh (chọn nhiều cùng lúc)
   const renderImgField = (label, fkey) => {
@@ -176,7 +203,7 @@ const KocPaymentTab = () => {
       'LINK KÊNH': r.channel_link || '', 'CAST (NET)': num(r.cast_net), 'PIT': num(r.pit), 'TỔNG': num(r.total),
       'SỐ TÀI KHOẢN': r.bank_account || '', 'NGÂN HÀNG': r.bank_name || '', 'NGƯỜI THỤ HƯỞNG': r.beneficiary || '',
       'HỌ VÀ TÊN': r.full_name || '', 'SỐ CCCD': r.cccd || '', 'MÃ SỐ THUẾ': r.tax_code || '',
-      'HÌNH ẢNH CCCD': r.cccd_image || '', 'HỢP ĐỒNG/ TIN NHẮN': r.contract_link || '', 'LINK AIR': r.air_link || '',
+      'HÌNH ẢNH CCCD': r.cccd_image || '', 'TIN NHẮN (ẢNH)': r.contract_link || '', 'HỢP ĐỒNG (FILE)': r.contract_file || '', 'LINK AIR': r.air_link || '',
       'KẾ TOÁN DUYỆT': r.accountant_approved ? 'x' : '', 'GHI CHÚ': r.note || '',
     }));
     const ws = XLSX.utils.json_to_sheet(data);
@@ -224,7 +251,8 @@ const KocPaymentTab = () => {
             <Field label="Số CCCD"><input value={form.cccd} onChange={e => setForm(f => ({ ...f, cccd: e.target.value }))} style={inputStyle} /></Field>
             <Field label="Mã số thuế"><input value={form.tax_code} onChange={e => setForm(f => ({ ...f, tax_code: e.target.value }))} style={inputStyle} /></Field>
             {renderImgField('📷 Ảnh CCCD (tải từ máy)', 'cccd_image')}
-            {renderImgField('📷 Hợp đồng / tin nhắn (ảnh)', 'contract_link')}
+            {renderImgField('💬 Tin nhắn (ảnh)', 'contract_link')}
+            {renderDocField('📄 Hợp đồng (PDF/Excel)', 'contract_file')}
 
             <div style={{ gridColumn: 'span 4' }}><Field label="Ghi chú"><input value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} style={inputStyle} /></Field></div>
           </div>
@@ -285,7 +313,7 @@ const KocPaymentTab = () => {
                     <td style={{ ...td, textAlign: 'right' }}>{fmtMoney(r.cast_net)}</td>
                     <td style={{ ...td, textAlign: 'right', color: '#94a3b8' }}>{fmtMoney(r.pit)}</td>
                     <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: ACCENT }}>{fmtMoney(r.total)}</td>
-                    <td style={{ ...td, textAlign: 'center' }}>{r.air_link ? <a href={r.air_link.split('\n')[0]} target="_blank" rel="noreferrer" style={{ color: '#7c3aed', textDecoration: 'none' }}>🎬</a> : '—'}{r.contract_link ? <a href={r.contract_link.split('\n')[0]} target="_blank" rel="noreferrer" style={{ color: '#0891b2', textDecoration: 'none', marginLeft: 6 }}>📄</a> : ''}{r.cccd_image ? <a href={r.cccd_image.split('\n')[0]} target="_blank" rel="noreferrer" style={{ color: '#16a34a', textDecoration: 'none', marginLeft: 6 }}>🪪{(() => { const n = r.cccd_image.split('\n').filter(Boolean).length; return n > 1 ? n : ''; })()}</a> : ''}</td>
+                    <td style={{ ...td, textAlign: 'center' }}>{r.air_link ? <a href={r.air_link.split('\n')[0]} target="_blank" rel="noreferrer" style={{ color: '#7c3aed', textDecoration: 'none' }}>🎬</a> : '—'}{r.contract_link ? <a href={r.contract_link.split('\n')[0]} target="_blank" rel="noreferrer" title="Tin nhắn (ảnh)" style={{ color: '#0891b2', textDecoration: 'none', marginLeft: 6 }}>💬</a> : ''}{r.contract_file ? <a href={r.contract_file.split('\n')[0]} target="_blank" rel="noreferrer" title="Hợp đồng (file)" style={{ color: '#ea580c', textDecoration: 'none', marginLeft: 6 }}>📄</a> : ''}{r.cccd_image ? <a href={r.cccd_image.split('\n')[0]} target="_blank" rel="noreferrer" style={{ color: '#16a34a', textDecoration: 'none', marginLeft: 6 }}>🪪{(() => { const n = r.cccd_image.split('\n').filter(Boolean).length; return n > 1 ? n : ''; })()}</a> : ''}</td>
                     <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={!!r.accountant_approved} onChange={() => toggleApproved(r)} style={{ width: 17, height: 17, accentColor: '#16a34a', cursor: 'pointer' }} /></td>
                     <td style={{ ...td, textAlign: 'center', whiteSpace: 'nowrap' }}>
                       <button onClick={() => startEdit(r)} title="Sửa" style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.95rem' }}>✏️</button>
