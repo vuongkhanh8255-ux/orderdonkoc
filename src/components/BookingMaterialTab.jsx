@@ -26,6 +26,7 @@ export default function BookingMaterialTab() {
   const [draft, setDraft] = useState({ brief: '', skus: [] });
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState('');   // '' | 'image_zip' | 'cert_pdf'
+  const [products, setProducts] = useState([]); // SP của brand (từ dashboard booking: bảng sanphams)
 
   const load = async () => {
     setLoading(true);
@@ -44,6 +45,23 @@ export default function BookingMaterialTab() {
   useEffect(() => {
     if (cur) setDraft({ brief: cur.brief || '', skus: Array.isArray(cur.skus) ? cur.skus : [] });
   }, [sel, cur?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Lấy danh sách SP của brand đang chọn (từ dashboard booking: brands → sanphams)
+  // để autocomplete ô Tên SKU. Khớp brand theo tên (vd "eHerb" ↔ "EHERB" + "EHERB HCM").
+  useEffect(() => {
+    if (!sel) { setProducts([]); return; }
+    let cancelled = false;
+    (async () => {
+      const { data: brs } = await supabase.from('brands').select('id, ten_brand');
+      const key = sel.trim().toUpperCase();
+      const ids = (brs || []).filter(b => (b.ten_brand || '').trim().toUpperCase().startsWith(key)).map(b => b.id);
+      if (!ids.length) { if (!cancelled) setProducts([]); return; }
+      const { data: sps } = await supabase.from('sanphams')
+        .select('ten_sanpham, barcode, gia_tien').in('brand_id', ids).order('ten_sanpham');
+      if (!cancelled) setProducts(sps || []);
+    })();
+    return () => { cancelled = true; };
+  }, [sel]);
 
   const patchRow = (brand, patch) => setRows(rs => rs.map(r => r.brand === brand ? { ...r, ...patch } : r));
 
@@ -80,6 +98,18 @@ export default function BookingMaterialTab() {
 
   // SKU helpers (thao tác trên draft)
   const setSku = (i, key, val) => setDraft(d => ({ ...d, skus: d.skus.map((s, idx) => idx === i ? { ...s, [key]: val } : s) }));
+  // Chọn tên SKU: nếu khớp 1 SP trong danh sách → tự điền mã/giá vào ghi chú (nếu ghi chú đang trống).
+  const onSkuName = (i, val) => {
+    const p = products.find(pp => pp.ten_sanpham === val);
+    setDraft(d => ({ ...d, skus: d.skus.map((s, idx) => {
+      if (idx !== i) return s;
+      const next = { ...s, name: val };
+      if (p && !(s.note || '').trim()) {
+        next.note = [p.barcode && `Mã: ${p.barcode}`, p.gia_tien && `Giá: ${Number(p.gia_tien).toLocaleString('vi-VN')}đ`].filter(Boolean).join(' · ');
+      }
+      return next;
+    }) }));
+  };
   const addSku = () => setDraft(d => ({ ...d, skus: [...d.skus, { name: '', note: '' }] }));
   const delSku = (i) => setDraft(d => ({ ...d, skus: d.skus.filter((_, idx) => idx !== i) }));
 
@@ -160,11 +190,15 @@ export default function BookingMaterialTab() {
             {draft.skus.map((s, i) => (
               <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
                 <span style={{ width: 22, height: 22, borderRadius: '50%', background: ORANGE, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 800, flex: 'none' }}>{i + 1}</span>
-                <input value={s.name || ''} onChange={e => setSku(i, 'name', e.target.value)} placeholder="Tên SKU" style={{ ...inputStyle, flex: 2 }} />
+                <input value={s.name || ''} onChange={e => onSkuName(i, e.target.value)} list="bm-sku-products" placeholder="Tên SKU (gõ để lọc DS booking)" style={{ ...inputStyle, flex: 2 }} />
                 <input value={s.note || ''} onChange={e => setSku(i, 'note', e.target.value)} placeholder="Ghi chú (mã, giá, ưu đãi…)" style={{ ...inputStyle, flex: 3 }} />
                 <button style={{ ...btn('#fff', '#ef4444'), border: '1.5px solid #fecaca', padding: '7px 10px' }} onClick={() => delSku(i)}>✕</button>
               </div>
             ))}
+            <datalist id="bm-sku-products">
+              {products.map((p, idx) => <option key={idx} value={p.ten_sanpham} />)}
+            </datalist>
+            {products.length > 0 && <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: 2 }}>💡 Gõ vào ô Tên SKU để chọn từ {products.length} sản phẩm của brand (tự điền mã/giá vào ghi chú).</div>}
 
             <button style={{ ...btn(ORANGE), marginTop: 12, opacity: saving ? 0.6 : 1 }} disabled={saving} onClick={saveInfo}>
               {saving ? '⏳ Đang lưu…' : '💾 Lưu brief + SKU'}
