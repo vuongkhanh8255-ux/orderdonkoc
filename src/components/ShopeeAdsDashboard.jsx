@@ -230,7 +230,7 @@ export default function ShopeeAdsDashboard() {
       {hasFetched && displayShops.length > 0 && (
         <>
           {/* KPI cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 14, marginBottom: 18 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginBottom: 18 }}>
             {kpi('💸', 'Tổng chi phí QC', fmtVND(agg.expense), single ? single.shop_name : `${displayShops.length} shop`, '#dc2626')}
             {kpi('💰', 'Doanh thu Ads', fmtVND(agg.gmv), 'GMV quy cho QC', '#16a34a')}
             {kpi('📈', 'ROAS chung', fmtRoas(agg.roas), 'Doanh thu / Chi phí', '#7c3aed')}
