@@ -90,7 +90,7 @@ const KocPaymentTab = () => {
       cast_net: num(form.cast_net), pit: num(form.pit), total: num(form.total),
       bank_account: form.bank_account || null, bank_name: form.bank_name || null,
       beneficiary: form.beneficiary || null, full_name: form.full_name || null,
-      cccd: form.cccd || null, tax_code: form.tax_code || null, cccd_image: form.cccd_image || null,
+      cccd: form.cccd || null, tax_code: (form.tax_code && form.tax_code.trim()) ? form.tax_code : (form.cccd || null), cccd_image: form.cccd_image || null,
       contract_link: form.contract_link || null, contract_file: form.contract_file || null, air_link: form.air_link || null,
       accountant_approved: !!form.accountant_approved, paid: !!form.paid, note: form.note || null,
     };
