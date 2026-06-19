@@ -151,7 +151,7 @@ export default function ShopeeAdsDashboard() {
   const single = shopFilter && displayShops.length === 1 ? displayShops[0] : null;
 
   return (
-    <div style={{ fontFamily: "'Outfit', sans-serif", maxWidth: 1400, margin: '0 auto', padding: '0 24px 48px' }}>
+    <div style={{ fontFamily: "'Outfit', sans-serif", color: '#0f172a', paddingBottom: 48 }}>
       {/* HEADER + FILTER BAR — gradient cam đồng bộ với Dashboard Ecom */}
       <div style={{ background: 'linear-gradient(135deg, #fff6f0 0%, #ffffff 55%)', border: '1px solid #ffe2d2', borderRadius: 16, padding: '15px 20px', boxShadow: '0 8px 22px -12px rgba(255,106,44,0.38), 0 1px 3px rgba(15,23,42,0.04)', marginBottom: 18 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
