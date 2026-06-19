@@ -113,22 +113,60 @@ export default function BookingMaterialTab() {
   const addSku = () => setDraft(d => ({ ...d, skus: [...d.skus, { name: '', note: '' }] }));
   const delSku = (i) => setDraft(d => ({ ...d, skus: d.skus.filter((_, idx) => idx !== i) }));
 
-  // Upload file
+  // Upload chung 1 file lên bucket → trả {url, path, size}
+  const putFile = async (subdir, file) => {
+    const path = `${safe(cur.brand)}/${subdir}/${Date.now()}_${safe(file.name)}`;
+    const { error } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: false });
+    if (error) throw error;
+    const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
+    return { url: data.publicUrl, path, size: file.size };
+  };
+
+  // File đính kèm (zip ảnh / pdf kiểm định) → thêm vào cột files
   const uploadFile = async (kind, file) => {
     if (!file || !cur) return;
     if (file.size > MAX_BYTES) { alert(`File quá lớn (>${fmtSize(MAX_BYTES)}). Hãy chia nhỏ hoặc nén lại.`); return; }
     setBusy(kind);
     try {
-      const path = `${safe(cur.brand)}/${kind}/${Date.now()}_${safe(file.name)}`;
-      const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: false });
-      if (upErr) throw upErr;
-      const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
-      const entry = { kind, name: file.name, url: pub.publicUrl, path, size: file.size, uploaded_at: new Date().toISOString() };
+      const { url, path, size } = await putFile(kind, file);
+      const entry = { kind, name: file.name, url, path, size, uploaded_at: new Date().toISOString() };
       const files = [...(Array.isArray(cur.files) ? cur.files : []), entry];
       const { error } = await supabase.from('booking_materials').update({ files, updated_at: new Date().toISOString() }).eq('id', cur.id);
       if (error) throw error;
       patchRow(cur.brand, { files });
     } catch (e) { alert('Lỗi upload: ' + e.message); }
+    finally { setBusy(''); }
+  };
+
+  // Avatar/logo brand
+  const uploadAvatar = async (file) => {
+    if (!file || !cur) return;
+    if (!file.type.startsWith('image/')) { alert('Hãy chọn file ảnh.'); return; }
+    if (file.size > MAX_BYTES) { alert('Ảnh quá lớn.'); return; }
+    setBusy('avatar');
+    try {
+      const { url } = await putFile('avatar', file);
+      const { error } = await supabase.from('booking_materials').update({ avatar_url: url, updated_at: new Date().toISOString() }).eq('id', cur.id);
+      if (error) throw error;
+      patchRow(cur.brand, { avatar_url: url });
+    } catch (e) { alert('Lỗi upload avatar: ' + e.message); }
+    finally { setBusy(''); }
+  };
+
+  // Ảnh cho 1 SKU (lưu ngay vào skus để khỏi mất link)
+  const uploadSkuImage = async (i, file) => {
+    if (!file || !cur) return;
+    if (!file.type.startsWith('image/')) { alert('Hãy chọn file ảnh.'); return; }
+    if (file.size > MAX_BYTES) { alert('Ảnh quá lớn.'); return; }
+    setBusy(`sku-${i}`);
+    try {
+      const { url } = await putFile('sku', file);
+      const skus = draft.skus.map((s, idx) => idx === i ? { ...s, image: url } : s);
+      setDraft(d => ({ ...d, skus }));
+      const { error } = await supabase.from('booking_materials').update({ skus, updated_at: new Date().toISOString() }).eq('id', cur.id);
+      if (error) throw error;
+      patchRow(cur.brand, { skus });
+    } catch (e) { alert('Lỗi upload ảnh SKU: ' + e.message); }
     finally { setBusy(''); }
   };
 
@@ -162,7 +200,10 @@ export default function BookingMaterialTab() {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
         {rows.map(r => (
           <button key={r.id} onClick={() => setSel(r.brand)}
-            style={{ ...btn(r.brand === sel ? ORANGE : '#fff', r.brand === sel ? '#fff' : '#475569'), border: r.brand === sel ? 'none' : '1.5px solid #e5e7eb' }}>
+            style={{ ...btn(r.brand === sel ? ORANGE : '#fff', r.brand === sel ? '#fff' : '#475569'), border: r.brand === sel ? 'none' : '1.5px solid #e5e7eb', display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+            {r.avatar_url
+              ? <img src={r.avatar_url} alt="" style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover' }} />
+              : <span style={{ width: 20, height: 20, borderRadius: '50%', background: r.brand === sel ? 'rgba(255,255,255,.3)' : '#f1f5f9', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem' }}>🏷️</span>}
             {r.brand}
           </button>
         ))}
@@ -174,7 +215,15 @@ export default function BookingMaterialTab() {
           {/* Brief + SKU */}
           <div style={card}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: ORANGE }}>📋 {cur.brand} — Brief & SKU</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <label title="Đổi avatar/logo brand" style={{ cursor: busy === 'avatar' ? 'default' : 'pointer', flex: 'none' }}>
+                  {cur.avatar_url
+                    ? <img src={cur.avatar_url} alt="" style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover', border: '2px solid #ffedd5' }} />
+                    : <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#fff7ed', border: '2px dashed #fdba74', display: 'flex', alignItems: 'center', justifyContent: 'center', color: ORANGE, fontSize: '0.6rem', fontWeight: 800, textAlign: 'center', lineHeight: 1.1 }}>{busy === 'avatar' ? '⏳' : '+ ảnh'}</div>}
+                  <input type="file" accept="image/*" disabled={busy === 'avatar'} style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadAvatar(f); e.target.value = ''; }} />
+                </label>
+                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: ORANGE }}>{cur.brand} — Brief & SKU</h3>
+              </div>
               <button style={{ ...btn('#fff', '#ef4444'), border: '1.5px solid #fecaca', padding: '6px 12px', fontSize: '0.78rem' }} onClick={deleteBrand}>🗑 Xoá brand</button>
             </div>
 
@@ -190,6 +239,12 @@ export default function BookingMaterialTab() {
             {draft.skus.map((s, i) => (
               <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
                 <span style={{ width: 22, height: 22, borderRadius: '50%', background: ORANGE, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 800, flex: 'none' }}>{i + 1}</span>
+                <label title="Ảnh SKU" style={{ cursor: busy === `sku-${i}` ? 'default' : 'pointer', flex: 'none' }}>
+                  {s.image
+                    ? <img src={s.image} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover', border: '1px solid #e5e7eb' }} />
+                    : <div style={{ width: 36, height: 36, borderRadius: 8, background: '#f8fafc', border: '1px dashed #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.9rem' }}>{busy === `sku-${i}` ? '⏳' : '🖼️'}</div>}
+                  <input type="file" accept="image/*" disabled={busy === `sku-${i}`} style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadSkuImage(i, f); e.target.value = ''; }} />
+                </label>
                 <input value={s.name || ''} onChange={e => onSkuName(i, e.target.value)} list="bm-sku-products" placeholder="Tên SKU (gõ để lọc DS booking)" style={{ ...inputStyle, flex: 2 }} />
                 <input value={s.note || ''} onChange={e => setSku(i, 'note', e.target.value)} placeholder="Ghi chú (mã, giá, ưu đãi…)" style={{ ...inputStyle, flex: 3 }} />
                 <button style={{ ...btn('#fff', '#ef4444'), border: '1.5px solid #fecaca', padding: '7px 10px' }} onClick={() => delSku(i)}>✕</button>
