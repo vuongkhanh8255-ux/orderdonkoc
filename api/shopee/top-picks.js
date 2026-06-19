@@ -718,6 +718,47 @@ async function handleReviewSettingsSave(supabase, body) {
   return { ok: true };
 }
 
+// Danh sách ĐÁNH GIÁ đầy đủ của 1 shop (cho bảng kiểu Salework): sao, nội dung,
+// người mua, mã đơn, sản phẩm, đã/chưa trả lời + lời đã trả lời.
+async function handleReviewList(supabase, shopId, params) {
+  if (!shopId) return { ok: false, error: 'Thiếu shop_id' };
+  const creds = await getCredentials(supabase, shopId, 'dashboard');
+  const fc = await fetchAllComments(creds, 8, 100);
+  if (fc.error) return { ok: false, error: fc.error, message: fc.message };
+  const comments = fc.comments || [];
+
+  // Trạng thái đã trả lời: gộp comment_reply (Shopee) + bảng dedup (mình tự trả lời).
+  const ids = comments.map((c) => Number(c.comment_id)).filter(Boolean);
+  let ourReplied = new Set();
+  if (ids.length) {
+    const { data: done } = await supabase.from('shopee_replied_comments').select('comment_id').in('comment_id', ids);
+    ourReplied = new Set((done || []).map((d) => Number(d.comment_id)));
+  }
+
+  // Tên + ảnh sản phẩm (batch get_item_base_info, tối đa 50 item).
+  const itemIds = [...new Set(comments.map((c) => Number(c.item_id)).filter(Boolean))].slice(0, 50);
+  const prodMap = {};
+  if (itemIds.length) {
+    try {
+      const pr = await shopeeGet(creds.partnerKey, creds.partnerId, '/api/v2/product/get_item_base_info', creds.accessToken, creds.shopId, { item_id_list: itemIds.join(',') });
+      (pr.response?.item_list || []).forEach((it) => { prodMap[Number(it.item_id)] = { name: it.item_name || '', image: (it.image?.image_url_list || [])[0] || '' }; });
+    } catch { /* tên SP là phụ */ }
+  }
+
+  const reviews = comments.map((c) => {
+    const shopeeReply = c.comment_reply && (c.comment_reply.reply || c.comment_reply.comment);
+    const replied = !!shopeeReply || ourReplied.has(Number(c.comment_id));
+    const p = prodMap[Number(c.item_id)] || {};
+    return {
+      comment_id: c.comment_id, rating_star: Number(c.rating_star || 0), comment: c.comment || '',
+      buyer_username: c.buyer_username || '', order_sn: c.order_sn || '', item_id: c.item_id,
+      create_time: c.create_time || 0, replied, reply_text: shopeeReply || '',
+      product_name: p.name || '', product_image: p.image || '',
+    };
+  });
+  return { ok: true, data: { shop_id: shopId, total: reviews.length, replied: reviews.filter((r) => r.replied).length, unreplied: reviews.filter((r) => !r.replied).length, reviews } };
+}
+
 // Nhật ký đã auto-trả-lời (gần nhất).
 async function handleReviewLog(supabase, params) {
   let q = supabase.from('shopee_replied_comments').select('comment_id, shop_id, rating_star, replied_at').order('replied_at', { ascending: false }).limit(Number(params.limit) || 50);
@@ -808,6 +849,9 @@ export default async function handler(req, res) {
         break;
       case 'review_log':
         result = await handleReviewLog(supabase, Object.fromEntries(reqUrl.searchParams.entries()));
+        break;
+      case 'review_list':
+        result = await handleReviewList(supabase, shopId, Object.fromEntries(reqUrl.searchParams.entries()));
         break;
       case 'list_shops':
         result = await handleListShops(supabase);
