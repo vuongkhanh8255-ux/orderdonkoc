@@ -81,8 +81,15 @@ const KocPaymentTab = () => {
   const cancel = () => { setShowForm(false); setEditingId(null); setForm(EMPTY); };
 
   const save = async () => {
-    if (!form.channel_link && !form.full_name && !form.beneficiary) { alert('Cần ít nhất Link kênh hoặc Họ tên / Người thụ hưởng.'); return; }
-    if (!form.air_link || !form.air_link.trim()) { alert('⚠️ Bắt buộc phải có LINK AIR mới tạo được lệnh thanh toán.'); return; }
+    const cccdDigits = (form.cccd || '').replace(/\D/g, '');
+    const miss = [];
+    if (!form.full_name || !form.full_name.trim()) miss.push('Họ tên');
+    if (!form.bank_account || !form.bank_account.trim()) miss.push('Số tài khoản');
+    if (!form.bank_name || !form.bank_name.trim()) miss.push('Ngân hàng');
+    if (!form.air_link || !form.air_link.trim()) miss.push('Link air');
+    if (!(num(form.cast_net) > 0)) miss.push('Cast');
+    if (miss.length) { alert('⚠️ Phải điền ĐẦY ĐỦ mới lưu được.\nCòn thiếu: ' + miss.join(', ') + '.'); return; }
+    if (cccdDigits.length !== 12) { alert(`⚠️ Số CCCD phải đúng 12 số (đang ${cccdDigits.length} số).`); return; }
     setSaving(true);
     const payload = {
       pay_date: form.pay_date || null, staff: form.staff || null, company: form.company || null,
@@ -90,7 +97,7 @@ const KocPaymentTab = () => {
       cast_net: num(form.cast_net), pit: num(form.pit), total: num(form.total),
       bank_account: form.bank_account || null, bank_name: form.bank_name || null,
       beneficiary: form.beneficiary || null, full_name: form.full_name || null,
-      cccd: form.cccd || null, tax_code: (form.tax_code && form.tax_code.trim()) ? form.tax_code : (form.cccd || null), cccd_image: form.cccd_image || null,
+      cccd: cccdDigits, tax_code: (form.tax_code && form.tax_code.trim()) ? form.tax_code : cccdDigits, cccd_image: form.cccd_image || null,
       contract_link: form.contract_link || null, contract_file: form.contract_file || null, air_link: form.air_link || null,
       accountant_approved: !!form.accountant_approved, paid: !!form.paid, note: form.note || null,
     };
@@ -299,12 +306,12 @@ const KocPaymentTab = () => {
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}><input type="checkbox" checked={!!form.paid} onChange={e => setForm(f => ({ ...f, paid: e.target.checked }))} style={{ width: 18, height: 18, accentColor: '#ea580c' }} /><span style={{ fontSize: '0.82rem', color: '#475569' }}>Đã TT</span></label>
             </div></Field>
 
-            <Field label="Số tài khoản"><input value={form.bank_account} onChange={e => setForm(f => ({ ...f, bank_account: e.target.value }))} style={inputStyle} /></Field>
-            <Field label="Ngân hàng"><input value={form.bank_name} onChange={e => setForm(f => ({ ...f, bank_name: e.target.value }))} placeholder="vd MB BANK" style={inputStyle} /></Field>
+            <Field label="Số tài khoản (*)"><input value={form.bank_account} onChange={e => setForm(f => ({ ...f, bank_account: e.target.value }))} style={inputStyle} /></Field>
+            <Field label="Ngân hàng (*)"><input value={form.bank_name} onChange={e => setForm(f => ({ ...f, bank_name: e.target.value }))} placeholder="vd MB BANK" style={inputStyle} /></Field>
             <Field label="Người thụ hưởng (không dấu)"><input value={form.beneficiary} onChange={e => setForm(f => ({ ...f, beneficiary: e.target.value }))} style={inputStyle} /></Field>
-            <Field label="Họ và tên (có dấu)"><input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} style={inputStyle} /></Field>
+            <Field label="Họ và tên (*) có dấu"><input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} style={inputStyle} /></Field>
 
-            <Field label="Số CCCD"><input value={form.cccd} onChange={e => setForm(f => ({ ...f, cccd: e.target.value }))} style={inputStyle} /></Field>
+            <Field label="Số CCCD (*) — đúng 12 số"><input value={form.cccd} onChange={e => setForm(f => ({ ...f, cccd: e.target.value.replace(/\D/g, '').slice(0, 12) }))} inputMode="numeric" maxLength={12} placeholder="12 số" style={inputStyle} /></Field>
             <Field label="Mã số thuế"><input value={form.tax_code} onChange={e => setForm(f => ({ ...f, tax_code: e.target.value }))} style={inputStyle} /></Field>
             {renderImgField('📷 Ảnh CCCD (tải từ máy)', 'cccd_image')}
             {renderImgField('💬 Tin nhắn (ảnh)', 'contract_link')}
