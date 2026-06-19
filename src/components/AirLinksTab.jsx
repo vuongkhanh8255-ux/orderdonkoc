@@ -916,6 +916,7 @@ const AirLinksTab = () => {
                     brand_id: editFormData.brand_id,
                     san_pham: editFormData.san_pham,
                     cast: finalCast,
+                    cast_auto_filled: false, // sửa tay => không còn là auto
                     cms_brand: finalCMS,
                     nhansu_id: editFormData.nhansu_id,
                     ngay_air: editFormData.ngay_air || null,
@@ -1766,7 +1767,9 @@ const AirLinksTab = () => {
                                                         ? <input type="text" value={editFormData.cast} onChange={(e) => handleEditFormChange(e, 'cast')} style={tableInputStyle} />
                                                         : (isSotCast
                                                             ? <span style={{ color: '#dc2626', fontWeight: 'bold', whiteSpace: 'nowrap' }} title="Đã trả tiền ở Module 3 (Thanh toán KOC) nhưng chưa điền cast ở đây. Nếu 1 lệnh có nhiều clip thì số này đã chia trung bình cho từng clip.">⚠️ Đã trả {formatCurrency(paidCast)}</span>
-                                                            : renderCast(link.cast))}
+                                                            : (link.cast_auto_filled
+                                                                ? <span title="Cast do hệ thống TỰ BỔ SUNG từ Module 3 (Thanh toán KOC). Nếu 1 lệnh nhiều clip thì đã chia trung bình. Sửa tay sẽ bỏ dấu này." style={{ whiteSpace: 'nowrap' }}><span style={{ color: '#D42426', fontWeight: 'bold' }}>{formatCurrency(parseMoney(link.cast))}</span> <span style={{ fontSize: '0.72rem', color: '#f59e0b' }}>🤖tự điền</span></span>
+                                                                : renderCast(link.cast)))}
                                                 </td>
 
                                                 {/* CMS */}

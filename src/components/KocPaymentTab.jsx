@@ -39,6 +39,8 @@ const td = { padding: '8px 10px', fontSize: '0.82rem', color: '#0f172a', whiteSp
 
 const Field = ({ label, children }) => (<div><label style={labelStyle}>{label}</label>{children}</div>);
 const bulkBtn = (bg) => ({ padding: '6px 14px', background: bg, color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' });
+const PAY_PAGE_SIZE = 50;
+const pgBtn = (disabled) => ({ padding: '6px 12px', border: '1px solid #e2e8f0', borderRadius: 8, background: disabled ? '#f8fafc' : '#fff', color: disabled ? '#cbd5e1' : ACCENT, fontWeight: 700, fontSize: '0.82rem', cursor: disabled ? 'default' : 'pointer' });
 
 const KocPaymentTab = () => {
   const [rows, setRows] = useState([]);
@@ -53,6 +55,7 @@ const KocPaymentTab = () => {
   const [selected, setSelected] = useState(() => new Set()); // chọn hàng loạt để thao tác
   const [pwOk, setPwOk] = useState(false);          // đã nhập đúng mật khẩu thao tác (nhớ trong phiên)
   const [q, setQ] = useState('');
+  const [payPage, setPayPage] = useState(1);
   const [form, setForm] = useState(EMPTY);
   const [editingId, setEditingId] = useState(null);
   const [showForm, setShowForm] = useState(false);
@@ -239,6 +242,12 @@ const KocPaymentTab = () => {
     });
   }, [rows, fCompany, fBrand, fApproved, fPaid, fFrom, fTo, q]);
 
+  // Đổi bộ lọc thì về trang 1
+  useEffect(() => { setPayPage(1); }, [ym, fCompany, fBrand, fApproved, fPaid, fFrom, fTo, q]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAY_PAGE_SIZE));
+  const safePage = Math.min(payPage, totalPages);
+  const pageRows = useMemo(() => filtered.slice((safePage - 1) * PAY_PAGE_SIZE, safePage * PAY_PAGE_SIZE), [filtered, safePage]);
+
   const sum = useMemo(() => filtered.reduce((a, r) => ({ cast: a.cast + num(r.cast_net), pit: a.pit + num(r.pit), total: a.total + num(r.total) }), { cast: 0, pit: 0, total: 0 }), [filtered]);
 
   // Rule PIT: gom theo người (CCCD / họ tên / kênh) trong kỳ → ai TỔNG ≥ 2tr mà CHƯA có PIT thì cảnh báo cần khấu trừ.
@@ -397,7 +406,7 @@ const KocPaymentTab = () => {
             <tbody>
               {loading ? (<tr><td colSpan={17} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải…</td></tr>)
                 : filtered.length === 0 ? (<tr><td colSpan={17} style={{ ...td, textAlign: 'center', padding: 36, color: '#9ca3af' }}>Chưa có thanh toán nào. Bấm “➕ Thêm thanh toán”.</td></tr>)
-                : filtered.map((r, i) => (
+                : pageRows.map((r, i) => (
                   <tr key={r.id} style={{ background: selected.has(r.id) ? '#eff6ff' : r.paid ? '#fff7ed' : r.accountant_approved ? '#f0fdf4' : (i % 2 ? '#fcfcfd' : '#fff') }}>
                     <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSel(r.id)} style={{ width: 15, height: 15, cursor: 'pointer' }} /></td>
                     <td style={td}>{fmtDate(r.pay_date)}</td>
@@ -424,6 +433,17 @@ const KocPaymentTab = () => {
             </tbody>
           </table>
         </div>
+        {filtered.length > PAY_PAGE_SIZE && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderTop: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
+            <button onClick={() => setPayPage(1)} disabled={safePage === 1} style={pgBtn(safePage === 1)}>«</button>
+            <button onClick={() => setPayPage(p => Math.max(1, p - 1))} disabled={safePage === 1} style={pgBtn(safePage === 1)}>‹ Trước</button>
+            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', padding: '0 6px' }}>
+              Trang {safePage}/{totalPages} · {fmtMoney(filtered.length)} dòng
+            </span>
+            <button onClick={() => setPayPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} style={pgBtn(safePage === totalPages)}>Sau ›</button>
+            <button onClick={() => setPayPage(totalPages)} disabled={safePage === totalPages} style={pgBtn(safePage === totalPages)}>»</button>
+          </div>
+        )}
       </div>
     </div>
   );

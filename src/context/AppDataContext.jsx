@@ -938,7 +938,7 @@ export const AppDataProvider = ({ children }) => {
       let q = supabase.from('air_links').select(`
             id, created_at, link_air_koc, id_kenh, id_video,
             "cast", cms_brand, brand_id, nhansu_id,
-            ngay_air, san_pham, ngay_booking,
+            ngay_air, san_pham, ngay_booking, cast_auto_filled,
             brands ( ten_brand ),
             nhansu ( ten_nhansu )
         `, { count: 'estimated' }); // 'estimated' = không quét cả bảng -> không timeout khi DB bận (tổng ~chính xác; set nhỏ vẫn đếm thật)
