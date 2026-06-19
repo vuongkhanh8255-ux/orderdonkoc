@@ -426,13 +426,13 @@ const TikTokTopSellers = ({ dateRange }) => {
 // ══════════════════════════════════════════════════════════════════════════════
 // ██  MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════════════════
-const ShopAnalyticsTab = () => {
+const ShopAnalyticsTab = ({ lockPlatform = '' } = {}) => {
   const [connections, setConnections] = useState([]);
   const [loading, setLoading]       = useState(false);
   const [syncing, setSyncing]       = useState(false);
   const [syncResult, setSyncResult] = useState(null);
   const [shopFilter, setShopFilter] = useState('');
-  const [platformFilter, setPlatformFilter] = useState('');
+  const [platformFilter, setPlatformFilter] = useState(lockPlatform || ''); // lockPlatform: khoá sàn (vd tab Shopee Dashboard)
   const [selectedMetrics, setSelectedMetrics] = useState(['GMV', 'Đơn hàng']); // tối đa 2 chỉ số trên chart tổng hợp
   const toggleMetric = (key) => setSelectedMetrics(prev =>
     prev.includes(key)
@@ -751,7 +751,8 @@ const ShopAnalyticsTab = () => {
           marginBottom: 16, display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap',
           boxShadow: '0 8px 22px -12px rgba(255,106,44,0.38), 0 1px 3px rgba(15,23,42,0.04)',
         }}>
-          {/* Sàn */}
+          {/* Sàn — ẩn khi đã khoá sàn (vd tab Shopee Dashboard chỉ Shopee) */}
+          {!lockPlatform && (
           <div>
             <div style={labelStyle}>Sàn</div>
             <select value={platformFilter} onChange={e => { setPlatformFilter(e.target.value); setShopFilter(''); setTablePage(0); }} style={selectStyle}>
@@ -760,6 +761,7 @@ const ShopAnalyticsTab = () => {
               <option value="shopee">Shopee</option>
             </select>
           </div>
+          )}
           {/* Shop */}
           <div>
             <div style={labelStyle}>Shop</div>

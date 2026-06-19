@@ -446,7 +446,12 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'shopee_livestream' && (
             <ComingSoonPlaceholder icon="📺" title="Shopee Livestream" description="Quản lý phiên livestream, theo dõi GMV, đơn hàng, người xem trực tiếp" />
           )}
-          {currentView === 'shopee_ads_dashboard' && <ShopeeAdsDashboard />}
+          {currentView === 'shopee_ads_dashboard' && (
+            <>
+              <ShopAnalyticsTab lockPlatform="shopee" />
+              <ShopeeAdsDashboard />
+            </>
+          )}
           {currentView === 'shopee_autoreply' && <ShopeeAutoReplyTab />}
           {currentView === 'shopee_database' && (
             <ComingSoonPlaceholder icon="🗄️" title="Database Shopee" description="Đang bảo trì — sẽ cập nhật sau" />
