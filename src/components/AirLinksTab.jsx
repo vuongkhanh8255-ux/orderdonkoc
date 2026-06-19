@@ -274,6 +274,9 @@ const AirLinksTab = () => {
     // --- STATE CHO BULK DELETE ---
     const [selectedRowIds, setSelectedRowIds] = useState([]);
 
+    // --- STATE: lọc/highlight các dòng SÓT CAST (cast = 0 / chưa điền) ---
+    const [showSotCast, setShowSotCast] = useState(false);
+
     // --- STATE CHO DUPLICATE FILTERS ---
     const [dupFilterStaff, setDupFilterStaff] = useState('');
     const [dupFilterLink, setDupFilterLink] = useState('');
@@ -288,6 +291,14 @@ const AirLinksTab = () => {
         });
         return Object.values(dupMap).filter(group => group.length > 1);
     }, [airLinks]);
+
+    // Các dòng bị SÓT CAST (cast <= 0) — để highlight + nút lọc nhanh.
+    // Lưu ý: chỉ tính dòng ĐÃ ON-AIR (có ngày air) vì video đã lên mà chưa điền cast mới là "quên".
+    const sotCastLinks = useMemo(
+        () => airLinks.filter(l => l.ngay_air && parseMoney(l.cast) <= 0),
+        [airLinks]
+    );
+    const displayAirLinks = showSotCast ? sotCastLinks : airLinks;
 
     // State bộ lọc biểu đồ
     const [chart1Brand, setChart1Brand] = useState('All');
@@ -1597,7 +1608,17 @@ const AirLinksTab = () => {
                             {Array.from({ length: 10 }, (_, i) => 2024 + i).map(y => <option key={y} value={y}>{y}</option>)}
                         </select>
                     </div>
-                    <button onClick={clearAirLinkFilters} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>Xóa Lọc</button>
+                    <button
+                        onClick={() => { setShowSotCast(v => !v); setAirLinksCurrentPage(1); }}
+                        title="Hiện các video ĐÃ on-air nhưng chưa điền cast (nhân sự quên điền)"
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: '5px', padding: '8px 16px', borderRadius: '6px',
+                            border: showSotCast ? 'none' : '1px solid #f97316', cursor: 'pointer', fontWeight: 700, fontSize: '0.9rem',
+                            background: showSotCast ? '#f97316' : '#fff7ed', color: showSotCast ? '#fff' : '#c2410c', whiteSpace: 'nowrap'
+                        }}>
+                        {showSotCast ? '✓ Đang lọc Sót Cast' : '⚠️ Sót Cast'} ({sotCastLinks.length})
+                    </button>
+                    <button onClick={() => { clearAirLinkFilters(); setShowSotCast(false); }} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>Xóa Lọc</button>
                     <button onClick={handleExportExcel} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: '#10B981', border: 'none' }}>
                         📥 Xuất Excel
                     </button>
@@ -1630,17 +1651,18 @@ const AirLinksTab = () => {
                                     // [MODIFIED] Client-side Pagination Logic
                                     const PAGE_SIZE = 100; // Smaller size for smooth DOM
                                     const startIndex = (airLinksCurrentPage - 1) * PAGE_SIZE;
-                                    const paginatedLinks = airLinks.slice(startIndex, startIndex + PAGE_SIZE);
+                                    const paginatedLinks = displayAirLinks.slice(startIndex, startIndex + PAGE_SIZE);
 
                                     return paginatedLinks.map((link, index) => {
                                         const globalIndex = startIndex + index; // Correct global index
                                         const isEditing = String(editingRowId) === String(link.id);
+                                        const isSotCast = link.ngay_air && parseMoney(link.cast) <= 0; // đã on-air mà quên điền cast
                                         return (
-                                            <tr key={link.id} style={{ borderBottom: '1px solid #eee', backgroundColor: isEditing ? '#fefce8' : 'transparent' }}>
+                                            <tr key={link.id} style={{ borderBottom: '1px solid #eee', backgroundColor: isEditing ? '#fefce8' : (isSotCast ? '#fff1f2' : 'transparent') }}>
                                                 <td style={{ padding: '12px', textAlign: 'center' }}>
                                                     <input type="checkbox" checked={selectedRowIds.includes(link.id)} onChange={() => handleSelectRow(link.id)} style={{ transform: 'scale(1.2)', cursor: 'pointer' }} />
                                                 </td>
-                                                <td style={{ textAlign: 'center', padding: '12px' }}>{airLinks.length - globalIndex}</td>
+                                                <td style={{ textAlign: 'center', padding: '12px' }}>{displayAirLinks.length - globalIndex}</td>
 
                                                 {/* LINK */}
                                                 <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '12px' }}>
@@ -1698,9 +1720,13 @@ const AirLinksTab = () => {
 
 
 
-                                                {/* CAST (Đã áp dụng Highlight đỏ nếu có tiền) */}
+                                                {/* CAST (Highlight đỏ nếu có tiền; cảnh báo nếu đã on-air mà quên điền) */}
                                                 <td style={{ textAlign: 'center', padding: '12px' }}>
-                                                    {isEditing ? <input type="text" value={editFormData.cast} onChange={(e) => handleEditFormChange(e, 'cast')} style={tableInputStyle} /> : renderCast(link.cast)}
+                                                    {isEditing
+                                                        ? <input type="text" value={editFormData.cast} onChange={(e) => handleEditFormChange(e, 'cast')} style={tableInputStyle} />
+                                                        : (isSotCast
+                                                            ? <span style={{ color: '#dc2626', fontWeight: 'bold', whiteSpace: 'nowrap' }}>⚠️ Chưa điền</span>
+                                                            : renderCast(link.cast))}
                                                 </td>
 
                                                 {/* CMS */}
@@ -1754,7 +1780,7 @@ const AirLinksTab = () => {
                 <div style={{ textAlign: 'center', marginTop: '25px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px' }}>
                     {(() => {
                         const PAGE_SIZE = 100;
-                        const totalPages = Math.ceil(airLinks.length / PAGE_SIZE);
+                        const totalPages = Math.ceil(displayAirLinks.length / PAGE_SIZE);
                         return (
                             <>
                                 <button onClick={() => setAirLinksCurrentPage(prev => Math.max(1, prev - 1))} disabled={airLinksCurrentPage === 1} className="btn-pagination btn-pagination-text">Trước</button>
