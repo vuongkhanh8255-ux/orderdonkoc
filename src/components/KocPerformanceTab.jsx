@@ -501,6 +501,15 @@ export default function KocPerformanceTab() {
       setBlacklist(new Set((data || []).map(r => (r.id_kenh || '').toLowerCase().replace(/^@/, ''))));
     }, () => {});
   }, []);
+  // Cast GẦN NHẤT mỗi KOC (đối chiếu file Thanh toán KOC) → thẻ định danh tô cam + ghi giá cast
+  const [castMap, setCastMap] = useState({});
+  useEffect(() => {
+    supabase.rpc('koc_latest_cast').then(({ data }) => {
+      const m = {};
+      for (const r of (data || [])) { const u = (r.uname || '').toLowerCase().replace(/^@/, ''); if (u) m[u] = { cast: Number(r.last_cast) || 0, date: r.last_date }; }
+      setCastMap(m);
+    }, () => {});
+  }, []);
   // ── Admin chờ duyệt: đề xuất GÁN (ecom) + đề xuất GỠ (hệ thống: blacklist / 45 ngày) ──
   const pendingProposals = useMemo(() => {
     if (currentUser?.role !== 'admin') return [];
@@ -888,8 +897,9 @@ export default function KocPerformanceTab() {
                 {assignRows.slice(0, assignShow).map((c, i) => {
                   const uname = (c.username || '').toLowerCase().replace(/^@/, '');
                   const isBlack = blacklist.has(uname);
+                  const cast = !isBlack ? castMap[uname] : null;
                   return (
-                    <div key={c.username || i} style={{ border: isBlack ? '2px solid #ef4444' : '1.5px solid #fed7aa', borderRadius: 12, padding: 12, background: isBlack ? '#fef2f2' : '#fffdfb', boxShadow: isBlack ? '0 1px 4px rgba(239,68,68,0.14)' : '0 1px 3px rgba(255,106,44,0.06)' }}>
+                    <div key={c.username || i} style={{ border: isBlack ? '2px solid #ef4444' : cast ? '2px solid #f97316' : '1.5px solid #fed7aa', borderRadius: 12, padding: 12, background: isBlack ? '#fef2f2' : cast ? '#fff7ed' : '#fffdfb', boxShadow: isBlack ? '0 1px 4px rgba(239,68,68,0.14)' : cast ? '0 2px 10px rgba(249,115,22,0.20)' : '0 1px 3px rgba(255,106,44,0.06)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
                         <span style={{ fontSize: '0.72rem', fontWeight: 800, color: i < 3 ? ACCENT : '#cbd5e1', width: 18, flexShrink: 0 }}>{i + 1}</span>
                         <KocAvatar username={c.username} url={avatarMap[c.username]?.avatar} size={34} />
@@ -898,6 +908,11 @@ export default function KocPerformanceTab() {
                           <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>{fmtVnd(c.gmv)}đ · {c.vperiod > 0 ? `${fmtNum(c.vperiod)} video kỳ` : '0 video kỳ'}</div>
                         </div>
                       </div>
+                      {cast && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, padding: '5px 10px', borderRadius: 9, background: '#ffedd5', border: '1px solid #fdba74', fontSize: '0.72rem', fontWeight: 800, color: '#c2410c' }}>
+                          🔥 Cast gần nhất: {fmtVnd(cast.cast)}đ{cast.date ? <span style={{ fontWeight: 600, color: '#9a3412' }}> · {new Date(cast.date).toLocaleDateString('vi-VN')}</span> : null}
+                        </div>
+                      )}
                       {isBlack
                         ? <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 14, fontSize: '0.76rem', fontWeight: 800, color: '#fff', background: '#ef4444' }}>⛔ BLACKLIST — không gán</div>
                         : <KocAssignCell username={uname} brand={brand} assignments={assignMap[uname]} staffNames={staffNames} currentUser={currentUser} onChanged={refreshAssign} allBrands={allBrands} />}
