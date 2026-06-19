@@ -899,7 +899,7 @@ export default function KocPerformanceTab() {
                   const isBlack = blacklist.has(uname);
                   const cast = !isBlack ? castMap[uname] : null;
                   return (
-                    <div key={c.username || i} style={{ border: isBlack ? '2px solid #ef4444' : cast ? '2px solid #f97316' : '1.5px solid #fed7aa', borderRadius: 12, padding: 12, background: isBlack ? '#fef2f2' : cast ? '#fff7ed' : '#fffdfb', boxShadow: isBlack ? '0 1px 4px rgba(239,68,68,0.14)' : cast ? '0 2px 10px rgba(249,115,22,0.20)' : '0 1px 3px rgba(255,106,44,0.06)' }}>
+                    <div key={c.username || i} style={{ border: isBlack ? '2px solid #ef4444' : cast ? '2.5px solid #7c3aed' : '1.5px solid #fed7aa', borderRadius: 12, padding: 12, background: isBlack ? '#fef2f2' : cast ? '#f5f3ff' : '#fffdfb', boxShadow: isBlack ? '0 1px 4px rgba(239,68,68,0.14)' : cast ? '0 3px 14px rgba(124,58,237,0.30)' : '0 1px 3px rgba(255,106,44,0.06)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
                         <span style={{ fontSize: '0.72rem', fontWeight: 800, color: i < 3 ? ACCENT : '#cbd5e1', width: 18, flexShrink: 0 }}>{i + 1}</span>
                         <KocAvatar username={c.username} url={avatarMap[c.username]?.avatar} size={34} />
@@ -909,12 +909,14 @@ export default function KocPerformanceTab() {
                         </div>
                       </div>
                       {cast && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, padding: '5px 10px', borderRadius: 9, background: '#ffedd5', border: '1px solid #fdba74', fontSize: '0.72rem', fontWeight: 800, color: '#c2410c' }}>
-                          🔥 Cast gần nhất: {fmtVnd(cast.cast)}đ{cast.date ? <span style={{ fontWeight: 600, color: '#9a3412' }}> · {new Date(cast.date).toLocaleDateString('vi-VN')}</span> : null}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, padding: '5px 10px', borderRadius: 9, background: '#ede9fe', border: '1px solid #c4b5fd', fontSize: '0.72rem', fontWeight: 800, color: '#6d28d9' }}>
+                          💸 Cast gần nhất: {fmtVnd(cast.cast)}đ{cast.date ? <span style={{ fontWeight: 600, color: '#7c3aed' }}> · {new Date(cast.date).toLocaleDateString('vi-VN')}</span> : null}
                         </div>
                       )}
                       {isBlack
                         ? <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 14, fontSize: '0.76rem', fontWeight: 800, color: '#fff', background: '#ef4444' }}>⛔ BLACKLIST — không gán</div>
+                        : cast
+                        ? <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 14, fontSize: '0.76rem', fontWeight: 800, color: '#fff', background: '#7c3aed' }} title="KOC đã book cast → không gán nhân sự quản lý">💸 Đã book cast — không gán</div>
                         : <KocAssignCell username={uname} brand={brand} assignments={assignMap[uname]} staffNames={staffNames} currentUser={currentUser} onChanged={refreshAssign} allBrands={allBrands} />}
                       {(() => {
                         const w = warnMap[uname];
