@@ -64,8 +64,10 @@ jobs:
         if: always()
         run: |
           BASE="https://koc-tool.vercel.app/api/tiktok-shop/analytics"
-          URL="${BASE}?action=fill_koc_views&limit=40"
-          echo "Fill views: $URL"
-          RESPONSE=$(curl -sS --max-time 80 "$URL" || echo '{"note":"fill views timed out — non-fatal"}')
-          echo "Response: ${RESPONSE:0:400}"
+          # Lặp 5 mẻ/lần (xoay shop) → ~250 video/run, dọn backlog nhanh hơn. Best-effort, không fail.
+          for n in 1 2 3 4 5; do
+            R=$(curl -sS --max-time 75 "${BASE}?action=fill_koc_views&limit=50" || echo '{"note":"timeout"}')
+            echo "Fill #$n: ${R:0:200}"
+            sleep 2
+          done
           echo "Fill views step done (non-fatal)."
