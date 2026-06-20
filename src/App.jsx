@@ -4,7 +4,7 @@ import { useState, useEffect, Component, lazy, Suspense } from 'react';
 import { AppDataProvider } from './context/AppDataContext';
 import { supabase } from './supabaseClient';
 // Giữ EAGER: cần ngay khi vào trang / có named export dùng đồng bộ
-import LoginPage, { ROLE_VIEWS } from './components/LoginPage';
+import LoginPage, { ROLE_VIEWS, ACCOUNTS } from './components/LoginPage';
 import TikTokShopCallback from './components/TikTokShopCallback';
 import PublicLandingPage from './components/PublicLandingPage';
 import CompanySite from './components/CompanySite';
@@ -94,8 +94,13 @@ function App() {
   // ── AUTH STATE — ưu tiên localStorage (ghi nhớ), fallback sessionStorage ──
   const [user, setUser] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem(SESSION_KEY))
+      const saved = JSON.parse(localStorage.getItem(SESSION_KEY))
           || JSON.parse(sessionStorage.getItem(SESSION_KEY));
+      if (!saved) return null;
+      // Đồng bộ lại role/name từ ACCOUNTS theo username — role có thể đã được nâng cấp
+      // sau lần đăng nhập trước (vd: thêm quyền 'đề xuất gán' cho ecom). Không bắt đăng nhập lại.
+      const fresh = ACCOUNTS.find(a => a.username === saved.username);
+      return fresh ? { ...saved, role: fresh.role, name: fresh.name } : saved;
     } catch { return null; }
   });
 
