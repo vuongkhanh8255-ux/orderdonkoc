@@ -21,11 +21,14 @@ const fmtVnd = (n) => {
 const todayYmd = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const fmtDate = (s) => { if (!s) return '—'; const p = String(s).slice(0, 10).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : s; };
 
-// danh sách tháng từ START tới hiện tại
-function monthsRange() {
-  const out = []; const now = new Date();
-  let y = START.y, m = START.m;
-  while (y < now.getFullYear() || (y === now.getFullYear() && m <= now.getMonth() + 1)) {
+// danh sách tháng trong khoảng [fromYmd, toYmd]; mặc định START → hiện tại
+function monthsRange(fromYmd, toYmd) {
+  const out = [];
+  let y, m;
+  if (fromYmd) { const p = fromYmd.split('-').map(Number); y = p[0]; m = p[1]; } else { y = START.y; m = START.m; }
+  let ey, em;
+  if (toYmd) { const p = toYmd.split('-').map(Number); ey = p[0]; em = p[1]; } else { const now = new Date(); ey = now.getFullYear(); em = now.getMonth() + 1; }
+  while (y < ey || (y === ey && m <= em)) {
     out.push({ key: `${y}-${String(m).padStart(2, '0')}`, label: `T${m}`, full: `Tháng ${m}/${y}`, y, m });
     m++; if (m > 12) { m = 1; y++; }
   }
@@ -45,13 +48,16 @@ function BookingBudgetTab() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
   const [detail, setDetail] = useState(null); // { staff }
+  const [fStaff, setFStaff] = useState('');   // lọc nhân sự
+  const [fFrom, setFFrom] = useState(`${START.y}-${String(START.m).padStart(2, '0')}-01`); // lọc từ ngày
+  const [fTo, setFTo] = useState(todayYmd()); // lọc đến ngày
 
-  const months = useMemo(() => monthsRange(), []);
+  const months = useMemo(() => monthsRange(fFrom, fTo), [fFrom, fTo]);
 
   const load = useCallback(async () => {
     setLoading(true); setErr('');
-    const from = `${START.y}-${String(START.m).padStart(2, '0')}-01`;
-    const to = todayYmd();
+    const from = fFrom || `${START.y}-${String(START.m).padStart(2, '0')}-01`;
+    const to = fTo || todayYmd();
     const [a, b] = await Promise.all([
       supabase.rpc('booking_cast_by_month', { p_from: from, p_to: to }),
       supabase.rpc('booking_cast_unresolved', { p_from: from, p_to: to }),
@@ -59,8 +65,10 @@ function BookingBudgetTab() {
     if (a.error) setErr(a.error.message); else setRows(a.data || []);
     setUnresolved(b.error ? [] : (b.data || []));
     setLoading(false);
-  }, []);
+  }, [fFrom, fTo]);
   useEffect(() => { load(); }, [load]);
+
+  const staffOptions = useMemo(() => [...new Set(rows.map(r => (r.staff || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi')), [rows]);
 
   // pivot: nhân sự × tháng
   const pivot = useMemo(() => {
@@ -80,6 +88,13 @@ function BookingBudgetTab() {
     rows.forEach(r => { const c = Number(r.cast_net) || 0; t[r.air_month] = (t[r.air_month] || 0) + c; grand += c; });
     return { t, grand };
   }, [rows]);
+
+  const shownPivot = useMemo(() => (fStaff ? pivot.filter(p => p.staff === fStaff) : pivot), [pivot, fStaff]);
+  const shownMonthTotal = useMemo(() => {
+    const t = {}; let grand = 0;
+    shownPivot.forEach(p => { Object.entries(p.byMonth).forEach(([k, v]) => { t[k] = (t[k] || 0) + v; }); grand += p.total; });
+    return { t, grand };
+  }, [shownPivot]);
 
   const curMonthKey = months.length ? months[months.length - 1].key : '';
   const unresolvedTotal = useMemo(() => unresolved.reduce((a, r) => a + (Number(r.cast_net) || 0), 0), [unresolved]);
@@ -108,8 +123,16 @@ function BookingBudgetTab() {
         Cast THẬT từng nhân sự, lấy từ <b>file Thanh toán KOC</b> · quy về <b>tháng video lên sóng</b> (ngày air) · bất kể đã thanh toán hay chưa. Bấm 1 dòng để xem chi tiết từng video.
       </p>
 
-      {/* actions */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+      {/* actions + bộ lọc */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+        <select value={fStaff} onChange={e => setFStaff(e.target.value)} style={{ padding: '8px 12px', borderRadius: 9, border: '1.5px solid #e5e7eb', fontSize: '0.84rem', fontWeight: 600, background: '#fff', cursor: 'pointer' }}>
+          <option value="">👥 Tất cả nhân sự</option>
+          {staffOptions.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700 }}>Từ</span>
+        <input type="date" value={fFrom} onChange={e => setFFrom(e.target.value)} title="Từ ngày" style={{ padding: '7px 10px', borderRadius: 9, border: '1.5px solid #e5e7eb', fontSize: '0.82rem', fontFamily: 'inherit' }} />
+        <span style={{ color: '#cbd5e1' }}>→</span>
+        <input type="date" value={fTo} onChange={e => setFTo(e.target.value)} title="Đến ngày" style={{ padding: '7px 10px', borderRadius: 9, border: '1.5px solid #e5e7eb', fontSize: '0.82rem', fontFamily: 'inherit' }} />
         <button onClick={load} style={btn('#f97316', '#fff')}>{loading ? '⏳ Đang tải...' : '🔄 Tải lại'}</button>
         <button onClick={exportExcel} style={btn('#16a34a', '#fff')}>📊 Xuất Excel</button>
       </div>
@@ -131,7 +154,7 @@ function BookingBudgetTab() {
       {/* pivot nhân sự × tháng */}
       <div style={{ ...card, padding: 0, overflow: 'hidden', marginBottom: 20 }}>
         <div style={{ padding: '14px 18px', borderBottom: '1px solid #f1f5f9', fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>
-          👥 Cast thật theo nhân sự ({pivot.length}) — đơn vị: đồng
+          👥 Cast thật theo nhân sự ({shownPivot.length}) — đơn vị: đồng
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
@@ -145,8 +168,8 @@ function BookingBudgetTab() {
             </thead>
             <tbody>
               {loading && <tr><td colSpan={months.length + 3} style={{ ...td, textAlign: 'center', color: '#94a3b8', padding: 40 }}>⏳ Đang tải...</td></tr>}
-              {!loading && pivot.length === 0 && <tr><td colSpan={months.length + 3} style={{ ...td, textAlign: 'center', color: '#94a3b8', padding: 40 }}>Không có dữ liệu.</td></tr>}
-              {!loading && pivot.map((p, i) => (
+              {!loading && shownPivot.length === 0 && <tr><td colSpan={months.length + 3} style={{ ...td, textAlign: 'center', color: '#94a3b8', padding: 40 }}>Không có dữ liệu.</td></tr>}
+              {!loading && shownPivot.map((p, i) => (
                 <tr key={p.staff} onClick={() => setDetail({ staff: p.staff })} style={{ cursor: 'pointer' }}
                   onMouseEnter={e => e.currentTarget.style.background = '#fff7ed'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                   <td style={{ ...td, textAlign: 'left', color: '#94a3b8', fontWeight: 700 }}>{i + 1}</td>
@@ -159,12 +182,12 @@ function BookingBudgetTab() {
                 </tr>
               ))}
             </tbody>
-            {!loading && pivot.length > 0 && (
+            {!loading && shownPivot.length > 0 && (
               <tfoot>
                 <tr style={{ background: '#fef7f0', borderTop: '2px solid #fed7aa' }}>
                   <td style={{ ...td, textAlign: 'left', fontWeight: 800, color: '#92400e' }} colSpan={2}>TỔNG</td>
-                  {months.map(m => <td key={m.key} style={{ ...td, fontWeight: 800, color: '#92400e' }}>{fmt(monthTotal.t[m.key] || 0)}</td>)}
-                  <td style={{ ...td, fontWeight: 800, color: ACCENT }}>{fmt(monthTotal.grand)}</td>
+                  {months.map(m => <td key={m.key} style={{ ...td, fontWeight: 800, color: '#92400e' }}>{fmt(shownMonthTotal.t[m.key] || 0)}</td>)}
+                  <td style={{ ...td, fontWeight: 800, color: ACCENT }}>{fmt(shownMonthTotal.grand)}</td>
                 </tr>
               </tfoot>
             )}
