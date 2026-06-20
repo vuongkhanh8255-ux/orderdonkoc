@@ -53,6 +53,7 @@ function BookingBudgetTab() {
   const [fFrom, setFFrom] = useState(`${START.y}-${String(START.m).padStart(2, '0')}-01`); // lọc từ ngày
   const [fTo, setFTo] = useState(todayYmd()); // lọc đến ngày
   const [monthSel, setMonthSel] = useState(''); // '' = tất cả tháng, hoặc 'YYYY-MM'
+  const [savingAir, setSavingAir] = useState(''); // id đang lưu ngày air bổ sung
 
   const months = useMemo(() => monthsRange(fFrom, fTo), [fFrom, fTo]);
 
@@ -76,6 +77,16 @@ function BookingBudgetTab() {
   const allMonthChips = useMemo(() => monthsRange(FULL_FROM, todayYmd()), []); // dãy nút chọn tháng (cố định toàn kỳ)
   const pickAll = () => { setMonthSel(''); setFFrom(FULL_FROM); setFTo(todayYmd()); };
   const pickMonth = (m) => { setMonthSel(m.key); setFFrom(`${m.key}-01`); const last = new Date(m.y, m.m, 0).getDate(); setFTo(`${m.key}-${String(last).padStart(2, '0')}`); };
+
+  // Điền tay ngày video air cho đơn "cần đối chiếu" → lưu koc_payments.air_date_manual → reload (đơn vào ngân sách).
+  const saveAirDate = async (id, date) => {
+    if (!id || !date) return;
+    setSavingAir(id);
+    const { error } = await supabase.from('koc_payments').update({ air_date_manual: date }).eq('id', id);
+    setSavingAir('');
+    if (error) { setErr('Lỗi lưu ngày air: ' + error.message); return; }
+    load();
+  };
 
   // pivot: nhân sự × tháng
   const pivot = useMemo(() => {
@@ -206,7 +217,7 @@ function BookingBudgetTab() {
       <div style={{ ...card, padding: 0, overflow: 'hidden', border: '1px solid #fecaca' }}>
         <div style={{ padding: '14px 18px', borderBottom: '1px solid #fee2e2', background: '#fef2f2', fontWeight: 800, color: '#b91c1c', fontSize: '0.95rem' }}>
           ⚠️ Cần đối chiếu — {unresolved.length} đơn ({fmtVnd(unresolvedTotal)} đ) chưa suy ra được ngày video air
-          <div style={{ fontSize: '0.74rem', fontWeight: 500, color: '#9a3412', marginTop: 2 }}>Các đơn này CHƯA được tính vào bảng trên. Qua <b>Module 5: Quản lý link air</b> kiểm tra/sửa link air để đồng bộ video.</div>
+          <div style={{ fontSize: '0.74rem', fontWeight: 500, color: '#9a3412', marginTop: 2 }}>Các đơn này CHƯA được tính vào bảng trên. Nhân sự <b>tick ngày video lên sóng</b> ở cột <b>📅 Điền ngày air</b> bên phải → đơn tự được tính vào ngân sách đúng tháng. (Hoặc qua <b>Module 5: Quản lý link air</b> sửa link để đồng bộ video.)</div>
         </div>
         <div style={{ overflowX: 'auto', maxHeight: 360, overflowY: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 820 }}>
@@ -218,10 +229,11 @@ function BookingBudgetTab() {
                 <th style={th}>Cast</th>
                 <th style={{ ...th, textAlign: 'center' }}>Ngày TT</th>
                 <th style={{ ...th, textAlign: 'left' }}>Lý do</th>
+                <th style={{ ...th, textAlign: 'center', background: '#fff7ed', color: '#9a3412' }}>📅 Điền ngày air</th>
               </tr>
             </thead>
             <tbody>
-              {!loading && unresolved.length === 0 && <tr><td colSpan={6} style={{ ...td, textAlign: 'center', color: '#16a34a', padding: 30 }}>✅ Tất cả đơn đều đã rà được ngày air.</td></tr>}
+              {!loading && unresolved.length === 0 && <tr><td colSpan={7} style={{ ...td, textAlign: 'center', color: '#16a34a', padding: 30 }}>✅ Tất cả đơn đều đã rà được ngày air.</td></tr>}
               {unresolved.map((r, i) => (
                 <tr key={r.id || i}>
                   <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>{r.staff || '—'}</td>
@@ -234,6 +246,13 @@ function BookingBudgetTab() {
                   <td style={{ ...td, fontWeight: 700, color: '#dc2626' }}>{fmt(r.cast_net)}</td>
                   <td style={{ ...td, textAlign: 'center', color: '#64748b' }}>{fmtDate(r.pay_date)}</td>
                   <td style={{ ...td, textAlign: 'left' }}><span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '2px 8px' }}>{r.reason}</span></td>
+                  <td style={{ ...td, textAlign: 'center' }}>
+                    <input type="date" disabled={savingAir === r.id}
+                      onChange={e => saveAirDate(r.id, e.target.value)}
+                      title="Tick đúng ngày video lên sóng → tự tính vào ngân sách"
+                      style={{ padding: '5px 8px', borderRadius: 7, border: '1.5px solid #fdba74', fontSize: '0.78rem', fontFamily: 'inherit', cursor: savingAir === r.id ? 'wait' : 'pointer', background: savingAir === r.id ? '#f1f5f9' : '#fff' }} />
+                    {savingAir === r.id && <span style={{ marginLeft: 6, fontSize: '0.72rem', color: '#94a3b8' }}>⏳</span>}
+                  </td>
                 </tr>
               ))}
             </tbody>
