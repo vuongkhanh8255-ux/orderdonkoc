@@ -740,23 +740,54 @@ async function handleSyncAffVideos({ params, appKey, appSecret, supabase, res })
   return res.status(200).json({ ok: true, synced: results.length, results });
 }
 
-// TẠM (sẽ gỡ): verify TikTok API lấy view 1 video theo ID — trước khi xây luồng "lấp view theo link KOC".
-async function handleTestVidPerf({ params, appKey, appSecret, supabase, res }) {
-  const shop_id = String(params.shop_id || '');
-  const video_id = String(params.video_id || '');
+// LẤP VIEW THEO LINK KOC: với video KOC CÓ ĐƠN nhưng thiếu view tháng (sync-cào-GMV chưa tới),
+// gọi API by-id /shop_videos/{id}/performance lấy đúng view tháng đó (kể cả video cũ) → đổ vào
+// tiktok_video_monthly_views + metadata. Additive, KHÔNG đụng sync cũ. 1 shop/run, batch ?limit (mặc định 40).
+async function handleFillKocViews({ params, appKey, appSecret, supabase, res }) {
+  const { data: metas } = await supabase.from('tiktok_affiliate_sync_meta').select('shop_id, seller_name, viewfill_last_run_at').not('shop_id', 'is', null);
+  const real = (metas || []).filter(m => m.shop_id && !String(m.shop_id).startsWith('noc:'));
+  let shop_id = params.shop_id ? String(params.shop_id) : '';
+  if (!shop_id) { // xoay shop theo lần fill cũ nhất
+    const sorted = [...real].sort((a, b) => (a.viewfill_last_run_at ? new Date(a.viewfill_last_run_at).getTime() : 0) - (b.viewfill_last_run_at ? new Date(b.viewfill_last_run_at).getTime() : 0));
+    shop_id = sorted[0]?.shop_id || '';
+  }
+  if (!shop_id) return res.status(200).json({ ok: false, error: 'no shop' });
+  const limit = Math.min(Math.max(Number(params.limit) || 40, 1), 80);
   const { data: aconns } = await supabase.from('tiktok_analytics_connections').select('access_token, refresh_token, shop_cipher, shop_id').not('access_token', 'is', null);
-  const aconn = (aconns || []).find(c => String(c.shop_id) === shop_id);
-  if (!aconn) return res.status(200).json({ ok: false, error: 'no analytics conn for shop' });
-  const sd = params.from || monthWindow(String(params.ym || '2026-05')).sd;
-  const ed = params.to   || monthWindow(String(params.ym || '2026-05')).ed;
-  const gran = params.gran || '';
-  const path = `/analytics/${VIDEO_PERF_VERSION}/shop_videos/${video_id}/performance`;
-  const u = { app_key: appKey, timestamp: String(Math.floor(Date.now() / 1000)), start_date_ge: sd, end_date_lt: ed, currency: 'LOCAL' };
-  if (gran) u.granularity = gran;
-  if (aconn.shop_cipher) u.shop_cipher = aconn.shop_cipher;
-  u.sign = buildSign(appSecret, path, u);
-  const raw = await ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(u)}`, { method: 'GET', headers: { 'x-tts-access-token': aconn.access_token, 'content-type': 'application/json' } }, 12000);
-  return res.status(200).json({ ok: true, video_id, sd, ed, gran, raw: String(raw).slice(0, 3000) });
+  const aconn = (aconns || []).find(c => String(c.shop_id) === String(shop_id));
+  if (!aconn) return res.status(200).json({ ok: false, error: 'no analytics conn for shop ' + shop_id });
+  const { data: work } = await supabase.rpc('koc_views_to_fill', { p_shop_id: shop_id, p_limit: limit });
+  const callVid = async (vid, sd, ed) => {
+    const path = `/analytics/${VIDEO_PERF_VERSION}/shop_videos/${vid}/performance`;
+    const u = { app_key: appKey, timestamp: String(Math.floor(Date.now() / 1000)), start_date_ge: sd, end_date_lt: ed, currency: 'LOCAL' };
+    if (aconn.shop_cipher) u.shop_cipher = aconn.shop_cipher;
+    u.sign = buildSign(appSecret, path, u);
+    return ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(u)}`, { method: 'GET', headers: { 'x-tts-access-token': aconn.access_token, 'content-type': 'application/json' } }, 12000);
+  };
+  let filled = 0, zero = 0, errs = 0;
+  const mvRows = [], metaRows = [];
+  for (const w of (work || [])) {
+    const { sd, ed } = monthWindow(w.ym);
+    let raw = await callVid(w.video_id, sd, ed);
+    let j; try { j = JSON.parse(raw); } catch { errs++; continue; }
+    if (j?.code === 105002 && await refreshAnalyticsToken({ appKey, appSecret, conn: aconn, supabase, table: 'tiktok_analytics_connections' })) {
+      raw = await callVid(w.video_id, sd, ed); try { j = JSON.parse(raw); } catch { errs++; continue; }
+    }
+    if (j?.code !== 0) { // video xóa/không lấy được → ghi 0 để khỏi lặp mãi
+      mvRows.push({ id: String(w.video_id), ym: w.ym, shop_id: String(shop_id), views: 0, updated_at: new Date().toISOString() });
+      zero++; continue;
+    }
+    const perf = j.data?.performance || {};
+    const views = (perf.intervals || []).reduce((a, x) => a + (Number(x.views) || 0), 0);
+    mvRows.push({ id: String(w.video_id), ym: w.ym, shop_id: String(shop_id), views, updated_at: new Date().toISOString() });
+    const pt = perf.video_post_time || '';
+    metaRows.push({ id: String(w.video_id), shop_id: String(shop_id), username: w.username || '', video_post_time: pt, post_date: pt ? pt.slice(0, 10) : null, synced_at: new Date().toISOString() });
+    filled++;
+  }
+  for (let i = 0; i < mvRows.length; i += 200) await supabase.from('tiktok_video_monthly_views').upsert(mvRows.slice(i, i + 200), { onConflict: 'id,ym' });
+  for (let i = 0; i < metaRows.length; i += 200) await supabase.from('tiktok_shop_videos').upsert(metaRows.slice(i, i + 200), { onConflict: 'id' });
+  await supabase.from('tiktok_affiliate_sync_meta').update({ viewfill_last_run_at: new Date().toISOString() }).eq('shop_id', shop_id);
+  return res.status(200).json({ ok: true, shop_id, work: (work || []).length, filled, zero, errs });
 }
 
 // Read + aggregate per-KOC sales from the synced table.
@@ -1157,8 +1188,8 @@ export default async function handler(req, res) {
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 
-  if (action === 'test_vid_perf') {
-    try { return await handleTestVidPerf({ params, appKey, appSecret, supabase, res }); }
+  if (action === 'fill_koc_views') {
+    try { return await handleFillKocViews({ params, appKey, appSecret, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 
