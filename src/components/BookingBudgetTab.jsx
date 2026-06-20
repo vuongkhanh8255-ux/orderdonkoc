@@ -41,6 +41,7 @@ const card = { background: '#fff', borderRadius: 16, boxShadow: '0 1px 3px rgba(
 const th = { padding: '11px 12px', textAlign: 'right', fontSize: '0.7rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.03em', borderBottom: '2px solid #e2e8f0', whiteSpace: 'nowrap', background: '#f8fafc' };
 const td = { padding: '11px 12px', borderBottom: '1px solid #f1f5f9', fontSize: '0.86rem', color: '#334155', whiteSpace: 'nowrap', textAlign: 'right' };
 const btn = (bg, color) => ({ padding: '8px 14px', borderRadius: 9, border: 'none', background: bg, color, fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer' });
+const chip = (active) => ({ padding: '6px 12px', borderRadius: 7, border: 'none', background: active ? ACCENT : 'transparent', color: active ? '#fff' : '#64748b', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' });
 
 function BookingBudgetTab() {
   const [rows, setRows] = useState([]);
@@ -51,6 +52,7 @@ function BookingBudgetTab() {
   const [fStaff, setFStaff] = useState('');   // lọc nhân sự
   const [fFrom, setFFrom] = useState(`${START.y}-${String(START.m).padStart(2, '0')}-01`); // lọc từ ngày
   const [fTo, setFTo] = useState(todayYmd()); // lọc đến ngày
+  const [monthSel, setMonthSel] = useState(''); // '' = tất cả tháng, hoặc 'YYYY-MM'
 
   const months = useMemo(() => monthsRange(fFrom, fTo), [fFrom, fTo]);
 
@@ -69,6 +71,11 @@ function BookingBudgetTab() {
   useEffect(() => { load(); }, [load]);
 
   const staffOptions = useMemo(() => [...new Set(rows.map(r => (r.staff || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi')), [rows]);
+
+  const FULL_FROM = `${START.y}-${String(START.m).padStart(2, '0')}-01`;
+  const allMonthChips = useMemo(() => monthsRange(FULL_FROM, todayYmd()), []); // dãy nút chọn tháng (cố định toàn kỳ)
+  const pickAll = () => { setMonthSel(''); setFFrom(FULL_FROM); setFTo(todayYmd()); };
+  const pickMonth = (m) => { setMonthSel(m.key); setFFrom(`${m.key}-01`); const last = new Date(m.y, m.m, 0).getDate(); setFTo(`${m.key}-${String(last).padStart(2, '0')}`); };
 
   // pivot: nhân sự × tháng
   const pivot = useMemo(() => {
@@ -123,18 +130,18 @@ function BookingBudgetTab() {
         Cast THẬT từng nhân sự, lấy từ <b>file Thanh toán KOC</b> · quy về <b>tháng video lên sóng</b> (ngày air) · bất kể đã thanh toán hay chưa. Bấm 1 dòng để xem chi tiết từng video.
       </p>
 
-      {/* actions + bộ lọc */}
+      {/* bộ lọc gọn: nhân sự + dãy nút tháng */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <select value={fStaff} onChange={e => setFStaff(e.target.value)} style={{ padding: '8px 12px', borderRadius: 9, border: '1.5px solid #e5e7eb', fontSize: '0.84rem', fontWeight: 600, background: '#fff', cursor: 'pointer' }}>
           <option value="">👥 Tất cả nhân sự</option>
           {staffOptions.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
-        <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700 }}>Từ</span>
-        <input type="date" value={fFrom} onChange={e => setFFrom(e.target.value)} title="Từ ngày" style={{ padding: '7px 10px', borderRadius: 9, border: '1.5px solid #e5e7eb', fontSize: '0.82rem', fontFamily: 'inherit' }} />
-        <span style={{ color: '#cbd5e1' }}>→</span>
-        <input type="date" value={fTo} onChange={e => setFTo(e.target.value)} title="Đến ngày" style={{ padding: '7px 10px', borderRadius: 9, border: '1.5px solid #e5e7eb', fontSize: '0.82rem', fontFamily: 'inherit' }} />
-        <button onClick={load} style={btn('#f97316', '#fff')}>{loading ? '⏳ Đang tải...' : '🔄 Tải lại'}</button>
-        <button onClick={exportExcel} style={btn('#16a34a', '#fff')}>📊 Xuất Excel</button>
+        <div style={{ display: 'flex', gap: 4, background: '#f1f5f9', borderRadius: 10, padding: 4, flexWrap: 'wrap' }}>
+          <button onClick={pickAll} style={chip(monthSel === '')}>Tất cả</button>
+          {allMonthChips.map(m => <button key={m.key} onClick={() => pickMonth(m)} title={m.full} style={chip(monthSel === m.key)}>{m.label}</button>)}
+        </div>
+        <button onClick={load} title="Tải lại" style={{ ...btn('#fff', ACCENT), border: `1px solid ${ACCENT}55`, marginLeft: 'auto' }}>{loading ? '⏳' : '🔄'}</button>
+        <button onClick={exportExcel} title="Xuất Excel" style={btn('#16a34a', '#fff')}>📊 Xuất</button>
       </div>
 
       {err && <div style={{ ...card, background: '#fef2f2', borderColor: '#fecaca', color: '#dc2626', padding: '12px 16px', marginBottom: 16 }}>❌ {err}</div>}
