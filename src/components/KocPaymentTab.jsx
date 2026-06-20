@@ -192,7 +192,11 @@ const KocPaymentTab = () => {
   };
 
   const del = async (r) => {
-    if (!window.confirm(`Xoá bản ghi thanh toán của "${r.full_name || r.beneficiary || r.channel_link || ''}"?`)) return;
+    // Xoá là thao tác không lấy lại được → luôn yêu cầu mật khẩu (nhập đúng = xác nhận xoá).
+    const who = r.full_name || r.beneficiary || r.channel_link || '';
+    const p = window.prompt(`🔒 Nhập mật khẩu để XOÁ bản ghi thanh toán của "${who}":`);
+    if (p === null) return;                                   // bấm Huỷ
+    if (p !== ACTION_PW) { alert('❌ Sai mật khẩu! Không xoá.'); return; }
     const { error } = await supabase.from('koc_payments').delete().eq('id', r.id);
     if (error) { alert('Lỗi khi xoá: ' + error.message); return; }
     setRows(prev => prev.filter(x => x.id !== r.id));
