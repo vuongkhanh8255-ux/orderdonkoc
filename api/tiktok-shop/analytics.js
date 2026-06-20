@@ -744,31 +744,19 @@ async function handleSyncAffVideos({ params, appKey, appSecret, supabase, res })
 async function handleTestVidPerf({ params, appKey, appSecret, supabase, res }) {
   const shop_id = String(params.shop_id || '');
   const video_id = String(params.video_id || '');
-  const ym = String(params.ym || '2026-05');
   const { data: aconns } = await supabase.from('tiktok_analytics_connections').select('access_token, refresh_token, shop_cipher, shop_id').not('access_token', 'is', null);
   const aconn = (aconns || []).find(c => String(c.shop_id) === shop_id);
   if (!aconn) return res.status(200).json({ ok: false, error: 'no analytics conn for shop' });
-  const { sd, ed } = monthWindow(ym);
-  const tries = [];
-  // (1) single-video endpoint
-  {
-    const path = `/analytics/${VIDEO_PERF_VERSION}/shop_videos/${video_id}/performance`;
-    const u = { app_key: appKey, timestamp: String(Math.floor(Date.now() / 1000)), start_date_ge: sd, end_date_lt: ed, currency: 'LOCAL' };
-    if (aconn.shop_cipher) u.shop_cipher = aconn.shop_cipher;
-    u.sign = buildSign(appSecret, path, u);
-    const raw = await ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(u)}`, { method: 'GET', headers: { 'x-tts-access-token': aconn.access_token, 'content-type': 'application/json' } }, 12000);
-    tries.push({ mode: 'single', path, raw: String(raw).slice(0, 1200) });
-  }
-  // (2) list endpoint + video_ids filter
-  {
-    const path = `/analytics/${VIDEO_PERF_VERSION}/shop_videos/performance`;
-    const u = { app_key: appKey, timestamp: String(Math.floor(Date.now() / 1000)), start_date_ge: sd, end_date_lt: ed, sort_field: 'gmv', sort_order: 'DESC', page_size: '50', currency: 'LOCAL', video_ids: video_id };
-    if (aconn.shop_cipher) u.shop_cipher = aconn.shop_cipher;
-    u.sign = buildSign(appSecret, path, u);
-    const raw = await ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(u)}`, { method: 'GET', headers: { 'x-tts-access-token': aconn.access_token, 'content-type': 'application/json' } }, 12000);
-    tries.push({ mode: 'list+video_ids', path, raw: String(raw).slice(0, 1200) });
-  }
-  return res.status(200).json({ ok: true, video_id, ym, sd, ed, tries });
+  const sd = params.from || monthWindow(String(params.ym || '2026-05')).sd;
+  const ed = params.to   || monthWindow(String(params.ym || '2026-05')).ed;
+  const gran = params.gran || '';
+  const path = `/analytics/${VIDEO_PERF_VERSION}/shop_videos/${video_id}/performance`;
+  const u = { app_key: appKey, timestamp: String(Math.floor(Date.now() / 1000)), start_date_ge: sd, end_date_lt: ed, currency: 'LOCAL' };
+  if (gran) u.granularity = gran;
+  if (aconn.shop_cipher) u.shop_cipher = aconn.shop_cipher;
+  u.sign = buildSign(appSecret, path, u);
+  const raw = await ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(u)}`, { method: 'GET', headers: { 'x-tts-access-token': aconn.access_token, 'content-type': 'application/json' } }, 12000);
+  return res.status(200).json({ ok: true, video_id, sd, ed, gran, raw: String(raw).slice(0, 3000) });
 }
 
 // Read + aggregate per-KOC sales from the synced table.
