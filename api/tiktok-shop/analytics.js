@@ -787,6 +787,9 @@ async function handleKocOrders({ params, supabase, res }) {
   const { data: viewTotal } = await supabase.rpc('koc_video_views_total', { p_shop_id: shopId, p_start: start, p_end: end });
   const { data: castRows } = await supabase.rpc('koc_cast_by_creator', { p_shop_id: shopId, p_start: castAll ? null : start, p_end: castAll ? null : end });
   const { data: sampleRows } = await supabase.rpc('koc_sample_cost', { p_start: castAll ? null : start, p_end: castAll ? null : end }); // chi phí mẫu THEO KỲ (ngay_gui); "Tất cả" → null = hết — vào ROAS
+  // TỔNG vtotal/vperiod/cast/sample lấy từ 1 hàm SCALAR (1 round-trip) — tránh PostgREST cắt creators >1000 dòng
+  // (shop lớn như EHERB 8159 creator → mảng creators chỉ còn 1000 → tổng thiếu ~31-49%). Giống cách đã làm cho TỔNG VIEW.
+  const { data: extraTot } = await supabase.rpc('koc_perf_extra_totals', { p_shop_id: shopId, p_start: start, p_end: end, p_cast_start: castAll ? null : start, p_cast_end: castAll ? null : end });
 
   // Tổng view video mỗi KOC (khớp username bỏ '@' + lowercase) theo khoảng đang chọn
   const normU = (u) => (u || '').toLowerCase().replace(/^@/, '');
@@ -817,11 +820,12 @@ async function handleKocOrders({ params, supabase, res }) {
   }));
   const t = (totRows || [])[0] || {};
   const totalViews = Number(viewTotal) || 0; // tổng đầy đủ (không bị cắt dòng); per-KOC viewRows chỉ để điền cột
-  const totalCast = (castRows || []).reduce((a, r) => a + (Number(r.cast_total) || 0), 0);
-  // Tổng clip = cộng theo KOC affiliate đang hiển thị (đồng bộ với bảng), không gộp creator ngoài cohort
-  const totalVtotal = creators.reduce((a, c) => a + (c.vtotal || 0), 0);
-  const totalVperiod = creators.reduce((a, c) => a + (c.vperiod || 0), 0);
-  const totalSample = creators.reduce((a, c) => a + (c.sample_cost || 0), 0);
+  // Tổng từ hàm SCALAR (full, không bị cắt 1000 dòng). Trước đây cộng từ mảng creators bị cắt → thiếu ~31-49% ở shop lớn.
+  const ex = (extraTot || [])[0] || {};
+  const totalCast = Number(ex.cast_total) || 0;
+  const totalVtotal = Number(ex.vtotal) || 0;
+  const totalVperiod = Number(ex.vperiod) || 0;
+  const totalSample = Number(ex.sample_total) || 0;
   const totals = { gmv: Number(t.gmv) || 0, orders: Number(t.orders) || 0, commission: Number(t.commission) || 0, qty: Number(t.qty) || 0, views: totalViews, cast: totalCast, sample_cost: totalSample, vtotal: totalVtotal, vperiod: totalVperiod };
   const totalCreators = Number(t.creators) || creators.length;
 
