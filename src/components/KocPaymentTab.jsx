@@ -48,6 +48,7 @@ const KocPaymentTab = () => {
   const [ym, setYm] = useState(curYm());
   const [fCompany, setFCompany] = useState('');
   const [fBrand, setFBrand] = useState('');
+  const [fStaff, setFStaff] = useState('');         // lọc theo nhân sự booking
   const [fApproved, setFApproved] = useState('');   // '', 'yes', 'no'
   const [fPaid, setFPaid] = useState('');           // '', 'yes', 'no' — lọc theo "đã thanh toán"
   const [fFrom, setFFrom] = useState('');           // lọc ngày TỪ (trong khoảng tháng đã chọn)
@@ -229,21 +230,23 @@ const KocPaymentTab = () => {
     if (error) { alert('Lỗi cập nhật hàng loạt: ' + error.message); load(); }
   };
 
+  const staffOptions = useMemo(() => [...new Set(rows.map(r => (r.staff || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi')), [rows]);
   const filtered = useMemo(() => {
     const kw = q.trim().toLowerCase();
     return rows.filter(r => {
       const d = (r.pay_date || '').slice(0, 10);
       return (!fCompany || r.company === fCompany) &&
         (!fBrand || r.brand === fBrand) &&
+        (!fStaff || (r.staff || '').trim() === fStaff) &&
         (!fApproved || (fApproved === 'yes' ? r.accountant_approved : !r.accountant_approved)) &&
         (!fPaid || (fPaid === 'yes' ? r.paid : !r.paid)) &&
         (!fFrom || d >= fFrom) && (!fTo || d <= fTo) &&
         (!kw || [r.full_name, r.beneficiary, r.channel_link, r.bank_account, r.staff].some(v => (v || '').toLowerCase().includes(kw)));
     });
-  }, [rows, fCompany, fBrand, fApproved, fPaid, fFrom, fTo, q]);
+  }, [rows, fCompany, fBrand, fStaff, fApproved, fPaid, fFrom, fTo, q]);
 
   // Đổi bộ lọc thì về trang 1
-  useEffect(() => { setPayPage(1); }, [ym, fCompany, fBrand, fApproved, fPaid, fFrom, fTo, q]);
+  useEffect(() => { setPayPage(1); }, [ym, fCompany, fBrand, fStaff, fApproved, fPaid, fFrom, fTo, q]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAY_PAGE_SIZE));
   const safePage = Math.min(payPage, totalPages);
   const pageRows = useMemo(() => filtered.slice((safePage - 1) * PAY_PAGE_SIZE, safePage * PAY_PAGE_SIZE), [filtered, safePage]);
@@ -347,6 +350,7 @@ const KocPaymentTab = () => {
         {(fFrom || fTo) && <button onClick={() => { setFFrom(''); setFTo(''); }} title="Bỏ lọc ngày" style={{ padding: '6px 10px', background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: '0.78rem' }}>✕ ngày</button>}
         <select value={fCompany} onChange={e => setFCompany(e.target.value)} style={{ ...inputStyle, width: 'auto' }}><option value="">Tất cả công ty</option>{COMPANIES.map(c => <option key={c}>{c}</option>)}</select>
         <select value={fBrand} onChange={e => setFBrand(e.target.value)} style={{ ...inputStyle, width: 'auto' }}><option value="">Tất cả brand</option>{BRANDS.map(b => <option key={b}>{b}</option>)}</select>
+        <select value={fStaff} onChange={e => setFStaff(e.target.value)} style={{ ...inputStyle, width: 'auto' }}><option value="">Tất cả nhân sự</option>{staffOptions.map(s => <option key={s} value={s}>{s}</option>)}</select>
         <select value={fApproved} onChange={e => setFApproved(e.target.value)} style={{ ...inputStyle, width: 'auto' }}><option value="">Tất cả duyệt</option><option value="no">Chưa duyệt</option><option value="yes">Đã duyệt</option></select>
         <select value={fPaid} onChange={e => setFPaid(e.target.value)} style={{ ...inputStyle, width: 'auto' }}><option value="">Tất cả TT</option><option value="no">Chưa TT</option><option value="yes">Đã TT</option></select>
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 Tìm tên / kênh / STK…" style={{ ...inputStyle, width: 220 }} />
