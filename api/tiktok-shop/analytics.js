@@ -829,7 +829,7 @@ async function handleKocOrders({ params, supabase, res }) {
   const totalVperiod = Number(ex.vperiod) || 0;
   const totalSample = Number(ex.sample_total) || 0;
   const gbc = (gmvByContent || [])[0] || {};
-  const totals = { gmv: Number(t.gmv) || 0, orders: Number(t.orders) || 0, commission: Number(t.commission) || 0, qty: Number(t.qty) || 0, views: totalViews, cast: totalCast, sample_cost: totalSample, vtotal: totalVtotal, vperiod: totalVperiod,
+  const totals = { gmv: Number(t.gmv) || 0, orders: Number(t.orders) || 0, commission: Number(t.commission) || 0, commission_actual: Number(t.commission_actual) || 0, qty: Number(t.qty) || 0, views: totalViews, cast: totalCast, sample_cost: totalSample, vtotal: totalVtotal, vperiod: totalVperiod,
     gmv_video: Number(gbc.gmv_video) || 0, gmv_live: Number(gbc.gmv_live) || 0, gmv_linkshare: Number(gbc.gmv_linkshare) || 0, gmv_shop: Number(gbc.gmv_shop) || 0 };
   const totalCreators = Number(t.creators) || creators.length;
 
