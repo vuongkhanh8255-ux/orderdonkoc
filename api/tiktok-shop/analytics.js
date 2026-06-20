@@ -790,6 +790,8 @@ async function handleKocOrders({ params, supabase, res }) {
   // TỔNG vtotal/vperiod/cast/sample lấy từ 1 hàm SCALAR (1 round-trip) — tránh PostgREST cắt creators >1000 dòng
   // (shop lớn như EHERB 8159 creator → mảng creators chỉ còn 1000 → tổng thiếu ~31-49%). Giống cách đã làm cho TỔNG VIEW.
   const { data: extraTot } = await supabase.rpc('koc_perf_extra_totals', { p_shop_id: shopId, p_start: start, p_end: end, p_cast_start: castAll ? null : start, p_cast_end: castAll ? null : end });
+  // Bóc tách GMV theo loại nội dung: Video / Live / LinkShare / Shop (showcase liên kết).
+  const { data: gmvByContent } = await supabase.rpc('koc_gmv_by_content', { p_shop_id: shopId, p_start: start, p_end: end });
 
   // Tổng view video mỗi KOC (khớp username bỏ '@' + lowercase) theo khoảng đang chọn
   const normU = (u) => (u || '').toLowerCase().replace(/^@/, '');
@@ -826,7 +828,9 @@ async function handleKocOrders({ params, supabase, res }) {
   const totalVtotal = Number(ex.vtotal) || 0;
   const totalVperiod = Number(ex.vperiod) || 0;
   const totalSample = Number(ex.sample_total) || 0;
-  const totals = { gmv: Number(t.gmv) || 0, orders: Number(t.orders) || 0, commission: Number(t.commission) || 0, qty: Number(t.qty) || 0, views: totalViews, cast: totalCast, sample_cost: totalSample, vtotal: totalVtotal, vperiod: totalVperiod };
+  const gbc = (gmvByContent || [])[0] || {};
+  const totals = { gmv: Number(t.gmv) || 0, orders: Number(t.orders) || 0, commission: Number(t.commission) || 0, qty: Number(t.qty) || 0, views: totalViews, cast: totalCast, sample_cost: totalSample, vtotal: totalVtotal, vperiod: totalVperiod,
+    gmv_video: Number(gbc.gmv_video) || 0, gmv_live: Number(gbc.gmv_live) || 0, gmv_linkshare: Number(gbc.gmv_linkshare) || 0, gmv_shop: Number(gbc.gmv_shop) || 0 };
   const totalCreators = Number(t.creators) || creators.length;
 
   const payload = {

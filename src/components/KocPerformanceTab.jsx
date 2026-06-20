@@ -707,6 +707,10 @@ export default function KocPerformanceTab() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, marginBottom: 18 }}>
           {[
             { label: 'Tổng GMV', value: `${fmtVnd(totals.gmv)} đ`, icon: '💰' },
+            { label: 'GMV Video', value: `${fmtVnd(totals.gmv_video || 0)} đ`, icon: '🎬' },
+            { label: 'GMV Live', value: `${fmtVnd(totals.gmv_live || 0)} đ`, icon: '📺' },
+            { label: 'GMV LinkShare', value: `${fmtVnd(totals.gmv_linkshare || 0)} đ`, icon: '🔗' },
+            { label: 'GMV Shop', value: `${fmtVnd(totals.gmv_shop || 0)} đ`, icon: '🛍️' },
             { label: 'Tổng đơn', value: fmtNum(totals.orders), icon: '🛒' },
             { label: 'Tổng video', value: fmtNum(totals.vtotal || 0), icon: '🎬' },
             { label: 'Video kỳ này', value: fmtNum(totals.vperiod || 0), icon: '🎞️' },
