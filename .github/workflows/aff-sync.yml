@@ -57,3 +57,15 @@ jobs:
           RESPONSE=$(curl -sS --max-time 90 "$URL" || echo '{"note":"video sync timed out — non-fatal"}')
           echo "Response: ${RESPONSE:0:400}"
           echo "Video sync step done (non-fatal)."
+
+      # 3) LẤP VIEW theo link KOC — video CÓ ĐƠN nhưng thiếu view tháng → gọi API by-id lấy đúng
+      #    view (kể cả video cũ). Tự xoay 1 shop/lần (theo viewfill_last_run_at). Best-effort.
+      - name: Fill KOC video views (best-effort)
+        if: always()
+        run: |
+          BASE="https://koc-tool.vercel.app/api/tiktok-shop/analytics"
+          URL="${BASE}?action=fill_koc_views&limit=40"
+          echo "Fill views: $URL"
+          RESPONSE=$(curl -sS --max-time 80 "$URL" || echo '{"note":"fill views timed out — non-fatal"}')
+          echo "Response: ${RESPONSE:0:400}"
+          echo "Fill views step done (non-fatal)."
