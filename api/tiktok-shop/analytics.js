@@ -1149,9 +1149,8 @@ async function handlePrewarmKoc({ params, supabase, res }) {
   }
   if (!shopId) return res.status(200).json({ ok: false, error: 'no shop' });
   const max = Math.min(Math.max(Number(params.max) || 4, 1), 8);
-  // Lấy hết key gần đây rồi lọc prefix trong JS (tránh .like lỗi với ký tự '|'). Bảng cache nhỏ.
-  const { data: allRows } = await supabase.from('koc_orders_cache')
-    .select('cache_key, built_at').order('built_at', { ascending: false }).limit(800);
+  // Lấy hết key rồi lọc prefix trong JS (tránh .like lỗi với ký tự '|'). Bảng cache nhỏ.
+  const { data: allRows, error: scanErr } = await supabase.from('koc_orders_cache').select('cache_key').limit(1000);
   const rows = (allRows || []).filter(r => String(r.cache_key).startsWith(shopId + '|')).slice(0, max);
   let warmed = 0; const keys = [];
   for (const r of (rows || [])) {
@@ -1162,7 +1161,7 @@ async function handlePrewarmKoc({ params, supabase, res }) {
       warmed++; keys.push(r.cache_key);
     } catch (e) { /* bỏ qua key lỗi */ }
   }
-  return res.status(200).json({ ok: true, shop_id: shopId, seller, warmed, keys });
+  return res.status(200).json({ ok: true, shop_id: shopId, seller, warmed, keys, seen: (allRows || []).length, scan_err: scanErr?.message || null });
 }
 
 // ── Main handler ─────────────────────────────────────────────────────────────
