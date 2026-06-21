@@ -890,19 +890,21 @@ const BookingPerformanceTab = ({ currentUser = null }) => {
     const [loadProgress, setLoadProgress] = useState({ current: 0, total: 0 }); // Track DB fetch progress
     const [lastLoadedLabel, setLastLoadedLabel] = useState(''); // "Đã lưu X tiếng trước"
 
-    // Load chi phí cast thực tế của tháng đang xem
-    // Dùng cùng RPC với Air Links Report để đảm bảo số liệu khớp 100%
+    // Load chi phí cast THỰC của tháng đang xem.
+    // Nguồn = file Thanh toán KOC (koc_payments.cast_net), quy về tháng VIDEO AIR (ngày đăng video),
+    // KHÔNG dùng cast nhân sự điền tay vào air_links (cũ, ~98% bỏ trống). Dùng chung hàm với Module 7.
     useEffect(() => {
         if (!month || !year) return;
-        supabase.rpc('generate_air_links_report', {
-            target_month: parseInt(month),
-            target_year:  parseInt(year),
-        }).then(({ data, error }) => {
+        const m = parseInt(month), y = parseInt(year);
+        const lastDay = new Date(y, m, 0).getDate();
+        const p_from = `${y}-${String(m).padStart(2, '0')}-01`;
+        const p_to   = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+        supabase.rpc('booking_cast_by_month', { p_from, p_to }).then(({ data, error }) => {
             if (error) { console.error('Lỗi load cast thực tế:', error); return; }
             const map = {};
             if (data) {
                 data.forEach(row => {
-                    if (row.ten_nhansu) map[row.ten_nhansu] = parseFloat(row.chi_phi_cast) || 0;
+                    if (row.staff) map[row.staff] = (map[row.staff] || 0) + (parseFloat(row.cast_net) || 0);
                 });
             }
             setActualCastByNhanSu(map);
@@ -2208,6 +2210,7 @@ ${txtFormat}
                                 <div>
                                     <div style={{ fontWeight: 800, fontSize: '1rem' }}>💰 Định Mức Booking Cast theo Nhân Sự</div>
                                     <div style={{ fontSize: '0.78rem', opacity: 0.85, marginTop: 2 }}>Công thức: max(15.000.000₫, GMV × 2.2%) + Phần dư tháng trước (nếu xài không hết)</div>
+                                    <div style={{ fontSize: '0.72rem', opacity: 0.8, marginTop: 2 }}>💸 "Đã chi" = cast THẬT từ file Thanh toán KOC, tính theo tháng video lên sóng (ngày air) · xem chi tiết ở Module 7</div>
                                     {savedBudgetInfo && (
                                         <div style={{ fontSize: '0.72rem', opacity: 0.75, marginTop: 3 }}>
                                             💾 Đã lưu từ tháng {savedBudgetInfo.month}/{savedBudgetInfo.year} · {new Date(savedBudgetInfo.savedAt).toLocaleString('vi-VN')}

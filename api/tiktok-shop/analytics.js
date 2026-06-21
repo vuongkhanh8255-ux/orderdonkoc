@@ -740,6 +740,56 @@ async function handleSyncAffVideos({ params, appKey, appSecret, supabase, res })
   return res.status(200).json({ ok: true, synced: results.length, results });
 }
 
+// LẤP VIEW THEO LINK KOC: với video KOC CÓ ĐƠN nhưng thiếu view tháng (sync-cào-GMV chưa tới),
+// gọi API by-id /shop_videos/{id}/performance lấy đúng view tháng đó (kể cả video cũ) → đổ vào
+// tiktok_video_monthly_views + metadata. Additive, KHÔNG đụng sync cũ. 1 shop/run, batch ?limit (mặc định 40).
+async function handleFillKocViews({ params, appKey, appSecret, supabase, res }) {
+  const { data: metas } = await supabase.from('tiktok_affiliate_sync_meta').select('shop_id, seller_name, viewfill_last_run_at').not('shop_id', 'is', null);
+  const real = (metas || []).filter(m => m.shop_id && !String(m.shop_id).startsWith('noc:'));
+  let shop_id = params.shop_id ? String(params.shop_id) : '';
+  if (!shop_id) { // xoay shop theo lần fill cũ nhất
+    const sorted = [...real].sort((a, b) => (a.viewfill_last_run_at ? new Date(a.viewfill_last_run_at).getTime() : 0) - (b.viewfill_last_run_at ? new Date(b.viewfill_last_run_at).getTime() : 0));
+    shop_id = sorted[0]?.shop_id || '';
+  }
+  if (!shop_id) return res.status(200).json({ ok: false, error: 'no shop' });
+  const limit = Math.min(Math.max(Number(params.limit) || 40, 1), 80);
+  const { data: aconns } = await supabase.from('tiktok_analytics_connections').select('access_token, refresh_token, shop_cipher, shop_id').not('access_token', 'is', null);
+  const aconn = (aconns || []).find(c => String(c.shop_id) === String(shop_id));
+  if (!aconn) return res.status(200).json({ ok: false, error: 'no analytics conn for shop ' + shop_id });
+  const { data: work } = await supabase.rpc('koc_views_to_fill', { p_shop_id: shop_id, p_limit: limit });
+  const callVid = async (vid, sd, ed) => {
+    const path = `/analytics/${VIDEO_PERF_VERSION}/shop_videos/${vid}/performance`;
+    const u = { app_key: appKey, timestamp: String(Math.floor(Date.now() / 1000)), start_date_ge: sd, end_date_lt: ed, currency: 'LOCAL' };
+    if (aconn.shop_cipher) u.shop_cipher = aconn.shop_cipher;
+    u.sign = buildSign(appSecret, path, u);
+    return ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(u)}`, { method: 'GET', headers: { 'x-tts-access-token': aconn.access_token, 'content-type': 'application/json' } }, 12000);
+  };
+  let filled = 0, zero = 0, errs = 0;
+  const mvRows = [], metaRows = [];
+  for (const w of (work || [])) {
+    const { sd, ed } = monthWindow(w.ym);
+    let raw = await callVid(w.video_id, sd, ed);
+    let j; try { j = JSON.parse(raw); } catch { errs++; continue; }
+    if (j?.code === 105002 && await refreshAnalyticsToken({ appKey, appSecret, conn: aconn, supabase, table: 'tiktok_analytics_connections' })) {
+      raw = await callVid(w.video_id, sd, ed); try { j = JSON.parse(raw); } catch { errs++; continue; }
+    }
+    if (j?.code !== 0) { // video xóa/không lấy được → ghi 0 để khỏi lặp mãi
+      mvRows.push({ id: String(w.video_id), ym: w.ym, shop_id: String(shop_id), views: 0, updated_at: new Date().toISOString() });
+      zero++; continue;
+    }
+    const perf = j.data?.performance || {};
+    const views = (perf.intervals || []).reduce((a, x) => a + (Number(x.views) || 0), 0);
+    mvRows.push({ id: String(w.video_id), ym: w.ym, shop_id: String(shop_id), views, updated_at: new Date().toISOString() });
+    const pt = perf.video_post_time || '';
+    metaRows.push({ id: String(w.video_id), shop_id: String(shop_id), username: w.username || '', video_post_time: pt, post_date: pt ? pt.slice(0, 10) : null, synced_at: new Date().toISOString() });
+    filled++;
+  }
+  for (let i = 0; i < mvRows.length; i += 200) await supabase.from('tiktok_video_monthly_views').upsert(mvRows.slice(i, i + 200), { onConflict: 'id,ym' });
+  for (let i = 0; i < metaRows.length; i += 200) await supabase.from('tiktok_shop_videos').upsert(metaRows.slice(i, i + 200), { onConflict: 'id' });
+  await supabase.from('tiktok_affiliate_sync_meta').update({ viewfill_last_run_at: new Date().toISOString() }).eq('shop_id', shop_id);
+  return res.status(200).json({ ok: true, shop_id, work: (work || []).length, filled, zero, errs });
+}
+
 // Read + aggregate per-KOC sales from the synced table.
 async function handleKocOrders({ params, supabase, res }) {
   // Chống CDN/proxy cache nhầm dữ liệu động (nhân viên thấy số cũ). App tự cache qua koc_orders_cache.
@@ -787,6 +837,11 @@ async function handleKocOrders({ params, supabase, res }) {
   const { data: viewTotal } = await supabase.rpc('koc_video_views_total', { p_shop_id: shopId, p_start: start, p_end: end });
   const { data: castRows } = await supabase.rpc('koc_cast_by_creator', { p_shop_id: shopId, p_start: castAll ? null : start, p_end: castAll ? null : end });
   const { data: sampleRows } = await supabase.rpc('koc_sample_cost', { p_start: castAll ? null : start, p_end: castAll ? null : end }); // chi phí mẫu THEO KỲ (ngay_gui); "Tất cả" → null = hết — vào ROAS
+  // TỔNG vtotal/vperiod/cast/sample lấy từ 1 hàm SCALAR (1 round-trip) — tránh PostgREST cắt creators >1000 dòng
+  // (shop lớn như EHERB 8159 creator → mảng creators chỉ còn 1000 → tổng thiếu ~31-49%). Giống cách đã làm cho TỔNG VIEW.
+  const { data: extraTot } = await supabase.rpc('koc_perf_extra_totals', { p_shop_id: shopId, p_start: start, p_end: end, p_cast_start: castAll ? null : start, p_cast_end: castAll ? null : end });
+  // Bóc tách GMV theo loại nội dung: Video / Live / LinkShare / Shop (showcase liên kết).
+  const { data: gmvByContent } = await supabase.rpc('koc_gmv_by_content', { p_shop_id: shopId, p_start: start, p_end: end });
 
   // Tổng view video mỗi KOC (khớp username bỏ '@' + lowercase) theo khoảng đang chọn
   const normU = (u) => (u || '').toLowerCase().replace(/^@/, '');
@@ -817,12 +872,15 @@ async function handleKocOrders({ params, supabase, res }) {
   }));
   const t = (totRows || [])[0] || {};
   const totalViews = Number(viewTotal) || 0; // tổng đầy đủ (không bị cắt dòng); per-KOC viewRows chỉ để điền cột
-  const totalCast = (castRows || []).reduce((a, r) => a + (Number(r.cast_total) || 0), 0);
-  // Tổng clip = cộng theo KOC affiliate đang hiển thị (đồng bộ với bảng), không gộp creator ngoài cohort
-  const totalVtotal = creators.reduce((a, c) => a + (c.vtotal || 0), 0);
-  const totalVperiod = creators.reduce((a, c) => a + (c.vperiod || 0), 0);
-  const totalSample = creators.reduce((a, c) => a + (c.sample_cost || 0), 0);
-  const totals = { gmv: Number(t.gmv) || 0, orders: Number(t.orders) || 0, commission: Number(t.commission) || 0, qty: Number(t.qty) || 0, views: totalViews, cast: totalCast, sample_cost: totalSample, vtotal: totalVtotal, vperiod: totalVperiod };
+  // Tổng từ hàm SCALAR (full, không bị cắt 1000 dòng). Trước đây cộng từ mảng creators bị cắt → thiếu ~31-49% ở shop lớn.
+  const ex = (extraTot || [])[0] || {};
+  const totalCast = Number(ex.cast_total) || 0;
+  const totalVtotal = Number(ex.vtotal) || 0;
+  const totalVperiod = Number(ex.vperiod) || 0;
+  const totalSample = Number(ex.sample_total) || 0;
+  const gbc = (gmvByContent || [])[0] || {};
+  const totals = { gmv: Number(t.gmv) || 0, orders: Number(t.orders) || 0, commission: Number(t.commission) || 0, commission_actual: Number(t.commission_actual) || 0, qty: Number(t.qty) || 0, views: totalViews, cast: totalCast, sample_cost: totalSample, vtotal: totalVtotal, vperiod: totalVperiod,
+    gmv_video: Number(gbc.gmv_video) || 0, gmv_live: Number(gbc.gmv_live) || 0, gmv_linkshare: Number(gbc.gmv_linkshare) || 0, gmv_shop: Number(gbc.gmv_shop) || 0 };
   const totalCreators = Number(t.creators) || creators.length;
 
   const payload = {
@@ -1127,6 +1185,11 @@ export default async function handler(req, res) {
 
   if (action === 'sync_aff_videos') {
     try { return await handleSyncAffVideos({ params, appKey, appSecret, supabase, res }); }
+    catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
+  }
+
+  if (action === 'fill_koc_views') {
+    try { return await handleFillKocViews({ params, appKey, appSecret, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 

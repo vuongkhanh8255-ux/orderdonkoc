@@ -4,7 +4,7 @@ import { useState, useEffect, Component, lazy, Suspense } from 'react';
 import { AppDataProvider } from './context/AppDataContext';
 import { supabase } from './supabaseClient';
 // Giữ EAGER: cần ngay khi vào trang / có named export dùng đồng bộ
-import LoginPage, { ROLE_VIEWS } from './components/LoginPage';
+import LoginPage, { ROLE_VIEWS, ACCOUNTS } from './components/LoginPage';
 import TikTokShopCallback from './components/TikTokShopCallback';
 import PublicLandingPage from './components/PublicLandingPage';
 import CompanySite from './components/CompanySite';
@@ -22,6 +22,7 @@ const KocPerformanceTab = lazy(() => import('./components/KocPerformanceTab'));
 const KocBlacklistTab = lazy(() => import('./components/KocBlacklistTab'));
 const KocPaymentTab = lazy(() => import('./components/KocPaymentTab'));
 const BookingMaterialTab = lazy(() => import('./components/BookingMaterialTab'));
+const BookingBudgetTab = lazy(() => import('./components/BookingBudgetTab'));
 const DataArchiveTab = lazy(() => import('./components/DataArchiveTab'));
 const NhanhProductsTab = lazy(() => import('./components/NhanhProductsTab'));
 const GmvRealtimeTab = lazy(() => import('./components/GmvRealtimeTab'));
@@ -93,8 +94,13 @@ function App() {
   // ── AUTH STATE — ưu tiên localStorage (ghi nhớ), fallback sessionStorage ──
   const [user, setUser] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem(SESSION_KEY))
+      const saved = JSON.parse(localStorage.getItem(SESSION_KEY))
           || JSON.parse(sessionStorage.getItem(SESSION_KEY));
+      if (!saved) return null;
+      // Đồng bộ lại role/name từ ACCOUNTS theo username — role có thể đã được nâng cấp
+      // sau lần đăng nhập trước (vd: thêm quyền 'đề xuất gán' cho ecom). Không bắt đăng nhập lại.
+      const fresh = ACCOUNTS.find(a => a.username === saved.username);
+      return fresh ? { ...saved, role: fresh.role, name: fresh.name } : saved;
     } catch { return null; }
   });
 
@@ -305,6 +311,7 @@ function AppMain({ user, onLogout, allowedViews }) {
                 { view: 'koc_blacklist',       icon: '🚫', name: 'Module 4: Blacklist KOC' },
                 { view: 'airlinks',            icon: '🔗', name: 'Module 5: Quản lý link air' },
                 { view: 'booking_material',    icon: '🎁', name: 'Module 6: Material bán hàng' },
+                { view: 'booking_budget',      icon: '💰', name: 'Module 7: Ngân sách chi phí booking' },
               ]},
               { key: 'archive', label: '🗄️ Lưu trữ', emoji: '🗄️', items: [
                 { view: 'data_archive', icon: '🗄️', name: 'Lưu Trữ Data' },
@@ -423,6 +430,7 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'contract' && <ContractTab />}
           {currentView === 'airlinks' && <AirLinksTab />}
           {currentView === 'booking_material' && <BookingMaterialTab />}
+          {currentView === 'booking_budget' && <BookingBudgetTab />}
           {currentView === 'expense' && <ExpenseEcomTab />}
           {currentView === 'booking' && <BookingManagerTab />}
           {currentView === 'data_archive' && <DataArchiveTab />}
