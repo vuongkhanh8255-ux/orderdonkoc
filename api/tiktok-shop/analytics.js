@@ -1152,16 +1152,16 @@ async function handlePrewarmKoc({ params, supabase, res }) {
   // Lấy hết key rồi lọc prefix trong JS (tránh .like lỗi với ký tự '|'). Bảng cache nhỏ.
   const { data: allRows, error: scanErr } = await supabase.from('koc_orders_cache').select('cache_key').limit(1000);
   const rows = (allRows || []).filter(r => String(r.cache_key).startsWith(shopId + '|')).slice(0, max);
-  let warmed = 0; const keys = [];
+  let warmed = 0; const keys = []; let loopErr = null;
   for (const r of (rows || [])) {
     const p = r.cache_key.split('|'); // shopId|start|end|cX
     const noop = { status() { return this; }, json() { return this; } };
     try {
       await handleKocOrders({ params: { seller, shop_id: shopId, start_date: p[1] || '', end_date: (p[2] === 'null' ? '' : p[2]) || '', cast_all: p[3] === 'c1' ? '1' : '0', force: '1' }, supabase, res: noop });
       warmed++; keys.push(r.cache_key);
-    } catch (e) { /* bỏ qua key lỗi */ }
+    } catch (e) { loopErr = loopErr || String(e && e.message || e); }
   }
-  return res.status(200).json({ ok: true, shop_id: shopId, seller, warmed, keys, seen: (allRows || []).length, scan_err: scanErr?.message || null, sample: (allRows || []).slice(0, 8).map(r => r.cache_key) });
+  return res.status(200).json({ ok: true, shop_id: shopId, seller, warmed, keys, matched: rows.length, loop_err: loopErr, seen: (allRows || []).length, scan_err: scanErr?.message || null });
 }
 
 // ── Main handler ─────────────────────────────────────────────────────────────
