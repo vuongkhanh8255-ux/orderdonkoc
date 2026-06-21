@@ -493,7 +493,7 @@ const syncShopVideosAllMonths = async ({ appKey, appSecret, shop_id, supabase, m
   const months = listMonths(AFF_SYNC_FLOOR_DATE);
   const cur = months[months.length - 1];
   const out = [];
-  out.push(await syncShopVideoMonth({ appKey, appSecret, aconn, shop_id, ym: cur, supabase, maxPages: Math.max(4, Math.floor(maxPages / 2)) }));
+  out.push(await syncShopVideoMonth({ appKey, appSecret, aconn, shop_id, ym: cur, supabase, maxPages }));
   const past = months.slice(0, -1);
   if (past.length) {
     const { data: sms } = await supabase.from('tiktok_video_month_sync').select('ym, done, updated_at').eq('shop_id', shop_id).in('ym', past);
@@ -723,15 +723,15 @@ async function handleSyncAffVideos({ params, appKey, appSecret, supabase, res })
     targets = [...real].sort((a, b) => (a.video_last_run_at ? new Date(a.video_last_run_at).getTime() : 0) - (b.video_last_run_at ? new Date(b.video_last_run_at).getTime() : 0)).slice(0, 1);
   }
 
-  const vpages = Math.min(Math.max(Number(params.vpages) || 8, 1), 40);
+  const vpages = Math.min(Math.max(Number(params.vpages) || 10, 1), 40);
   const vsort = params.vsort ? String(params.vsort) : 'views'; // sort VIEWS: bắt video nhiều-view (kể cả ít đơn). API ko sort theo ngày.
-  const vrpages = Math.min(Math.max(Number(params.vrpages) || 10, 1), 20);
+  const vrpages = Math.min(Math.max(Number(params.vrpages) || 8, 1), 20);
   const results = [];
   for (const m of targets) {
     try {
       // Lượt "video mới nhất" TRƯỚC (cửa sổ ngày hẹp + sort views → bắt video vừa air dù ít/không đơn)
       const recent = await syncShopVideosRecent({ appKey, appSecret, shop_id: m.shop_id, supabase, sortField: vsort, maxPages: vrpages });
-      const win = await syncShopVideos({ appKey, appSecret, shop_id: m.shop_id, supabase, maxPages: 4 });
+      const win = await syncShopVideos({ appKey, appSecret, shop_id: m.shop_id, supabase, maxPages: 2 });
       const mon = await syncShopVideosAllMonths({ appKey, appSecret, shop_id: m.shop_id, supabase, maxPages: vpages });
       await supabase.from('tiktok_affiliate_sync_meta').update({ video_last_run_at: new Date().toISOString() }).eq('shop_id', m.shop_id);
       results.push({ shop: m.seller_name, recent, total: win, monthly: mon });
@@ -815,7 +815,7 @@ async function handleKocOrders({ params, supabase, res }) {
   // sync_token đổi khi total_synced / high_water / OLDEST / backfill thay đổi → cache tự stale.
   // (thêm oldest_create_time: backfill chạy nốt làm ngày cũ nhất lùi mà total không đổi → nhãn "đã đủ từ" phải refresh)
   const castAll = params.cast_all === '1'; // Cast scope: "Tất cả" → cộng hết (không lọc ngày)
-  const syncToken = 'v9|' + (meta ? `${meta.total_synced || 0}|${meta.high_water_create_time || ''}|${meta.oldest_create_time || ''}|${meta.video_synced || 0}|${meta.backfill_done ? 1 : 0}` : 'no-meta');
+  const syncToken = 'v10|' + (meta ? `${meta.total_synced || 0}|${meta.high_water_create_time || ''}|${meta.oldest_create_time || ''}|${meta.video_synced || 0}|${meta.backfill_done ? 1 : 0}` : 'no-meta');
   const cacheKey = `${shopId || 'null'}|${start}|${end || 'null'}|c${castAll ? 1 : 0}`; // có castAll để pre-warm hâm đúng
   const force = params.force === '1';
   if (!force) {
