@@ -1150,18 +1150,19 @@ async function handlePrewarmKoc({ params, supabase, res }) {
   if (!shopId) return res.status(200).json({ ok: false, error: 'no shop' });
   const max = Math.min(Math.max(Number(params.max) || 4, 1), 8);
   // Lấy hết key rồi lọc prefix trong JS (tránh .like lỗi với ký tự '|'). Bảng cache nhỏ.
-  const { data: allRows, error: scanErr } = await supabase.from('koc_orders_cache').select('cache_key').limit(1000);
+  const { data: allRows } = await supabase.from('koc_orders_cache').select('cache_key, built_at').order('built_at', { ascending: false }).limit(1000);
   const rows = (allRows || []).filter(r => String(r.cache_key).startsWith(shopId + '|')).slice(0, max);
-  let warmed = 0; const keys = []; let loopErr = null;
+  // res giả: nuốt mọi lời gọi (handleKocOrders dùng setHeader/status/json/...) — chỉ cần nó CHẠY để ghi cache.
+  const noop = { setHeader() { return this; }, status() { return this; }, json() { return this; }, send() { return this; }, end() { return this; } };
+  let warmed = 0; const keys = [];
   for (const r of (rows || [])) {
     const p = r.cache_key.split('|'); // shopId|start|end|cX
-    const noop = { status() { return this; }, json() { return this; } };
     try {
       await handleKocOrders({ params: { seller, shop_id: shopId, start_date: p[1] || '', end_date: (p[2] === 'null' ? '' : p[2]) || '', cast_all: p[3] === 'c1' ? '1' : '0', force: '1' }, supabase, res: noop });
       warmed++; keys.push(r.cache_key);
-    } catch (e) { loopErr = loopErr || String(e && e.message || e); }
+    } catch (e) { /* bỏ qua key lỗi */ }
   }
-  return res.status(200).json({ ok: true, shop_id: shopId, seller, warmed, keys, matched: rows.length, loop_err: loopErr, seen: (allRows || []).length, scan_err: scanErr?.message || null });
+  return res.status(200).json({ ok: true, shop_id: shopId, seller, warmed, keys });
 }
 
 // ── Main handler ─────────────────────────────────────────────────────────────
