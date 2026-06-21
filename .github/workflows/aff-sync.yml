@@ -8,10 +8,10 @@ on:
         required: false
         default: ''
   schedule:
-    # Mỗi 20 phút, xoay vòng 1 shop/lần — endpoint tự chọn shop chưa sync / cũ nhất.
-    # 6 shop → mỗi shop được sync ~2h/lần. Backfill từ 01/04/2026 hoàn tất trong ~1 ngày.
+    # Mỗi 10 phút, xoay vòng 1 shop/lần — endpoint tự chọn shop chưa sync / cũ nhất.
+    # 6 shop → mỗi shop sync ~1h/lần (nhanh gấp đôi). Views-sort nên view+video đầy nhanh hơn.
     # (Repo public nên Actions miễn phí; Vercel Hobby không cho cron < 1 ngày nên đặt ở đây.)
-    - cron: '5,25,45 * * * *'
+    - cron: '5,15,25,35,45,55 * * * *'
 
 jobs:
   sync:

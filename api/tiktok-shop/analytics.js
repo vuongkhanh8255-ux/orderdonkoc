@@ -826,22 +826,39 @@ async function handleKocOrders({ params, supabase, res }) {
 
   // Cast scope theo NGÀY AIR của video; "Tất cả" (cast_all=1) → cộng hết (không lọc ngày)
   const castAll = params.cast_all === '1';
-  // CHẠY TUẦN TỰ (không Promise.all): trên phạm vi rộng (vd "Tất cả"), 5 RPC chạy cùng lúc
-  // tranh tài nguyên DB → cái chậm nhất vượt statement_timeout. Chạy lần lượt thì mỗi query
-  // đứng 1 mình (~2s) + cache buffer ấm dần → nhanh & không timeout. Xong cache lại tức thì.
-  const { data: stats, error } = await supabase.rpc('koc_order_stats', { p_shop_id: shopId, p_start: start, p_end: end });
-  if (error) return res.status(200).json({ ok: false, error: error.message });
-  const { data: totRows } = await supabase.rpc('koc_order_totals', { p_shop_id: shopId, p_start: start, p_end: end });
-  const { data: viewRows } = await supabase.rpc('koc_video_views', { p_shop_id: shopId, p_start: start, p_end: end });
-  // TỔNG VIEW lấy từ hàm scalar (1 dòng) — tránh PostgREST cắt bớt dòng khi RPC per-KOC trả >1000 dòng.
-  const { data: viewTotal } = await supabase.rpc('koc_video_views_total', { p_shop_id: shopId, p_start: start, p_end: end });
-  const { data: castRows } = await supabase.rpc('koc_cast_by_creator', { p_shop_id: shopId, p_start: castAll ? null : start, p_end: castAll ? null : end });
-  const { data: sampleRows } = await supabase.rpc('koc_sample_cost', { p_start: castAll ? null : start, p_end: castAll ? null : end }); // chi phí mẫu THEO KỲ (ngay_gui); "Tất cả" → null = hết — vào ROAS
-  // TỔNG vtotal/vperiod/cast/sample lấy từ 1 hàm SCALAR (1 round-trip) — tránh PostgREST cắt creators >1000 dòng
-  // (shop lớn như EHERB 8159 creator → mảng creators chỉ còn 1000 → tổng thiếu ~31-49%). Giống cách đã làm cho TỔNG VIEW.
-  const { data: extraTot } = await supabase.rpc('koc_perf_extra_totals', { p_shop_id: shopId, p_start: start, p_end: end, p_cast_start: castAll ? null : start, p_cast_end: castAll ? null : end });
-  // Bóc tách GMV theo loại nội dung: Video / Live / LinkShare / Shop (showcase liên kết).
-  const { data: gmvByContent } = await supabase.rpc('koc_gmv_by_content', { p_shop_id: shopId, p_start: start, p_end: end });
+  // Phạm vi RỘNG ("Tất cả" = không start, hoặc > 60 ngày) → chạy TUẦN TỰ tránh tranh tài nguyên DB
+  // → timeout. Phạm vi HẸP (7/30 ngày, tháng) → chạy SONG SONG (Promise.all): 58s ↓ ~max(1 RPC).
+  const spanDays = (start && end) ? (new Date(end) - new Date(start)) / 86400000 : 9999;
+  const wide = !start || spanDays > 60;
+  const R = {
+    stats:      () => supabase.rpc('koc_order_stats',        { p_shop_id: shopId, p_start: start, p_end: end }),
+    totRows:    () => supabase.rpc('koc_order_totals',       { p_shop_id: shopId, p_start: start, p_end: end }),
+    viewRows:   () => supabase.rpc('koc_video_views',        { p_shop_id: shopId, p_start: start, p_end: end }),
+    viewTotal:  () => supabase.rpc('koc_video_views_total',  { p_shop_id: shopId, p_start: start, p_end: end }),
+    castRows:   () => supabase.rpc('koc_cast_by_creator',    { p_shop_id: shopId, p_start: castAll ? null : start, p_end: castAll ? null : end }),
+    sampleRows: () => supabase.rpc('koc_sample_cost',        { p_start: castAll ? null : start, p_end: castAll ? null : end }),
+    extraTot:   () => supabase.rpc('koc_perf_extra_totals',  { p_shop_id: shopId, p_start: start, p_end: end, p_cast_start: castAll ? null : start, p_cast_end: castAll ? null : end }),
+    gmvByContent: () => supabase.rpc('koc_gmv_by_content',   { p_shop_id: shopId, p_start: start, p_end: end }),
+  };
+  let stats, error, totRows, viewRows, viewTotal, castRows, sampleRows, extraTot, gmvByContent;
+  if (wide) {
+    ({ data: stats, error } = await R.stats());
+    if (error) return res.status(200).json({ ok: false, error: error.message });
+    ({ data: totRows } = await R.totRows());
+    ({ data: viewRows } = await R.viewRows());
+    ({ data: viewTotal } = await R.viewTotal());
+    ({ data: castRows } = await R.castRows());
+    ({ data: sampleRows } = await R.sampleRows());
+    ({ data: extraTot } = await R.extraTot());
+    ({ data: gmvByContent } = await R.gmvByContent());
+  } else {
+    const [a, b, c, d, e, f, g, h] = await Promise.all([
+      R.stats(), R.totRows(), R.viewRows(), R.viewTotal(), R.castRows(), R.sampleRows(), R.extraTot(), R.gmvByContent(),
+    ]);
+    if (a.error) return res.status(200).json({ ok: false, error: a.error.message });
+    stats = a.data; totRows = b.data; viewRows = c.data; viewTotal = d.data;
+    castRows = e.data; sampleRows = f.data; extraTot = g.data; gmvByContent = h.data;
+  }
 
   // Tổng view video mỗi KOC (khớp username bỏ '@' + lowercase) theo khoảng đang chọn
   const normU = (u) => (u || '').toLowerCase().replace(/^@/, '');
