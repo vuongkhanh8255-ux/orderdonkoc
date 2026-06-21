@@ -538,62 +538,6 @@ const syncShopVideosRecent = async ({ appKey, appSecret, shop_id, supabase, days
   }
   return { videos: up, api_code: firstCode, api_msg: firstMsg, sort: sortField, window_from: sd, sample_post_dates: sampleDates.slice(0, 8) };
 };
-
-// ── SYNC INCREMENTAL THEO NGÀY (đủ đuôi dài + nhớ done) ───────────────────────
-// API TikTok KHÔNG sort theo ngày (chỉ metric) NHƯNG cho lọc cửa sổ theo NGÀY ĐĂNG
-// (start_date_ge/end_date_lt). Nên mỗi NGÀY ta cào HẾT trang (sort gmv DESC tới khi
-// next_page_token rỗng) → bắt được cả video 0 đơn (đuôi dài mà sync-cap cũ bỏ sót).
-// Ngày nào cào xong → lưu done=true vào tiktok_video_day_sync → lần sau BỎ QUA.
-// restart=true: cào lại từ đầu (dùng cho vài ngày gần nhất → video mới + cập nhật view).
-const syncShopVideoDay = async ({ appKey, appSecret, aconn, shop_id, day, supabase, maxPages = 10, restart = false }) => {
-  const path = `/analytics/${VIDEO_PERF_VERSION}/shop_videos/performance`;
-  const next = new Date(new Date(day + 'T00:00:00Z').getTime() + 86400000).toISOString().slice(0, 10);
-  const doCall = (pt) => {
-    const u = { app_key: appKey, timestamp: String(Math.floor(Date.now() / 1000)), start_date_ge: day, end_date_lt: next, sort_field: 'gmv', sort_order: 'DESC', page_size: '50', currency: 'LOCAL' };
-    if (aconn.shop_cipher) u.shop_cipher = aconn.shop_cipher;
-    if (pt) u.page_token = pt;
-    u.sign = buildSign(appSecret, path, u);
-    return ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(u)}`, { method: 'GET', headers: { 'x-tts-access-token': aconn.access_token, 'content-type': 'application/json' } }, 12000);
-  };
-  const { data: st } = await supabase.from('tiktok_video_day_sync').select('token, done, video_count').eq('shop_id', shop_id).eq('day', day).maybeSingle();
-  let token = restart ? null : (st?.token || null);
-  let pages = 0, up = 0, done = false; const seen = new Set();
-  while (pages < maxPages) {
-    let raw = await doCall(token); let j; try { j = JSON.parse(raw); } catch { break; }
-    if (j?.code === 105002 && await refreshAnalyticsToken({ appKey, appSecret, conn: aconn, supabase, table: 'tiktok_analytics_connections' })) { raw = await doCall(token); try { j = JSON.parse(raw); } catch { break; } }
-    if (j?.code !== 0) break;
-    const vids = j.data?.videos || [];
-    if (!vids.length) { done = true; break; }
-    const rows = vids.map(v => { const pt = v.video_post_time || ''; const prod = (v.products || [])[0] || {}; return { id: String(v.id), shop_id: String(shop_id), username: v.username || '', title: v.title || '', views: Number(v.views) || 0, gmv: numAmt(v.gmv), units_sold: Number(v.units_sold) || 0, sku_orders: Number(v.sku_orders) || 0, ctr: Number(v.click_through_rate) || 0, video_post_time: pt, post_date: pt ? pt.slice(0, 10) : day, product_id: String(prod.id || ''), product_name: prod.name || '', product_count: (v.products || []).length, synced_at: new Date().toISOString() }; }).filter(r => r.id);
-    for (const r of rows) seen.add(r.id);
-    for (let i = 0; i < rows.length; i += 200) await supabase.from('tiktok_shop_videos').upsert(rows.slice(i, i + 200), { onConflict: 'id' });
-    up += rows.length; token = j.data?.next_page_token; pages++;
-    if (!token) { done = true; break; }
-  }
-  await supabase.from('tiktok_video_day_sync').upsert({ shop_id: String(shop_id), day, token: done ? null : token, done, video_count: restart ? seen.size : ((Number(st?.video_count) || 0) + up), last_synced_at: new Date().toISOString() }, { onConflict: 'shop_id,day' });
-  return { day, up, done, pages };
-};
-// Driver: re-sync vài ngày gần (video mới + view) + backfill ngày cũ chưa done (mới nhất trước).
-const syncShopVideosDaily = async ({ appKey, appSecret, shop_id, supabase, recentDays = 2, recentPages = 6, backfillDays = 2, backfillPages = 8 }) => {
-  const { data: aconns } = await supabase.from('tiktok_analytics_connections').select('access_token, refresh_token, shop_cipher, shop_id').not('access_token', 'is', null);
-  const aconn = (aconns || []).find(c => String(c.shop_id) === String(shop_id));
-  if (!aconn) return { skipped: 'no analytics conn' };
-  const now = Math.floor(Date.now() / 1000);
-  const dayStr = (off) => vnDate(now - off * 86400);
-  const out = { recent: [], backfill: [], backfill_left: 0 };
-  // 1) Ngày gần nhất → cào lại full (video mới + cập nhật view)
-  for (let d = 0; d <= recentDays; d++) out.recent.push(await syncShopVideoDay({ appKey, appSecret, aconn, shop_id, day: dayStr(d), supabase, maxPages: recentPages, restart: true }));
-  // 2) Backfill: liệt kê ngày [floor .. today-recentDays-1], chọn ngày CHƯA done, MỚI NHẤT trước
-  const horizon = dayStr(recentDays + 1);
-  const { data: stRows } = await supabase.from('tiktok_video_day_sync').select('day, done').eq('shop_id', shop_id).gte('day', AFF_SYNC_FLOOR_DATE).lte('day', horizon);
-  const doneSet = new Set((stRows || []).filter(r => r.done).map(r => String(r.day).slice(0, 10)));
-  const undone = [];
-  let cur = new Date(AFF_SYNC_FLOOR_DATE + 'T00:00:00Z'); const endD = new Date(horizon + 'T00:00:00Z');
-  while (cur <= endD) { const ds = cur.toISOString().slice(0, 10); if (!doneSet.has(ds)) undone.push(ds); cur = new Date(cur.getTime() + 86400000); }
-  out.backfill_left = Math.max(0, undone.length - backfillDays);
-  for (const ds of undone.slice(-backfillDays)) out.backfill.push(await syncShopVideoDay({ appKey, appSecret, aconn, shop_id, day: ds, supabase, maxPages: backfillPages, restart: false }));
-  return out;
-};
 // Window-total sync (1/4 → nay) → tiktok_shop_videos.views = "tổng view" (toàn data mình có). Cycling.
 const syncShopVideos = async ({ appKey, appSecret, shop_id, supabase, maxPages = 6 }) => {
   const { data: aconns } = await supabase.from('tiktok_analytics_connections').select('access_token, refresh_token, shop_cipher, shop_id').not('access_token', 'is', null);
@@ -779,17 +723,18 @@ async function handleSyncAffVideos({ params, appKey, appSecret, supabase, res })
     targets = [...real].sort((a, b) => (a.video_last_run_at ? new Date(a.video_last_run_at).getTime() : 0) - (b.video_last_run_at ? new Date(b.video_last_run_at).getTime() : 0)).slice(0, 1);
   }
 
-  // SYNC THEO NGÀY (đủ đuôi dài + nhớ done). Tham số tinh chỉnh qua query nếu cần.
-  const recentDays   = Math.min(Math.max(params.rdays != null ? Number(params.rdays) : 2, 0), 6);
-  const recentPages  = Math.min(Math.max(Number(params.rpages) || 6, 1), 12);
-  const backfillDays = Math.min(Math.max(Number(params.bdays) || 2, 0), 12);
-  const backfillPages = Math.min(Math.max(Number(params.bpages) || 8, 1), 20);
+  const vpages = Math.min(Math.max(Number(params.vpages) || 12, 1), 40);
+  const vsort = params.vsort ? String(params.vsort) : 'views'; // TikTok chỉ cho sort theo metric (views/gmv/...), không theo ngày
+  const vrpages = Math.min(Math.max(Number(params.vrpages) || 15, 1), 20);
   const results = [];
   for (const m of targets) {
     try {
-      const day = await syncShopVideosDaily({ appKey, appSecret, shop_id: m.shop_id, supabase, recentDays, recentPages, backfillDays, backfillPages });
+      // Lượt "video mới nhất" TRƯỚC (cửa sổ ngày hẹp + sort views → bắt video vừa air dù ít/không đơn)
+      const recent = await syncShopVideosRecent({ appKey, appSecret, shop_id: m.shop_id, supabase, sortField: vsort, maxPages: vrpages });
+      const win = await syncShopVideos({ appKey, appSecret, shop_id: m.shop_id, supabase, maxPages: 6 });
+      const mon = await syncShopVideosAllMonths({ appKey, appSecret, shop_id: m.shop_id, supabase, maxPages: vpages });
       await supabase.from('tiktok_affiliate_sync_meta').update({ video_last_run_at: new Date().toISOString() }).eq('shop_id', m.shop_id);
-      results.push({ shop: m.seller_name, day });
+      results.push({ shop: m.seller_name, recent, total: win, monthly: mon });
     } catch (e) { results.push({ shop: m.seller_name, error: e.message }); }
   }
   return res.status(200).json({ ok: true, synced: results.length, results });
