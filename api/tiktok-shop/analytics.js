@@ -814,7 +814,7 @@ async function handleKocOrders({ params, supabase, res }) {
   // ── Cache CHUNG: mọi máy vào là tức thì cho tới khi shop có data mới ──
   // sync_token đổi khi total_synced / high_water / OLDEST / backfill thay đổi → cache tự stale.
   // (thêm oldest_create_time: backfill chạy nốt làm ngày cũ nhất lùi mà total không đổi → nhãn "đã đủ từ" phải refresh)
-  const syncToken = 'v8|' + (meta ? `${meta.total_synced || 0}|${meta.high_water_create_time || ''}|${meta.oldest_create_time || ''}|${meta.video_synced || 0}|${meta.backfill_done ? 1 : 0}` : 'no-meta');
+  const syncToken = 'v9|' + (meta ? `${meta.total_synced || 0}|${meta.high_water_create_time || ''}|${meta.oldest_create_time || ''}|${meta.video_synced || 0}|${meta.backfill_done ? 1 : 0}` : 'no-meta');
   const cacheKey = `${shopId || 'null'}|${start}|${end || 'null'}`;
   const force = params.force === '1';
   if (!force) {
