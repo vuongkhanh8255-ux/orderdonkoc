@@ -723,15 +723,15 @@ async function handleSyncAffVideos({ params, appKey, appSecret, supabase, res })
     targets = [...real].sort((a, b) => (a.video_last_run_at ? new Date(a.video_last_run_at).getTime() : 0) - (b.video_last_run_at ? new Date(b.video_last_run_at).getTime() : 0)).slice(0, 1);
   }
 
-  const vpages = Math.min(Math.max(Number(params.vpages) || 12, 1), 40);
-  const vsort = params.vsort ? String(params.vsort) : 'views'; // TikTok chỉ cho sort theo metric (views/gmv/...), không theo ngày
-  const vrpages = Math.min(Math.max(Number(params.vrpages) || 15, 1), 20);
+  const vpages = Math.min(Math.max(Number(params.vpages) || 8, 1), 40);
+  const vsort = params.vsort ? String(params.vsort) : 'views'; // sort VIEWS: bắt video nhiều-view (kể cả ít đơn). API ko sort theo ngày.
+  const vrpages = Math.min(Math.max(Number(params.vrpages) || 10, 1), 20);
   const results = [];
   for (const m of targets) {
     try {
       // Lượt "video mới nhất" TRƯỚC (cửa sổ ngày hẹp + sort views → bắt video vừa air dù ít/không đơn)
       const recent = await syncShopVideosRecent({ appKey, appSecret, shop_id: m.shop_id, supabase, sortField: vsort, maxPages: vrpages });
-      const win = await syncShopVideos({ appKey, appSecret, shop_id: m.shop_id, supabase, maxPages: 6 });
+      const win = await syncShopVideos({ appKey, appSecret, shop_id: m.shop_id, supabase, maxPages: 4 });
       const mon = await syncShopVideosAllMonths({ appKey, appSecret, shop_id: m.shop_id, supabase, maxPages: vpages });
       await supabase.from('tiktok_affiliate_sync_meta').update({ video_last_run_at: new Date().toISOString() }).eq('shop_id', m.shop_id);
       results.push({ shop: m.seller_name, recent, total: win, monthly: mon });
