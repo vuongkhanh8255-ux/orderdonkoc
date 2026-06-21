@@ -619,7 +619,7 @@ export default function KocPerformanceTab() {
   const sync = data?.sync;
   const countSync = data?.count_sync;
   const fillSub = countSync?.filling
-    ? `⏳ đang cào${countSync.last_run_at ? ' · ' + new Date(countSync.last_run_at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : ''}`
+    ? `⏳ đang cào · cập nhật lúc ${countSync.last_run_at ? new Date(countSync.last_run_at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : '—'}`
     : null;
 
   const today = toYmd(new Date());
