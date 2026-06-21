@@ -1161,7 +1161,7 @@ async function handlePrewarmKoc({ params, supabase, res }) {
       warmed++; keys.push(r.cache_key);
     } catch (e) { /* bỏ qua key lỗi */ }
   }
-  return res.status(200).json({ ok: true, shop_id: shopId, seller, warmed, keys, seen: (allRows || []).length, scan_err: scanErr?.message || null });
+  return res.status(200).json({ ok: true, shop_id: shopId, seller, warmed, keys, seen: (allRows || []).length, scan_err: scanErr?.message || null, sample: (allRows || []).slice(0, 8).map(r => r.cache_key) });
 }
 
 // ── Main handler ─────────────────────────────────────────────────────────────
