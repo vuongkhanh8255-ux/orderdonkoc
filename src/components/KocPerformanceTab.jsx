@@ -617,6 +617,10 @@ export default function KocPerformanceTab() {
   }, [rows, onlyUnassigned, assignMap, brand, blacklist]);
   const totals = data?.totals || { gmv: 0, orders: 0, commission: 0, views: 0, cast: 0 };
   const sync = data?.sync;
+  const countSync = data?.count_sync;
+  const fillSub = countSync?.filling
+    ? `⏳ đang cào${countSync.last_run_at ? ' · ' + new Date(countSync.last_run_at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : ''}`
+    : null;
 
   const today = toYmd(new Date());
   const presets = [
@@ -713,9 +717,9 @@ export default function KocPerformanceTab() {
             { label: 'GMV LinkShare', value: `${fmtVnd(totals.gmv_linkshare || 0)} đ`, icon: '🔗' },
             { label: 'GMV Shop', value: `${fmtVnd(totals.gmv_shop || 0)} đ`, icon: '🛍️' },
             { label: 'Tổng đơn', value: fmtNum(totals.orders), icon: '🛒' },
-            { label: 'Tổng video', value: fmtNum(totals.vtotal_all || totals.vtotal || 0), icon: '🎬', note: 'Tổng video shop-wide (mọi KOC, không chỉ KOC có đơn). Tự cập nhật theo sync.' },
-            { label: 'Video kỳ này', value: fmtNum(totals.vperiod_all || totals.vperiod || 0), icon: '🎞️', note: 'Video ĐĂNG trong kỳ — shop-wide (mọi KOC). Leo dần khi sync cào thêm.' },
-            { label: 'Tổng view', value: fmtViews(totals.views), icon: '👁' },
+            { label: 'Tổng video', value: fmtNum(totals.vtotal_all || totals.vtotal || 0), icon: '🎬', sub: fillSub, note: 'Tổng video shop-wide CÓ TRACTION (view≥100 hoặc có đơn) — đã loại video rác. Đang cào dần theo sync, số sẽ leo tới khi đủ.' },
+            { label: 'Video kỳ này', value: fmtNum(totals.vperiod_all || totals.vperiod || 0), icon: '🎞️', sub: fillSub, note: 'Video ĐĂNG trong kỳ, chỉ tính view≥100 hoặc có đơn (loại đuôi rác 0-view-0-đơn). Đang cào dần — "đang cào · giờ" = mới cập nhật tới đó, số chưa đủ 100% sẽ leo lên.' },
+            { label: 'Tổng view', value: fmtViews(totals.views), icon: '👁', sub: fillSub, note: 'Tổng lượt xem video. View do mấy video nhiều-view gánh nên thường đã chuẩn; nếu đang cào thì leo nốt vài %.' },
             { label: 'Hoa hồng (sẽ trả)', value: `${fmtVnd(totals.commission)} đ`, icon: '💸', note: 'Hoa hồng ƯỚC TÍNH SẼ TRẢ cho KOC (TikTok field: estimated_paid_commission). Đã loại đơn hoàn / không đủ điều kiện → đây là số tiền THỰC TẾ sẽ chi. Lưu ý: con số "Hoa hồng ước tính" trên TikTok cao hơn vì nó tính GỘP cả đơn chưa/không đủ điều kiện — field gộp đó TikTok không đẩy về qua API nên app dùng số "sẽ trả" này (chính xác hơn).' },
             { label: 'Hoa hồng đã trả', value: `${fmtVnd(totals.commission_actual || 0)} đ`, icon: '✅', note: 'Hoa hồng TikTok ĐÃ THANH TOÁN thực tế (field: actual_paid_commission). Chỉ tính đơn đã settled (đã đối soát xong). Thường thấp hơn ô "sẽ trả" vì còn đơn chưa tới kỳ thanh toán.' },
             { label: 'Tổng cast', value: `${fmtVnd(totals.cast || 0)} đ`, icon: '💵' },
@@ -732,6 +736,7 @@ export default function KocPerformanceTab() {
                 )}
               </div>
               <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#0f172a', marginTop: 8 }}>{s.value}</div>
+              {s.sub && <div style={{ fontSize: '0.64rem', color: ACCENT, fontWeight: 700, marginTop: 3 }}>{s.sub}</div>}
               {s.note && noteOpen === s.label && (
                 <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30, marginTop: 6, background: '#0f172a', color: '#f1f5f9', fontSize: '0.74rem', lineHeight: 1.55, padding: '11px 13px', borderRadius: 10, boxShadow: '0 10px 30px rgba(0,0,0,0.28)', fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>
                   {s.note}

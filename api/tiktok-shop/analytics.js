@@ -815,7 +815,7 @@ async function handleKocOrders({ params, supabase, res }) {
   // sync_token đổi khi total_synced / high_water / OLDEST / backfill thay đổi → cache tự stale.
   // (thêm oldest_create_time: backfill chạy nốt làm ngày cũ nhất lùi mà total không đổi → nhãn "đã đủ từ" phải refresh)
   const castAll = params.cast_all === '1'; // Cast scope: "Tất cả" → cộng hết (không lọc ngày)
-  const syncToken = 'v11|' + (meta ? `${meta.total_synced || 0}|${meta.high_water_create_time || ''}|${meta.oldest_create_time || ''}|${meta.video_synced || 0}|${meta.backfill_done ? 1 : 0}` : 'no-meta');
+  const syncToken = 'v12|' + (meta ? `${meta.total_synced || 0}|${meta.high_water_create_time || ''}|${meta.oldest_create_time || ''}|${meta.video_synced || 0}|${meta.backfill_done ? 1 : 0}` : 'no-meta');
   const cacheKey = `${shopId || 'null'}|${start}|${end || 'null'}|c${castAll ? 1 : 0}`; // có castAll để pre-warm hâm đúng
   const force = params.force === '1';
   if (!force) {
@@ -901,11 +901,21 @@ async function handleKocOrders({ params, supabase, res }) {
     gmv_video: Number(gbc.gmv_video) || 0, gmv_live: Number(gbc.gmv_live) || 0, gmv_linkshare: Number(gbc.gmv_linkshare) || 0, gmv_shop: Number(gbc.gmv_shop) || 0 };
   const totalCreators = Number(t.creators) || creators.length;
 
+  // Trạng thái cào COUNT video (ghi chú "đang cào tới [time]") — kỳ chạm tháng hiện tại = chưa đủ 100%
+  let count_sync = null;
+  if (shopId) {
+    try {
+      const { data: vmeta } = await supabase.from('tiktok_affiliate_sync_meta').select('video_last_run_at').eq('shop_id', shopId).maybeSingle();
+      const curMonth = new Date().toISOString().slice(0, 7);
+      const endMonth = (end || new Date().toISOString().slice(0, 10)).slice(0, 7);
+      count_sync = { last_run_at: vmeta?.video_last_run_at || null, filling: endMonth >= curMonth };
+    } catch { /* ignore */ }
+  }
   const payload = {
     ok: true, shop: meta?.seller_name || params.seller, shop_id: shopId,
     start_date: start, end_date: end, floor: AFF_SYNC_FLOOR_DATE,
     sync: meta ? { last_run_at: meta.last_run_at, total_synced: meta.total_synced, backfill_done: meta.backfill_done, oldest_date: vnDate(meta.oldest_create_time), newest_date: vnDate(meta.high_water_create_time), status: meta.last_status } : null,
-    count: totalCreators, shown: creators.length, totals, creators, shops: shopList,
+    count: totalCreators, shown: creators.length, totals, creators, shops: shopList, count_sync,
   };
   // Lưu cache chung (best-effort) → máy khác vào là tức thì tới lần sync kế
   try { await supabase.from('koc_orders_cache').upsert({ cache_key: cacheKey, payload, sync_token: syncToken, built_at: new Date().toISOString() }, { onConflict: 'cache_key' }); } catch { /* cache lỗi không chặn response */ }
