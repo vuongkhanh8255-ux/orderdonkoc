@@ -1148,14 +1148,18 @@ async function handlePrewarmKoc({ params, supabase, res }) {
     seller = data?.seller_name || '';
   }
   if (!shopId) return res.status(200).json({ ok: false, error: 'no shop' });
-  const max = Math.min(Math.max(Number(params.max) || 4, 1), 8);
+  const max = Math.min(Math.max(Number(params.max) || 6, 1), 12);
   // Lấy hết key rồi lọc prefix trong JS (tránh .like lỗi với ký tự '|'). Bảng cache nhỏ.
   const { data: allRows } = await supabase.from('koc_orders_cache').select('cache_key, built_at').order('built_at', { ascending: false }).limit(1000);
   const rows = (allRows || []).filter(r => String(r.cache_key).startsWith(shopId + '|')).slice(0, max);
+  // Ưu tiên range HẸP (nhanh ~10s); range "Tất cả"/floor (chậm ~40s) để cuối → tránh timeout 60s.
+  const isWide = (k) => { const p = String(k).split('|'); return (!p[2] || p[2] === 'null') || p[1] === AFF_SYNC_FLOOR_DATE; };
+  rows.sort((a, b) => (isWide(a.cache_key) ? 1 : 0) - (isWide(b.cache_key) ? 1 : 0));
   // res giả: nuốt mọi lời gọi (handleKocOrders dùng setHeader/status/json/...) — chỉ cần nó CHẠY để ghi cache.
   const noop = { setHeader() { return this; }, status() { return this; }, json() { return this; }, send() { return this; }, end() { return this; } };
-  let warmed = 0; const keys = [];
+  let warmed = 0; const keys = []; const t0 = Date.now();
   for (const r of (rows || [])) {
+    if (warmed > 0 && Date.now() - t0 > 35000) break; // đã warm ≥1, hết giờ → dừng (tránh timeout)
     const p = r.cache_key.split('|'); // shopId|start|end|cX
     try {
       await handleKocOrders({ params: { seller, shop_id: shopId, start_date: p[1] || '', end_date: (p[2] === 'null' ? '' : p[2]) || '', cast_all: p[3] === 'c1' ? '1' : '0', force: '1' }, supabase, res: noop });
