@@ -1114,6 +1114,37 @@ async function handleKocAvatars({ params, supabase, res }) {
   return res.status(200).json({ ok: true, avatars });
 }
 
+// ── [TẠM] CHẨN ĐOÁN API video: lật 1 cửa sổ tới đáy, KHÔNG ghi DB, báo cáo số liệu ──
+async function handleProbeVidApi({ params, appKey, appSecret, supabase, res }) {
+  const seller = (params.seller || '').toLowerCase().trim();
+  const { data: metas } = await supabase.from('tiktok_affiliate_sync_meta').select('shop_id, seller_name').not('shop_id', 'is', null);
+  const m = (metas || []).find(x => (x.seller_name || '').toLowerCase().includes(seller)) || (metas || [])[0];
+  if (!m) return res.status(200).json({ ok: false, error: 'no shop' });
+  const shop_id = m.shop_id;
+  const { data: aconns } = await supabase.from('tiktok_analytics_connections').select('access_token, refresh_token, shop_cipher, shop_id').not('access_token', 'is', null);
+  const aconn = (aconns || []).find(c => String(c.shop_id) === String(shop_id));
+  if (!aconn) return res.status(200).json({ ok: false, error: 'no analytics conn' });
+  const sd = params.pstart || '2026-06-10';
+  const ed = params.pend || '2026-06-11';
+  const sort = params.psort || 'gmv';
+  const maxPages = Math.min(Math.max(Number(params.ppages) || 60, 1), 200);
+  const path = `/analytics/${VIDEO_PERF_VERSION}/shop_videos/performance`;
+  const doCall = (pt) => { const u = { app_key: appKey, timestamp: String(Math.floor(Date.now() / 1000)), start_date_ge: sd, end_date_lt: ed, sort_field: sort, sort_order: 'DESC', page_size: '50', currency: 'LOCAL' }; if (aconn.shop_cipher) u.shop_cipher = aconn.shop_cipher; if (pt) u.page_token = pt; u.sign = buildSign(appSecret, path, u); return ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(u)}`, { method: 'GET', headers: { 'x-tts-access-token': aconn.access_token, 'content-type': 'application/json' } }, 12000); };
+  let token = null, pages = 0, total = 0, done = false, viewSum = 0, code = null, msg = ''; const postDist = {}; const samples = []; const ids = new Set();
+  while (pages < maxPages) {
+    let raw = await doCall(token); let j; try { j = JSON.parse(raw); } catch { msg = 'parse fail: ' + String(raw).slice(0, 120); break; }
+    if (j?.code === 105002 && await refreshAnalyticsToken({ appKey, appSecret, conn: aconn, supabase, table: 'tiktok_analytics_connections' })) { raw = await doCall(token); try { j = JSON.parse(raw); } catch { break; } }
+    if (code === null) { code = j?.code; msg = j?.message || ''; }
+    if (j?.code !== 0) { msg = 'code ' + j?.code + ': ' + (j?.message || ''); break; }
+    const vids = j.data?.videos || [];
+    if (!vids.length) { done = true; break; }
+    for (const v of vids) { const pm = (v.video_post_time || '').slice(0, 7) || '(null)'; postDist[pm] = (postDist[pm] || 0) + 1; viewSum += Number(v.views) || 0; ids.add(String(v.id)); if (samples.length < 5) samples.push({ id: String(v.id), post: (v.video_post_time || '').slice(0, 10), views: Number(v.views) || 0, gmv: v.gmv }); }
+    total += vids.length; token = j.data?.next_page_token; pages++;
+    if (!token) { done = true; break; }
+  }
+  return res.status(200).json({ ok: true, shop: m.seller_name, window: [sd, ed], sort, pages, total_rows: total, distinct_ids: ids.size, done_exhausted: done, hit_maxpages: pages >= maxPages && !done, view_sum: viewSum, post_month_dist: postDist, samples, api_code: code, api_msg: msg });
+}
+
 // ── Main handler ─────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   // Allow GET and POST
@@ -1190,6 +1221,11 @@ export default async function handler(req, res) {
 
   if (action === 'fill_koc_views') {
     try { return await handleFillKocViews({ params, appKey, appSecret, supabase, res }); }
+    catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
+  }
+
+  if (action === 'probe_vid_api') {
+    try { return await handleProbeVidApi({ params, appKey, appSecret, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 
