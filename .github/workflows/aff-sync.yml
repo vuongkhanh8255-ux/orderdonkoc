@@ -71,3 +71,13 @@ jobs:
             sleep 2
           done
           echo "Fill views step done (non-fatal)."
+
+      # 4) PRE-WARM cache koc_orders cho shop VỪA SYNC: hâm sẵn các range đã từng xem
+      #    → user bấm vô shop là có cache liền (~3s thay vì ~10s). Best-effort, không fail.
+      - name: Pre-warm KOC cache (best-effort)
+        if: always()
+        run: |
+          BASE="https://koc-tool.vercel.app/api/tiktok-shop/analytics"
+          R=$(curl -sS --max-time 90 "${BASE}?action=prewarm_koc&max=4" || echo '{"note":"prewarm timeout"}')
+          echo "Prewarm: ${R:0:300}"
+          echo "Prewarm step done (non-fatal)."

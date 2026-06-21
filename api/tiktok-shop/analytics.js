@@ -814,8 +814,9 @@ async function handleKocOrders({ params, supabase, res }) {
   // ── Cache CHUNG: mọi máy vào là tức thì cho tới khi shop có data mới ──
   // sync_token đổi khi total_synced / high_water / OLDEST / backfill thay đổi → cache tự stale.
   // (thêm oldest_create_time: backfill chạy nốt làm ngày cũ nhất lùi mà total không đổi → nhãn "đã đủ từ" phải refresh)
+  const castAll = params.cast_all === '1'; // Cast scope: "Tất cả" → cộng hết (không lọc ngày)
   const syncToken = 'v9|' + (meta ? `${meta.total_synced || 0}|${meta.high_water_create_time || ''}|${meta.oldest_create_time || ''}|${meta.video_synced || 0}|${meta.backfill_done ? 1 : 0}` : 'no-meta');
-  const cacheKey = `${shopId || 'null'}|${start}|${end || 'null'}`;
+  const cacheKey = `${shopId || 'null'}|${start}|${end || 'null'}|c${castAll ? 1 : 0}`; // có castAll để pre-warm hâm đúng
   const force = params.force === '1';
   if (!force) {
     const { data: cc } = await supabase.from('koc_orders_cache').select('payload, sync_token').eq('cache_key', cacheKey).maybeSingle();
@@ -824,8 +825,6 @@ async function handleKocOrders({ params, supabase, res }) {
     }
   }
 
-  // Cast scope theo NGÀY AIR của video; "Tất cả" (cast_all=1) → cộng hết (không lọc ngày)
-  const castAll = params.cast_all === '1';
   // Phạm vi RỘNG ("Tất cả" = không start, hoặc > 60 ngày) → chạy TUẦN TỰ tránh tranh tài nguyên DB
   // → timeout. Phạm vi HẸP (7/30 ngày, tháng) → chạy SONG SONG (Promise.all): 58s ↓ ~max(1 RPC).
   const spanDays = (start && end) ? (new Date(end) - new Date(start)) / 86400000 : 9999;
@@ -1133,6 +1132,38 @@ async function handleKocAvatars({ params, supabase, res }) {
   return res.status(200).json({ ok: true, avatars });
 }
 
+// Pre-warm cache koc_orders: hâm lại các range shop ĐÃ TỪNG XEM (rebuild force=1) sau khi sync
+// → bấm vô shop là có cache liền (~3s thay vì ~10s). Chạy ở GitHub runner (ngoài giới hạn 60s Vercel).
+async function handlePrewarmKoc({ params, supabase, res }) {
+  let shopId = params.shop_id ? String(params.shop_id) : null;
+  let seller = params.seller || '';
+  if (!shopId) {
+    // không chỉ định → lấy shop VỪA SYNC (video_last_run_at mới nhất)
+    const { data } = await supabase.from('tiktok_affiliate_sync_meta')
+      .select('shop_id, seller_name, video_last_run_at').not('shop_id', 'is', null)
+      .order('video_last_run_at', { ascending: false }).limit(1).maybeSingle();
+    shopId = data?.shop_id || null; seller = data?.seller_name || seller;
+  } else if (!seller) {
+    const { data } = await supabase.from('tiktok_affiliate_sync_meta').select('seller_name').eq('shop_id', shopId).maybeSingle();
+    seller = data?.seller_name || '';
+  }
+  if (!shopId) return res.status(200).json({ ok: false, error: 'no shop' });
+  const max = Math.min(Math.max(Number(params.max) || 4, 1), 8);
+  const { data: rows } = await supabase.from('koc_orders_cache')
+    .select('cache_key').like('cache_key', shopId + '|%')
+    .order('built_at', { ascending: false }).limit(max);
+  let warmed = 0; const keys = [];
+  for (const r of (rows || [])) {
+    const p = r.cache_key.split('|'); // shopId|start|end|cX
+    const noop = { status() { return this; }, json() { return this; } };
+    try {
+      await handleKocOrders({ params: { seller, shop_id: shopId, start_date: p[1] || '', end_date: (p[2] === 'null' ? '' : p[2]) || '', cast_all: p[3] === 'c1' ? '1' : '0', force: '1' }, supabase, res: noop });
+      warmed++; keys.push(r.cache_key);
+    } catch (e) { /* bỏ qua key lỗi */ }
+  }
+  return res.status(200).json({ ok: true, shop_id: shopId, seller, warmed, keys });
+}
+
 // ── Main handler ─────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   // Allow GET and POST
@@ -1209,6 +1240,11 @@ export default async function handler(req, res) {
 
   if (action === 'fill_koc_views') {
     try { return await handleFillKocViews({ params, appKey, appSecret, supabase, res }); }
+    catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
+  }
+
+  if (action === 'prewarm_koc') {
+    try { return await handlePrewarmKoc({ params, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 
