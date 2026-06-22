@@ -16,6 +16,9 @@ const BRANDS = ['BODYMISS', 'MILAGANICS', 'MOAWMOAWS', 'EHERB VN', 'HEALMI', 'MA
 const ACTION_PW = 'STELLA8255$';        // mật khẩu để tick Duyệt / Đã thanh toán (1 lần/phiên)
 const PIT_THRESHOLD = 2_000_000;        // tổng chi 1 người/kỳ ≥ ngưỡng này → cảnh báo cần PIT (thuế TNCN)
 const personKeyOf = (r) => (r.cccd || r.full_name || r.beneficiary || r.channel_link || '').trim().toLowerCase();
+// Bóc id kênh (@username) từ link video; bóc id video từ link air (mỗi video 1 dòng).
+const extractUname = (url) => { const m = String(url || '').match(/@([^/?#\s]+)/); return m ? m[1].toLowerCase() : ''; };
+const extractVideoIds = (text) => [...new Set([...String(text || '').matchAll(/\/video\/(\d{6,})/g)].map(m => m[1]))];
 
 const num = (v) => { const n = Number(String(v ?? '').replace(/[^\d-]/g, '')); return Number.isFinite(n) ? n : 0; };
 const fmtMoney = (v) => (Number(v) || 0).toLocaleString('vi-VN');
@@ -62,6 +65,7 @@ const KocPaymentTab = () => {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState('');
+  const [vidMap, setVidMap] = useState({}); // id_video -> [{id, name}] TOÀN BỘ koc_payments (cảnh báo trùng video, kể cả khác tháng)
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -75,6 +79,28 @@ const KocPaymentTab = () => {
     finally { setLoading(false); }
   }, [ym]);
   useEffect(() => { load(); }, [load]);
+
+  // Map TẤT CẢ video id -> đơn (cảnh báo trùng, kể cả khác tháng). Nhẹ (~1.4k đơn). Reload sau mỗi load.
+  const loadVidMap = useCallback(async () => {
+    const { data } = await supabase.from('koc_payments').select('id, air_link, full_name, beneficiary, staff');
+    const m = {};
+    (data || []).forEach(r => extractVideoIds(r.air_link).forEach(vid => { (m[vid] = m[vid] || []).push({ id: r.id, name: r.full_name || r.beneficiary || r.staff || '?' }); }));
+    setVidMap(m);
+  }, []);
+  useEffect(() => { loadVidMap(); }, [loadVidMap, rows]);
+
+  // #1 id kênh bóc từ link air · #2 video trùng (so toàn bộ koc_payments, trừ đơn đang sửa)
+  const formUnames = useMemo(() => [...new Set((form.air_link || '').split('\n').map(extractUname).filter(Boolean))], [form.air_link]);
+  const dupVideos = useMemo(() => {
+    return extractVideoIds(form.air_link).map(vid => {
+      const others = (vidMap[vid] || []).filter(x => x.id !== editingId);
+      return others.length ? { vid, who: [...new Set(others.map(o => o.name))] } : null;
+    }).filter(Boolean);
+  }, [form.air_link, vidMap, editingId]);
+  // #2 list-level: video bị ≥2 đơn (double-pay) trong TOÀN BỘ koc_payments
+  const dupList = useMemo(() => Object.entries(vidMap)
+    .map(([vid, arr]) => { const ids = [...new Set(arr.map(x => x.id))]; return ids.length > 1 ? { vid, names: [...new Set(arr.map(x => x.name))], n: ids.length } : null; })
+    .filter(Boolean).sort((a, b) => b.n - a.n), [vidMap]);
 
   // Cast/PIT/Tổng liên động
   const setCast = (v) => { const c = num(v); setForm(f => ({ ...f, cast_net: c, pit: round(c / 9), total: c + round(c / 9) })); };
@@ -312,7 +338,15 @@ const KocPaymentTab = () => {
             <Field label="Brand"><input list="koc-brands" value={form.brand} onChange={e => setForm(f => ({ ...f, brand: e.target.value }))} placeholder="Chọn / gõ brand" style={inputStyle} /><datalist id="koc-brands">{BRANDS.map(b => <option key={b} value={b} />)}</datalist></Field>
 
             <Field label="Link kênh"><input value={form.channel_link} onChange={e => setForm(f => ({ ...f, channel_link: e.target.value }))} placeholder="https://tiktok.com/@..." style={inputStyle} /></Field>
-            <div style={{ gridColumn: 'span 3' }}><Field label="Link air (*) — BẮT BUỘC · mỗi video 1 dòng"><textarea value={form.air_link} onChange={e => setForm(f => ({ ...f, air_link: e.target.value }))} rows={1} placeholder="https://tiktok.com/@.../video/..." style={{ ...inputStyle, resize: 'vertical' }} /></Field></div>
+            <div style={{ gridColumn: 'span 3' }}>
+              <Field label="Link air (*) — BẮT BUỘC · mỗi video 1 dòng">
+                <textarea value={form.air_link}
+                  onChange={e => { const v = e.target.value; const u = extractUname((v.split('\n').find(Boolean) || '')); setForm(f => ({ ...f, air_link: v, channel_link: (f.channel_link && f.channel_link.trim()) ? f.channel_link : (u ? `https://www.tiktok.com/@${u}` : f.channel_link) })); }}
+                  rows={1} placeholder="https://tiktok.com/@.../video/..." style={{ ...inputStyle, resize: 'vertical' }} />
+              </Field>
+              {formUnames.length > 0 && <div style={{ fontSize: '0.74rem', color: '#0891b2', marginTop: 4, fontWeight: 700 }}>🆔 ID kênh: {formUnames.map(u => '@' + u).join(', ')}</div>}
+              {dupVideos.length > 0 && <div style={{ fontSize: '0.76rem', color: '#dc2626', fontWeight: 700, marginTop: 4, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 7, padding: '5px 9px' }}>⚠️ VIDEO TRÙNG (đã có thanh toán khác): {dupVideos.map(d => `…${d.vid.slice(-6)} ← ${d.who.join(', ')}`).join(' · ')}</div>}
+            </div>
 
             <Field label="Cast (net)"><input value={form.cast_net ? fmtMoney(form.cast_net) : ''} onChange={e => setCast(e.target.value)} inputMode="numeric" placeholder="vd 2.000.000" style={inputStyle} /></Field>
             <Field label="PIT (thuế TNCN)"><input value={form.pit ? fmtMoney(form.pit) : '0'} onChange={e => setPit(e.target.value)} inputMode="numeric" style={inputStyle} /></Field>
@@ -382,6 +416,21 @@ const KocPaymentTab = () => {
                 {a.name} · {fmtMoney(a.total)}đ{a.count > 1 ? ` (${a.count} lần)` : ''}
               </span>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Cảnh báo VIDEO TRÙNG — 1 video có ≥2 đơn thanh toán (nguy cơ trả 2 lần) */}
+      {dupList.length > 0 && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, padding: '12px 16px', marginBottom: 14 }}>
+          <div style={{ fontWeight: 800, color: '#dc2626', fontSize: '0.9rem', marginBottom: 8 }}>⚠️ {dupList.length} video bị TRÙNG — có ≥2 đơn thanh toán cho cùng 1 video (kiểm tra kẻo trả 2 lần)</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {dupList.slice(0, 30).map(d => (
+              <span key={d.vid} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #fecaca', borderRadius: 20, padding: '4px 12px', fontSize: '0.78rem', fontWeight: 700, color: '#b91c1c' }}>
+                …{d.vid.slice(-6)} · {d.names.join(', ')} ({d.n} đơn)
+              </span>
+            ))}
+            {dupList.length > 30 && <span style={{ fontSize: '0.78rem', color: '#94a3b8', alignSelf: 'center' }}>…và {dupList.length - 30} video nữa</span>}
           </div>
         </div>
       )}
