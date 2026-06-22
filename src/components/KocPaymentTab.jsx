@@ -14,8 +14,11 @@ const ACCENT = '#ff6a2c';
 const COMPANIES = ['STELLA', 'OPTIMAX'];
 const BRANDS = ['BODYMISS', 'MILAGANICS', 'MOAWMOAWS', 'EHERB VN', 'HEALMI', 'MASUBE', 'REALSTEEL'];
 const ACTION_PW = 'STELLA8255$';        // mật khẩu để tick Duyệt / Đã thanh toán (1 lần/phiên)
-const PIT_THRESHOLD = 2_000_000;        // tổng chi 1 người/kỳ ≥ ngưỡng này → cảnh báo cần PIT (thuế TNCN)
+const PIT_THRESHOLD = 2_000_000;        // tổng chi 1 người TRONG 1 CÔNG TY / 1 tháng ≥ ngưỡng này → cần PIT (thuế TNCN)
 const personKeyOf = (r) => (r.cccd || r.full_name || r.beneficiary || r.channel_link || '').trim().toLowerCase();
+const ymOf = (r) => (r.pay_date || '').slice(0, 7);   // tháng của lần chi (YYYY-MM)
+// PIT tính RIÊNG theo từng người × công ty × tháng (1 KOC book 2 cty thì KHÔNG cộng dồn — cty nào ≥2tr cty đó mới cần PIT)
+const pitKeyOf = (r) => { const p = personKeyOf(r); return p ? `${p}|${(r.company || '').trim().toLowerCase()}|${ymOf(r)}` : ''; };
 // Bóc id kênh (@username) từ link video; bóc id video từ link air (mỗi video 1 dòng).
 const extractUname = (url) => { const m = String(url || '').match(/@([^/?#\s]+)/); return m ? m[1].toLowerCase() : ''; };
 const extractVideoIds = (text) => [...new Set([...String(text || '').matchAll(/\/video\/(\d{6,})/g)].map(m => m[1]))];
@@ -294,12 +297,14 @@ const KocPaymentTab = () => {
 
   const sum = useMemo(() => filtered.reduce((a, r) => ({ cast: a.cast + num(r.cast_net), pit: a.pit + num(r.pit), total: a.total + num(r.total) }), { cast: 0, pit: 0, total: 0 }), [filtered]);
 
-  // Rule PIT: gom theo người (CCCD / họ tên / kênh) trong kỳ → ai TỔNG ≥ 2tr mà CHƯA có PIT thì cảnh báo cần khấu trừ.
+  // Rule PIT: gom RIÊNG theo người × CÔNG TY × tháng → công ty nào TỔNG ≥ 2tr/tháng mà CHƯA có PIT thì cảnh báo.
+  // (1 KOC book cả 2 công ty: KHÔNG cộng dồn — tránh đếm nhầm, chỉ báo đúng công ty vượt ngưỡng.)
   const { pitAlerts, pitFlagKeys } = useMemo(() => {
     const map = new Map();
     for (const r of filtered) {
-      const key = personKeyOf(r); if (!key) continue;
-      const e = map.get(key) || { key, name: r.full_name || r.beneficiary || r.channel_link || '—', total: 0, pit: 0, count: 0 };
+      const key = pitKeyOf(r); if (!key) continue;
+      const [y, m] = ymOf(r).split('-');
+      const e = map.get(key) || { key, name: r.full_name || r.beneficiary || r.channel_link || '—', company: r.company || '—', monthLabel: m ? `T${Number(m)}/${y}` : '', total: 0, pit: 0, count: 0 };
       e.total += num(r.total); e.pit += num(r.pit); e.count += 1;
       map.set(key, e);
     }
@@ -433,11 +438,11 @@ const KocPaymentTab = () => {
       {/* Cảnh báo PIT — người có tổng ≥ 2tr trong kỳ mà chưa khấu trừ thuế TNCN */}
       {pitAlerts.length > 0 && (
         <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '12px 16px', marginBottom: 14 }}>
-          <div style={{ fontWeight: 800, color: '#b45309', fontSize: '0.9rem', marginBottom: 8 }}>⚠️ {pitAlerts.length} người có TỔNG ≥ {fmtMoney(PIT_THRESHOLD)}đ trong kỳ nhưng CHƯA có PIT — cần khấu trừ thuế TNCN</div>
+          <div style={{ fontWeight: 800, color: '#b45309', fontSize: '0.9rem', marginBottom: 8 }}>⚠️ {pitAlerts.length} trường hợp có TỔNG ≥ {fmtMoney(PIT_THRESHOLD)}đ / tháng / công ty nhưng CHƯA có PIT — cần khấu trừ thuế TNCN <span style={{ fontWeight: 600, color: '#92400e' }}>(tính riêng từng công ty, không cộng dồn)</span></div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {pitAlerts.map(a => (
               <span key={a.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #fde68a', borderRadius: 20, padding: '4px 12px', fontSize: '0.78rem', fontWeight: 700, color: '#92400e' }}>
-                {a.name} · {fmtMoney(a.total)}đ{a.count > 1 ? ` (${a.count} lần)` : ''}
+                {a.name} · <b style={{ color: a.company === 'OPTIMAX' ? '#7c3aed' : '#0891b2' }}>{a.company}</b>{a.monthLabel ? ` · ${a.monthLabel}` : ''} · {fmtMoney(a.total)}đ{a.count > 1 ? ` (${a.count} lần)` : ''}
               </span>
             ))}
           </div>
@@ -524,7 +529,7 @@ const KocPaymentTab = () => {
                     <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.78rem' }}>{r.bank_account || '—'}</td>
                     <td style={td}>{r.bank_name || '—'}</td>
                     <td style={{ ...td, textAlign: 'right' }}>{fmtMoney(r.cast_net)}</td>
-                    <td style={{ ...td, textAlign: 'right', color: pitFlagKeys.has(personKeyOf(r)) ? '#b45309' : '#94a3b8', fontWeight: pitFlagKeys.has(personKeyOf(r)) ? 800 : 400 }} title={pitFlagKeys.has(personKeyOf(r)) ? 'Người này có tổng ≥ 2tr trong kỳ nhưng chưa có PIT — cần khấu trừ thuế TNCN' : ''}>{pitFlagKeys.has(personKeyOf(r)) ? '⚠️ ' : ''}{fmtMoney(r.pit)}</td>
+                    <td style={{ ...td, textAlign: 'right', color: pitFlagKeys.has(pitKeyOf(r)) ? '#b45309' : '#94a3b8', fontWeight: pitFlagKeys.has(pitKeyOf(r)) ? 800 : 400 }} title={pitFlagKeys.has(pitKeyOf(r)) ? `Người này chi ≥ 2tr trong tháng tại ${r.company || 'công ty này'} nhưng chưa có PIT — cần khấu trừ thuế TNCN` : ''}>{pitFlagKeys.has(pitKeyOf(r)) ? '⚠️ ' : ''}{fmtMoney(r.pit)}</td>
                     <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: ACCENT }}>{fmtMoney(r.total)}</td>
                     <td style={{ ...td, textAlign: 'center' }}>{(() => {
                       const imgIcon = (val, emoji, color, label) => { const u = (val || '').split('\n').map(s => s.trim()).filter(Boolean); if (!u.length) return null; return <button onClick={() => setGallery({ title: `${label} — ${r.full_name || r.beneficiary || ''}`, urls: u })} title={`Xem ${u.length} ${label.toLowerCase()}`} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color, marginLeft: 6, fontSize: 'inherit', padding: 0 }}>{emoji}{u.length > 1 ? u.length : ''}</button>; };
