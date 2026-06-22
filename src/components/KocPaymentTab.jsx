@@ -76,14 +76,13 @@ const KocPaymentTab = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      let query = supabase.from('koc_payments').select('*');
-      if (ym !== 'all') { const { start, end } = monthRange(ym); query = query.gte('pay_date', start).lt('pay_date', end); }
-      const { data, error } = await query.order('pay_date', { ascending: false }).order('created_at', { ascending: false }).limit(3000);
+      // Tải TẤT CẢ các tháng 1 lần (lọc tháng làm phía client) → search tìm được mọi tháng + đổi tháng tức thì.
+      const { data, error } = await supabase.from('koc_payments').select('*').order('pay_date', { ascending: false }).order('created_at', { ascending: false }).limit(5000);
       if (error) throw error;
       setRows(data || []);
     } catch (e) { console.error('load payments failed', e); alert('Không tải được dữ liệu: ' + (e.message || e)); }
     finally { setLoading(false); }
-  }, [ym]);
+  }, []);
   useEffect(() => { load(); }, [load]);
 
   // Map TẤT CẢ video id -> đơn (cảnh báo trùng, kể cả khác tháng). Nhẹ (~1.4k đơn). Reload sau mỗi load.
@@ -277,9 +276,13 @@ const KocPaymentTab = () => {
   const staffOptions = useMemo(() => [...new Set(rows.map(r => (r.staff || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi')), [rows]);
   const filtered = useMemo(() => {
     const kw = q.trim().toLowerCase();
+    const mr = (ym !== 'all') ? monthRange(ym) : null;
     return rows.filter(r => {
       const d = (r.pay_date || '').slice(0, 10);
-      return (!fCompany || r.company === fCompany) &&
+      // Đang search → tìm TẤT CẢ tháng (bỏ lọc tháng). Không search → đúng tháng đã chọn.
+      const monthOk = kw ? true : (!mr || (d >= mr.start && d < mr.end));
+      return monthOk &&
+        (!fCompany || r.company === fCompany) &&
         (!fBrand || r.brand === fBrand) &&
         (!fStaff || (r.staff || '').trim() === fStaff) &&
         (!fApproved || (fApproved === 'yes' ? r.accountant_approved : !r.accountant_approved)) &&
@@ -287,7 +290,7 @@ const KocPaymentTab = () => {
         (!fFrom || d >= fFrom) && (!fTo || d <= fTo) &&
         (!kw || [r.full_name, r.beneficiary, r.channel_link, r.air_link, r.bank_account, r.staff].some(v => (v || '').toLowerCase().includes(kw)));
     });
-  }, [rows, fCompany, fBrand, fStaff, fApproved, fPaid, fFrom, fTo, q]);
+  }, [rows, ym, fCompany, fBrand, fStaff, fApproved, fPaid, fFrom, fTo, q]);
 
   // Đổi bộ lọc thì về trang 1
   useEffect(() => { setPayPage(1); }, [ym, fCompany, fBrand, fStaff, fApproved, fPaid, fFrom, fTo, q]);
