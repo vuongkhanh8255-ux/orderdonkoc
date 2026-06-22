@@ -16,6 +16,7 @@ const PAGE_SIZE = 30;
 const KocBlacklistTab = () => {
   const [channels, setChannels] = useState([]);   // [{ id_kenh, created_at }]
   const [airedMap, setAiredMap] = useState({});   // id_kenh chuẩn hoá → { staff, total_air } (nhân sự đã từng air)
+  const [orderedMap, setOrderedMap] = useState({}); // id_kenh chuẩn hoá → { staff, total_order } (nhân sự đã order - Module 1)
   const [loading, setLoading]   = useState(true);
   const [search, setSearch]     = useState('');
   const [flag, setFlag]         = useState('all'); // all | aired | none
@@ -39,6 +40,13 @@ const KocBlacklistTab = () => {
         for (const r of (aired || [])) m[(r.id_kenh || '').toLowerCase().replace(/^@/, '')] = r;
         setAiredMap(m);
       } catch (e2) { console.error('aired staff failed:', e2); }
+      // Đối chiếu donguis (Module 1): nhân sự nào đã ORDER kênh blacklist này (kèm số đơn)
+      try {
+        const { data: ordered } = await supabase.rpc('blacklist_ordered_staff');
+        const mo = {};
+        for (const r of (ordered || [])) mo[(r.id_kenh || '').toLowerCase().replace(/^@/, '')] = r;
+        setOrderedMap(mo);
+      } catch (e3) { console.error('ordered staff failed:', e3); }
     } catch (e) {
       console.error('Load blacklist failed:', e);
       alert('Không tải được blacklist: ' + (e.message || e));
@@ -170,6 +178,7 @@ const KocBlacklistTab = () => {
                     ID Kênh {search && <span style={{ fontWeight: 400, color: '#9ca3af' }}>({filtered.length} kết quả)</span>}
                   </th>
                   <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 800, color: '#dc2626' }}>⚠️ Nhân sự đã từng air (số video)</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 800, color: '#ea580c' }}>🛒 Nhân sự đã order (số đơn)</th>
                   <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 800, color: '#dc2626', width: 120 }}>Ngày thêm</th>
                   <th style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 800, color: '#dc2626', width: 80 }}>Xoá</th>
                 </tr>
@@ -184,6 +193,12 @@ const KocBlacklistTab = () => {
                       return a
                         ? <span style={{ color: '#dc2626', fontWeight: 600 }} title={`Tổng ${a.total_air} video đã air kênh này`}>{a.staff}</span>
                         : <span style={{ color: '#cbd5e1' }}>— chưa ai air</span>;
+                    })()}</td>
+                    <td style={{ padding: '9px 14px', fontSize: '0.82rem' }}>{(() => {
+                      const o = orderedMap[(c.id_kenh || '').toLowerCase().replace(/^@/, '')];
+                      return o
+                        ? <span style={{ color: '#ea580c', fontWeight: 600 }} title={`Tổng ${o.total_order} đơn order cho kênh này`}>{o.staff}</span>
+                        : <span style={{ color: '#cbd5e1' }}>— chưa ai order</span>;
                     })()}</td>
                     <td style={{ padding: '9px 14px', color: '#64748b', fontSize: '0.8rem' }}>{fmtDate(c.created_at)}</td>
                     <td style={{ padding: '9px 14px', textAlign: 'center' }}>
