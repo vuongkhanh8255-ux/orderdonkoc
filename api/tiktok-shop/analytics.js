@@ -426,9 +426,13 @@ const resolveShopContext = async ({ conn, supabase }) => {
   return null;
 };
 
-const fetchAffOrdersPage = ({ ck, cs, accessToken, cipher, pageToken, pageSize = AFF_PAGE_SIZE }) => {
+const fetchAffOrdersPage = ({ ck, cs, accessToken, cipher, pageToken, pageSize = AFF_PAGE_SIZE, geTs = null, ltTs = null }) => {
   const path = `/affiliate_seller/${AFF_ORDERS_VERSION}/orders/search`;
-  const bodyStr = '{}';
+  // Lọc theo create_time (Unix giây) trong body NẾU có → kéo thẳng cửa sổ ngày (gian to khỏi lật từ đầu).
+  const bodyObj = {};
+  if (geTs) bodyObj.create_time_ge = Number(geTs);
+  if (ltTs) bodyObj.create_time_lt = Number(ltTs);
+  const bodyStr = JSON.stringify(bodyObj);
   const urlParams = { app_key: ck, timestamp: String(Math.floor(Date.now() / 1000)), page_size: pageSize, shop_cipher: cipher };
   if (pageToken) urlParams.page_token = pageToken;
   urlParams.sign = buildSign(cs, path, urlParams, bodyStr);
@@ -704,6 +708,24 @@ async function handleSyncAffOrders({ params, appKey, appSecret, supabase, res })
     }).slice(0, 1);
   }
   if (!targets.length) return res.status(200).json({ ok: false, error: 'no matching shop' });
+
+  // TEST: 1 call có filter create_time → xem API affiliate có lọc ngày không (đơn trả về có nằm trong cửa sổ?).
+  if (params.filter_test === '1') {
+    const conn = targets[0];
+    const ctx = await resolveShopContext({ conn, supabase });
+    if (!ctx) return res.status(200).json({ ok: false, error: 'no shop_cipher' });
+    const geTs = Number(params.ge_ts) || (Math.floor(Date.now() / 1000) - 7 * 86400);
+    const ltTs = Number(params.lt_ts) || Math.floor(Date.now() / 1000);
+    let j = await fetchAffOrdersPage({ ck, cs, accessToken: conn.access_token, cipher: ctx.cipher, geTs, ltTs });
+    if (j?.code === 105002 && await refreshCreatorToken({ ck, cs, conn, supabase })) {
+      j = await fetchAffOrdersPage({ ck, cs, accessToken: conn.access_token, cipher: ctx.cipher, geTs, ltTs });
+    }
+    const orders = j?.data?.orders || [];
+    const cts = orders.map(o => Number(o.create_time) || 0).filter(Boolean);
+    return res.status(200).json({ ok: true, shop: ctx.seller_name, code: j?.code, msg: j?.message,
+      window: `${vnDate(geTs)} → ${vnDate(ltTs)}`, returned: orders.length, has_next: !!j?.data?.next_page_token,
+      min_date: cts.length ? vnDate(Math.min(...cts)) : null, max_date: cts.length ? vnDate(Math.max(...cts)) : null });
+  }
 
   const results = [];
   for (const conn of targets) {
