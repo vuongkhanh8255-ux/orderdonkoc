@@ -534,7 +534,8 @@ const syncShopVideosRecent = async ({ appKey, appSecret, shop_id, supabase, days
     const vids = j.data?.videos || []; if (!vids.length) break;
     const rows = vids.map(v => { const pt = v.video_post_time || ''; const prod = (v.products || [])[0] || {}; return { id: String(v.id), shop_id: String(shop_id), username: v.username || '', title: v.title || '', views: Number(v.views) || 0, gmv: numAmt(v.gmv), units_sold: Number(v.units_sold) || 0, sku_orders: Number(v.sku_orders) || 0, ctr: Number(v.click_through_rate) || 0, video_post_time: pt, post_date: pt ? pt.slice(0, 10) : null, product_id: String(prod.id || ''), product_name: prod.name || '', product_count: (v.products || []).length, synced_at: new Date().toISOString() }; }).filter(r => r.id);
     sampleDates.push(...rows.slice(0, 6).map(r => r.post_date));
-    for (let i = 0; i < rows.length; i += 200) await supabase.from('tiktok_shop_videos').upsert(rows.slice(i, i + 200), { onConflict: 'id' });
+    // GREATEST upsert: views/gmv/đơn CHỈ TĂNG, không cho view cửa sổ hẹp đè thấp lại bản gốc (Excel/lần trước).
+    for (let i = 0; i < rows.length; i += 200) await supabase.rpc('upsert_shop_videos_max', { p_rows: rows.slice(i, i + 200) });
     up += rows.length; token = j.data?.next_page_token; pages++; if (!token) break;
   }
   return { videos: up, api_code: firstCode, api_msg: firstMsg, sort: sortField, window_from: sd, sample_post_dates: sampleDates.slice(0, 8) };
