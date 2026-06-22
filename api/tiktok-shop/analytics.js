@@ -445,6 +445,13 @@ const fetchAffOrdersPage = ({ ck, cs, accessToken, cipher, pageToken, pageSize =
 // + views tính theo kỳ). Sync mỗi tháng riêng → tiktok_video_monthly_views (id, ym, views)
 // + metadata (title/post_date/product) vào tiktok_shop_videos. Tổng view = cộng các tháng.
 const VIDEO_PERF_VERSION = '202409';
+
+// ── RULE đếm video chuẩn: chỉ GIỮ video có đơn (sku_orders>0) HOẶC view>=100.
+//    Lọc ngay lúc CÀO (view lấy từ API là chính xác) → bảng nhẹ, query Hiệu suất KOC mượt.
+//    Bật theo shop để test trước; để Set() RỖNG = áp cho TẤT CẢ shop.
+const VIDEO_RULE_SHOPS = new Set(['7495107349171898427']); // Bodymiss VN (test trước)
+const videoRuleOn = (shop_id) => VIDEO_RULE_SHOPS.size === 0 || VIDEO_RULE_SHOPS.has(String(shop_id));
+const keepVideo = (r, shop_id) => !!r.id && (!videoRuleOn(shop_id) || r.views >= 100 || r.sku_orders > 0);
 const monthWindow = (ym) => { const [y, m] = ym.split('-').map(Number); const nx = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`; return { sd: `${ym}-01`, ed: nx }; };
 const listMonths = (floorDate) => {
   const [fy, fm] = floorDate.split('-').map(Number);
@@ -536,7 +543,7 @@ const syncShopVideosRecent = async ({ appKey, appSecret, shop_id, supabase, days
     if (firstCode === null) { firstCode = j?.code; firstMsg = j?.message || ''; }
     if (j?.code !== 0) break;
     const vids = j.data?.videos || []; if (!vids.length) break;
-    const rows = vids.map(v => { const pt = v.video_post_time || ''; const prod = (v.products || [])[0] || {}; return { id: String(v.id), shop_id: String(shop_id), username: v.username || '', title: v.title || '', views: Number(v.views) || 0, gmv: numAmt(v.gmv), units_sold: Number(v.units_sold) || 0, sku_orders: Number(v.sku_orders) || 0, ctr: Number(v.click_through_rate) || 0, video_post_time: pt, post_date: pt ? pt.slice(0, 10) : null, product_id: String(prod.id || ''), product_name: prod.name || '', product_count: (v.products || []).length, synced_at: new Date().toISOString() }; }).filter(r => r.id);
+    const rows = vids.map(v => { const pt = v.video_post_time || ''; const prod = (v.products || [])[0] || {}; return { id: String(v.id), shop_id: String(shop_id), username: v.username || '', title: v.title || '', views: Number(v.views) || 0, gmv: numAmt(v.gmv), units_sold: Number(v.units_sold) || 0, sku_orders: Number(v.sku_orders) || 0, ctr: Number(v.click_through_rate) || 0, video_post_time: pt, post_date: pt ? pt.slice(0, 10) : null, product_id: String(prod.id || ''), product_name: prod.name || '', product_count: (v.products || []).length, synced_at: new Date().toISOString() }; }).filter(r => keepVideo(r, shop_id));
     sampleDates.push(...rows.slice(0, 6).map(r => r.post_date));
     // GREATEST upsert: views/gmv/đơn CHỈ TĂNG, không cho view cửa sổ hẹp đè thấp lại bản gốc (Excel/lần trước).
     for (let i = 0; i < rows.length; i += 200) await supabase.rpc('upsert_shop_videos_max', { p_rows: rows.slice(i, i + 200) });
@@ -565,7 +572,7 @@ const syncShopVideos = async ({ appKey, appSecret, shop_id, supabase, maxPages =
     if (j?.code === 105002 && await refreshAnalyticsToken({ appKey, appSecret, conn: aconn, supabase, table: 'tiktok_analytics_connections' })) { raw = await doCall(token); try { j = JSON.parse(raw); } catch { break; } }
     if (j?.code !== 0) break;
     const vids = j.data?.videos || []; if (!vids.length) { cycleDone = true; break; }
-    const rows = vids.map(v => { const pt = v.video_post_time || ''; const prod = (v.products || [])[0] || {}; return { id: String(v.id), shop_id: String(shop_id), username: v.username || '', title: v.title || '', views: Number(v.views) || 0, gmv: numAmt(v.gmv), units_sold: Number(v.units_sold) || 0, sku_orders: Number(v.sku_orders) || 0, ctr: Number(v.click_through_rate) || 0, video_post_time: pt, post_date: pt ? pt.slice(0, 10) : null, product_id: String(prod.id || ''), product_name: prod.name || '', product_count: (v.products || []).length, synced_at: new Date().toISOString() }; }).filter(r => r.id);
+    const rows = vids.map(v => { const pt = v.video_post_time || ''; const prod = (v.products || [])[0] || {}; return { id: String(v.id), shop_id: String(shop_id), username: v.username || '', title: v.title || '', views: Number(v.views) || 0, gmv: numAmt(v.gmv), units_sold: Number(v.units_sold) || 0, sku_orders: Number(v.sku_orders) || 0, ctr: Number(v.click_through_rate) || 0, video_post_time: pt, post_date: pt ? pt.slice(0, 10) : null, product_id: String(prod.id || ''), product_name: prod.name || '', product_count: (v.products || []).length, synced_at: new Date().toISOString() }; }).filter(r => keepVideo(r, shop_id));
     for (let i = 0; i < rows.length; i += 200) await supabase.from('tiktok_shop_videos').upsert(rows.slice(i, i + 200), { onConflict: 'id' });
     up += rows.length; token = j.data?.next_page_token; pages++; if (!token) { cycleDone = true; break; }
   }
