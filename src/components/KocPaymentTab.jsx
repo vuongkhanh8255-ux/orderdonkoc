@@ -134,8 +134,13 @@ const KocPaymentTab = () => {
     if (!form.bank_name || !form.bank_name.trim()) miss.push('Ngân hàng');
     if (!form.air_link || !form.air_link.trim()) miss.push('Link air');
     if (!(num(form.cast_net) > 0)) miss.push('Cast');
+    if (!form.brand || !form.brand.trim()) miss.push('Brand');
+    if (!form.staff || !form.staff.trim()) miss.push('Nhân sự booking');
+    if (!form.company || !form.company.trim()) miss.push('Công ty');
     if (miss.length) { alert('⚠️ Phải điền ĐẦY ĐỦ mới lưu được.\nCòn thiếu: ' + miss.join(', ') + '.'); return; }
-    if (cccdDigits.length !== 12) { alert(`⚠️ Số CCCD phải đúng 12 số (đang ${cccdDigits.length} số).`); return; }
+    const mstDigits = (form.tax_code || '').replace(/\D/g, '');
+    const isBiz = mstDigits.length === 10 || mstDigits.length === 13; // MST công ty/HKD: 10 hoặc 13 số
+    if (!isBiz && cccdDigits.length !== 12) { alert(`⚠️ Cá nhân: CCCD phải đúng 12 số (đang ${cccdDigits.length} số).\nCông ty/HKD: điền ô "Mã số thuế" 10 hoặc 13 số.`); return; }
     setSaving(true);
     const payload = {
       pay_date: form.pay_date || null, staff: form.staff || null, company: form.company || null,
