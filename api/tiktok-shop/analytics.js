@@ -734,6 +734,40 @@ async function handleSyncAffOrders({ params, appKey, appSecret, supabase, res })
       min_date: cts.length ? vnDate(Math.min(...cts)) : null, max_date: cts.length ? vnDate(Math.max(...cts)) : null });
   }
 
+  // RE-PULL CỬA SỔ NGÀY (hứng đơn affiliate VỀ TRỄ bị sót): kéo thẳng đơn có create_time trong [start,end]
+  //   (VN) bằng filter create_time → không phải lật cursor cả nghìn trang. Lặp qua mọi shop khớp `seller`.
+  //   ?action=sync_aff_orders&resync_window=1&seller=eherb&start=2026-06-16&end=2026-06-18
+  if (params.resync_window === '1') {
+    const dToTs = (d, addDay = 0) => Math.floor(Date.parse(`${d}T00:00:00+07:00`) / 1000) + addDay * 86400;
+    const geTs = params.ge_ts ? Number(params.ge_ts) : dToTs(params.start);
+    const ltTs = params.lt_ts ? Number(params.lt_ts) : dToTs(params.end, 1); // end inclusive → +1 ngày
+    const MAXP = Math.min(Math.max(Number(params.pages) || 40, 1), 80);
+    const out = [];
+    for (const conn of targets) {
+      const ctx = await resolveShopContext({ conn, supabase });
+      if (!ctx) { out.push({ shop: conn.seller_name, skip: 'no shop_cipher' }); continue; }
+      let accessToken = conn.access_token;
+      const pull = async (pt) => {
+        let j = await fetchAffOrdersPage({ ck, cs, accessToken, cipher: ctx.cipher, pageToken: pt, geTs, ltTs });
+        if (j?.code === 105002 && await refreshCreatorToken({ ck, cs, conn, supabase })) { accessToken = conn.access_token; j = await fetchAffOrdersPage({ ck, cs, accessToken, cipher: ctx.cipher, pageToken: pt, geTs, ltTs }); }
+        return j;
+      };
+      let token = null, pages = 0, up = 0, code = 0;
+      while (pages < MAXP) {
+        const j = await pull(token);
+        code = j?.code;
+        if (j?.code !== 0) break;
+        const orders = j.data?.orders || [];
+        const rows = []; for (const o of orders) rows.push(...affRowsFromOrder(o, ctx.shop_id));
+        for (let i = 0; i < rows.length; i += 500) await supabase.from('tiktok_affiliate_orders').upsert(rows.slice(i, i + 500), { onConflict: 'order_id,sku_id' });
+        up += rows.length; token = j.data?.next_page_token; pages++;
+        if (!token || !orders.length) break;
+      }
+      out.push({ shop: ctx.seller_name, shop_id: ctx.shop_id, window: `${vnDate(geTs)} → ${vnDate(ltTs)}`, pages, upserted_rows: up, code, done: !token });
+    }
+    return res.status(200).json({ ok: true, resync: out });
+  }
+
   const results = [];
   for (const conn of targets) {
     try { results.push(await syncOneAffShop({ ck, cs, conn, supabase, appKey, appSecret })); }
