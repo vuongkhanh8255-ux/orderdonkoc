@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx-js-style';
 
 // ─── helpers ────────────────────────────────────────────────
@@ -10,8 +10,10 @@ const toInt = (val) => {
 
 const fmt = (n) => Number(n).toLocaleString('vi-VN');
 
-// ─── core logic (ported from app.py) ────────────────────────
-function processFiles(tiktokRows, campainRows) {
+const PRIORITY_LS_KEY = 'camp_priority_skus';   // nhớ bảng ID ưu tiên giữa các lần
+
+// ─── core logic (ported from app.py + rule ƯU TIÊN) ─────────
+function processFiles(tiktokRows, campainRows, prioritySet) {
     // Build tiktok_map: sku_id → { product_id, product_name, camp_price }
     const tiktokMap = {};
     for (const row of tiktokRows) {
@@ -28,10 +30,12 @@ function processFiles(tiktokRows, campainRows) {
         }
     }
 
-    const kept      = [];
-    const removed   = [];
-    const th2ByPid  = {};   // pid → list
-    const keptPids  = new Set();
+    const kept           = [];
+    const removed        = [];
+    const th2ByPid       = {};            // pid → list
+    const keptPidsNormal = new Set();     // product có ≥1 SKU đạt điều kiện (TH1/TH3)
+    const outSkus        = new Set();     // SKU đã đưa vào output (chống trùng)
+    const campInfo       = {};            // skuId → {pidStr, myPrice, ttPrice, ttInfo, phanLoai}
 
     for (const row of campainRows) {
         const productIdCp = row[0];
@@ -52,9 +56,10 @@ function processFiles(tiktokRows, campainRows) {
 
         const ttPrice = ttInfo.campPrice;
         const diff    = myPrice - ttPrice;
+        campInfo[skuStr] = { pidStr, myPrice, ttPrice, ttInfo, phanLoai };
 
         if (diff > 1000) {
-            // TH2: loại
+            // TH2: loại (trừ khi là SKU ưu tiên — xử lý ở pass dưới)
             removed.push({
                 sku: skuStr, pid: pidStr, myPrice, ttPrice,
                 reason: `TH2: Giá A (${fmt(myPrice)}) > Giá B (${fmt(ttPrice)}) + 1.000đ (hơn ${fmt(diff)}đ)`,
@@ -71,19 +76,20 @@ function processFiles(tiktokRows, campainRows) {
         } else if (diff > 0) {
             // TH3: quay đầu → dùng giá B
             kept.push({ productId: ttInfo.productId, skuId: skuStr, campaignPrice: ttPrice, note: '' });
-            keptPids.add(pidStr);
+            keptPidsNormal.add(pidStr); outSkus.add(skuStr);
         } else {
             // TH1: giá A <= giá B → dùng giá A
             kept.push({ productId: ttInfo.productId, skuId: skuStr, campaignPrice: myPrice, note: '' });
-            keptPids.add(pidStr);
+            keptPidsNormal.add(pidStr); outSkus.add(skuStr);
         }
     }
 
-    // TH4: tất cả SKU của product đều bị TH2
+    // TH4: tất cả SKU của product đều bị TH2 → pick SKU giá A cao nhất
     const special = [];
     for (const [pid, skuList] of Object.entries(th2ByPid)) {
-        if (!keptPids.has(pid)) {
+        if (!keptPidsNormal.has(pid)) {
             const best = skuList.reduce((a, b) => a.myPrice > b.myPrice ? a : b);
+            if (outSkus.has(best.skuId)) continue;
             const phanLoaiTxt = best.phanLoai ? ` | Phân loại: ${best.phanLoai}` : '';
             const note = `[TH4-ĐẶC BIỆT] Toàn bộ SKU vượt giá B.${phanLoaiTxt} | Giá A cao nhất: ${fmt(best.myPrice)}đ vs Giá B: ${fmt(best.ttPrice)}đ | Cần duyệt thủ công!`;
             special.push({
@@ -96,10 +102,45 @@ function processFiles(tiktokRows, campainRows) {
                 ttPrice:     best.ttPrice,
                 phanLoai:    best.phanLoai,
             });
+            outSkus.add(best.skuId);
         }
     }
 
-    return { kept, removed, special };
+    // ƯU TIÊN: mọi SKU trong bảng ưu tiên đều PHẢI được đăng kí (đè TH2 nếu cần),
+    // giá đăng kí = min(Giá A, Giá B). Vẫn giữ SKU giá cao nhất ở TH4 (đã thêm ở trên).
+    const priorityRows   = [];   // dòng ưu tiên cần THÊM vào output (chưa có sẵn)
+    const priorityReport = [];   // báo cáo MỌI SKU ưu tiên (kể cả đã có / không tìm thấy)
+    for (const skuStr of prioritySet) {
+        const info = campInfo[skuStr];
+        if (!info) {
+            const inTt = tiktokMap[skuStr];
+            priorityReport.push({
+                skuId: skuStr, productId: inTt?.productId || '', productName: inTt?.productName || '',
+                phanLoai: '', allowedPrice: null, campaignPrice: inTt ? inTt.campPrice : null,
+                found: false,
+                status: inTt ? 'Có trong file TikTok nhưng THIẾU trong file giá của mình' : 'KHÔNG tìm thấy trong cả 2 file',
+            });
+            continue;
+        }
+        const { myPrice, ttPrice, ttInfo, phanLoai } = info;
+        const cp      = Math.min(myPrice, ttPrice);
+        const overB   = (myPrice - ttPrice) > 1000;
+        const already = outSkus.has(skuStr);
+        if (!already) {
+            const note = `[ƯU TIÊN] Phân loại ưu tiên (điền tay).${phanLoai ? ' Phân loại: ' + phanLoai + '.' : ''} `
+                + `Giá cho phép: ${fmt(myPrice)}đ · Giá đăng kí: ${fmt(cp)}đ`
+                + (overB ? ' · (Giá A vượt Giá B nhưng VẪN đăng do ưu tiên)' : '');
+            priorityRows.push({ productId: ttInfo.productId, skuId: skuStr, campaignPrice: cp, note });
+            outSkus.add(skuStr);
+        }
+        priorityReport.push({
+            skuId: skuStr, productId: ttInfo.productId, productName: ttInfo.productName, phanLoai,
+            allowedPrice: myPrice, campaignPrice: cp, found: true,
+            status: already ? 'Đã đạt điều kiện — đăng kí' : (overB ? 'Ưu tiên — đè TH2, đăng ở Giá B' : 'Ưu tiên — đăng kí'),
+        });
+    }
+
+    return { kept, removed, special, priorityRows, priorityReport };
 }
 
 const MEO_TEXT =
@@ -110,10 +151,12 @@ const MEO_TEXT =
     'Các trường bắt buộc: ID sản phẩm, ID SKU, giá chiến dịch.';
 
 const YELLOW_FILL = { patternType: 'solid', fgColor: { rgb: 'FFFF00' }, bgColor: { rgb: 'FFFF00' } };
+const BLUE_FILL   = { patternType: 'solid', fgColor: { rgb: 'CCE5FF' }, bgColor: { rgb: 'CCE5FF' } };
 
-function buildOutputXlsx(kept, special) {
+function buildOutputXlsx(kept, special, priorityRows) {
     const keptRows    = kept.map(r => [r.productId, r.skuId, r.campaignPrice, r.note || '']);
     const specialRows = special.map(r => [r.productId, r.skuId, r.campaignPrice, r.note || '']);
+    const prioRows    = priorityRows.map(r => [r.productId, r.skuId, r.campaignPrice, r.note || '']);
 
     // Row 0 = TikTok "Mẹo:" template header  |  Row 1 = column headers
     const allRows = [
@@ -121,13 +164,14 @@ function buildOutputXlsx(kept, special) {
         ['Product ID', 'SKU ID', 'Campaign price', null],
         ...keptRows,
         ...specialRows,
+        ...prioRows,
     ];
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(allRows);
 
     // ── Column widths ──
-    ws['!cols'] = [{ wch: 24 }, { wch: 24 }, { wch: 18 }, { wch: 90 }];
+    ws['!cols'] = [{ wch: 24 }, { wch: 24 }, { wch: 18 }, { wch: 95 }];
 
     // ── Merge A1:D1 for the Mẹo title row ──
     ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }];
@@ -138,6 +182,7 @@ function buildOutputXlsx(kept, special) {
         { hpt: 22 },   // row 2 — headers
         ...Array(keptRows.length).fill({ hpt: 20 }),     // normal data rows
         ...Array(specialRows.length).fill({ hpt: 38 }),  // TH4 rows (longer note text)
+        ...Array(prioRows.length).fill({ hpt: 38 }),     // priority rows
     ];
 
     // ── Style: Mẹo title cell ──
@@ -174,6 +219,21 @@ function buildOutputXlsx(kept, special) {
             if (!ws[ref]) ws[ref] = { t: 's', v: '' };
             ws[ref].s = {
                 fill:      YELLOW_FILL,
+                font:      { sz: 12 },
+                alignment: col === 'D' ? { wrapText: true, vertical: 'top' } : { vertical: 'center' },
+            };
+        });
+    }
+
+    // ── Style: ƯU TIÊN rows — blue fill + font 12 ──
+    const prioStartExcelRow = 2 + keptRows.length + specialRows.length + 1; // 1-indexed
+    for (let i = 0; i < prioRows.length; i++) {
+        const excelRow = prioStartExcelRow + i;
+        ['A', 'B', 'C', 'D'].forEach(col => {
+            const ref = col + excelRow;
+            if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+            ws[ref].s = {
+                fill:      BLUE_FILL,
                 font:      { sz: 12 },
                 alignment: col === 'D' ? { wrapText: true, vertical: 'top' } : { vertical: 'center' },
             };
@@ -234,6 +294,7 @@ const statCard = (type) => {
         success: { bg: '#d4edda', text: '#155724' },
         warning: { bg: '#fff3cd', text: '#856404' },
         danger:  { bg: '#f8d7da', text: '#721c24' },
+        info:    { bg: '#cce5ff', text: '#004085' },
     }[type];
     return {
         background: colors.bg, borderRadius: 10, padding: '16px 12px', textAlign: 'center', flex: 1,
@@ -245,11 +306,25 @@ export default function CampRegistrationTab() {
     const [tiktokFile,  setTiktokFile]  = useState(null);
     const [campainFile, setCampainFile] = useState(null);
     const [loading,     setLoading]     = useState(false);
-    const [result,      setResult]      = useState(null); // { kept, removed, special }
+    const [result,      setResult]      = useState(null); // { kept, removed, special, priorityRows, priorityReport }
     const [error,       setError]       = useState('');
     const [outputData,  setOutputData]  = useState(null);
+    const [priorityInput, setPriorityInput] = useState(() => {
+        try { return localStorage.getItem(PRIORITY_LS_KEY) || ''; } catch { return ''; }
+    });
     const tiktokRef  = useRef();
     const campainRef = useRef();
+
+    // nhớ bảng ID ưu tiên
+    useEffect(() => {
+        try { localStorage.setItem(PRIORITY_LS_KEY, priorityInput); } catch { /* ignore */ }
+    }, [priorityInput]);
+
+    // ID ưu tiên: tách theo dòng / dấu phẩy / khoảng trắng
+    const prioritySet = useMemo(
+        () => new Set(priorityInput.split(/[\n,;\s]+/).map(s => s.trim()).filter(Boolean)),
+        [priorityInput],
+    );
 
     const handleProcess = async () => {
         if (!tiktokFile || !campainFile) { setError('Vui lòng chọn đủ 2 file!'); return; }
@@ -260,10 +335,11 @@ export default function CampRegistrationTab() {
                 readExcelRows(campainFile, 2),
             ]);
 
-            const { kept, removed, special } = processFiles(tiktokRows, campainRows);
+            const res = processFiles(tiktokRows, campainRows, prioritySet);
+            const { kept, removed, special, priorityRows } = res;
 
             // Sanity check: all removed + no kept/special → likely swapped files
-            if (kept.length === 0 && special.length === 0 && removed.length > 0) {
+            if (kept.length === 0 && special.length === 0 && priorityRows.length === 0 && removed.length > 0) {
                 const notFound = removed.filter(r => r.reason.includes('Không tìm thấy')).length;
                 if (notFound === removed.length) {
                     setError('⚠️ Có thể bạn upload nhầm thứ tự file! Ô trái = File TikTok gửi, ô phải = File giá của mình.');
@@ -271,9 +347,9 @@ export default function CampRegistrationTab() {
                 }
             }
 
-            const xlsxData = buildOutputXlsx(kept, special);
+            const xlsxData = buildOutputXlsx(kept, special, priorityRows);
             setOutputData(xlsxData);
-            setResult({ kept, removed, special });
+            setResult(res);
         } catch (e) {
             setError('Lỗi xử lý: ' + e.message);
         } finally { setLoading(false); }
@@ -318,6 +394,10 @@ export default function CampRegistrationTab() {
         </div>
     );
 
+    const priorityCount = prioritySet.size;
+    const priorityRegistered = result?.priorityReport?.filter(p => p.found).length || 0;
+    const priorityNotFound   = result?.priorityReport?.filter(p => !p.found) || [];
+
     return (
         <div style={{ fontFamily: "'Outfit', sans-serif", maxWidth: 760, margin: '0 auto' }}>
             {/* Header */}
@@ -335,7 +415,39 @@ export default function CampRegistrationTab() {
                     <li><span style={{ color: '#28a745', fontWeight: 700 }}>✅ TH3:</span> Giá A &gt; Giá B trong 0–1.000đ (quay đầu) → lấy <b>Giá B</b></li>
                     <li><span style={{ color: '#dc3545', fontWeight: 700 }}>❌ TH2:</span> Giá A &gt; Giá B hơn 1.000đ → <b>XÓA</b></li>
                     <li><span style={{ color: '#856404', fontWeight: 700 }}>⚠️ TH4:</span> Toàn bộ SKU của 1 Product đều bị TH2 → <b>Pick SKU giá A cao nhất, highlight vàng để duyệt</b></li>
+                    <li><span style={{ color: '#004085', fontWeight: 700 }}>🎯 ƯU TIÊN:</span> ID phân loại điền trong bảng ưu tiên → <b>luôn được đăng kí</b> (đè TH2, đăng ở Giá B), <b>kèm</b> SKU giá cao nhất. Highlight xanh để biết.</li>
                 </ul>
+            </div>
+
+            {/* Bảng ID phân loại ưu tiên */}
+            <div style={{ ...card, border: '2px solid #b8daff', background: '#f5faff' }}>
+                <div style={{ fontWeight: 700, fontSize: 15, color: '#004085', marginBottom: 6 }}>
+                    🎯 Bảng ID phân loại ưu tiên (điền tay)
+                </div>
+                <div style={{ fontSize: 12.5, color: '#5b6b7b', marginBottom: 12, lineHeight: 1.6 }}>
+                    Mỗi dòng <b>1 ID phân loại (SKU ID)</b> cần ưu tiên đăng kí trong camp. Những SKU này <b>luôn được fill vào file</b> dù vượt giá (đăng ở Giá B), kèm SKU giá cao nhất như cũ. Bỏ trống = chạy theo rule cũ.
+                    <span style={{ color: '#004085', fontWeight: 700 }}> Đang có {priorityCount} ID ưu tiên.</span>
+                </div>
+                <textarea
+                    value={priorityInput}
+                    onChange={e => setPriorityInput(e.target.value)}
+                    placeholder={'Dán / gõ ID phân loại, mỗi dòng 1 ID. Ví dụ:\n1729412345678901234\n1729498765432109876'}
+                    style={{
+                        width: '100%', minHeight: 96, padding: '12px 14px', fontSize: 13,
+                        fontFamily: "'Outfit', sans-serif", lineHeight: 1.7, borderRadius: 10,
+                        border: '1px solid #b8daff', background: '#fff', color: '#333',
+                        boxSizing: 'border-box', outline: 'none', resize: 'vertical',
+                    }}
+                />
+                {priorityCount > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                        {[...prioritySet].slice(0, 40).map(id => (
+                            <span key={id} style={{ fontSize: 11.5, fontWeight: 700, color: '#004085', background: '#cce5ff', borderRadius: 14, padding: '3px 10px' }}>{id}</span>
+                        ))}
+                        {priorityCount > 40 && <span style={{ fontSize: 11.5, color: '#5b6b7b' }}>… +{priorityCount - 40}</span>}
+                        <button onClick={() => setPriorityInput('')} style={{ fontSize: 11.5, fontWeight: 700, color: '#721c24', background: '#f8d7da', border: 'none', borderRadius: 14, padding: '3px 12px', cursor: 'pointer' }}>✕ Xoá hết</button>
+                    </div>
+                )}
             </div>
 
             {/* Upload area */}
@@ -378,6 +490,10 @@ export default function CampRegistrationTab() {
                             <div style={{ fontSize: 34, fontWeight: 800, color: '#155724' }}>{result.kept.length}</div>
                             <div style={{ fontSize: 13, color: '#155724', marginTop: 4 }}>✅ Đăng kí được</div>
                         </div>
+                        <div style={statCard('info')}>
+                            <div style={{ fontSize: 34, fontWeight: 800, color: '#004085' }}>{priorityRegistered}</div>
+                            <div style={{ fontSize: 13, color: '#004085', marginTop: 4 }}>🎯 Ưu tiên</div>
+                        </div>
                         <div style={statCard('warning')}>
                             <div style={{ fontSize: 34, fontWeight: 800, color: '#856404' }}>{result.special.length}</div>
                             <div style={{ fontSize: 13, color: '#856404', marginTop: 4 }}>⚠️ TH4 - Cần duyệt</div>
@@ -392,6 +508,44 @@ export default function CampRegistrationTab() {
                     <button style={btnGreen} onClick={handleDownload}>
                         📥 Tải file kết quả (.xlsx)
                     </button>
+
+                    {/* Bảng thông báo PHÂN LOẠI ƯU TIÊN */}
+                    {result.priorityReport.length > 0 && (
+                        <div style={{ marginTop: 16, border: '2px solid #b8daff', borderRadius: 10, overflow: 'hidden' }}>
+                            <div style={{ padding: '10px 16px', background: '#cce5ff', color: '#004085', fontWeight: 700, fontSize: 13 }}>
+                                🎯 Camp này ưu tiên {result.priorityReport.filter(p => p.found).length} phân loại (highlight xanh trong file):
+                            </div>
+                            <div style={{ overflowX: 'auto' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                    <thead>
+                                        <tr style={{ background: '#eaf4ff', color: '#004085' }}>
+                                            <th style={{ padding: '7px 10px', textAlign: 'left', fontWeight: 700 }}>Tên SP / Phân loại</th>
+                                            <th style={{ padding: '7px 10px', textAlign: 'left', fontWeight: 700 }}>ID phân loại</th>
+                                            <th style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700 }}>Giá cho phép</th>
+                                            <th style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700 }}>Giá đăng kí camp</th>
+                                            <th style={{ padding: '7px 10px', textAlign: 'left', fontWeight: 700 }}>Trạng thái</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {result.priorityReport.map((p, i) => (
+                                            <tr key={i} style={{ borderTop: '1px solid #eef', background: p.found ? '#fff' : '#fff6f6' }}>
+                                                <td style={{ padding: '7px 10px', color: '#333' }}>{p.productName || '—'}{p.phanLoai ? ` · ${p.phanLoai}` : ''}</td>
+                                                <td style={{ padding: '7px 10px', color: '#666', fontFamily: 'monospace' }}>{p.skuId}</td>
+                                                <td style={{ padding: '7px 10px', textAlign: 'right', color: '#333' }}>{p.allowedPrice != null ? fmt(p.allowedPrice) + 'đ' : '—'}</td>
+                                                <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, color: '#004085' }}>{p.campaignPrice != null ? fmt(p.campaignPrice) + 'đ' : '—'}</td>
+                                                <td style={{ padding: '7px 10px', color: p.found ? '#155724' : '#721c24', fontWeight: 600 }}>{p.found ? '✅ ' : '⚠️ '}{p.status}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {priorityNotFound.length > 0 && (
+                                <div style={{ padding: '8px 16px', background: '#fff6f6', color: '#721c24', fontSize: 12 }}>
+                                    ⚠️ {priorityNotFound.length} ID ưu tiên không đăng kí được (xem cột trạng thái) — kiểm tra lại ID hoặc 2 file đầu vào.
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* TH4 special items */}
                     {result.special.length > 0 && (
