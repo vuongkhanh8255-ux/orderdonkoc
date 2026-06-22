@@ -1,6 +1,7 @@
 // src/components/ShopAnalyticsTab.jsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
+import RunnerLoader from './RunnerLoader';
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList,
@@ -253,7 +254,7 @@ const ShopeeTopSellers = ({ dateRange }) => {
       </div>
 
       {loading && (
-        <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8', fontSize: '0.84rem' }}>⏳ Đang tải bảng xếp hạng...</div>
+        <RunnerLoader label="Đang tải bảng xếp hạng…" />
       )}
       {error && !loading && (
         <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 12, padding: '12px 16px', fontSize: '0.82rem', fontWeight: 600 }}>⚠️ {error}</div>
@@ -371,7 +372,7 @@ const TikTokTopSellers = ({ dateRange }) => {
       </div>
 
       {loading && (
-        <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8', fontSize: '0.84rem' }}>⏳ Đang tải bảng xếp hạng TikTok...</div>
+        <RunnerLoader label="Đang tải bảng xếp hạng TikTok…" />
       )}
       {error && !loading && (
         <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 12, padding: '12px 16px', fontSize: '0.82rem', fontWeight: 600 }}>⚠️ {error}</div>
@@ -855,10 +856,7 @@ const ShopAnalyticsTab = ({ lockPlatform = '' } = {}) => {
 
       {/* ── Loading ──────────────────────────────────────────────────────────── */}
       {loading && (
-        <div style={{ textAlign: 'center', padding: '64px 20px', color: '#64748b' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: 10 }}>⏳</div>
-          <p style={{ fontWeight: 600 }}>Đang tải dữ liệu...</p>
-        </div>
+        <div style={{ padding: '40px 20px' }}><RunnerLoader label="Đang tải dữ liệu…" /></div>
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════ */}

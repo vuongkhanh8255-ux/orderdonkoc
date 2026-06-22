@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Component, lazy, Suspense } from 'react';
 import { AppDataProvider } from './context/AppDataContext';
+import RunnerLoader from './components/RunnerLoader';
 import { supabase } from './supabaseClient';
 // Giữ EAGER: cần ngay khi vào trang / có named export dùng đồng bộ
 import LoginPage, { ROLE_VIEWS, ACCOUNTS } from './components/LoginPage';
@@ -74,9 +75,8 @@ class AppErrorBoundary extends Component {
 // Spinner nhẹ hiển thị trong lúc code của 1 tab (lazy) đang được tải
 function TabLoadingFallback() {
   return (
-    <div style={{ padding: '60px 24px', textAlign: 'center', color: '#94a3b8', fontFamily: "'Outfit', sans-serif" }}>
-      <div style={{ fontSize: '1.6rem', marginBottom: 8 }}>⏳</div>
-      <div style={{ fontSize: '0.9rem' }}>Đang tải...</div>
+    <div style={{ padding: '40px 24px', fontFamily: "'Outfit', sans-serif" }}>
+      <RunnerLoader label="Đang tải…" />
     </div>
   );
 }
