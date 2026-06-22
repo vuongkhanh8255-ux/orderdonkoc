@@ -285,7 +285,7 @@ const KocPaymentTab = () => {
         (!fApproved || (fApproved === 'yes' ? r.accountant_approved : !r.accountant_approved)) &&
         (!fPaid || (fPaid === 'yes' ? r.paid : !r.paid)) &&
         (!fFrom || d >= fFrom) && (!fTo || d <= fTo) &&
-        (!kw || [r.full_name, r.beneficiary, r.channel_link, r.bank_account, r.staff].some(v => (v || '').toLowerCase().includes(kw)));
+        (!kw || [r.full_name, r.beneficiary, r.channel_link, r.air_link, r.bank_account, r.staff].some(v => (v || '').toLowerCase().includes(kw)));
     });
   }, [rows, fCompany, fBrand, fStaff, fApproved, fPaid, fFrom, fTo, q]);
 
@@ -420,7 +420,7 @@ const KocPaymentTab = () => {
         <select value={fStaff} onChange={e => setFStaff(e.target.value)} style={{ ...inputStyle, width: 'auto' }}><option value="">Tất cả nhân sự</option>{staffOptions.map(s => <option key={s} value={s}>{s}</option>)}</select>
         <select value={fApproved} onChange={e => setFApproved(e.target.value)} style={{ ...inputStyle, width: 'auto' }}><option value="">Tất cả duyệt</option><option value="no">Chưa duyệt</option><option value="yes">Đã duyệt</option></select>
         <select value={fPaid} onChange={e => setFPaid(e.target.value)} style={{ ...inputStyle, width: 'auto' }}><option value="">Tất cả TT</option><option value="no">Chưa TT</option><option value="yes">Đã TT</option></select>
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 Tìm tên / kênh / STK…" style={{ ...inputStyle, width: 220 }} />
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 Tìm tên / kênh / STK / link video / ID kênh…" style={{ ...inputStyle, width: 220 }} />
         <button onClick={exportExcel} disabled={!filtered.length} title={selected.size > 0 ? `Xuất ${selected.size} dòng đã chọn` : 'Xuất toàn bộ dòng đang lọc'} style={{ padding: '9px 16px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 9, fontWeight: 700, cursor: filtered.length ? 'pointer' : 'default', opacity: filtered.length ? 1 : 0.5 }}>📥 Xuất Excel{selected.size > 0 ? ` (${selected.size} dòng chọn)` : ''}</button>
         <button onClick={load} style={{ padding: '9px 14px', background: '#fff', color: ACCENT, border: `1px solid ${ACCENT}55`, borderRadius: 9, fontWeight: 700, cursor: 'pointer' }}>🔄</button>
       </div>
