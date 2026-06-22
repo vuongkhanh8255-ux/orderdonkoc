@@ -65,7 +65,9 @@ const KocPaymentTab = () => {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState('');
-  const [vidMap, setVidMap] = useState({}); // id_video -> [{id, name}] TOÀN BỘ koc_payments (cảnh báo trùng video, kể cả khác tháng)
+  const [vidMap, setVidMap] = useState({}); // id_video -> [đơn] TOÀN BỘ koc_payments (cảnh báo trùng video, kể cả khác tháng)
+  const [dupBannerOpen, setDupBannerOpen] = useState(true); // thu gọn banner video trùng
+  const [dupVidOpen, setDupVidOpen] = useState(null);       // vid đang bung chi tiết 2 đơn
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -82,9 +84,13 @@ const KocPaymentTab = () => {
 
   // Map TẤT CẢ video id -> đơn (cảnh báo trùng, kể cả khác tháng). Nhẹ (~1.4k đơn). Reload sau mỗi load.
   const loadVidMap = useCallback(async () => {
-    const { data } = await supabase.from('koc_payments').select('id, air_link, full_name, beneficiary, staff');
+    const { data } = await supabase.from('koc_payments').select('id, air_link, channel_link, full_name, beneficiary, staff, pay_date, cast_net, brand');
     const m = {};
-    (data || []).forEach(r => extractVideoIds(r.air_link).forEach(vid => { (m[vid] = m[vid] || []).push({ id: r.id, name: r.full_name || r.beneficiary || r.staff || '?' }); }));
+    (data || []).forEach(r => {
+      const name = r.full_name || r.beneficiary || r.staff || '?';
+      const channel = extractUname(r.channel_link) || extractUname(r.air_link);
+      extractVideoIds(r.air_link).forEach(vid => { (m[vid] = m[vid] || []).push({ id: r.id, name, channel, pay_date: r.pay_date, cast_net: r.cast_net, brand: r.brand }); });
+    });
     setVidMap(m);
   }, []);
   useEffect(() => { loadVidMap(); }, [loadVidMap, rows]);
@@ -99,7 +105,11 @@ const KocPaymentTab = () => {
   }, [form.air_link, vidMap, editingId]);
   // #2 list-level: video bị ≥2 đơn (double-pay) trong TOÀN BỘ koc_payments
   const dupList = useMemo(() => Object.entries(vidMap)
-    .map(([vid, arr]) => { const ids = [...new Set(arr.map(x => x.id))]; return ids.length > 1 ? { vid, names: [...new Set(arr.map(x => x.name))], n: ids.length } : null; })
+    .map(([vid, arr]) => {
+      const seen = new Map(); arr.forEach(a => { if (!seen.has(a.id)) seen.set(a.id, a); });
+      const payments = [...seen.values()];
+      return payments.length > 1 ? { vid, payments, names: [...new Set(payments.map(x => x.name))], n: payments.length } : null;
+    })
     .filter(Boolean).sort((a, b) => b.n - a.n), [vidMap]);
 
   // Cast/PIT/Tổng liên động
@@ -425,15 +435,38 @@ const KocPaymentTab = () => {
       {/* Cảnh báo VIDEO TRÙNG — 1 video có ≥2 đơn thanh toán (nguy cơ trả 2 lần) */}
       {dupList.length > 0 && (
         <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, padding: '12px 16px', marginBottom: 14 }}>
-          <div style={{ fontWeight: 800, color: '#dc2626', fontSize: '0.9rem', marginBottom: 8 }}>⚠️ {dupList.length} video bị TRÙNG — có ≥2 đơn thanh toán cho cùng 1 video (kiểm tra kẻo trả 2 lần)</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {dupList.slice(0, 30).map(d => (
-              <span key={d.vid} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #fecaca', borderRadius: 20, padding: '4px 12px', fontSize: '0.78rem', fontWeight: 700, color: '#b91c1c' }}>
-                …{d.vid.slice(-6)} · {d.names.join(', ')} ({d.n} đơn)
-              </span>
-            ))}
-            {dupList.length > 30 && <span style={{ fontSize: '0.78rem', color: '#94a3b8', alignSelf: 'center' }}>…và {dupList.length - 30} video nữa</span>}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <div style={{ fontWeight: 800, color: '#dc2626', fontSize: '0.9rem' }}>⚠️ {dupList.length} video bị TRÙNG — có ≥2 đơn thanh toán cho cùng 1 video <span style={{ fontWeight: 600 }}>(bấm 1 video để xem các đơn · kẻo trả 2 lần)</span></div>
+            <button onClick={() => setDupBannerOpen(o => !o)} style={{ flexShrink: 0, padding: '4px 12px', borderRadius: 8, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}>{dupBannerOpen ? '▲ Thu gọn' : `▼ Mở (${dupList.length})`}</button>
           </div>
+          {dupBannerOpen && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+              {dupList.slice(0, 40).map(d => (
+                <span key={d.vid} onClick={() => setDupVidOpen(dupVidOpen === d.vid ? null : d.vid)} title="Bấm xem các đơn trùng"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: dupVidOpen === d.vid ? '#dc2626' : '#fff', border: '1px solid #fecaca', borderRadius: 20, padding: '4px 12px', fontSize: '0.78rem', fontWeight: 700, color: dupVidOpen === d.vid ? '#fff' : '#b91c1c', cursor: 'pointer' }}>
+                  …{d.vid.slice(-6)} · {d.names.join(', ')} ({d.n} đơn)
+                </span>
+              ))}
+              {dupList.length > 40 && <span style={{ fontSize: '0.78rem', color: '#94a3b8', alignSelf: 'center' }}>…và {dupList.length - 40} video nữa</span>}
+            </div>
+          )}
+          {dupBannerOpen && dupVidOpen && (() => {
+            const d = dupList.find(x => x.vid === dupVidOpen); if (!d) return null;
+            return (
+              <div style={{ marginTop: 10, background: '#fff', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px' }}>
+                <div style={{ fontWeight: 800, color: '#b91c1c', fontSize: '0.84rem', marginBottom: 6 }}>🎬 Video …{d.vid.slice(-6)} — {d.n} đơn thanh toán trùng:</div>
+                {d.payments.map((p, i) => (
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '7px 0', borderTop: i ? '1px solid #f1f5f9' : 'none', fontSize: '0.82rem' }}>
+                    <span style={{ fontWeight: 700, color: '#0f172a' }}>{i + 1}. {p.name}</span>
+                    <span style={{ color: '#64748b' }}>{fmtDate(p.pay_date)} · {fmtMoney(p.cast_net)}đ{p.brand ? ' · ' + p.brand : ''}</span>
+                    {p.channel && <a href={`https://www.tiktok.com/@${p.channel}/video/${d.vid}`} target="_blank" rel="noreferrer" style={{ color: '#7c3aed', textDecoration: 'none', fontWeight: 600 }}>🔗 Link video</a>}
+                    <button onClick={() => { const row = rows.find(r => r.id === p.id); if (row) startEdit(row); else alert('Đơn này ở THÁNG KHÁC. Đổi bộ lọc tháng về "Tất cả" (hoặc đúng tháng) rồi bấm lại để mở/xoá.'); }}
+                      style={{ marginLeft: 'auto', padding: '4px 12px', borderRadius: 7, border: '1px solid #e2e8f0', background: '#f8fafc', color: ACCENT, fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>✏️ Mở đơn</button>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
       )}
 
