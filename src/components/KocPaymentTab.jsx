@@ -9,6 +9,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
+import { useAppData } from '../context/AppDataContext';
 
 const ACCENT = '#ff6a2c';
 const COMPANIES = ['STELLA', 'OPTIMAX'];
@@ -49,6 +50,8 @@ const PAY_PAGE_SIZE = 50;
 const pgBtn = (disabled) => ({ padding: '6px 12px', border: '1px solid #e2e8f0', borderRadius: 8, background: disabled ? '#f8fafc' : '#fff', color: disabled ? '#cbd5e1' : ACCENT, fontWeight: 700, fontSize: '0.82rem', cursor: disabled ? 'default' : 'pointer' });
 
 const KocPaymentTab = () => {
+  const { nhanSus } = useAppData(); // danh sách nhân sự dùng CHUNG với Order (bảng nhansu)
+  const staffNames = useMemo(() => [...new Set((nhanSus || []).map(n => (n.ten_nhansu || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi')), [nhanSus]);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [ym, setYm] = useState(curYm());
@@ -365,7 +368,11 @@ const KocPaymentTab = () => {
           <div style={{ fontWeight: 900, color: ACCENT, marginBottom: 14, fontSize: '1.05rem' }}>{editingId ? `✏️ Sửa thanh toán${form.full_name || form.beneficiary ? ' — ' + (form.full_name || form.beneficiary) : ''}` : '➕ Thêm thanh toán'}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
             <Field label="Ngày"><input type="date" value={form.pay_date} onChange={e => setForm(f => ({ ...f, pay_date: e.target.value }))} style={inputStyle} /></Field>
-            <Field label="Nhân sự booking"><input value={form.staff} onChange={e => setForm(f => ({ ...f, staff: e.target.value }))} placeholder="Tên người book" style={inputStyle} /></Field>
+            <Field label="Nhân sự booking"><select value={form.staff || ''} onChange={e => setForm(f => ({ ...f, staff: e.target.value }))} style={inputStyle}>
+              <option value="">— Chọn nhân sự —</option>
+              {staffNames.map(n => <option key={n} value={n}>{n}</option>)}
+              {form.staff && !staffNames.includes(form.staff) && <option value={form.staff}>{form.staff} (cũ)</option>}
+            </select></Field>
             <Field label="Công ty"><select value={form.company} onChange={e => setForm(f => ({ ...f, company: e.target.value }))} style={inputStyle}>{COMPANIES.map(c => <option key={c}>{c}</option>)}</select></Field>
             <Field label="Brand"><input list="koc-brands" value={form.brand} onChange={e => setForm(f => ({ ...f, brand: e.target.value }))} placeholder="Chọn / gõ brand" style={inputStyle} /><datalist id="koc-brands">{BRANDS.map(b => <option key={b} value={b} />)}</datalist></Field>
 
