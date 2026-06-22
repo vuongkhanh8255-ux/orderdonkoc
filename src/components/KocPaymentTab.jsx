@@ -123,7 +123,10 @@ const KocPaymentTab = () => {
   const setPit = (v) => { const p = num(v); setForm(f => ({ ...f, pit: p, total: num(f.cast_net) + p })); };
 
   const startAdd = () => { setForm({ ...EMPTY, pay_date: todayYmd(), company: fCompany || 'STELLA' }); setEditingId(null); setShowForm(true); };
-  const startEdit = (r) => { setForm({ ...EMPTY, ...r, pay_date: (r.pay_date || '').slice(0, 10) }); setEditingId(r.id); setShowForm(true); };
+  const startEdit = (r) => {
+    if (r.paid) { alert('🔒 Đơn này đã tick "Đã thanh toán" nên KHÔNG sửa được.\nMuốn sửa: bỏ tick ô "Đã TT" trước (cần mật khẩu).'); return; }
+    setForm({ ...EMPTY, ...r, pay_date: (r.pay_date || '').slice(0, 10) }); setEditingId(r.id); setShowForm(true);
+  };
   const cancel = () => { setShowForm(false); setEditingId(null); setForm(EMPTY); };
 
   const save = async () => {
@@ -558,7 +561,9 @@ const KocPaymentTab = () => {
                     <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={!!r.accountant_approved} onChange={() => toggleApproved(r)} style={{ width: 17, height: 17, accentColor: '#16a34a', cursor: 'pointer' }} /></td>
                     <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={!!r.paid} onChange={() => togglePaid(r)} title="Đã thanh toán (cần mật khẩu)" style={{ width: 17, height: 17, accentColor: '#ea580c', cursor: 'pointer' }} /></td>
                     <td style={{ ...td, textAlign: 'center', whiteSpace: 'nowrap' }}>
-                      <button onClick={() => startEdit(r)} title="Sửa" style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.95rem' }}>✏️</button>
+                      {r.paid
+                        ? <button onClick={() => startEdit(r)} title="Đã thanh toán — khóa sửa (bỏ tick 'Đã TT' để mở)" style={{ border: 'none', background: 'transparent', cursor: 'not-allowed', fontSize: '0.95rem', opacity: 0.6 }}>🔒</button>
+                        : <button onClick={() => startEdit(r)} title="Sửa" style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.95rem' }}>✏️</button>}
                       <button onClick={() => del(r)} title="Xoá" style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.95rem', marginLeft: 4 }}>🗑️</button>
                     </td>
                   </tr>
