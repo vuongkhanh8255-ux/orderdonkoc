@@ -380,7 +380,7 @@ const AFF_SYNC_FLOOR_TS   = Math.floor(new Date('2026-01-01T00:00:00+07:00').get
 const AFF_PAGE_SIZE = '100';
 const AFF_FWD_PAGES  = 6;   // pages from top each run (refresh recent + settlement status)
 const AFF_BACK_PAGES = 12;  // số trang re-quét cửa sổ mỗi run — nhỏ để 1 run (6+12 trang) ~25-30s, an toàn cron-job.org 30s + Vercel 90s
-const AFF_WINDOW_DAYS = 14; // RE-QUÉT lại N ngày gần nhất mỗi vòng (cuốn chiếu qua nhiều run) để hứng đơn affiliate VỀ TRỄ (đơn cũ lên API muộn)
+const AFF_WINDOW_DAYS = 7;  // RE-QUÉT lại N ngày gần nhất (dùng filter create_time → API chỉ trả đơn trong cửa sổ, cursor quét gọn, gối qua nhiều run hứng đơn VỀ TRỄ)
 
 const vnDate = (ct) => { const n = Number(ct) || 0; return n ? new Date((n + 7 * 3600) * 1000).toISOString().slice(0, 10) : null; };
 
@@ -449,7 +449,7 @@ const VIDEO_PERF_VERSION = '202409';
 // ── RULE đếm video chuẩn: chỉ GIỮ video có đơn (sku_orders>0) HOẶC view>=100.
 //    Lọc ngay lúc CÀO (view lấy từ API là chính xác) → bảng nhẹ, query Hiệu suất KOC mượt.
 //    Bật theo shop để test trước; để Set() RỖNG = áp cho TẤT CẢ shop.
-const VIDEO_RULE_SHOPS = new Set(['7495107349171898427']); // Bodymiss VN (test trước)
+const VIDEO_RULE_SHOPS = new Set([]); // RỖNG = áp rule lọc video rác cho TẤT CẢ shop
 const videoRuleOn = (shop_id) => VIDEO_RULE_SHOPS.size === 0 || VIDEO_RULE_SHOPS.has(String(shop_id));
 const keepVideo = (r, shop_id) => !!r.id && (!videoRuleOn(shop_id) || r.views >= 100 || r.sku_orders > 0);
 const monthWindow = (ym) => { const [y, m] = ym.split('-').map(Number); const nx = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`; return { sd: `${ym}-01`, ed: nx }; };
@@ -637,16 +637,21 @@ const syncOneAffShop = async ({ ck, cs, conn, supabase, appKey, appSecret, video
     if (ing.hitFloor || !token || !orders.length) break;
   }
 
-  // PHASE B — RE-QUÉT CỬA SỔ (rolling window): mỗi vòng kéo lại AFF_WINDOW_DAYS ngày gần nhất để
-  // hứng đơn affiliate VỀ TRỄ (đơn đặt ngày cũ nhưng vài ngày sau mới lên API → create_time cũ, nằm
-  // sâu dưới list sort-desc → PHASE A 6 trang không với tới). Quét tới mép cửa sổ thì reset cursor=null
-  // → vòng sau quét lại từ đầu (hứng đơn trễ mới). Ngày cũ hơn cửa sổ: coi như đã khóa (đã có sẵn trong DB).
-  const windowFloorTs = Math.floor(Date.now() / 1000) - AFF_WINDOW_DAYS * 86400;
-  let cur = meta.backfill_token || token;
+  // PHASE B — RE-QUÉT CỬA SỔ N NGÀY bằng FILTER create_time (geTs): API CHỈ trả đơn trong cửa sổ →
+  // cursor quét gọn (không phải lật toàn bộ list all-time), gối qua nhiều run quét hết cửa sổ →
+  // HỨNG ĐƠN affiliate VỀ TRỄ (đơn create_time cũ nhưng vài ngày sau mới lên API). geTs chốt theo ĐẦU
+  // NGÀY (UTC) để page_token còn hiệu lực trong ngày; sang ngày token cũ stale → tự reset cursor=null.
+  const windowGeTs = Math.floor(Date.now() / 86400000) * 86400 - AFF_WINDOW_DAYS * 86400;
+  const fetchWin = async (pt) => {
+    let j = await fetchAffOrdersPage({ ck, cs, accessToken, cipher, pageToken: pt, geTs: windowGeTs });
+    if (j?.code === 105002 && await refreshCreatorToken({ ck, cs, conn, supabase })) { accessToken = conn.access_token; j = await fetchAffOrdersPage({ ck, cs, accessToken, cipher, pageToken: pt, geTs: windowGeTs }); }
+    return j;
+  };
+  let cur = meta.backfill_token || null;
   let sweepDone = false;
   for (let p = 0; p < AFF_BACK_PAGES; p++) {
-    if (!cur) { sweepDone = true; break; }
-    const j = await fetchPage(cur);
+    let j = await fetchWin(cur);
+    if (j?.code !== 0 && cur) { cur = null; j = await fetchWin(cur); } // token cũ/stale (đổi ngày) → quét lại từ đầu cửa sổ
     if (j?.code !== 0) { status = `window ${j?.code}: ${j?.message || ''}`.slice(0, 120); break; }
     const orders = j.data?.orders || [];
     const ing = await ingest(orders);
@@ -654,8 +659,7 @@ const syncOneAffShop = async ({ ck, cs, conn, supabase, appKey, appSecret, video
     if (ing.maxCt) newest = Math.max(newest, ing.maxCt);
     if (ing.minCt) oldest = oldest ? Math.min(oldest, ing.minCt) : ing.minCt;
     cur = j.data?.next_page_token;
-    if (ing.hitFloor || (ing.minCt && ing.minCt < windowFloorTs)) { sweepDone = true; break; } // chạm floor lịch sử / mép cửa sổ
-    if (!cur || !orders.length) { sweepDone = true; break; }
+    if (!cur || !orders.length) { sweepDone = true; break; } // hết cửa sổ → vòng sau quét lại từ đầu
   }
   const backfillDone = true; // lịch sử đã backfill 1 lần xong; từ giờ chỉ re-quét cửa sổ N ngày
   const nextBackfillToken = sweepDone ? null : cur; // quét xong cửa sổ → null để vòng sau quét lại từ đầu
