@@ -379,7 +379,8 @@ const AFF_SYNC_FLOOR_DATE = '2026-01-01';
 const AFF_SYNC_FLOOR_TS   = Math.floor(new Date('2026-01-01T00:00:00+07:00').getTime() / 1000);
 const AFF_PAGE_SIZE = '100';
 const AFF_FWD_PAGES  = 6;   // pages from top each run (refresh recent + settlement status)
-const AFF_BACK_PAGES = 40;  // deeper backfill pages each run (resumes via saved cursor)
+const AFF_BACK_PAGES = 28;  // số trang re-quét cửa sổ mỗi run (giảm để 1 run < ~50s, tránh Vercel cắt 60s)
+const AFF_WINDOW_DAYS = 21; // RE-QUÉT lại N ngày gần nhất mỗi vòng để hứng đơn affiliate VỀ TRỄ (đơn cũ lên API muộn)
 
 const vnDate = (ct) => { const n = Number(ct) || 0; return n ? new Date((n + 7 * 3600) * 1000).toISOString().slice(0, 10) : null; };
 
@@ -624,31 +625,33 @@ const syncOneAffShop = async ({ ck, cs, conn, supabase, appKey, appSecret, video
     if (ing.hitFloor || !token || !orders.length) break;
   }
 
-  // PHASE B — backfill deeper (resume from saved cursor; else continue where forward stopped)
-  let backfillDone = meta.backfill_done;
+  // PHASE B — RE-QUÉT CỬA SỔ (rolling window): mỗi vòng kéo lại AFF_WINDOW_DAYS ngày gần nhất để
+  // hứng đơn affiliate VỀ TRỄ (đơn đặt ngày cũ nhưng vài ngày sau mới lên API → create_time cũ, nằm
+  // sâu dưới list sort-desc → PHASE A 6 trang không với tới). Quét tới mép cửa sổ thì reset cursor=null
+  // → vòng sau quét lại từ đầu (hứng đơn trễ mới). Ngày cũ hơn cửa sổ: coi như đã khóa (đã có sẵn trong DB).
+  const windowFloorTs = Math.floor(Date.now() / 1000) - AFF_WINDOW_DAYS * 86400;
   let cur = meta.backfill_token || token;
-  if (!backfillDone) {
-    let bdone = false;
-    for (let p = 0; p < AFF_BACK_PAGES; p++) {
-      if (!cur) { bdone = true; break; }
-      const j = await fetchPage(cur);
-      if (j?.code !== 0) { status = `backfill ${j?.code}: ${j?.message || ''}`.slice(0, 120); break; }
-      const orders = j.data?.orders || [];
-      const ing = await ingest(orders);
-      totalUp += ing.count;
-      if (ing.maxCt) newest = Math.max(newest, ing.maxCt);
-      if (ing.minCt) oldest = oldest ? Math.min(oldest, ing.minCt) : ing.minCt;
-      cur = j.data?.next_page_token;
-      if (ing.hitFloor) { bdone = true; break; }
-      if (!cur || !orders.length) { bdone = true; break; }
-    }
-    backfillDone = bdone;
+  let sweepDone = false;
+  for (let p = 0; p < AFF_BACK_PAGES; p++) {
+    if (!cur) { sweepDone = true; break; }
+    const j = await fetchPage(cur);
+    if (j?.code !== 0) { status = `window ${j?.code}: ${j?.message || ''}`.slice(0, 120); break; }
+    const orders = j.data?.orders || [];
+    const ing = await ingest(orders);
+    totalUp += ing.count;
+    if (ing.maxCt) newest = Math.max(newest, ing.maxCt);
+    if (ing.minCt) oldest = oldest ? Math.min(oldest, ing.minCt) : ing.minCt;
+    cur = j.data?.next_page_token;
+    if (ing.hitFloor || (ing.minCt && ing.minCt < windowFloorTs)) { sweepDone = true; break; } // chạm floor lịch sử / mép cửa sổ
+    if (!cur || !orders.length) { sweepDone = true; break; }
   }
+  const backfillDone = true; // lịch sử đã backfill 1 lần xong; từ giờ chỉ re-quét cửa sổ N ngày
+  const nextBackfillToken = sweepDone ? null : cur; // quét xong cửa sổ → null để vòng sau quét lại từ đầu
 
   await supabase.from('tiktok_affiliate_sync_meta').upsert({
     shop_id, seller_name,
     high_water_create_time: newest,
-    backfill_token: backfillDone ? null : cur,
+    backfill_token: nextBackfillToken,
     backfill_done: backfillDone,
     oldest_create_time: oldest,
     total_synced: (Number(meta.total_synced) || 0) + totalUp,
