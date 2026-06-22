@@ -1055,10 +1055,9 @@ export const AppDataProvider = ({ children }) => {
     const { data, error } = await supabase
       .from('bookings')
       .select(`
-            id, 
+            id,
             created_at,
-            ngay_booking,
-            ngay_gui_don, 
+            ngay_gui_don,
             brand_id,
             nhansu_id,
             status
