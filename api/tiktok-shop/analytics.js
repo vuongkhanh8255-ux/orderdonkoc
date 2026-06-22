@@ -379,8 +379,8 @@ const AFF_SYNC_FLOOR_DATE = '2026-01-01';
 const AFF_SYNC_FLOOR_TS   = Math.floor(new Date('2026-01-01T00:00:00+07:00').getTime() / 1000);
 const AFF_PAGE_SIZE = '100';
 const AFF_FWD_PAGES  = 6;   // pages from top each run (refresh recent + settlement status)
-const AFF_BACK_PAGES = 28;  // số trang re-quét cửa sổ mỗi run (giảm để 1 run < ~50s, tránh Vercel cắt 60s)
-const AFF_WINDOW_DAYS = 21; // RE-QUÉT lại N ngày gần nhất mỗi vòng để hứng đơn affiliate VỀ TRỄ (đơn cũ lên API muộn)
+const AFF_BACK_PAGES = 12;  // số trang re-quét cửa sổ mỗi run — nhỏ để 1 run (6+12 trang) ~25-30s, an toàn cron-job.org 30s + Vercel 90s
+const AFF_WINDOW_DAYS = 14; // RE-QUÉT lại N ngày gần nhất mỗi vòng (cuốn chiếu qua nhiều run) để hứng đơn affiliate VỀ TRỄ (đơn cũ lên API muộn)
 
 const vnDate = (ct) => { const n = Number(ct) || 0; return n ? new Date((n + 7 * 3600) * 1000).toISOString().slice(0, 10) : null; };
 
