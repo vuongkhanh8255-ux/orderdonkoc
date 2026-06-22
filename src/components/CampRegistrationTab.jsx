@@ -1,5 +1,8 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx-js-style';
+import { supabase } from '../supabaseClient';
+
+const PRIORITY_DB_KEY = 'camp_priority_skus';   // key trong bảng app_security (dùng chung mọi máy)
 
 // ─── helpers ────────────────────────────────────────────────
 const toInt = (val) => {
@@ -312,12 +315,45 @@ export default function CampRegistrationTab() {
     const [priorityInput, setPriorityInput] = useState(() => {
         try { return localStorage.getItem(PRIORITY_LS_KEY) || ''; } catch { return ''; }
     });
+    const [saveStatus, setSaveStatus] = useState(''); // '', 'saving', 'saved', 'error'
     const tiktokRef  = useRef();
     const campainRef = useRef();
+    const loadedRef  = useRef(false);   // đã load xong từ Supabase chưa
+    const skipSaveRef = useRef(false);  // bỏ qua 1 lần save ngay sau khi load
 
-    // nhớ bảng ID ưu tiên
+    // LOAD bảng ID ưu tiên từ Supabase (dùng chung mọi máy). localStorage chỉ là cache hiện nhanh.
+    useEffect(() => {
+        let alive = true;
+        (async () => {
+            try {
+                const { data } = await supabase.from('app_security').select('value').eq('key', PRIORITY_DB_KEY).maybeSingle();
+                if (alive && data && typeof data.value === 'string' && data.value !== priorityInput) {
+                    skipSaveRef.current = true;
+                    setPriorityInput(data.value);
+                }
+            } catch { /* offline → dùng cache localStorage */ }
+            finally { loadedRef.current = true; }
+        })();
+        return () => { alive = false; };
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // LƯU (debounced) lên Supabase + cache localStorage
     useEffect(() => {
         try { localStorage.setItem(PRIORITY_LS_KEY, priorityInput); } catch { /* ignore */ }
+        if (!loadedRef.current) return;
+        if (skipSaveRef.current) { skipSaveRef.current = false; return; }
+        setSaveStatus('saving');
+        const t = setTimeout(async () => {
+            try {
+                const { error } = await supabase.from('app_security').upsert(
+                    { key: PRIORITY_DB_KEY, value: priorityInput, updated_at: new Date().toISOString() },
+                    { onConflict: 'key' },
+                );
+                if (error) throw error;
+                setSaveStatus('saved'); setTimeout(() => setSaveStatus(''), 1800);
+            } catch { setSaveStatus('error'); }
+        }, 900);
+        return () => clearTimeout(t);
     }, [priorityInput]);
 
     // ID ưu tiên: tách theo dòng / dấu phẩy / khoảng trắng
@@ -427,6 +463,10 @@ export default function CampRegistrationTab() {
                 <div style={{ fontSize: 12.5, color: '#5b6b7b', marginBottom: 12, lineHeight: 1.6 }}>
                     Mỗi dòng <b>1 ID phân loại (SKU ID)</b> cần ưu tiên đăng kí trong camp. Những SKU này <b>luôn được fill vào file</b> dù vượt giá (đăng ở Giá B), kèm SKU giá cao nhất như cũ. Bỏ trống = chạy theo rule cũ.
                     <span style={{ color: '#004085', fontWeight: 700 }}> Đang có {priorityCount} ID ưu tiên.</span>
+                    <br />💾 Lưu chung trên hệ thống — máy nào / ai mở cũng thấy.
+                    {saveStatus === 'saving' && <span style={{ color: '#856404', fontWeight: 700 }}> ⏳ đang lưu…</span>}
+                    {saveStatus === 'saved'  && <span style={{ color: '#155724', fontWeight: 700 }}> ✅ đã lưu</span>}
+                    {saveStatus === 'error'  && <span style={{ color: '#721c24', fontWeight: 700 }}> ⚠️ lưu lỗi — thử lại</span>}
                 </div>
                 <textarea
                     value={priorityInput}
