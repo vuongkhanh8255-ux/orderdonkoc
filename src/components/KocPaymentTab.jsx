@@ -57,6 +57,7 @@ const KocPaymentTab = () => {
   const [fFrom, setFFrom] = useState('');           // lọc ngày TỪ (trong khoảng tháng đã chọn)
   const [fTo, setFTo] = useState('');               // lọc ngày ĐẾN
   const [selected, setSelected] = useState(() => new Set()); // chọn hàng loạt để thao tác
+  const [gallery, setGallery] = useState(null); // { title, urls:[] } — xem tất cả ảnh mấy bạn up
   const [pwOk, setPwOk] = useState(false);          // đã nhập đúng mật khẩu thao tác (nhớ trong phiên)
   const [q, setQ] = useState('');
   const [payPage, setPayPage] = useState(1);
@@ -321,6 +322,17 @@ const KocPaymentTab = () => {
       'KẾ TOÁN DUYỆT': r.accountant_approved ? 'x' : '', 'ĐÃ THANH TOÁN': r.paid ? 'x' : '', 'GHI CHÚ': r.note || '',
     }));
     const ws = XLSX.utils.json_to_sheet(data);
+    // Biến ô URL thành link bấm được trong Excel (link tới ảnh/file đầu tiên; ô vẫn hiện đủ mọi URL để kế toán copy & lưu).
+    const urlCols = [[4, 'channel_link'], [14, 'cccd_image'], [15, 'contract_link'], [16, 'contract_file'], [17, 'air_link']];
+    source.forEach((r, i) => {
+      for (const [c, key] of urlCols) {
+        const first = String(r[key] || '').split('\n').map(s => s.trim()).filter(Boolean)[0];
+        if (first && /^https?:\/\//i.test(first)) {
+          const ref = XLSX.utils.encode_cell({ r: i + 1, c });
+          if (ws[ref]) ws[ref].l = { Target: first, Tooltip: 'Mở link' };
+        }
+      }
+    });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'THANH TOÁN KOC');
     XLSX.writeFile(wb, `thanh-toan-koc-${ym === 'all' ? 'tatca' : ym}.xlsx`);
@@ -514,7 +526,15 @@ const KocPaymentTab = () => {
                     <td style={{ ...td, textAlign: 'right' }}>{fmtMoney(r.cast_net)}</td>
                     <td style={{ ...td, textAlign: 'right', color: pitFlagKeys.has(personKeyOf(r)) ? '#b45309' : '#94a3b8', fontWeight: pitFlagKeys.has(personKeyOf(r)) ? 800 : 400 }} title={pitFlagKeys.has(personKeyOf(r)) ? 'Người này có tổng ≥ 2tr trong kỳ nhưng chưa có PIT — cần khấu trừ thuế TNCN' : ''}>{pitFlagKeys.has(personKeyOf(r)) ? '⚠️ ' : ''}{fmtMoney(r.pit)}</td>
                     <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: ACCENT }}>{fmtMoney(r.total)}</td>
-                    <td style={{ ...td, textAlign: 'center' }}>{r.air_link ? <a href={r.air_link.split('\n')[0]} target="_blank" rel="noreferrer" style={{ color: '#7c3aed', textDecoration: 'none' }}>🎬</a> : '—'}{r.contract_link ? <a href={r.contract_link.split('\n')[0]} target="_blank" rel="noreferrer" title="Tin nhắn (ảnh)" style={{ color: '#0891b2', textDecoration: 'none', marginLeft: 6 }}>💬</a> : ''}{r.contract_file ? <a href={r.contract_file.split('\n')[0]} target="_blank" rel="noreferrer" title="Hợp đồng (file)" style={{ color: '#ea580c', textDecoration: 'none', marginLeft: 6 }}>📄</a> : ''}{r.cccd_image ? <a href={r.cccd_image.split('\n')[0]} target="_blank" rel="noreferrer" style={{ color: '#16a34a', textDecoration: 'none', marginLeft: 6 }}>🪪{(() => { const n = r.cccd_image.split('\n').filter(Boolean).length; return n > 1 ? n : ''; })()}</a> : ''}</td>
+                    <td style={{ ...td, textAlign: 'center' }}>{(() => {
+                      const imgIcon = (val, emoji, color, label) => { const u = (val || '').split('\n').map(s => s.trim()).filter(Boolean); if (!u.length) return null; return <button onClick={() => setGallery({ title: `${label} — ${r.full_name || r.beneficiary || ''}`, urls: u })} title={`Xem ${u.length} ${label.toLowerCase()}`} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color, marginLeft: 6, fontSize: 'inherit', padding: 0 }}>{emoji}{u.length > 1 ? u.length : ''}</button>; };
+                      return <>
+                        {r.air_link ? <a href={r.air_link.split('\n')[0]} target="_blank" rel="noreferrer" title="Link air" style={{ color: '#7c3aed', textDecoration: 'none' }}>🎬</a> : '—'}
+                        {imgIcon(r.contract_link, '💬', '#0891b2', 'Tin nhắn')}
+                        {r.contract_file ? <a href={r.contract_file.split('\n')[0]} target="_blank" rel="noreferrer" title="Hợp đồng (file)" style={{ color: '#ea580c', textDecoration: 'none', marginLeft: 6 }}>📄</a> : ''}
+                        {imgIcon(r.cccd_image, '🪪', '#16a34a', 'Ảnh CCCD')}
+                      </>;
+                    })()}</td>
                     <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={!!r.accountant_approved} onChange={() => toggleApproved(r)} style={{ width: 17, height: 17, accentColor: '#16a34a', cursor: 'pointer' }} /></td>
                     <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={!!r.paid} onChange={() => togglePaid(r)} title="Đã thanh toán (cần mật khẩu)" style={{ width: 17, height: 17, accentColor: '#ea580c', cursor: 'pointer' }} /></td>
                     <td style={{ ...td, textAlign: 'center', whiteSpace: 'nowrap' }}>
@@ -538,6 +558,30 @@ const KocPaymentTab = () => {
           </div>
         )}
       </div>
+
+      {gallery && (
+        <div onClick={() => setGallery(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.62)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 20, maxWidth: '92vw', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 24px 70px rgba(0,0,0,0.35)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 16 }}>
+              <h3 style={{ margin: 0, fontSize: '0.98rem', color: '#0f172a' }}>{gallery.title} · {gallery.urls.length} ảnh</h3>
+              <button onClick={() => setGallery(null)} style={{ border: 'none', background: '#f1f5f9', borderRadius: 8, width: 34, height: 34, cursor: 'pointer', fontSize: '1rem', flexShrink: 0 }}>✕</button>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, justifyContent: 'center' }}>
+              {gallery.urls.map((url, i) => (
+                <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                  <a href={url} target="_blank" rel="noreferrer">
+                    <img src={url} alt="" referrerPolicy="no-referrer"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'flex'; }}
+                      style={{ maxWidth: 340, maxHeight: 460, objectFit: 'contain', borderRadius: 10, border: '1px solid #e5e7eb', display: 'block', background: '#f8fafc' }} />
+                    <span style={{ display: 'none', width: 220, height: 130, alignItems: 'center', justifyContent: 'center', borderRadius: 10, border: '1px dashed #cbd5e1', background: '#f8fafc', color: '#0891b2', fontWeight: 700, fontSize: '0.82rem' }}>📎 Mở ảnh {i + 1} ↗</span>
+                  </a>
+                  <a href={url} target="_blank" rel="noreferrer" style={{ fontSize: '0.78rem', color: '#0891b2', fontWeight: 700, textDecoration: 'none' }}>⬇ Ảnh {i + 1} — mở / tải ↗</a>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
