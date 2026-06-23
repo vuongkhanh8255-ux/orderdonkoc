@@ -862,6 +862,20 @@ async function handleFillKocViews({ params, appKey, appSecret, supabase, res }) 
 }
 
 // Read + aggregate per-KOC sales from the synced table.
+// Suy brand từ tên gian hàng (khớp brandOfShop ở frontend + brands.ten_brand). null = không xác định → không lọc.
+const brandOf = (sellerName) => {
+  const s = (sellerName || '').toUpperCase();
+  if (s.includes('BODY')) return 'BODYMISS';
+  if (s.includes('EHERB') && s.includes('HCM')) return 'EHERB HCM';
+  if (s.includes('EHERB')) return 'EHERB';
+  if (s.includes('MILAGANIC')) return 'MILAGANICS';
+  if (s.includes('MOAW')) return 'MOAW MOAWS';
+  if (s.includes('HEALMI')) return 'HEALMI';
+  if (s.includes('MASUBE')) return 'MASUBE';
+  if (s.includes('REAL') && s.includes('STEEL')) return 'REAL STEEL';
+  return null;
+};
+
 // Tìm KOC theo tên (server-side) — KHÔNG dính trần 1000 dòng của bảng xếp hạng.
 // Bảng xếp hạng koc_order_stats sắp theo GMV nên KOC nhỏ (ngoài top 1000) bị PostgREST cắt,
 // search lọc tại chỗ không thấy. Endpoint này lọc thẳng trong SQL (p_search) → trả đúng vài dòng khớp.
@@ -907,12 +921,13 @@ async function handleKocOrders({ params, supabase, res }) {
   const shopId = params.shop_id ? String(params.shop_id) : (meta?.shop_id || null);
   const start = params.start_date || AFF_SYNC_FLOOR_DATE;
   const end = params.end_date || null;
+  const brandArg = brandOf(meta?.seller_name || params.seller); // chi phí mẫu lọc theo brand đang xem (gộp eHerb + eHerb HCM)
 
   // ── Cache CHUNG: mọi máy vào là tức thì cho tới khi shop có data mới ──
   // sync_token đổi khi total_synced / high_water / OLDEST / backfill thay đổi → cache tự stale.
   // (thêm oldest_create_time: backfill chạy nốt làm ngày cũ nhất lùi mà total không đổi → nhãn "đã đủ từ" phải refresh)
   const castAll = params.cast_all === '1'; // Cast scope: "Tất cả" → cộng hết (không lọc ngày)
-  const syncToken = 'v12|' + (meta ? `${meta.total_synced || 0}|${meta.high_water_create_time || ''}|${meta.oldest_create_time || ''}|${meta.video_synced || 0}|${meta.backfill_done ? 1 : 0}` : 'no-meta');
+  const syncToken = 'v13|' + (meta ? `${meta.total_synced || 0}|${meta.high_water_create_time || ''}|${meta.oldest_create_time || ''}|${meta.video_synced || 0}|${meta.backfill_done ? 1 : 0}` : 'no-meta');
   const cacheKey = `${shopId || 'null'}|${start}|${end || 'null'}|c${castAll ? 1 : 0}`; // có castAll để pre-warm hâm đúng
   const force = params.force === '1';
   if (!force) {
@@ -932,8 +947,8 @@ async function handleKocOrders({ params, supabase, res }) {
     viewRows:   () => supabase.rpc('koc_video_views',        { p_shop_id: shopId, p_start: start, p_end: end }),
     viewTotal:  () => supabase.rpc('koc_video_views_total',  { p_shop_id: shopId, p_start: start, p_end: end }),
     castRows:   () => supabase.rpc('koc_cast_by_creator',    { p_shop_id: shopId, p_start: castAll ? null : start, p_end: castAll ? null : end }),
-    sampleRows: () => supabase.rpc('koc_sample_cost',        { p_start: castAll ? null : start, p_end: castAll ? null : end }),
-    extraTot:   () => supabase.rpc('koc_perf_extra_totals',  { p_shop_id: shopId, p_start: start, p_end: end, p_cast_start: castAll ? null : start, p_cast_end: castAll ? null : end }),
+    sampleRows: () => supabase.rpc('koc_sample_cost',        { p_start: castAll ? null : start, p_end: castAll ? null : end, p_brand: brandArg }),
+    extraTot:   () => supabase.rpc('koc_perf_extra_totals',  { p_shop_id: shopId, p_start: start, p_end: end, p_cast_start: castAll ? null : start, p_cast_end: castAll ? null : end, p_brand: brandArg }),
     gmvByContent: () => supabase.rpc('koc_gmv_by_content',   { p_shop_id: shopId, p_start: start, p_end: end }),
   };
   let stats, error, totRows, viewRows, viewTotal, castRows, sampleRows, extraTot, gmvByContent;
