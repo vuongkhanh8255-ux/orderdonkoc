@@ -308,10 +308,10 @@ function AppMain({ user, onLogout, allowedViews }) {
                 { view: 'order',               icon: '🛒', name: 'Module 1: Order đơn hàng' },
                 { view: 'contract',            icon: '📝', name: 'Module 2: Hợp đồng tự động' },
                 { view: 'koc_payment',         icon: '💸', name: 'Module 3: Thanh toán KOC' },
-                { view: 'koc_blacklist',       icon: '🚫', name: 'Module 4: Blacklist KOC' },
+                { view: 'booking_material',    icon: '🎁', name: 'Module 4: Material bán hàng' },
                 { view: 'airlinks',            icon: '🔗', name: 'Module 5: Quản lý link air' },
-                { view: 'booking_material',    icon: '🎁', name: 'Module 6: Material bán hàng' },
-                { view: 'booking_budget',      icon: '💰', name: 'Module 7: Ngân sách chi phí booking' },
+                { view: 'koc_blacklist',       icon: '🚫', name: 'Module 6: Blacklist KOC' },
+                { view: 'booking_budget',      icon: '💰', name: 'Tạm đối chiếu' },
               ]},
               { key: 'archive', label: '🗄️ Lưu trữ', emoji: '🗄️', items: [
                 { view: 'data_archive', icon: '🗄️', name: 'Lưu Trữ Data' },

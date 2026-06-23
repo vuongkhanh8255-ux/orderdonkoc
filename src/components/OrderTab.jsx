@@ -584,7 +584,7 @@ const OrderTab = () => {
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                             <div>
                                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151' }}>Số điện thoại</label>
-                                <input type="text" value={sdt} onChange={e => setSdt(e.target.value)} onBlur={handleSdtBlur} required placeholder="SĐT... (nhập xong tự điền lại thông tin cũ)" style={{ width: '100%' }} />
+                                <input type="text" inputMode="numeric" value={sdt} onChange={e => setSdt(e.target.value.replace(/\D/g, '').slice(0, 10))} onBlur={handleSdtBlur} required maxLength={10} placeholder="SĐT 10 số (tự bỏ dấu cách khi dán)" style={{ width: '100%' }} />
                             </div>
                             <div>
                                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151' }}>ID Kênh (*)</label>
@@ -898,7 +898,7 @@ const OrderTab = () => {
                                                 <td style={{ width: `${columnWidths.hoTenKOC}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{ width: '90%' }} value={editingDonHang.koc_ho_ten} onChange={e => setEditingDonHang({ ...editingDonHang, koc_ho_ten: e.target.value })} /></td>
                                                 <td style={{ width: `${columnWidths.cccd}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{ width: '90%' }} value={editingDonHang.koc_cccd} onChange={e => setEditingDonHang({ ...editingDonHang, koc_cccd: e.target.value })} /></td>
                                                 <td style={{ width: `${columnWidths.idKenh}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{ width: '90%' }} value={editingDonHang.koc_id_kenh} onChange={e => setEditingDonHang({ ...editingDonHang, koc_id_kenh: e.target.value })} /></td>
-                                                <td style={{ width: `${columnWidths.sdt}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{ width: '90%' }} value={editingDonHang.koc_sdt} onChange={e => setEditingDonHang({ ...editingDonHang, koc_sdt: e.target.value })} /></td>
+                                                <td style={{ width: `${columnWidths.sdt}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{ width: '90%' }} inputMode="numeric" maxLength={10} value={editingDonHang.koc_sdt} onChange={e => setEditingDonHang({ ...editingDonHang, koc_sdt: e.target.value.replace(/\D/g, '').slice(0, 10) })} /></td>
                                                 <td style={{ width: `${columnWidths.diaChi}px`, padding: '12px', border: '1px solid #ddd' }}><input style={{ width: '90%' }} value={editingDonHang.koc_dia_chi} onChange={e => setEditingDonHang({ ...editingDonHang, koc_dia_chi: e.target.value })} /></td>
                                                 <td style={{ width: `${columnWidths.brand}px`, padding: '12px', border: '1px solid #ddd' }}>{[...new Set(donHang.chitiettonguis?.map(ct => ct.sanphams?.brands?.ten_brand))].map(b => <div key={b}>{b}</div>)}</td>
                                                 <td style={{ width: `${columnWidths.sanPham}px`, padding: '12px', border: '1px solid #ddd' }}>{sanPhamDisplay}</td>

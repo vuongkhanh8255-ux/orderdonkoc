@@ -866,12 +866,15 @@ const ShopAnalyticsTab = ({ lockPlatform = '' } = {}) => {
         <>
           {/* ── 4 Stat Cards ─────────────────────────────────────────────────── */}
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
-            <StatCard icon="🌐" label="Traffic" accentColor={ACCENT.orange}
-              value={fmtVnd(computed.cur.visitors)} unit="lượt"
-              change={computed.changes.visitors}
-              sub={`vs ${periodLabel} trước · ${fmtVndFull(computed.cur.visitors)} lượt`}
-              sparkData={computed.sparkVisitors} sparkKey="v"
-              selected={selectedMetrics.includes('Khách truy cập')} onClick={() => toggleMetric('Khách truy cập')} />
+            {/* Shopee không có data Traffic (API không trả lượt truy cập) → ẩn card này cho sàn Shopee */}
+            {platformFilter !== 'shopee' && (
+              <StatCard icon="🌐" label="Traffic" accentColor={ACCENT.orange}
+                value={fmtVnd(computed.cur.visitors)} unit="lượt"
+                change={computed.changes.visitors}
+                sub={`vs ${periodLabel} trước · ${fmtVndFull(computed.cur.visitors)} lượt`}
+                sparkData={computed.sparkVisitors} sparkKey="v"
+                selected={selectedMetrics.includes('Khách truy cập')} onClick={() => toggleMetric('Khách truy cập')} />
+            )}
 
             <StatCard icon="💰" label="Tổng GMV" accentColor={ACCENT.green}
               value={fmtVnd(computed.cur.gmv)} unit="đ"
