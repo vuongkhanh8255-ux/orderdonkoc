@@ -642,7 +642,11 @@ async function fetchAllComments(creds, maxPages = 6, pageSize = 100) {
 async function replyShopComments(supabase, creds, shopId, shopName, template, dryRun) {
   const fc = await fetchAllComments(creds, 6, 100);
   if (fc.error) return { shop_id: shopId, status: 'read_fail', error: fc.error };
-  const cand = (fc.comments || []).filter((c) => Number(c.rating_star || 0) >= 4 && c.comment_id);
+  // Chỉ lấy ≥4★, CHƯA có phản hồi sẵn trên Shopee (c.comment_reply) — tránh gọi API trả lời lại
+  // hàng loạt đánh giá đã được trả lời tay ở Seller Center (vốn không nằm trong bảng dedup nội bộ).
+  const cand = (fc.comments || []).filter((c) =>
+    Number(c.rating_star || 0) >= 4 && c.comment_id &&
+    !(c.comment_reply && (c.comment_reply.reply || c.comment_reply.comment)));
   const ids = cand.map((c) => Number(c.comment_id));
   let already = new Set();
   if (ids.length) {
