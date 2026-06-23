@@ -604,11 +604,14 @@ const OrderTab = () => {
             return;
         }
 
-        // #3: Kênh + brand đã có người gắn tag (approved) ở Hiệu suất KOC → CHẶN gửi brand đó cho kênh đó (brand khác vẫn gửi được).
+        // #3: Kênh + brand đã có NGƯỜI KHÁC gắn tag (approved) ở Hiệu suất KOC → CHẶN gửi brand đó cho kênh đó (brand khác vẫn gửi được).
+        // Nếu chính người đang gửi là người gắn tag thì KHÔNG chặn (không tự trùng với chính mình).
         const normBrand = (b) => String(b || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const normStaff = (s) => String(s || '').trim().toLowerCase();
         const orderBrands = [...new Set(previewList.map(it => normBrand(it.ten_brand)).filter(Boolean))];
         const ch = normK(idKenh);
-        const conflict = assignments.find(a => normK(a.koc_id) === ch && orderBrands.includes(normBrand(a.brand_name)));
+        const senderName = normStaff(nhanSus.find(n => String(n.id) === String(selectedNhanSu))?.ten_nhansu);
+        const conflict = assignments.find(a => normK(a.koc_id) === ch && orderBrands.includes(normBrand(a.brand_name)) && normStaff(a.staff_name) !== senderName);
         if (conflict) {
             alert(`🚫 Kênh "${idKenh}" đã được "${conflict.staff_name}" gắn brand "${conflict.brand_name}" ở Hiệu suất KOC.\nKhông gửi sản phẩm brand này cho kênh này nữa (có thể gửi brand KHÁC).`);
             return;
