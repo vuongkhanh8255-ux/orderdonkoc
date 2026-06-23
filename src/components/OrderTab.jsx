@@ -34,6 +34,49 @@ const parseDiaChi = (raw) => {
     return { tinh, quan, phuong, soNha };
 };
 
+// ⚠️ Cảnh báo liên hệ KOC: 1 ID kênh gắn >=3 SĐT, hoặc 1 SĐT gắn >=3 ID kênh (rà donguis qua RPC). Thu gọn được.
+function KocContactWarnings() {
+    const [data, setData] = useState(null);
+    const [open, setOpen] = useState(false);
+    useEffect(() => {
+        let alive = true;
+        supabase.rpc('koc_phone_channel_warnings').then(({ data, error }) => { if (alive && !error) setData(data); });
+        return () => { alive = false; };
+    }, []);
+    const kenhSdt = Array.isArray(data?.kenh_nhieu_sdt) ? data.kenh_nhieu_sdt : [];
+    const sdtKenh = Array.isArray(data?.sdt_nhieu_kenh) ? data.sdt_nhieu_kenh : [];
+    const total = kenhSdt.length + sdtKenh.length;
+    if (!data || total === 0) return null;
+    const col = (title, items, render) => (
+        <div style={{ flex: 1, minWidth: 320 }}>
+            <div style={{ fontWeight: 700, color: '#92400e', marginBottom: 6 }}>{title} ({items.length})</div>
+            <div style={{ maxHeight: 260, overflowY: 'auto', background: '#fff', borderRadius: 8, border: '1px solid #fde68a' }}>
+                {items.map((it, i) => <div key={i} style={{ padding: '8px 10px', borderBottom: '1px solid #fef3c7', fontSize: '0.84rem' }}>{render(it)}</div>)}
+            </div>
+        </div>
+    );
+    return (
+        <div style={{ background: '#fffbeb', border: '1.5px solid #f59e0b', borderRadius: 12, padding: '14px 18px', marginBottom: '1.5rem' }}>
+            <div onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
+                <div style={{ fontWeight: 800, color: '#b45309', fontSize: '1rem' }}>⚠️ Cảnh báo liên hệ KOC ({total}) — {kenhSdt.length} kênh nhiều SĐT · {sdtKenh.length} SĐT nhiều kênh</div>
+                <span style={{ color: '#b45309', fontWeight: 700 }}>{open ? '▲ Thu gọn' : '▼ Xem chi tiết'}</span>
+            </div>
+            {open && (
+                <div style={{ display: 'flex', gap: 16, marginTop: 12, flexWrap: 'wrap' }}>
+                    {col('🔗 1 ID kênh gắn nhiều SĐT (≥3)', kenhSdt, k => (<>
+                        <b>@{k.id_kenh}</b> — <span style={{ color: '#dc2626', fontWeight: 700 }}>{k.so_sdt} SĐT</span>
+                        <div style={{ color: '#64748b', fontSize: '0.78rem' }}>{(k.ds_sdt || []).join(' · ')}</div>
+                    </>))}
+                    {col('📞 1 SĐT gắn nhiều ID kênh (≥3)', sdtKenh, s => (<>
+                        <b>{s.sdt}</b> — <span style={{ color: '#dc2626', fontWeight: 700 }}>{s.so_kenh} kênh</span>
+                        <div style={{ color: '#64748b', fontSize: '0.78rem' }}>{(s.ds_kenh || []).map(x => '@' + x).join(' · ')}</div>
+                    </>))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 const OrderTab = () => {
     const {
         brands, nhanSus, sanPhams,
@@ -337,6 +380,8 @@ const OrderTab = () => {
             <div style={{ position: 'relative', textAlign: 'center', marginBottom: '2rem' }}>
                 <h1 className="page-header">QUẢN LÝ ĐƠN HÀNG KOC</h1>
             </div>
+
+            <KocContactWarnings />
 
             <div style={{ display: 'flex', gap: '2rem', marginBottom: '2rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <div className="mirinda-card" style={{ flex: 1, padding: '30px' }}>
