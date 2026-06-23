@@ -152,6 +152,102 @@ function KocNoVideoWarnings({ email }) {
     );
 }
 
+// Cache dữ liệu hành chính (34 tỉnh/thành + ~3.300 phường/xã, cơ cấu mới 2025) — tải 1 lần cho cả app.
+let _geoCache = null, _geoPromise = null;
+function loadGeo() {
+    if (_geoCache) return Promise.resolve(_geoCache);
+    if (!_geoPromise) {
+        _geoPromise = Promise.all([
+            fetch('/geo/provinces.json').then(r => r.json()),
+            fetch('/geo/wards.json').then(r => r.json()),
+        ]).then(([provinces, wards]) => { _geoCache = { provinces, wards }; return _geoCache; })
+          .catch(() => ({ provinces: [], wards: [] }));
+    }
+    return _geoPromise;
+}
+const stripAdminPrefix = (s) => String(s || '').toLowerCase()
+    .replace(/^(tỉnh|thành phố|tp\.?|phường|xã|thị trấn|đặc khu|quận|huyện)\s+/i, '').trim();
+
+// Ô địa chỉ nhận hàng kiểu Shopee: Thành phố (bắt buộc) → Phường/Xã (bắt buộc, lọc theo TP) → Đường (tự do).
+// Ghép lại thành chuỗi "Đường, Phường X, Tỉnh Y" lưu vào diaChi để phần xem trước / bảng / parse cũ vẫn chạy.
+function AddressPicker({ value, onChange }) {
+    const [geo, setGeo] = useState(null);
+    const [tinhCode, setTinhCode] = useState('');
+    const [phuongCode, setPhuongCode] = useState('');
+    const [duong, setDuong] = useState('');
+    const inited = React.useRef(false);
+
+    useEffect(() => { let alive = true; loadGeo().then(g => { if (alive) setGeo(g); }); return () => { alive = false; }; }, []);
+
+    // Tải xong → cố gắng tách chuỗi diaChi sẵn có để điền lại các ô (không đụng onChange, giữ nguyên giá trị cũ).
+    useEffect(() => {
+        if (!geo || inited.current) return;
+        inited.current = true;
+        const raw = String(value || '').trim();
+        if (!raw) return;
+        const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
+        if (parts.length < 2) { setDuong(raw); return; }
+        const tail = stripAdminPrefix(parts[parts.length - 1]);
+        const prov = geo.provinces.find(p => stripAdminPrefix(p.name) === tail || stripAdminPrefix(p.fullName) === tail);
+        if (!prov) { setDuong(raw); return; }
+        setTinhCode(prov.code);
+        const wardsP = geo.wards.filter(w => w.provinceCode === prov.code);
+        let wardIdx = -1, ward = null;
+        for (let i = 0; i < parts.length - 1; i++) {
+            const m = wardsP.find(w => stripAdminPrefix(w.name) === stripAdminPrefix(parts[i]));
+            if (m) { ward = m; wardIdx = i; break; }
+        }
+        if (ward) { setPhuongCode(ward.code); setDuong(parts.slice(0, wardIdx).join(', ')); }
+        else setDuong(parts.slice(0, -1).join(', '));
+    }, [geo, value]);
+
+    const provinces = geo?.provinces || [];
+    const wardsForTinh = useMemo(
+        () => (geo && tinhCode ? geo.wards.filter(w => w.provinceCode === tinhCode) : []),
+        [geo, tinhCode]
+    );
+
+    const recompose = (d, pCode, tCode) => {
+        const ward = geo?.wards.find(w => w.code === pCode);
+        if (pCode && ward && tCode) onChange(`${d.trim() ? d.trim() + ', ' : ''}${ward.fullName}`);
+        else onChange('');
+    };
+    const onTinh = (code) => { setTinhCode(code); setPhuongCode(''); recompose(duong, '', code); };
+    const onPhuong = (code) => { setPhuongCode(code); recompose(duong, code, tinhCode); };
+    const onDuongChange = (val) => { setDuong(val); recompose(val, phuongCode, tinhCode); };
+
+    const provOpts = provinces.map(p => ({ value: p.code, label: p.fullName }));
+    const wardOpts = wardsForTinh.map(w => ({ value: w.code, label: w.fullName.split(',')[0] }));
+
+    return (
+        <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151' }}>Địa chỉ nhận hàng (*)</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                    <div style={{ fontSize: '0.78rem', color: '#6B7280', marginBottom: 4 }}>🏙️ Tỉnh / Thành phố (*)</div>
+                    <SearchableDropdown options={provOpts} value={tinhCode} onChange={onTinh}
+                        placeholder={geo ? 'Chọn Tỉnh / Thành phố' : 'Đang tải…'} />
+                </div>
+                <div>
+                    <div style={{ fontSize: '0.78rem', color: '#6B7280', marginBottom: 4 }}>📍 Phường / Xã (*)</div>
+                    {tinhCode
+                        ? <SearchableDropdown options={wardOpts} value={phuongCode} onChange={onPhuong} placeholder="Chọn Phường / Xã" />
+                        : <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #eee', background: '#f9fafb', color: '#999', fontSize: 14, minHeight: 40, display: 'flex', alignItems: 'center' }}>Chọn Tỉnh/TP trước</div>}
+                </div>
+            </div>
+            <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: '0.78rem', color: '#6B7280', marginBottom: 4 }}>🏠 Số nhà / Đường</div>
+                <input type="text" value={duong} onChange={e => onDuongChange(e.target.value)} placeholder="VD: 123 Lê Lợi" style={{ width: '100%' }} />
+            </div>
+            {value && value.trim() && (
+                <div style={{ marginTop: '10px', padding: '10px 14px', background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: '8px', fontSize: '0.88rem', color: '#9A3412' }}>
+                    📦 Giao đến: <b>{value}</b>
+                </div>
+            )}
+        </div>
+    );
+}
+
 const OrderTab = () => {
     const {
         user,
@@ -347,6 +443,7 @@ const OrderTab = () => {
     const handleCustomSubmit = async (e) => {
         e.preventDefault();
         if (!idKenh || !hoTen || !selectedNhanSu) { alert("Vui lòng điền đủ thông tin bắt buộc!"); return; }
+        if (!diaChi || !diaChi.trim()) { alert("Vui lòng chọn Tỉnh/Thành phố và Phường/Xã nhận hàng!"); return; }
         if (previewList.length === 0) { alert("Vui lòng chọn ít nhất 1 sản phẩm!"); return; }
 
         // Blacklist check — nếu chưa load được thì block lại, reload rồi thử
@@ -506,31 +603,7 @@ const OrderTab = () => {
                             </div>
                         </div>
 
-                        <div>
-                            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151' }}>Địa chỉ nhận hàng</label>
-                            <input type="text" value={diaChi} onChange={e => setDiaChi(e.target.value)} required placeholder="Số nhà/đường, Phường/Xã, Tỉnh/Thành phố..." style={{ width: '100%' }} />
-                            {(() => {
-                                const p = parseDiaChi(diaChi);
-                                if (!p) return null;
-                                const rows = [
-                                    { icon: '🏙️', label: 'Tỉnh / Thành phố', value: p.tinh },
-                                    { icon: '🏘️', label: 'Quận / Huyện', value: p.quan },
-                                    { icon: '📍', label: 'Phường / Xã', value: p.phuong },
-                                    { icon: '🏠', label: 'Số nhà / Đường', value: p.soNha },
-                                ].filter(r => r.value);
-                                return (
-                                    <div style={{ marginTop: '10px', padding: '12px 16px', background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: '8px' }}>
-                                        <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#9A3412', marginBottom: '8px' }}>🔎 Địa chỉ đã tách:</div>
-                                        {rows.map((r, i) => (
-                                            <div key={i} style={{ display: 'flex', gap: '8px', fontSize: '0.9rem', color: '#374151', padding: '3px 0' }}>
-                                                <span style={{ minWidth: '150px', color: '#6B7280' }}>{r.icon} {r.label}:</span>
-                                                <span style={{ fontWeight: '600' }}>{r.value}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                );
-                            })()}
-                        </div>
+                        <AddressPicker value={diaChi} onChange={setDiaChi} />
 
                         {/* Bỏ ô CAST (VNĐ) + CMS (%) khỏi form tạo đơn (cast giờ lấy từ koc_payments). State giữ mặc định cast='0', cms='10%' để booking không vỡ. */}
 
