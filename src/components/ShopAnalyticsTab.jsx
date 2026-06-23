@@ -552,7 +552,7 @@ const ShopAnalyticsTab = ({ lockPlatform = '' } = {}) => {
 
       const shopeeParams = new URLSearchParams();
       if (fullSync) shopeeParams.set('full_sync', '1');
-      else shopeeParams.set('days', '7');
+      // else: để backend tự backfill (mặc định 40 ngày), có ngân sách thời gian + bỏ qua đơn đã có nên an toàn
 
       const [tiktokRes, shopeeRes] = await Promise.allSettled([
         fetch(`${SYNC_API}?${tiktokParams}`).then(r => r.json()),
@@ -831,7 +831,7 @@ const ShopAnalyticsTab = ({ lockPlatform = '' } = {}) => {
               ? `⚠️ Lỗi: ${syncResult.error}`
               : <>
                   {syncResult.tiktok && !syncResult.tiktok.error && <div>TikTok: {syncResult.tiktok.total_upserted || 0} bản ghi ({syncResult.tiktok.elapsed_seconds || 0}s)</div>}
-                  {syncResult.shopee && !syncResult.shopee.error && <div>Shopee: {syncResult.shopee.total_synced || 0} đơn ({syncResult.shopee.elapsed_seconds || 0}s)</div>}
+                  {syncResult.shopee && !syncResult.shopee.error && <div>Shopee: {syncResult.shopee.total_synced || 0} đơn ({syncResult.shopee.elapsed_seconds || 0}s){syncResult.shopee.partial ? ' · ⏳ còn dở, bấm Đồng bộ lần nữa để kéo tiếp' : ''}</div>}
                   {syncResult.tiktok?.error && <div style={{ color: '#dc2626' }}>TikTok: {syncResult.tiktok.error}</div>}
                   {syncResult.shopee?.error && <div style={{ color: '#dc2626' }}>Shopee: {syncResult.shopee.error}</div>}
                 </>
