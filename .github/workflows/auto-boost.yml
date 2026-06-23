@@ -49,3 +49,16 @@ jobs:
           echo "Response: $RESPONSE"
           # Endpoint always returns HTTP 200; treat "ok":true as success (covers ran/skipped both)
           echo "$RESPONSE" | grep -q '"ok":true' || { echo "::error::Auto-boost call failed"; exit 1; }
+
+      # Tự TRẢ LỜI đánh giá ≥4★ cho các shop ĐÃ BẬT auto (mỗi ~15 phút). Best-effort, không fail workflow.
+      - name: Auto-reply shop reviews (best-effort)
+        if: always()
+        env:
+          BOOST_CRON_SECRET: ${{ secrets.BOOST_CRON_SECRET }}
+        run: |
+          BASE="https://koc-tool.vercel.app/api/shopee/top-picks"
+          R=$(curl -sS --max-time 90 --retry 1 --retry-delay 5 \
+            -H "x-boost-secret: ${BOOST_CRON_SECRET}" \
+            "${BASE}?action=auto_reply_comments&source=cron" || echo '{"note":"auto-reply timeout"}')
+          echo "Auto-reply: $R"
+          echo "Auto-reply step done (non-fatal)."
