@@ -4,7 +4,9 @@ returns jsonb language sql stable set statement_timeout to '15s'
 as $function$
   with base as (
     select nullif(trim(koc_id_kenh),'') as id_kenh, nullif(trim(koc_sdt),'') as sdt
-    from donguis where nullif(trim(koc_id_kenh),'') is not null and nullif(trim(koc_sdt),'') is not null
+    from donguis
+    where nullif(trim(koc_id_kenh),'') is not null
+      and trim(koc_sdt) ~ '^[0-9]{9,12}$'   -- chỉ tính giá trị THẬT là số điện thoại, bỏ qua "HỦY ĐƠN"...
   ),
   kenh_nhieu_sdt as (
     select id_kenh, count(distinct sdt) as so_sdt, array_agg(distinct sdt) as ds_sdt
