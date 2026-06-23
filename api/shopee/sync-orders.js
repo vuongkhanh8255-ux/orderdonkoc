@@ -109,7 +109,7 @@ async function existingSns(supabase, sns) {
 
 async function fetchOrderDetails(partnerKey, accessToken, shopId, orderSns, deadline = Infinity) {
   const details = [];
-  const BATCH = 20;
+  const BATCH = 50;   // Shopee get_order_detail cho tối đa 50 order_sn/lần → ít call hơn, nhanh hơn
   for (let i = 0; i < orderSns.length; i += BATCH) {
     if (Date.now() > deadline) break;
     const batch = orderSns.slice(i, i + BATCH);
@@ -118,7 +118,7 @@ async function fetchOrderDetails(partnerKey, accessToken, shopId, orderSns, dead
       response_optional_fields: 'buyer_username,recipient_address,item_list,actual_shipping_fee,total_amount,pay_time,payment_method,checkout_shipping_carrier',
     });
     if (res.response?.order_list) details.push(...res.response.order_list);
-    await sleep(180);
+    await sleep(120);
   }
   return details;
 }
@@ -220,7 +220,7 @@ export default async function handler(req, res) {
             const { error } = await supabase.from('shopee_orders').upsert(batch, { onConflict: 'order_sn' });
             if (!error) upserted += batch.length;
           }
-          if (details.length < fresh.length) { shopResult.partial = true; break; } // hết giờ giữa chừng
+          if (Date.now() > deadline) { shopResult.partial = true; break; } // hết giờ giữa chừng
         } else if (to <= lastSynced + WINDOW) {
           // Không có đơn mới và đã chạm vùng cũ đã sync → dừng.
           break;
