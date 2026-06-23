@@ -639,7 +639,9 @@ async function fetchAllComments(creds, maxPages = 6, pageSize = 100) {
 }
 
 // Chạy auto-trả-lời cho 1 shop: đọc đánh giá, ≥4★ chưa trả lời → trả lời theo mẫu.
-async function replyShopComments(supabase, creds, shopId, shopName, template, dryRun) {
+const REPLY_MAX_PER_SHOP = 80;   // trần xử mỗi shop / mỗi lượt cron — tránh timeout, phần dư để lượt sau vét tiếp
+
+async function replyShopComments(supabase, creds, shopId, shopName, template, dryRun, deadlineMs = 0) {
   const fc = await fetchAllComments(creds, 6, 100);
   if (fc.error) return { shop_id: shopId, status: 'read_fail', error: fc.error };
   // Chỉ lấy ≥4★, CHƯA có phản hồi sẵn trên Shopee (c.comment_reply) — tránh gọi API trả lời lại
@@ -653,10 +655,12 @@ async function replyShopComments(supabase, creds, shopId, shopName, template, dr
     const { data: done } = await supabase.from('shopee_replied_comments').select('comment_id').in('comment_id', ids);
     already = new Set((done || []).map((d) => Number(d.comment_id)));
   }
-  const todo = cand.filter((c) => !already.has(Number(c.comment_id)));
-  let replied = 0;
+  const todoAll = cand.filter((c) => !already.has(Number(c.comment_id)));
+  if (dryRun) return { shop_id: shopId, shop: shopName, quet: (fc.comments || []).length, can_tra_loi: todoAll.length, da_tra_loi: todoAll.length, dry: true };
+  const todo = todoAll.slice(0, REPLY_MAX_PER_SHOP);   // trần / lượt
+  let replied = 0, hetGio = false;
   for (const c of todo) {
-    if (dryRun) { replied++; continue; }
+    if (deadlineMs && Date.now() > deadlineMs) { hetGio = true; break; }   // hết quỹ thời gian → để lượt sau
     const r = await replyOneComment(creds, c.comment_id, template || REPLY_TEMPLATE(shopName));
     const dup = r.error && /replied|already|duplicate/i.test(JSON.stringify(r));
     if (!r.error || dup) {
@@ -665,7 +669,7 @@ async function replyShopComments(supabase, creds, shopId, shopName, template, dr
     }
     await new Promise((res) => setTimeout(res, 350));
   }
-  return { shop_id: shopId, shop: shopName, quet: (fc.comments || []).length, can_tra_loi: todo.length, da_tra_loi: replied, dry: dryRun };
+  return { shop_id: shopId, shop: shopName, quet: (fc.comments || []).length, can_tra_loi: todoAll.length, da_tra_loi: replied, con_lai: Math.max(0, todoAll.length - replied), het_gio: hetGio, dry: false };
 }
 
 // Cron: auto-trả-lời cho các shop ĐÃ BẬT (enabled) trong cài đặt.
@@ -680,11 +684,14 @@ async function handleAutoReplyComments(supabase, reqUrl, req) {
   const { data: toks } = await supabase.from('shopee_tokens').select('shop_id, shop_name').eq('app_type', 'dashboard').eq('status', 'active');
   const nameById = {}; (toks || []).forEach((t) => { nameById[String(t.shop_id)] = t.shop_name; });
 
+  // Quỹ thời gian cả lượt ~50s (chừa biên cho giới hạn Vercel) — vét tới đâu hay tới đó, phần dư lượt cron sau.
+  const deadline = dryRun ? 0 : Date.now() + 50000;
   const out = [];
   for (const s of enabled) {
+    if (deadline && Date.now() > deadline) { out.push({ shop_id: s.shop_id, status: 'skip_het_gio' }); continue; }
     try {
       const creds = await getCredentials(supabase, s.shop_id, 'dashboard');
-      out.push(await replyShopComments(supabase, creds, s.shop_id, nameById[String(s.shop_id)] || creds.shopName, s.template, dryRun));
+      out.push(await replyShopComments(supabase, creds, s.shop_id, nameById[String(s.shop_id)] || creds.shopName, s.template, dryRun, deadline));
     } catch (e) { out.push({ shop_id: s.shop_id, status: 'error', error: e.message }); }
   }
   return { ok: true, shops: enabled.length, results: out };
