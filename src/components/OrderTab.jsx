@@ -393,16 +393,7 @@ const OrderTab = () => {
                             })()}
                         </div>
 
-                        <div style={{ display: 'flex', gap: '30px' }}>
-                            <div style={{ flex: 1 }}>
-                                <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold', color: '#374151' }}>Cast (VNĐ)</label>
-                                <input type="text" value={cast} onChange={e => setCast(formatCurrency(e.target.value))} style={{ fontWeight: '600', width: '100%' }} />
-                            </div>
-                            <div style={{ flex: 1 }}>
-                                <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold', color: '#374151' }}>CMS (%)</label>
-                                <input type="text" value={cms} onChange={e => setCms(e.target.value)} style={{ fontWeight: '600', width: '100%' }} />
-                            </div>
-                        </div>
+                        {/* Bỏ ô CAST (VNĐ) + CMS (%) khỏi form tạo đơn (cast giờ lấy từ koc_payments). State giữ mặc định cast='0', cms='10%' để booking không vỡ. */}
 
                         <div>
                             <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151' }}>Brand (*)</label>
