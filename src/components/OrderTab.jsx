@@ -113,6 +113,13 @@ const OrderTab = () => {
         });
     }, []);
 
+    // #3: Kênh + brand đã có người gắn tag (approved) ở Hiệu suất KOC → không ai gửi brand đó cho kênh đó nữa.
+    const [assignments, setAssignments] = useState([]); // {koc_id, brand_name, staff_name}
+    useEffect(() => {
+        supabase.from('koc_brand_assignments').select('koc_id, brand_name, staff_name').eq('status', 'approved')
+            .then(({ data }) => setAssignments(data || []));
+    }, []);
+
     // State cục bộ
     const [cast, setCast] = useState('0');
     const [cms, setCms] = useState('10%');
@@ -278,6 +285,16 @@ const OrderTab = () => {
         const normK = (k) => String(k || '').trim().replace(/^@/, '').toLowerCase();
         if (blacklistChannels.map(c => normK(c)).includes(normK(idKenh))) {
             alert(`🚫 Kênh "${idKenh}" đang trong danh sách Black List!\nKhông thể tạo đơn hàng cho kênh này.`);
+            return;
+        }
+
+        // #3: Kênh + brand đã có người gắn tag (approved) ở Hiệu suất KOC → CHẶN gửi brand đó cho kênh đó (brand khác vẫn gửi được).
+        const normBrand = (b) => String(b || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const orderBrands = [...new Set(previewList.map(it => normBrand(it.ten_brand)).filter(Boolean))];
+        const ch = normK(idKenh);
+        const conflict = assignments.find(a => normK(a.koc_id) === ch && orderBrands.includes(normBrand(a.brand_name)));
+        if (conflict) {
+            alert(`🚫 Kênh "${idKenh}" đã được "${conflict.staff_name}" gắn brand "${conflict.brand_name}" ở Hiệu suất KOC.\nKhông gửi sản phẩm brand này cho kênh này nữa (có thể gửi brand KHÁC).`);
             return;
         }
 
