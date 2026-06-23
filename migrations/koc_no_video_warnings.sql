@@ -1,5 +1,6 @@
 -- #4 Cảnh báo KOC chưa lên video sau 14 ngày
--- Đơn gửi 14–45 ngày trước mà Hiệu suất KOC chưa đo được video nào của kênh đó (map theo brand → gian hàng).
+-- Đơn gửi TỪ 01/06/2026 trở đi (đơn cũ hơn không cảnh báo) mà đã quá 14 ngày, Hiệu suất KOC
+-- chưa đo được video nào của kênh đó (map theo brand → gian hàng).
 -- eHerb + eHerb HCM tính chung 1 KOC. Admin gỡ tay (bảng dismissed); hệ thống tự gỡ khi tải được video trùng kênh.
 
 -- Bảng lưu cảnh báo đã gỡ
@@ -16,7 +17,7 @@ create policy kvwd_all on public.koc_video_warning_dismissed for all using (true
 create or replace function public.koc_no_video_warnings()
 returns jsonb language sql stable set statement_timeout to '20s'
 as $function$
-  with rng as (select (now() - interval '14 days')::date as d_late, (now() - interval '45 days')::date as d_floor),
+  with rng as (select (now() - interval '14 days')::date as d_late, date '2026-06-01' as d_floor),
   brand_shop(bkey, shop_id) as (values
     ('BODYMISS','7495107349171898427'),
     ('EHERB','7494529979361168222'), ('EHERB','7495838925500090511'),
