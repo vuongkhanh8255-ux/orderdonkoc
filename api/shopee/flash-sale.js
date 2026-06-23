@@ -872,7 +872,6 @@ function fsBuildItems(rows) {
 async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, maxSlots) {
   const out = [];
   let processed = 0;
-  let lastGood = maxItems; // số variant lần add gần nhất THÀNH CÔNG → khung sau khỏi dò lại từ đầu
   const slotsRes = await handleTimeSlots(supabase, shopId);
   const sd = slotsRes.ok ? slotsRes.data : null;
   const slots = Array.isArray(sd) ? sd : (sd?.time_slot_list || sd?.time_slot || []);
@@ -893,8 +892,9 @@ async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, m
     processed++;
 
     // FORM (template) random; PHÂN LOẠI khoá theo file — lấy đúng thứ tự, KHÔNG shuffle.
+    // ĐĂNG FULL: lấy TOÀN BỘ sản phẩm của form (chỉ chặn trần an toàn maxItems). Mỗi khung dò độc lập.
     const tmpl = templates[Math.floor(Math.random() * templates.length)];
-    let picked = (Array.isArray(tmpl.rows) ? tmpl.rows : []).slice(0, lastGood);
+    let picked = (Array.isArray(tmpl.rows) ? tmpl.rows : []).slice(0, maxItems);
     let items = fsBuildItems(picked);
     if (!items.length) { out.push({ shopId, slotId, status: 'no_items' }); continue; }
 
@@ -907,8 +907,11 @@ async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, m
 
     let addRes = await handleAddItems(supabase, shopId, { flash_sale_id: fsId, items });
     let tries = 0;
-    while (!addRes.ok && /exceed_max_item|max number of item/i.test(JSON.stringify(addRes)) && picked.length > 1 && tries < 8) {
-      picked = picked.slice(0, Math.max(1, Math.floor(picked.length * 0.6)));
+    // CHỈ co lại khi Shopee TỪ CHỐI vì vượt trần của shop — co từng bước nhẹ (~10%/lần) để bám
+    // sát số tối đa cho phép, KHÔNG overshoot xuống 2–4. Mỗi khung dò độc lập (không kéo khung khác).
+    while (!addRes.ok && /exceed_max_item|max number of item/i.test(JSON.stringify(addRes)) && picked.length > 1 && tries < 15) {
+      const step = Math.max(1, Math.ceil(picked.length * 0.1));
+      picked = picked.slice(0, picked.length - step);
       items = fsBuildItems(picked);
       addRes = await handleAddItems(supabase, shopId, { flash_sale_id: fsId, items });
       tries++;
@@ -917,7 +920,6 @@ async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, m
       try { await handleDelete(supabase, shopId, { flash_sale_id: fsId }); } catch { /* rollback */ }
       out.push({ shopId, slotId, status: 'add_fail', error: addRes.error || addRes.message, template: tmpl.name });
     } else {
-      lastGood = picked.length; // học giới hạn shop → khung sau bắt đầu từ số này, khỏi dò lại
       out.push({ shopId, slotId, status: 'ok', fsId, variants: picked.length, template: tmpl.name });
     }
     await new Promise((r) => setTimeout(r, 300)); // giãn nhịp tránh rate-limit
