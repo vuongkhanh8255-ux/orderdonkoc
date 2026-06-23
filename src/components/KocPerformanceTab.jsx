@@ -411,6 +411,8 @@ export default function KocPerformanceTab() {
   const [prodCache, setProdCache] = useState({});
   const [vidCache, setVidCache] = useState({});
   const [avatarMap, setAvatarMap] = useState({});
+  const [serverHits, setServerHits] = useState([]);     // KOC tìm được phía server (ngoài top-1000 xếp hạng)
+  const [serverSearching, setServerSearching] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -456,6 +458,25 @@ export default function KocPerformanceTab() {
   }, [shopId, selSeller, start, end]);
 
   useEffect(() => { fetchSales(); }, [fetchSales]);
+
+  // Tìm KOC phía SERVER khi gõ tên mà danh sách tại chỗ (đã bị cắt top-1000) không có.
+  // → KOC nhỏ (GMV thấp) vẫn tra ra được. Có khớp tại chỗ rồi thì khỏi gọi.
+  useEffect(() => {
+    const q = search.trim();
+    const localHit = (data?.creators || []).some(c => (c.username || '').toLowerCase().includes(q.toLowerCase()));
+    if (q.length < 2 || localHit) { setServerHits([]); setServerSearching(false); return; }
+    let cancelled = false; setServerSearching(true);
+    const t = setTimeout(async () => {
+      try {
+        const qs = new URLSearchParams({ action: 'koc_find', q, shop_id: shopId, seller: selSeller, start_date: start, end_date: end });
+        const r = await fetch(`${API}?${qs}`);
+        const j = await r.json().catch(() => ({ ok: false }));
+        if (!cancelled) setServerHits(j.ok && Array.isArray(j.creators) ? j.creators : []);
+      } catch { if (!cancelled) setServerHits([]); }
+      finally { if (!cancelled) setServerSearching(false); }
+    }, 400);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [search, data, shopId, selSeller, start, end]);
 
   // ── Định danh KOC: nhân sự + brand (dùng chung bảng koc_brand_assignments) ──
   const { nhanSus } = useAppData();
@@ -594,11 +615,11 @@ export default function KocPerformanceTab() {
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const cs = (data?.creators || [])
-      .filter(c => !q || (c.username || '').toLowerCase().includes(q))
-      .map(c => ({ ...c, roas: roasOf(c.gmv, c.commission, c.cast, c.sample_cost) }));
+    let base = (data?.creators || []).filter(c => !q || (c.username || '').toLowerCase().includes(q));
+    if (q && base.length === 0 && serverHits.length) base = serverHits;   // dùng kết quả server cho KOC ngoài top-1000
+    const cs = base.map(c => ({ ...c, roas: roasOf(c.gmv, c.commission, c.cast, c.sample_cost) }));
     return [...cs].sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0));
-  }, [data, sortKey, search]);
+  }, [data, sortKey, search, serverHits]);
   // Phân trang bảng KOC (mặc định 20 dòng/trang) — khỏi kéo dài cả 1000 dòng
   const [kocPage, setKocPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -756,7 +777,9 @@ export default function KocPerformanceTab() {
       )}
       {!loading && !error && data && rows.length === 0 && (
         <div style={{ textAlign: 'center', padding: 50, color: '#94a3b8', fontSize: '0.88rem' }}>
-          {search ? `Không tìm thấy KOC "${search}".` : <>Chưa có đơn affiliate trong khoảng này.<br /><span style={{ fontSize: '0.8rem' }}>Nếu shop vừa kết nối, dữ liệu đang được đồng bộ — quay lại sau vài phút.</span></>}
+          {serverSearching ? `🔎 Đang tìm KOC "${search}"…`
+            : search ? <>Không tìm thấy KOC "{search}" trong khoảng ngày / shop này.<br /><span style={{ fontSize: '0.8rem' }}>Thử đổi sang khoảng "Tất cả" hoặc bỏ chọn shop cụ thể.</span></>
+            : <>Chưa có đơn affiliate trong khoảng này.<br /><span style={{ fontSize: '0.8rem' }}>Nếu shop vừa kết nối, dữ liệu đang được đồng bộ — quay lại sau vài phút.</span></>}
         </div>
       )}
 

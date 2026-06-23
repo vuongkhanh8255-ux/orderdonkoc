@@ -862,6 +862,34 @@ async function handleFillKocViews({ params, appKey, appSecret, supabase, res }) 
 }
 
 // Read + aggregate per-KOC sales from the synced table.
+// Tìm KOC theo tên (server-side) — KHÔNG dính trần 1000 dòng của bảng xếp hạng.
+// Bảng xếp hạng koc_order_stats sắp theo GMV nên KOC nhỏ (ngoài top 1000) bị PostgREST cắt,
+// search lọc tại chỗ không thấy. Endpoint này lọc thẳng trong SQL (p_search) → trả đúng vài dòng khớp.
+async function handleKocFind({ params, supabase, res }) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  const norm = (s) => (s || '').toLowerCase().trim();
+  const q = (params.q || '').trim();
+  if (q.length < 2) return res.status(200).json({ ok: true, creators: [], note: 'Gõ ít nhất 2 ký tự' });
+  const { data: metas } = await supabase.from('tiktok_affiliate_sync_meta').select('seller_name, shop_id');
+  const want = norm(params.seller || '');
+  const meta = want ? (metas || []).find(m => norm(m.seller_name).includes(want)) : null;
+  const shopId = params.shop_id ? String(params.shop_id) : (meta?.shop_id || null);
+  const start = params.start_date || AFF_SYNC_FLOOR_DATE;
+  const end = params.end_date || null;
+  const { data: stats, error } = await supabase.rpc('koc_order_stats', { p_shop_id: shopId, p_start: start, p_end: end, p_search: q });
+  if (error) return res.status(200).json({ ok: false, error: error.message });
+  // views/cast/sample để 0 (KOC nhỏ thường ~0); bấm vào dòng sẽ tải chi tiết video/sản phẩm thật.
+  const creators = (stats || []).slice(0, 50).map(s => ({
+    username: s.creator_username,
+    orders: Number(s.orders) || 0, gmv: Number(s.gmv) || 0, qty: Number(s.qty) || 0,
+    commission: Number(s.commission) || 0, videos: Number(s.videos) || 0,
+    vtotal: Number(s.vtotal) || 0, vperiod: Number(s.vperiod) || 0,
+    views: 0, cast: 0, sample_cost: 0,
+    lives: Number(s.lives) || 0, products: Number(s.products) || 0, last_order: Number(s.last_order) || 0,
+  }));
+  return res.status(200).json({ ok: true, creators, search: q });
+}
+
 async function handleKocOrders({ params, supabase, res }) {
   // Chống CDN/proxy cache nhầm dữ liệu động (nhân viên thấy số cũ). App tự cache qua koc_orders_cache.
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
@@ -1296,6 +1324,11 @@ export default async function handler(req, res) {
 
   if (action === 'koc_orders') {
     try { return await handleKocOrders({ params, supabase, res }); }
+    catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
+  }
+
+  if (action === 'koc_find') {
+    try { return await handleKocFind({ params, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 
