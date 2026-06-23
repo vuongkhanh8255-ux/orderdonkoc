@@ -870,13 +870,11 @@ async function handleKocFind({ params, supabase, res }) {
   const norm = (s) => (s || '').toLowerCase().trim();
   const q = (params.q || '').trim();
   if (q.length < 2) return res.status(200).json({ ok: true, creators: [], note: 'Gõ ít nhất 2 ký tự' });
-  const { data: metas } = await supabase.from('tiktok_affiliate_sync_meta').select('seller_name, shop_id');
-  const want = norm(params.seller || '');
-  const meta = want ? (metas || []).find(m => norm(m.seller_name).includes(want)) : null;
-  const shopId = params.shop_id ? String(params.shop_id) : (meta?.shop_id || null);
   const start = params.start_date || AFF_SYNC_FLOOR_DATE;
   const end = params.end_date || null;
-  const { data: stats, error } = await supabase.rpc('koc_order_stats', { p_shop_id: shopId, p_start: start, p_end: end, p_search: q });
+  // Tìm theo TÊN → quét TOÀN BỘ shop (p_shop_id=null) để gõ tên là ra dù đang ở tab shop nào.
+  // (KOC có thể bán cho shop khác với shop đang xem — vd linh.latvat thuộc eHerb, không phải Bodymiss.)
+  const { data: stats, error } = await supabase.rpc('koc_order_stats', { p_shop_id: null, p_start: start, p_end: end, p_search: q });
   if (error) return res.status(200).json({ ok: false, error: error.message });
   // views/cast/sample để 0 (KOC nhỏ thường ~0); bấm vào dòng sẽ tải chi tiết video/sản phẩm thật.
   const creators = (stats || []).slice(0, 50).map(s => ({
