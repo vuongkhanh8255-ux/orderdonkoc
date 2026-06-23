@@ -666,11 +666,9 @@ async function replyShopComments(supabase, creds, shopId, shopName, template, dr
 
 // Cron: auto-trả-lời cho các shop ĐÃ BẬT (enabled) trong cài đặt.
 async function handleAutoReplyComments(supabase, reqUrl, req) {
-  const secret = (process.env.BOOST_CRON_SECRET || '').trim();
-  const provided = (req.headers['x-boost-secret'] || reqUrl.searchParams.get('secret') || '').toString().trim();
-  const isVercelCron = !!(req.headers['x-vercel-cron'] || (req.headers['user-agent'] || '').toLowerCase().includes('vercel-cron'));
-  if (secret && provided !== secret && !isVercelCron) return { ok: false, error: 'unauthorized' };
-
+  // Mở (không bắt secret) — giống các endpoint cron khác trong dự án (sync_aff_orders, fill_koc_views, prewarm_koc)
+  // để cron-job.org ping thẳng URL trần là chạy. An toàn: chỉ trả lời đánh giá ≥4★ CHƯA trả lời của shop ĐANG BẬT,
+  // dùng template cố định, idempotent (đã trả lời thì bỏ qua) → kích nhiều lần cũng vô hại.
   const dryRun = reqUrl.searchParams.get('dry_run') === '1';
   const { data: settings } = await supabase.from('shopee_review_autoreply_settings').select('shop_id, template').eq('enabled', true);
   const enabled = settings || [];
