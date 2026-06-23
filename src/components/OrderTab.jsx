@@ -1,6 +1,6 @@
 // src/components/OrderTab.jsx
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, Fragment } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import ResizableHeader from './ResizableHeader';
 import { supabase } from '../supabaseClient';
@@ -85,7 +85,17 @@ function KocClipStatus() {
     const [q, setQ] = useState('');
     const [tab, setTab] = useState('pending');   // all | done | pending | unknown
     const [page, setPage] = useState(1);
+    const [exp, setExp] = useState(null);        // key dòng đang bung chi tiết
+    const [detail, setDetail] = useState({});    // cache chi tiết theo key
     const PAGE = 30;
+    const toggleDetail = async (key, idKenh, brand) => {
+        if (exp === key) { setExp(null); return; }
+        setExp(key);
+        if (detail[key]) return;
+        const ch = String(idKenh || '').replace(/^@/, '').trim().toLowerCase();
+        const { data, error } = await supabase.rpc('koc_clip_detail', { p_ch: ch, p_brand: brand });
+        setDetail(d => ({ ...d, [key]: error ? { dons: [], clips: [] } : (data || { dons: [], clips: [] }) }));
+    };
     useEffect(() => {
         let alive = true;
         supabase.rpc('koc_clip_status').then(({ data, error }) => {
@@ -142,10 +152,14 @@ function KocClipStatus() {
                                 {paged.map((it, i) => {
                                     const s = stat(it);
                                     const u = String(it.id_kenh || '').replace(/^@/, '');
+                                    const key = u + '|' + it.brand;
+                                    const d = detail[key];
                                     return (
-                                        <tr key={u + '|' + it.brand + i} style={{ borderTop: '1px solid #f1f5f9' }}>
+                                        <Fragment key={key + i}>
+                                        <tr onClick={() => toggleDetail(key, it.id_kenh, it.brand)} style={{ borderTop: '1px solid #f1f5f9', cursor: 'pointer', background: exp === key ? '#f0f9ff' : 'transparent' }}>
                                             <td style={{ padding: '6px 10px', fontWeight: 600 }}>
-                                                <a href={`https://www.tiktok.com/@${u}`} target="_blank" rel="noreferrer" style={{ color: '#0284c7', textDecoration: 'none' }}>@{u}</a>
+                                                <span style={{ color: '#94a3b8', marginRight: 4 }}>{exp === key ? '▾' : '▸'}</span>
+                                                <a href={`https://www.tiktok.com/@${u}`} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: '#0284c7', textDecoration: 'none' }}>@{u}</a>
                                             </td>
                                             <td style={{ padding: '6px 10px' }}>{it.brand}</td>
                                             <td style={{ padding: '6px 10px', color: '#475569' }}>{it.staff || '—'}</td>
@@ -157,6 +171,33 @@ function KocClipStatus() {
                                                         : <span style={{ color: '#64748b' }}>❔ Chưa rõ (brand chưa map shop)</span>}
                                             </td>
                                         </tr>
+                                        {exp === key && (
+                                            <tr style={{ background: '#f8fafc' }}>
+                                                <td colSpan={6} style={{ padding: '10px 16px' }}>
+                                                    {!d ? <span style={{ color: '#94a3b8' }}>⏳ Đang tải chi tiết…</span> : (
+                                                        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+                                                            <div style={{ minWidth: 240, flex: 1 }}>
+                                                                <div style={{ fontWeight: 700, color: '#0369a1', marginBottom: 4 }}>📦 Đơn đã gửi ({(d.dons || []).length})</div>
+                                                                {(d.dons || []).length === 0 ? <span style={{ color: '#94a3b8' }}>—</span> : (d.dons || []).map((o, k) => (
+                                                                    <div key={k} style={{ fontSize: '0.78rem', color: '#334155', marginBottom: 3 }}><b>{o.ngay}</b> · {o.sp || '(không ghi SP)'} <span style={{ color: '#94a3b8' }}>· {o.staff || '—'}</span></div>
+                                                                ))}
+                                                            </div>
+                                                            <div style={{ minWidth: 240, flex: 1 }}>
+                                                                <div style={{ fontWeight: 700, color: '#16a34a', marginBottom: 4 }}>🎬 Clip đã lên ({(d.clips || []).length})</div>
+                                                                {(d.clips || []).length === 0 ? <span style={{ color: '#dc2626' }}>Chưa thấy clip nào</span> : (d.clips || []).map((c, k) => (
+                                                                    <div key={k} style={{ fontSize: '0.78rem', marginBottom: 3 }}>
+                                                                        <a href={`https://www.tiktok.com/@${c.username}/video/${c.id}`} target="_blank" rel="noreferrer" style={{ color: '#0284c7', textDecoration: 'none' }}>▶ {c.post}</a>
+                                                                        <span style={{ color: '#64748b' }}> · {Number(c.views || 0).toLocaleString('vi-VN')} view</span>
+                                                                        <span style={{ color: '#94a3b8' }}> · {c.title ? c.title.slice(0, 40) : ''}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        )}
+                                        </Fragment>
                                     );
                                 })}
                                 {paged.length === 0 && <tr><td colSpan={6} style={{ padding: 20, textAlign: 'center', color: '#94a3b8' }}>Không có dòng nào.</td></tr>}
