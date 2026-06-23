@@ -77,8 +77,84 @@ function KocContactWarnings() {
     );
 }
 
+// ⚠️ #4 Cảnh báo KOC chưa lên video: đơn gửi 14–45 ngày trước mà Hiệu suất KOC chưa đo được video nào của kênh đó (theo brand/gian hàng). eHerb + eHerb HCM tính chung. Admin gỡ tay; hệ thống tự gỡ khi tải được video trùng kênh. Thu gọn được.
+function KocNoVideoWarnings({ email }) {
+    const [rows, setRows] = useState(null);
+    const [open, setOpen] = useState(false);
+    const [q, setQ] = useState('');
+    const [busy, setBusy] = useState({});
+    useEffect(() => {
+        let alive = true;
+        supabase.rpc('koc_no_video_warnings').then(({ data, error }) => {
+            if (alive) setRows(error ? [] : (Array.isArray(data) ? data : []));
+        });
+        return () => { alive = false; };
+    }, []);
+    const handleGo = async (it) => {
+        if (!window.confirm(`Gỡ cảnh báo cho kênh @${it.id_kenh} (brand ${it.brand})?`)) return;
+        setBusy(b => ({ ...b, [it.dongui_id]: true }));
+        const { error } = await supabase.from('koc_video_warning_dismissed')
+            .insert({ dongui_id: it.dongui_id, dismissed_by: email || null });
+        if (error) { alert('Lỗi gỡ: ' + error.message); setBusy(b => ({ ...b, [it.dongui_id]: false })); return; }
+        setRows(rs => (rs || []).filter(r => r.dongui_id !== it.dongui_id));
+    };
+    if (!rows || rows.length === 0) return null;
+    const kw = q.trim().toLowerCase();
+    const filtered = kw
+        ? rows.filter(r => [r.id_kenh, r.brand, r.staff].some(x => String(x || '').toLowerCase().includes(kw)))
+        : rows;
+    const sorted = [...filtered].sort((a, b) => (b.days_ago || 0) - (a.days_ago || 0));
+    return (
+        <div style={{ background: '#fff7ed', border: '1.5px solid #ea580c', borderRadius: 12, padding: '14px 18px', marginBottom: '1.5rem' }}>
+            <div onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
+                <div style={{ fontWeight: 800, color: '#c2410c', fontSize: '1rem' }}>🎬 Cảnh báo KOC chưa lên video sau 14 ngày ({rows.length})</div>
+                <span style={{ color: '#c2410c', fontWeight: 700 }}>{open ? '▲ Thu gọn' : '▼ Xem chi tiết'}</span>
+            </div>
+            {open && (
+                <div style={{ marginTop: 12 }}>
+                    <input value={q} onChange={e => setQ(e.target.value)} placeholder="Lọc theo kênh / brand / nhân sự…"
+                        style={{ width: '100%', maxWidth: 360, padding: '6px 10px', borderRadius: 8, border: '1px solid #fdba74', marginBottom: 10, fontSize: '0.85rem' }} />
+                    <div style={{ maxHeight: 340, overflowY: 'auto', background: '#fff', borderRadius: 8, border: '1px solid #fed7aa' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                            <thead>
+                                <tr style={{ background: '#ffedd5', color: '#9a3412', textAlign: 'left' }}>
+                                    <th style={{ padding: '6px 10px' }}>ID kênh</th>
+                                    <th style={{ padding: '6px 10px' }}>Brand</th>
+                                    <th style={{ padding: '6px 10px' }}>Nhân sự</th>
+                                    <th style={{ padding: '6px 10px' }}>Ngày gửi</th>
+                                    <th style={{ padding: '6px 10px', textAlign: 'center' }}>Số ngày</th>
+                                    <th style={{ padding: '6px 10px', textAlign: 'center' }}></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {sorted.map((it) => (
+                                    <tr key={it.dongui_id} style={{ borderTop: '1px solid #fef3c7' }}>
+                                        <td style={{ padding: '6px 10px', fontWeight: 600 }}>@{it.id_kenh}</td>
+                                        <td style={{ padding: '6px 10px' }}>{it.brand}</td>
+                                        <td style={{ padding: '6px 10px', color: '#475569' }}>{it.staff || '—'}</td>
+                                        <td style={{ padding: '6px 10px' }}>{it.ngay_gui}</td>
+                                        <td style={{ padding: '6px 10px', textAlign: 'center', color: '#dc2626', fontWeight: 700 }}>{it.days_ago}</td>
+                                        <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                                            <button onClick={() => handleGo(it)} disabled={busy[it.dongui_id]}
+                                                style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid #ea580c', background: busy[it.dongui_id] ? '#fed7aa' : '#fff', color: '#c2410c', fontWeight: 700, cursor: 'pointer', fontSize: '0.78rem' }}>
+                                                {busy[it.dongui_id] ? '…' : 'Gỡ'}
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    {kw && <div style={{ marginTop: 6, color: '#9a3412', fontSize: '0.78rem' }}>Hiện {sorted.length}/{rows.length}</div>}
+                </div>
+            )}
+        </div>
+    );
+}
+
 const OrderTab = () => {
     const {
+        user,
         brands, nhanSus, sanPhams,
         isLoading, hoTen, setHoTen, idKenh, setIdKenh, sdt, setSdt,
         diaChi, setDiaChi, cccd, setCccd, selectedBrand, setSelectedBrand,
@@ -399,6 +475,7 @@ const OrderTab = () => {
             </div>
 
             <KocContactWarnings />
+            <KocNoVideoWarnings email={user?.email} />
 
             <div style={{ display: 'flex', gap: '2rem', marginBottom: '2rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <div className="mirinda-card" style={{ flex: 1, padding: '30px' }}>
