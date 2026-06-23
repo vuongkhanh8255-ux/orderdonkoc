@@ -77,6 +77,108 @@ function KocContactWarnings() {
     );
 }
 
+// 📋 Tình trạng lên clip KOC (đơn từ 01/06): liệt kê MỌI kênh đã gửi đơn từ 1/6, đối chiếu với video tải về
+// (theo brand/gian hàng) để biết bạn nào ĐÃ lên clip / CHƯA. Gom theo (kênh + brand). Lọc + search + phân trang.
+function KocClipStatus() {
+    const [rows, setRows] = useState(null);
+    const [open, setOpen] = useState(false);
+    const [q, setQ] = useState('');
+    const [tab, setTab] = useState('pending');   // all | done | pending | unknown
+    const [page, setPage] = useState(1);
+    const PAGE = 30;
+    useEffect(() => {
+        let alive = true;
+        supabase.rpc('koc_clip_status').then(({ data, error }) => {
+            if (alive) setRows(error ? [] : (Array.isArray(data) ? data : []));
+        });
+        return () => { alive = false; };
+    }, []);
+    useEffect(() => { setPage(1); }, [q, tab]);
+    if (!rows) return null;
+    const stat = (r) => (!r.mapped ? 'unknown' : r.co_clip ? 'done' : 'pending');
+    const cnt = { all: rows.length, done: 0, pending: 0, unknown: 0 };
+    rows.forEach(r => { cnt[stat(r)]++; });
+    const kw = q.trim().toLowerCase();
+    const filtered = rows.filter(r => {
+        if (tab !== 'all' && stat(r) !== tab) return false;
+        if (kw && ![r.id_kenh, r.brand, r.staff].some(x => String(x || '').toLowerCase().includes(kw))) return false;
+        return true;
+    });
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE));
+    const safePage = Math.min(page, totalPages);
+    const paged = filtered.slice((safePage - 1) * PAGE, safePage * PAGE);
+    const chip = (key, label, color) => (
+        <button onClick={() => setTab(key)} style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid ' + (tab === key ? color : '#cbd5e1'), background: tab === key ? color : '#fff', color: tab === key ? '#fff' : '#475569', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}>{label}</button>
+    );
+    return (
+        <div style={{ background: '#f0f9ff', border: '1.5px solid #0ea5e9', borderRadius: 12, padding: '14px 18px', marginBottom: '1.5rem' }}>
+            <div onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
+                <div style={{ fontWeight: 800, color: '#0369a1', fontSize: '1rem' }}>📋 Tình trạng lên clip KOC — đơn từ 01/06 ({cnt.all} kênh · <span style={{ color: '#16a34a' }}>{cnt.done} đã lên</span> · <span style={{ color: '#dc2626' }}>{cnt.pending} chưa</span>)</div>
+                <span style={{ color: '#0369a1', fontWeight: 700 }}>{open ? '▲ Thu gọn' : '▼ Xem chi tiết'}</span>
+            </div>
+            {open && (
+                <div style={{ marginTop: 12 }}>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10, alignItems: 'center' }}>
+                        {chip('pending', `❌ Chưa lên (${cnt.pending})`, '#dc2626')}
+                        {chip('done', `✅ Đã lên (${cnt.done})`, '#16a34a')}
+                        {chip('all', `Tất cả (${cnt.all})`, '#0ea5e9')}
+                        {chip('unknown', `❔ Chưa rõ (${cnt.unknown})`, '#64748b')}
+                        <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔎 Tìm kênh / brand / nhân sự…"
+                            style={{ flex: 1, minWidth: 200, maxWidth: 320, padding: '6px 10px', borderRadius: 8, border: '1px solid #7dd3fc', fontSize: '0.85rem' }} />
+                    </div>
+                    <div style={{ maxHeight: 420, overflowY: 'auto', background: '#fff', borderRadius: 8, border: '1px solid #bae6fd' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                            <thead>
+                                <tr style={{ background: '#e0f2fe', color: '#075985', textAlign: 'left', position: 'sticky', top: 0 }}>
+                                    <th style={{ padding: '6px 10px' }}>ID kênh</th>
+                                    <th style={{ padding: '6px 10px' }}>Brand</th>
+                                    <th style={{ padding: '6px 10px' }}>Nhân sự</th>
+                                    <th style={{ padding: '6px 10px', textAlign: 'center' }}>Số đơn</th>
+                                    <th style={{ padding: '6px 10px' }}>Gửi gần nhất</th>
+                                    <th style={{ padding: '6px 10px' }}>Trạng thái clip</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {paged.map((it, i) => {
+                                    const s = stat(it);
+                                    const u = String(it.id_kenh || '').replace(/^@/, '');
+                                    return (
+                                        <tr key={u + '|' + it.brand + i} style={{ borderTop: '1px solid #f1f5f9' }}>
+                                            <td style={{ padding: '6px 10px', fontWeight: 600 }}>
+                                                <a href={`https://www.tiktok.com/@${u}`} target="_blank" rel="noreferrer" style={{ color: '#0284c7', textDecoration: 'none' }}>@{u}</a>
+                                            </td>
+                                            <td style={{ padding: '6px 10px' }}>{it.brand}</td>
+                                            <td style={{ padding: '6px 10px', color: '#475569' }}>{it.staff || '—'}</td>
+                                            <td style={{ padding: '6px 10px', textAlign: 'center' }}>{it.so_don}</td>
+                                            <td style={{ padding: '6px 10px' }}>{it.gui_cuoi} <span style={{ color: '#94a3b8' }}>({it.days_ago}n)</span></td>
+                                            <td style={{ padding: '6px 10px' }}>
+                                                {s === 'done' ? <span style={{ color: '#16a34a', fontWeight: 700 }}>✅ {it.so_clip} clip{it.clip_cuoi ? ` · ${it.clip_cuoi}` : ''}</span>
+                                                    : s === 'pending' ? <span style={{ color: '#dc2626', fontWeight: 700 }}>❌ Chưa lên</span>
+                                                        : <span style={{ color: '#64748b' }}>❔ Chưa rõ (brand chưa map shop)</span>}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                                {paged.length === 0 && <tr><td colSpan={6} style={{ padding: 20, textAlign: 'center', color: '#94a3b8' }}>Không có dòng nào.</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, fontSize: '0.8rem', color: '#475569' }}>
+                        <span>Hiện {filtered.length} kênh{kw ? ' (đã lọc)' : ''}</span>
+                        {totalPages > 1 && (
+                            <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1} style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid #bae6fd', background: '#fff', cursor: safePage === 1 ? 'default' : 'pointer' }}>‹</button>
+                                Trang {safePage}/{totalPages}
+                                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid #bae6fd', background: '#fff', cursor: safePage === totalPages ? 'default' : 'pointer' }}>›</button>
+                            </span>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ⚠️ #4 Cảnh báo KOC chưa lên video: đơn gửi 14–45 ngày trước mà Hiệu suất KOC chưa đo được video nào của kênh đó (theo brand/gian hàng). eHerb + eHerb HCM tính chung. Admin gỡ tay; hệ thống tự gỡ khi tải được video trùng kênh. Thu gọn được.
 function KocNoVideoWarnings({ email }) {
     const [rows, setRows] = useState(null);
@@ -573,6 +675,7 @@ const OrderTab = () => {
 
             <KocContactWarnings />
             <KocNoVideoWarnings email={user?.email} />
+            <KocClipStatus />
 
             <div style={{ display: 'flex', gap: '2rem', marginBottom: '2rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <div className="mirinda-card" style={{ flex: 1, padding: '30px' }}>
