@@ -1060,11 +1060,31 @@ async function handleKocOrders({ params, supabase, res }) {
       count_sync = { last_run_at: vmeta?.video_last_run_at || null, filling: endMonth >= curMonth };
     } catch { /* ignore */ }
   }
+
+  // ĐÈN BÁO TỰ KIỂM view: data view-tháng (tiktok_video_monthly_views) của tháng-cuối-kỳ còn TƯƠI ko?
+  // Rủi ro thật khi bỏ Excel: cron sync đứng → tháng hiện tại đếm thiếu mà số vẫn "đông cứng". updated_at
+  // mới nhất của tháng đó = lần cron chạm cuối. Lệch > ngưỡng (giờ) → đèn vàng "nghi đứng, số có thể thiếu".
+  let view_health = null;
+  if (shopId) {
+    try {
+      const endMonth = (end || new Date().toISOString().slice(0, 10)).slice(0, 7);
+      const curMonth = new Date().toISOString().slice(0, 7);
+      const { data: fr } = await supabase.from('tiktok_video_monthly_views')
+        .select('updated_at').eq('shop_id', shopId).eq('ym', endMonth)
+        .order('updated_at', { ascending: false }).limit(1).maybeSingle();
+      const last = fr?.updated_at ? new Date(fr.updated_at) : null;
+      const hours = last ? Math.round((Date.now() - last.getTime()) / 3600000) : null;
+      // Chỉ "soi" tháng còn đang chạy (tháng hiện tại). Tháng quá khứ đã đóng → khỏi báo động.
+      const watching = endMonth >= curMonth;
+      const stale = watching && (hours == null || hours > 30); // cron chạy nhiều lần/ngày → >30h là bất thường
+      view_health = { ym: endMonth, last_updated: fr?.updated_at || null, hours, watching, level: stale ? 'warn' : 'ok' };
+    } catch { /* ignore */ }
+  }
   const payload = {
     ok: true, shop: meta?.seller_name || params.seller, shop_id: shopId,
     start_date: start, end_date: end, floor: AFF_SYNC_FLOOR_DATE,
     sync: meta ? { last_run_at: meta.last_run_at, total_synced: meta.total_synced, backfill_done: meta.backfill_done, oldest_date: vnDate(meta.oldest_create_time), newest_date: vnDate(meta.high_water_create_time), status: meta.last_status } : null,
-    count: totalCreators, shown: creators.length, totals, creators, shops: shopList, count_sync,
+    count: totalCreators, shown: creators.length, totals, creators, shops: shopList, count_sync, view_health,
   };
   // Lưu cache chung (best-effort) → máy khác vào là tức thì tới lần sync kế
   try { await supabase.from('koc_orders_cache').upsert({ cache_key: cacheKey, payload, sync_token: syncToken, built_at: new Date().toISOString() }, { onConflict: 'cache_key' }); } catch { /* cache lỗi không chặn response */ }

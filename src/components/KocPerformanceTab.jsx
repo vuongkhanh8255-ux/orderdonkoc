@@ -643,6 +643,16 @@ export default function KocPerformanceTab() {
     ? `⏳ đang cào · cập nhật lúc ${countSync.last_run_at ? new Date(countSync.last_run_at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : '—'}`
     : null;
 
+  // ĐÈN BÁO TỰ KIỂM view: data view-tháng đang xem còn tươi (cron sống) hay đứng (nghi thiếu)
+  const vh = data?.view_health;
+  const viewHealth = (!vh || !vh.watching) ? null : (() => {
+    const h = vh.hours;
+    const when = h == null ? 'chưa có data' : h < 1 ? 'vừa xong' : h < 24 ? `${h}h trước` : `${Math.round(h / 24)} ngày trước`;
+    return vh.level === 'warn'
+      ? { ok: false, text: `⚠️ View tháng này ${when} chưa cập nhật — nghi sync đứng, số có thể thiếu. Bấm "Tải lại" / kiểm cron.`, color: '#b45309', bg: '#fffbeb', border: '#fde68a' }
+      : { ok: true, text: `✅ View tháng này cập nhật ${when} — cron đang chạy, số đang đủ dần.`, color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0' };
+  })();
+
   const today = toYmd(new Date());
   const presets = [
     { key: 'all',       label: 'Tất cả',  s: FLOOR,          e: today },
@@ -740,7 +750,7 @@ export default function KocPerformanceTab() {
             { label: 'Tổng đơn', value: fmtNum(totals.orders), icon: '🛒' },
             { label: 'Tổng video', value: fmtNum(totals.vtotal_all || totals.vtotal || 0), icon: '🎬', sub: fillSub, note: 'Tổng video shop-wide CÓ TRACTION (view≥100 hoặc có đơn) — đã loại video rác. Đang cào dần theo sync, số sẽ leo tới khi đủ.' },
             { label: 'Video kỳ này', value: fmtNum(totals.vperiod_all || totals.vperiod || 0), icon: '🎞️', sub: fillSub, note: 'Video ĐĂNG trong kỳ, chỉ tính view≥100 hoặc có đơn (loại đuôi rác 0-view-0-đơn). Đang cào dần — "đang cào · giờ" = mới cập nhật tới đó, số chưa đủ 100% sẽ leo lên.' },
-            { label: 'Tổng view', value: fmtViews(totals.views), icon: '👁', sub: fillSub, note: 'Tổng lượt xem video. View do mấy video nhiều-view gánh nên thường đã chuẩn; nếu đang cào thì leo nốt vài %.' },
+            { label: 'Tổng view', value: fmtViews(totals.views), icon: '👁', sub: fillSub, health: viewHealth, note: 'Tổng lượt xem video PHÁT SINH trong kỳ (view-tháng, KHÔNG cộng dồn lũy kế). Mỗi video mỗi tháng 1 dòng "view đẻ trong tháng đó"; chọn kỳ nào thì cộng các tháng trong kỳ. Đèn báo bên dưới cho biết data tháng đang xem còn tươi (cron sống) hay đứng.' },
             { label: 'Hoa hồng (sẽ trả)', value: `${fmtVnd(totals.commission)} đ`, icon: '💸', note: 'Hoa hồng ƯỚC TÍNH SẼ TRẢ cho KOC (TikTok field: estimated_paid_commission). Đã loại đơn hoàn / không đủ điều kiện → đây là số tiền THỰC TẾ sẽ chi. Lưu ý: con số "Hoa hồng ước tính" trên TikTok cao hơn vì nó tính GỘP cả đơn chưa/không đủ điều kiện — field gộp đó TikTok không đẩy về qua API nên app dùng số "sẽ trả" này (chính xác hơn).' },
             { label: 'Hoa hồng đã trả', value: `${fmtVnd(totals.commission_actual || 0)} đ`, icon: '✅', note: 'Hoa hồng TikTok ĐÃ THANH TOÁN thực tế (field: actual_paid_commission). Chỉ tính đơn đã settled (đã đối soát xong). Thường thấp hơn ô "sẽ trả" vì còn đơn chưa tới kỳ thanh toán.' },
             { label: 'Tổng cast', value: `${fmtVnd(totals.cast || 0)} đ`, icon: '💵' },
@@ -758,6 +768,9 @@ export default function KocPerformanceTab() {
               </div>
               <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#0f172a', marginTop: 8 }}>{s.value}</div>
               {s.sub && <div style={{ fontSize: '0.64rem', color: ACCENT, fontWeight: 700, marginTop: 3 }}>{s.sub}</div>}
+              {s.health && (
+                <div style={{ marginTop: 6, fontSize: '0.62rem', fontWeight: 700, lineHeight: 1.4, color: s.health.color, background: s.health.bg, border: `1px solid ${s.health.border}`, borderRadius: 7, padding: '5px 7px' }}>{s.health.text}</div>
+              )}
               {s.note && noteOpen === s.label && (
                 <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30, marginTop: 6, background: '#0f172a', color: '#f1f5f9', fontSize: '0.74rem', lineHeight: 1.55, padding: '11px 13px', borderRadius: 10, boxShadow: '0 10px 30px rgba(0,0,0,0.28)', fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>
                   {s.note}
