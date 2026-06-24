@@ -927,11 +927,9 @@ async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, m
 }
 
 async function handleAutoFlashSaleAll(supabase, reqUrl, req) {
-  const secret = (process.env.BOOST_CRON_SECRET || '').trim();
-  const provided = (req.headers['x-boost-secret'] || reqUrl.searchParams.get('secret') || '').toString().trim();
-  const isVercelCron = !!(req.headers['x-vercel-cron'] || (req.headers['user-agent'] || '').toLowerCase().includes('vercel-cron'));
-  if (secret && provided !== secret && !isVercelCron) return { ok: false, error: 'unauthorized' };
-
+  // Mở (không bắt secret) — giống các endpoint cron khác (auto_boost_all, auto_reply_comments)
+  // để cron-job.org ping thẳng URL trần là chạy. An toàn: chỉ lấp khung FS TRỐNG bằng template
+  // sẵn có của shop, idempotent (khung đã có FS thì bỏ qua) → kích nhiều lần cũng vô hại.
   const maxItems = Math.max(1, Number(reqUrl.searchParams.get('max_items')) || 20);
   const maxSlots = Math.max(1, Number(reqUrl.searchParams.get('max_slots')) || 15);
   const source = reqUrl.searchParams.get('source') || 'cron';

@@ -62,14 +62,6 @@
     {
       "path": "/api/shopee/flash-sale?action=ads_sync",
       "schedule": "0 23 * * *"
-    },
-    {
-      "path": "/api/shopee/flash-sale?action=auto_flash_sale_all",
-      "schedule": "0 21 * * *"
-    },
-    {
-      "path": "/api/shopee/flash-sale?action=auto_flash_sale_all",
-      "schedule": "0 10 * * *"
     }
   ]
 }
