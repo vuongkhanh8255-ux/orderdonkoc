@@ -577,7 +577,8 @@ const syncShopVideos = async ({ appKey, appSecret, shop_id, supabase, maxPages =
     if (j?.code !== 0) break;
     const vids = j.data?.videos || []; if (!vids.length) { cycleDone = true; break; }
     const rows = vids.map(v => { const pt = v.video_post_time || ''; const prod = (v.products || [])[0] || {}; return { id: String(v.id), shop_id: String(shop_id), username: v.username || '', title: v.title || '', views: Number(v.views) || 0, gmv: numAmt(v.gmv), units_sold: Number(v.units_sold) || 0, sku_orders: Number(v.sku_orders) || 0, ctr: Number(v.click_through_rate) || 0, video_post_time: pt, post_date: pt ? pt.slice(0, 10) : null, product_id: String(prod.id || ''), product_name: prod.name || '', product_count: (v.products || []).length, synced_at: new Date().toISOString() }; }).filter(r => keepVideo(r, shop_id));
-    for (let i = 0; i < rows.length; i += 200) await supabase.from('tiktok_shop_videos').upsert(rows.slice(i, i + 200), { onConflict: 'id' });
+    // GREATEST upsert: view chỉ TĂNG, không cho view cửa sổ "1/4→nay" đè thấp lại bản gốc/lần trước (video cũ).
+    for (let i = 0; i < rows.length; i += 200) await supabase.rpc('upsert_shop_videos_max', { p_rows: rows.slice(i, i + 200) });
     up += rows.length; token = j.data?.next_page_token; pages++; if (!token) { cycleDone = true; break; }
   }
   try { await supabase.from('tiktok_affiliate_sync_meta').update({ video_token: cycleDone ? null : token, video_synced: (Number(m?.video_synced) || 0) + up }).eq('shop_id', shop_id); } catch { /* ignore */ }
