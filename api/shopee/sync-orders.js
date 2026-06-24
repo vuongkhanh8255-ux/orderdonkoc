@@ -175,6 +175,43 @@ export default async function handler(req, res) {
   if (dbErr) return res.status(500).json({ error: dbErr.message });
   if (!shops?.length) return res.json({ success: true, message: 'No shops found', results: [] });
 
+  // ── BACKFILL CÓ CHỦ ĐÍCH: lấp đúng khoảng [from_ts, to_ts] (vd lỗ hổng sync giữa kỳ) ──
+  // Không dùng cơ chế dừng-sớm → cào FULL mọi đơn trong khoảng, chỉ bỏ đơn đã có (resumable).
+  const fromTs = Number(url.searchParams.get('from_ts')) || 0;
+  const toTs   = Number(url.searchParams.get('to_ts')) || 0;
+  if (fromTs && toTs && toTs > fromTs) {
+    const bResults = [];
+    for (const shop of shops) {
+      const r = { shop_id: shop.shop_id, shop_name: shop.shop_name, orders_synced: 0, windows: 0, partial: false, error: null };
+      if (Date.now() > deadline) { r.partial = true; r.error = 'skipped (het thoi gian)'; bResults.push(r); continue; }
+      try {
+        const token = await refreshIfNeeded(supabase, shop);
+        const sid = Number(shop.shop_id);
+        let upserted = 0;
+        for (let to = toTs; to > fromTs; to -= WINDOW) {
+          if (Date.now() > deadline) { r.partial = true; break; }
+          const from = Math.max(to - WINDOW, fromTs);
+          const sns = await fetchOrderList(partnerKey, token.access_token, sid, from, to, deadline);
+          r.windows++;
+          if (!sns.length) continue;
+          const have = await existingSns(supabase, sns);
+          const fresh = sns.filter(s => !have.has(s));
+          if (!fresh.length) continue;
+          const details = await fetchOrderDetails(partnerKey, token.access_token, sid, fresh, deadline);
+          const records = transformOrders(details, shop.shop_id, shop.shop_name);
+          for (let i = 0; i < records.length; i += 200) {
+            const batch = records.slice(i, i + 200);
+            const { error } = await supabase.from('shopee_orders').upsert(batch, { onConflict: 'order_sn' });
+            if (!error) upserted += batch.length;
+          }
+        }
+        r.orders_synced = upserted;
+      } catch (err) { r.error = err.message; }
+      bResults.push(r);
+    }
+    return res.json({ success: true, mode: 'backfill', from_ts: fromTs, to_ts: toTs, total_synced: bResults.reduce((s, x) => s + x.orders_synced, 0), results: bResults });
+  }
+
   // Ưu tiên gian CŨ NHẤT trước (đơn mới nhất trong DB xa hiện tại nhất) để gian đang kẹt được kéo trước.
   const { data: lastRows } = await supabase.from('shopee_orders')
     .select('shop_id, create_time').order('create_time', { ascending: false }).limit(5000);
