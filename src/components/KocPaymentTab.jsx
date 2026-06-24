@@ -76,6 +76,7 @@ const KocPaymentTab = () => {
   const [selected, setSelected] = useState(() => new Set()); // chọn hàng loạt để thao tác
   const [gallery, setGallery] = useState(null); // { title, items:[{url,tag}] } — xem TẤT CẢ ảnh/file 1 dòng
   const [zipBusy, setZipBusy] = useState(null);  // { done, total } khi đang tải ZIP ảnh
+  const [lightbox, setLightbox] = useState(null); // index ảnh đang phóng to (xem từng tấm + mũi tên ◀ ▶)
   const [pwOk, setPwOk] = useState(false);          // đã nhập đúng mật khẩu thao tác (nhớ trong phiên)
   const [q, setQ] = useState('');
   const [payPage, setPayPage] = useState(1);
@@ -317,6 +318,18 @@ const KocPaymentTab = () => {
 
   // Đổi bộ lọc thì về trang 1
   useEffect(() => { setPayPage(1); }, [ym, fCompany, fBrand, fStaff, fApproved, fPaid, fFrom, fTo, q]);
+  // Phím ◀ ▶ Esc khi đang phóng to ảnh
+  useEffect(() => {
+    if (lightbox == null || !gallery) return;
+    const n = (gallery.items || gallery.urls || []).length;
+    const onKey = (e) => {
+      if (e.key === 'ArrowLeft') setLightbox(i => (i - 1 + n) % n);
+      else if (e.key === 'ArrowRight') setLightbox(i => (i + 1) % n);
+      else if (e.key === 'Escape') setLightbox(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightbox, gallery]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAY_PAGE_SIZE));
   const safePage = Math.min(payPage, totalPages);
   const pageRows = useMemo(() => filtered.slice((safePage - 1) * PAY_PAGE_SIZE, safePage * PAY_PAGE_SIZE), [filtered, safePage]);
@@ -605,7 +618,7 @@ const KocPaymentTab = () => {
                       const imgs = rowImages(r);  // CCCD + tin nhắn + hợp đồng (KHÔNG gồm video)
                       return <>
                         {r.air_link ? <a href={r.air_link.split('\n')[0]} target="_blank" rel="noreferrer" title="Link air (video)" style={{ color: '#7c3aed', textDecoration: 'none' }}>🎬</a> : '—'}
-                        {imgs.length > 0 && <button onClick={() => setGallery({ title: r.full_name || r.beneficiary || '', items: imgs })} title={`Xem tất cả ${imgs.length} ảnh/file (CCCD + tin nhắn + hợp đồng)`} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#0891b2', marginLeft: 8, fontSize: 'inherit', padding: 0, fontWeight: 700 }}>🖼️ {imgs.length}</button>}
+                        {imgs.length > 0 && <button onClick={() => { setLightbox(null); setGallery({ title: r.full_name || r.beneficiary || '', items: imgs }); }} title={`Xem tất cả ${imgs.length} ảnh/file (CCCD + tin nhắn + hợp đồng)`} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#0891b2', marginLeft: 8, fontSize: 'inherit', padding: 0, fontWeight: 700 }}>🖼️ {imgs.length}</button>}
                       </>;
                     })()}</td>
                     <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={!!r.accountant_approved} onChange={() => toggleApproved(r)} style={{ width: 17, height: 17, accentColor: '#16a34a', cursor: 'pointer' }} /></td>
@@ -649,12 +662,12 @@ const KocPaymentTab = () => {
                 return (
                 <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                   {it.tag && <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>{label}</span>}
-                  <a href={it.url} target="_blank" rel="noreferrer">
+                  <div onClick={() => setLightbox(i)} title="Bấm để phóng to (lật bằng mũi tên ◀ ▶)" style={{ cursor: 'zoom-in' }}>
                     <img src={it.url} alt="" referrerPolicy="no-referrer"
                       onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'flex'; }}
                       style={{ maxWidth: 340, maxHeight: 460, objectFit: 'contain', borderRadius: 10, border: '1px solid #e5e7eb', display: 'block', background: '#f8fafc' }} />
-                    <span style={{ display: 'none', width: 220, height: 130, alignItems: 'center', justifyContent: 'center', borderRadius: 10, border: '1px dashed #cbd5e1', background: '#f8fafc', color: '#0891b2', fontWeight: 700, fontSize: '0.82rem' }}>📎 Mở {label} ↗</span>
-                  </a>
+                    <span style={{ display: 'none', width: 220, height: 130, alignItems: 'center', justifyContent: 'center', borderRadius: 10, border: '1px dashed #cbd5e1', background: '#f8fafc', color: '#0891b2', fontWeight: 700, fontSize: '0.82rem' }}>📎 {label} (bấm phóng to)</span>
+                  </div>
                   <a href={it.url} target="_blank" rel="noreferrer" style={{ fontSize: '0.78rem', color: '#0891b2', fontWeight: 700, textDecoration: 'none' }}>⬇ {label} — mở / tải ↗</a>
                 </div>
                 );
@@ -662,6 +675,34 @@ const KocPaymentTab = () => {
             </div>
           </div>
         </div>
+        );
+      })()}
+
+      {/* Xem PHÓNG TO 1 ảnh + lật bằng ◀ ▶ (không nhảy ra tab mới) */}
+      {gallery && lightbox != null && (() => {
+        const items = gallery.items || (gallery.urls || []).map(u => ({ url: u, tag: '' }));
+        if (!items.length) return null;
+        const idx = ((lightbox % items.length) + items.length) % items.length;
+        const it = items[idx];
+        const label = TAG_LABEL[it.tag] || `Ảnh ${idx + 1}`;
+        const go = (e, d) => { e.stopPropagation(); setLightbox((idx + d + items.length) % items.length); };
+        const arrow = (side) => ({ position: 'absolute', [side]: 14, top: '50%', transform: 'translateY(-50%)', width: 54, height: 54, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.92)', color: '#0f172a', fontSize: '1.8rem', fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 20px rgba(0,0,0,0.3)' });
+        return (
+          <div onClick={() => setLightbox(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ position: 'absolute', top: 16, left: 20, color: '#fff', fontWeight: 800, fontSize: '0.95rem' }}>{label} · {idx + 1}/{items.length}</div>
+            <button onClick={(e) => { e.stopPropagation(); setLightbox(null); }} title="Đóng (Esc)" style={{ position: 'absolute', top: 14, right: 18, width: 42, height: 42, borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.92)', cursor: 'pointer', fontSize: '1.2rem', fontWeight: 900 }}>✕</button>
+            {items.length > 1 && <button onClick={(e) => go(e, -1)} title="Trước (←)" style={arrow('left')}>‹</button>}
+            <img key={idx} src={it.url} alt="" referrerPolicy="no-referrer" onClick={(e) => e.stopPropagation()}
+              onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'flex'; }}
+              style={{ maxWidth: '88vw', maxHeight: '84vh', objectFit: 'contain', borderRadius: 8, background: '#fff' }} />
+            <div onClick={(e) => e.stopPropagation()} style={{ display: 'none', flexDirection: 'column', alignItems: 'center', gap: 12, background: '#fff', borderRadius: 12, padding: '40px 50px' }}>
+              <div style={{ fontSize: '2.5rem' }}>📄</div>
+              <div style={{ fontWeight: 700, color: '#0f172a' }}>{label} — không xem trực tiếp được (file PDF/khác)</div>
+              <a href={it.url} target="_blank" rel="noreferrer" style={{ color: '#0891b2', fontWeight: 800 }}>⬇ Mở / tải bản gốc ↗</a>
+            </div>
+            {items.length > 1 && <button onClick={(e) => go(e, 1)} title="Sau (→)" style={arrow('right')}>›</button>}
+            <a href={it.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', bottom: 16, color: '#fff', fontWeight: 700, fontSize: '0.84rem', textDecoration: 'none', background: 'rgba(255,255,255,0.15)', padding: '6px 14px', borderRadius: 8 }}>⬇ Mở / tải bản gốc ↗</a>
+          </div>
         );
       })()}
     </div>
