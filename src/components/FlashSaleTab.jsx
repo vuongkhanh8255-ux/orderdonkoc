@@ -37,6 +37,11 @@ async function apiCall(action, params = {}, body = null) {
     ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
     : { method: 'GET' };
   const res = await fetch(url, opts);
+  // Server timeout/lỗi → Vercel trả trang HTML, không phải JSON. Báo lỗi tử tế thay vì "Unexpected token <".
+  const ct = res.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) {
+    return { ok: false, error: `Máy chủ bận hoặc quá thời gian (HTTP ${res.status}). Thử lại giúp em.` };
+  }
   return res.json();
 }
 
@@ -1081,9 +1086,20 @@ function FlashSaleList({ flashSales, onDelete, onBulkDelete, onRefresh }) {
     if (!confirm(`Xóa sản phẩm "${itemName || ('#' + itemId)}" khỏi TẤT CẢ khung giờ Flash Sale chưa kết thúc?\n(Các sản phẩm khác giữ nguyên)`)) return;
     setRemoving(itemId);
     try {
-      const res = await apiCall('delete_item_all', {}, { item_id: itemId });
-      if (res.ok) { alert(`✅ Đã xóa SP khỏi ${res.data?.removed_count || 0} khung giờ.`); setItemsByFs({}); setExpanded(null); onRefresh?.(); }
-      else alert('Lỗi: ' + (res.error || res.message || 'không xóa được'));
+      // Gọi theo lô có ngắt 45s/lần — lặp với remaining_ids tới khi hết (shop nhiều khung giờ khỏi timeout).
+      let totalRemoved = 0, remaining = null, guard = 0, failMsg = '';
+      do {
+        const body = remaining ? { item_id: itemId, flash_sale_ids: remaining } : { item_id: itemId };
+        const res = await apiCall('delete_item_all', {}, body);
+        if (!res.ok) { failMsg = res.error || res.message || 'không xóa được'; break; }
+        totalRemoved += res.data?.removed_count || 0;
+        remaining = res.data?.partial ? (res.data.remaining_ids || []) : null;
+        guard++;
+      } while (remaining && remaining.length && guard < 20);
+      if (failMsg) alert('Lỗi: ' + failMsg);
+      else if (remaining && remaining.length) alert(`⚠️ Đã xóa ${totalRemoved} khung, còn ${remaining.length} khung chưa xong — bấm xóa lại lần nữa.`);
+      else alert(`✅ Đã xóa SP khỏi ${totalRemoved} khung giờ.`);
+      setItemsByFs({}); setExpanded(null); onRefresh?.();
     } catch (e) { alert('Lỗi: ' + e.message); }
     setRemoving(null);
   };

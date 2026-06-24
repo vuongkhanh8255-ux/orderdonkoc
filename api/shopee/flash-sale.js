@@ -768,7 +768,13 @@ async function handleDeleteItemAll(supabase, shopId, body) {
   }
 
   const removed = []; const skipped = [];
-  for (const fsId of targetFs) {
+  // Ngắt ~45s/lần (dưới trần Vercel 60s) → tránh timeout trả HTML. Phần chưa xử trả về remaining_ids,
+  // FE gọi tiếp với đúng list đó (đường nhanh, khỏi quét lại) cho tới hết.
+  const t0 = Date.now(); const BUDGET_MS = 45000;
+  let i = 0;
+  for (; i < targetFs.length; i++) {
+    if (Date.now() - t0 > BUDGET_MS) break;
+    const fsId = targetFs[i];
     let has = true;
     try {
       const itRes = await shopeeGet(
@@ -792,7 +798,8 @@ async function handleDeleteItemAll(supabase, shopId, body) {
     else removed.push(fsId);
     await new Promise((r) => setTimeout(r, 200));
   }
-  return { ok: true, data: { item_id: itemId, removed_count: removed.length, removed, skipped } };
+  const remaining = targetFs.slice(i);
+  return { ok: true, data: { item_id: itemId, removed_count: removed.length, removed, skipped, remaining_ids: remaining, partial: remaining.length > 0 } };
 }
 
 /** 7. Delete a Flash Sale */
