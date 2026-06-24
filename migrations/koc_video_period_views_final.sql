@@ -1,26 +1,38 @@
 -- View KOC = view PHÁT SINH trong các THÁNG của kỳ chọn (delta từng tháng, KHÔNG cộng dồn quá khứ).
---   VD: T4 video 1tr view, T5 thêm 500k → chọn T5 hiện 500k (không phải 1tr5). Chọn "Tất cả" = cộng delta mọi tháng.
---   Bảng tiktok_video_monthly_views lưu đúng delta từng tháng (đã verify không trùng).
+--   VD: T4 video 1tr view, T5 thêm 500k → chọn T5 hiện 500k (không phải 1tr5). "Tất cả" = cộng delta mọi tháng.
+--   Nguồn: tiktok_video_monthly_views (lưu đúng delta từng tháng, verify không trùng).
 -- Gian thuộc koc_full_video_shops: tính cho TẤT CẢ video của kênh (theo username), không chỉ video có đơn.
--- (Đã từng thử: card dùng cột tiktok_shop_videos.views = undercount; lũy kế ym<=p_end = cộng dồn quá khứ — CẢ HAI SAI, đã bỏ.)
+--
+-- ⚠️ 2 BẪY đã gặp khi làm cái này (đừng lặp):
+--  1. SECURITY: hàm phải SECURITY DEFINER — nếu INVOKER thì chạy quyền anon, RLS chặn đọc tiktok_video_monthly_views → KOC ra view 0.
+--  2. PostgREST CẮT 1000 DÒNG: full_v ban đầu trả TẤT CẢ creator có video (hàng nghìn) → PostgREST cắt còn 1000 →
+--     KOC ngoài top 1000 (vd tieulinhsann) bị view=0. FIX: chỉ trả creator CÓ ĐƠN trong kỳ (<1000) — vẫn đếm view tất cả video của họ.
 
--- Per-KOC
 create or replace function public.koc_video_views(p_shop_id text, p_start date, p_end date)
-returns table(uname text, total_views bigint) language sql stable as $function$
+returns table(uname text, total_views bigint)
+language sql stable security definer set search_path to 'public'
+as $function$
   with ff as (select (p_shop_id is not null and exists(select 1 from koc_full_video_shops f where f.shop_id=p_shop_id)) as full_on),
   months as (
     select to_char(gs,'YYYY-MM') ym
     from generate_series(date_trunc('month',coalesce(p_start,date '2026-01-01')),
                          date_trunc('month',coalesce(p_end,current_date)), interval '1 month') gs
   ),
-  full_v as (   -- gian full: tất cả video của kênh theo username
+  ord_creators as (   -- creator CÓ ĐƠN trong kỳ (đúng tập hiển thị, bounded < 1000)
+    select distinct lower(regexp_replace(creator_username,'^@','')) as uname
+    from tiktok_affiliate_orders
+    where (p_shop_id is null or shop_id=p_shop_id) and coalesce(creator_username,'')<>''
+      and (p_start is null or order_date>=p_start) and (p_end is null or order_date<=p_end)
+  ),
+  full_v as (   -- gian full: view TẤT CẢ video của creator-có-đơn (theo username)
     select lower(regexp_replace(v.username,'^@','')) as uname, coalesce(sum(mv.views),0)::bigint as total_views
     from tiktok_shop_videos v
     join tiktok_video_monthly_views mv on mv.id = v.id and mv.ym in (select ym from months)
     where v.shop_id = p_shop_id and coalesce(v.username,'') <> ''
+      and lower(regexp_replace(v.username,'^@','')) in (select uname from ord_creators)
     group by 1
   ),
-  norm_vids as (   -- gian khác: chỉ video có đơn trong kỳ
+  norm_vids as (   -- gian khác: chỉ video có đơn
     select distinct o.creator_username, o.content_id
     from tiktok_affiliate_orders o
     where o.content_type='VIDEO' and coalesce(o.content_id,'')<>'' and o.creator_username is not null and o.creator_username<>''
@@ -38,9 +50,9 @@ returns table(uname text, total_views bigint) language sql stable as $function$
 $function$;
 grant execute on function public.koc_video_views(text,date,date) to anon, authenticated;
 
--- Card "Tổng view" (toàn shop, view-tháng theo kỳ)
+-- Card "Tổng view" (toàn shop, view-tháng theo kỳ). SECURITY DEFINER để khỏi bị RLS.
 create or replace function public.koc_video_views_total(p_shop_id text, p_start date, p_end date)
-returns bigint language sql stable set statement_timeout to '20s'
+returns bigint language sql stable security definer set search_path to 'public'
 as $function$
   with months as (
     select to_char(gs,'YYYY-MM') ym
