@@ -522,7 +522,7 @@ const syncShopVideosAllMonths = async ({ appKey, appSecret, shop_id, supabase, m
 // Lượt sync "VIDEO MỚI NHẤT": cửa sổ ngày hẹp (vài ngày qua) + sort theo NGÀY ĐĂNG giảm dần →
 // bắt video vừa air dù 0 GMV (đường sort-GMV phải cày tới đáy 45k video mới tới → rất lâu).
 // sortField cho phép thử nghiệm (param vsort) vì chưa chắc TikTok hỗ trợ field nào.
-const syncShopVideosRecent = async ({ appKey, appSecret, shop_id, supabase, days = 14, maxPages = 8, sortField = 'views', sortOrder = 'DESC', deadlineMs = 0 }) => {
+const syncShopVideosRecent = async ({ appKey, appSecret, shop_id, supabase, days = 14, maxPages = 8, sortField = 'views', sortOrder = 'DESC', deadlineMs = 0, keepChannels = null }) => {
   const { data: aconns } = await supabase.from('tiktok_analytics_connections').select('access_token, refresh_token, shop_cipher, shop_id').not('access_token', 'is', null);
   const aconn = (aconns || []).find(c => String(c.shop_id) === String(shop_id));
   if (!aconn) return { videos: 0, skipped: 'no analytics conn' };
@@ -544,7 +544,7 @@ const syncShopVideosRecent = async ({ appKey, appSecret, shop_id, supabase, days
     if (firstCode === null) { firstCode = j?.code; firstMsg = j?.message || ''; }
     if (j?.code !== 0) break;
     const vids = j.data?.videos || []; if (!vids.length) break;
-    const rows = vids.map(v => { const pt = v.video_post_time || ''; const prod = (v.products || [])[0] || {}; return { id: String(v.id), shop_id: String(shop_id), username: v.username || '', title: v.title || '', views: Number(v.views) || 0, gmv: numAmt(v.gmv), units_sold: Number(v.units_sold) || 0, sku_orders: Number(v.sku_orders) || 0, ctr: Number(v.click_through_rate) || 0, video_post_time: pt, post_date: pt ? pt.slice(0, 10) : null, product_id: String(prod.id || ''), product_name: prod.name || '', product_count: (v.products || []).length, synced_at: new Date().toISOString() }; }).filter(r => keepVideo(r, shop_id));
+    const rows = vids.map(v => { const pt = v.video_post_time || ''; const prod = (v.products || [])[0] || {}; return { id: String(v.id), shop_id: String(shop_id), username: v.username || '', title: v.title || '', views: Number(v.views) || 0, gmv: numAmt(v.gmv), units_sold: Number(v.units_sold) || 0, sku_orders: Number(v.sku_orders) || 0, ctr: Number(v.click_through_rate) || 0, video_post_time: pt, post_date: pt ? pt.slice(0, 10) : null, product_id: String(prod.id || ''), product_name: prod.name || '', product_count: (v.products || []).length, synced_at: new Date().toISOString() }; }).filter(r => keepVideo(r, shop_id) || (keepChannels && keepChannels.has((r.username || '').replace(/^@/, '').trim().toLowerCase())));
     sampleDates.push(...rows.slice(0, 6).map(r => r.post_date));
     // GREATEST upsert: views/gmv/đơn CHỈ TĂNG, không cho view cửa sổ hẹp đè thấp lại bản gốc (Excel/lần trước).
     for (let i = 0; i < rows.length; i += 200) await supabase.rpc('upsert_shop_videos_max', { p_rows: rows.slice(i, i + 200) });
@@ -791,17 +791,20 @@ async function handleSyncVideosFresh({ params, appKey, appSecret, supabase, res 
   const real = (metas || []).filter(m => m.shop_id && !String(m.shop_id).startsWith('noc:'));
   const days = Math.min(Math.max(Number(params.days) || 10, 1), 30);
   const pages = Math.min(Math.max(Number(params.pages) || 3, 1), 8);
+  // Danh sách kênh ĐÃ GỬI ĐƠN (từ 01/06) → giữ cả clip mới 0-view của họ (qua mặt bộ lọc view≥100).
+  const { data: dch } = await supabase.from('donguis').select('koc_id_kenh').gte('ngay_gui', '2026-06-01').not('koc_id_kenh', 'is', null);
+  const keepChannels = new Set((dch || []).map(d => String(d.koc_id_kenh || '').replace(/^@/, '').trim().toLowerCase()).filter(Boolean));
   const deadline = Date.now() + 50000;
   const out = [];
   for (const m of real) {
     if (Date.now() > deadline) { out.push({ shop: m.seller_name, status: 'skip_het_gio' }); continue; }
     try {
-      const asc  = await syncShopVideosRecent({ appKey, appSecret, shop_id: m.shop_id, supabase, days, maxPages: pages, sortOrder: 'ASC',  deadlineMs: deadline });
-      const desc = await syncShopVideosRecent({ appKey, appSecret, shop_id: m.shop_id, supabase, days, maxPages: pages, sortOrder: 'DESC', deadlineMs: deadline });
+      const asc  = await syncShopVideosRecent({ appKey, appSecret, shop_id: m.shop_id, supabase, days, maxPages: pages, sortOrder: 'ASC',  deadlineMs: deadline, keepChannels });
+      const desc = await syncShopVideosRecent({ appKey, appSecret, shop_id: m.shop_id, supabase, days, maxPages: pages, sortOrder: 'DESC', deadlineMs: deadline, keepChannels });
       out.push({ shop: m.seller_name, moi_asc: asc.videos, asc_code: asc.api_code, moi_desc: desc.videos, win_from: desc.window_from });
     } catch (e) { out.push({ shop: m.seller_name, error: e.message }); }
   }
-  return res.status(200).json({ ok: true, shops: real.length, days, results: out });
+  return res.status(200).json({ ok: true, shops: real.length, days, kenh_theo_doi: keepChannels.size, results: out });
 }
 
 // Video analytics sync — TÁCH riêng khỏi sync đơn (tránh timeout). 1 shop/run, xoay theo video_last_run_at.
