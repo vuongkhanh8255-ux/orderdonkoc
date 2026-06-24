@@ -544,18 +544,27 @@ export const AppDataProvider = ({ children }) => {
   const handleExportAll = async () => {
     setIsLoading(true); const hasProductFilter = !!filterBrand || !!filterSanPham; const ctRelation = hasProductFilter ?
       'chitiettonguis!chitiettonguis_dongui_id_fkey_final!inner' : 'chitiettonguis!chitiettonguis_dongui_id_fkey_final'; const spRelation = hasProductFilter ? 'sanphams!inner' : 'sanphams';
-    let query = supabase.from('donguis').select(`id, ngay_gui, da_sua, loai_ship, original_loai_ship, trang_thai, original_trang_thai, koc_ho_ten, original_koc_ho_ten, koc_id_kenh, original_koc_id_kenh, original_koc_id_kenh, koc_sdt, original_koc_sdt, koc_dia_chi, original_koc_dia_chi, koc_cccd, original_koc_cccd, nhansu ( id, ten_nhansu ), ${ctRelation} ( id, so_luong, ${spRelation} ( id, ten_sanpham, barcode, gia_tien, brands ( id, ten_brand ) ) )`).order('ngay_gui', { ascending: false });
-    if (filterIdKenh) query = query.ilike('koc_id_kenh', `%${filterIdKenh.trim()}%`); if (filterSdt) query = query.ilike('koc_sdt', `%${filterSdt.trim()}%`); if (filterNhanSu) query = query.eq('nhansu_id', filterNhanSu);
-    if (filterLoaiShip) query = query.eq('loai_ship', filterLoaiShip);
-    if (filterNgayStart) query = query.gte('ngay_gui', `${filterNgayStart}T00:00:00.000Z`);
-    if (filterNgayEnd)   query = query.lte('ngay_gui', `${filterNgayEnd}T23:59:59.999Z`); if (filterEditedStatus !== 'all') {
-      const isEdited = filterEditedStatus === 'edited';
-      query = query.eq('da_sua', isEdited);
-    } if (filterBrand) query = query.eq('chitiettonguis.sanphams.brand_id', filterBrand); if (filterSanPham) query = query.eq('chitiettonguis.sanphams.id', filterSanPham);
-    const { data, error } = await query; if (error) {
-      alert("Lỗi tải dữ liệu để xuất file: " + error.message);
-      setIsLoading(false); return;
-    } let exportData = data || []; const finalExportData = exportData.flatMap((donHang, index) => { const dc = splitDiaChi(donHang.koc_dia_chi); const baseData = { stt: index + 1, ngayGui: new Date(donHang.ngay_gui).toLocaleString('vi-VN'), tenKOC: donHang.koc_ho_ten, cccd: donHang.koc_cccd, idKenh: donHang.koc_id_kenh, sdt: donHang.koc_sdt, diaChi: donHang.koc_dia_chi, tinhTP: dc.tinh, quanHuyen: dc.quan, phuongXa: dc.phuong, soNhaDuong: dc.soNha, nhanSu: donHang.nhansu?.ten_nhansu, loaiShip: donHang.loai_ship, trangThai: donHang.trang_thai }; if (donHang.chitiettonguis.length === 0) { return [{ ...baseData, sanPham: 'N/A', soLuong: 0, brand: 'N/A', barcode: 'N/A' }]; } return donHang.chitiettonguis.map(ct => ({ ...baseData, sanPham: ct.sanphams?.ten_sanpham, soLuong: ct.so_luong, brand: ct.sanphams?.brands?.ten_brand, barcode: ct.sanphams?.barcode, })); });
+    const buildExportQuery = () => {
+      let query = supabase.from('donguis').select(`id, ngay_gui, da_sua, loai_ship, original_loai_ship, trang_thai, original_trang_thai, koc_ho_ten, original_koc_ho_ten, koc_id_kenh, original_koc_id_kenh, original_koc_id_kenh, koc_sdt, original_koc_sdt, koc_dia_chi, original_koc_dia_chi, koc_cccd, original_koc_cccd, nhansu ( id, ten_nhansu ), ${ctRelation} ( id, so_luong, ${spRelation} ( id, ten_sanpham, barcode, gia_tien, brands ( id, ten_brand ) ) )`).order('ngay_gui', { ascending: false }).order('id', { ascending: false });
+      if (filterIdKenh) query = query.ilike('koc_id_kenh', `%${filterIdKenh.trim()}%`); if (filterSdt) query = query.ilike('koc_sdt', `%${filterSdt.trim()}%`); if (filterNhanSu) query = query.eq('nhansu_id', filterNhanSu);
+      if (filterLoaiShip) query = query.eq('loai_ship', filterLoaiShip);
+      if (filterNgayStart) query = query.gte('ngay_gui', `${filterNgayStart}T00:00:00.000Z`);
+      if (filterNgayEnd)   query = query.lte('ngay_gui', `${filterNgayEnd}T23:59:59.999Z`);
+      if (filterEditedStatus !== 'all') query = query.eq('da_sua', filterEditedStatus === 'edited');
+      if (filterBrand) query = query.eq('chitiettonguis.sanphams.brand_id', filterBrand); if (filterSanPham) query = query.eq('chitiettonguis.sanphams.id', filterSanPham);
+      return query;
+    };
+    // Lấy TẤT CẢ đơn — Supabase trả tối đa 1000 dòng/lần → phân trang gộp lại (xuất full >10k đơn)
+    let exportData = [];
+    const EXPORT_PAGE = 1000;
+    for (let from = 0; ; from += EXPORT_PAGE) {
+      const { data: chunk, error } = await buildExportQuery().range(from, from + EXPORT_PAGE - 1);
+      if (error) { alert("Lỗi tải dữ liệu để xuất file: " + error.message); setIsLoading(false); return; }
+      if (!chunk || chunk.length === 0) break;
+      exportData = exportData.concat(chunk);
+      if (chunk.length < EXPORT_PAGE) break;
+    }
+    const finalExportData = exportData.flatMap((donHang, index) => { const dc = splitDiaChi(donHang.koc_dia_chi); const baseData = { stt: index + 1, ngayGui: new Date(donHang.ngay_gui).toLocaleString('vi-VN'), tenKOC: donHang.koc_ho_ten, cccd: donHang.koc_cccd, idKenh: donHang.koc_id_kenh, sdt: donHang.koc_sdt, diaChi: donHang.koc_dia_chi, tinhTP: dc.tinh, quanHuyen: dc.quan, phuongXa: dc.phuong, soNhaDuong: dc.soNha, nhanSu: donHang.nhansu?.ten_nhansu, loaiShip: donHang.loai_ship, trangThai: donHang.trang_thai }; if (donHang.chitiettonguis.length === 0) { return [{ ...baseData, sanPham: 'N/A', soLuong: 0, brand: 'N/A', barcode: 'N/A' }]; } return donHang.chitiettonguis.map(ct => ({ ...baseData, sanPham: ct.sanphams?.ten_sanpham, soLuong: ct.so_luong, brand: ct.sanphams?.brands?.ten_brand, barcode: ct.sanphams?.barcode, })); });
     const mainExportHeaders = [{ label: "STT", key: "stt" }, { label: "Ngày Gửi", key: "ngayGui" }, { label: "Tên KOC", key: "tenKOC" }, { label: "CCCD", key: "cccd" }, { label: "ID Kênh", key: "idKenh" }, { label: "SĐT", key: "sdt" }, { label: "Địa chỉ", key: "diaChi" }, { label: "Tỉnh/TP", key: "tinhTP" }, { label: "Quận/Huyện", key: "quanHuyen" }, { label: "Phường/Xã", key: "phuongXa" }, { label: "Số nhà/Đường", key: "soNhaDuong" }, { label: "Sản Phẩm", key: "sanPham" }, { label: "Số Lượng", key: "soLuong" }, { label: "Brand", key: "brand" }, { label: "Barcode", key: "barcode" }, { label: "Nhân Sự Gửi", key: "nhanSu" }, { label: "Loại Ship", key: "loaiShip" }, { label: "Trạng Thái", key: "trangThai" },];
     handleExport({ data: finalExportData, headers: mainExportHeaders, filename: 'danh-sach-don-hang-FULL.xlsx' }); setIsLoading(false);
   };
