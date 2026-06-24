@@ -525,7 +525,7 @@ const syncShopVideosAllMonths = async ({ appKey, appSecret, shop_id, supabase, m
 // Lượt sync "VIDEO MỚI NHẤT": cửa sổ ngày hẹp (vài ngày qua) + sort theo NGÀY ĐĂNG giảm dần →
 // bắt video vừa air dù 0 GMV (đường sort-GMV phải cày tới đáy 45k video mới tới → rất lâu).
 // sortField cho phép thử nghiệm (param vsort) vì chưa chắc TikTok hỗ trợ field nào.
-const syncShopVideosRecent = async ({ appKey, appSecret, shop_id, supabase, days = 14, maxPages = 8, sortField = 'views', sortOrder = 'DESC', deadlineMs = 0, keepChannels = null }) => {
+const syncShopVideosRecent = async ({ appKey, appSecret, shop_id, supabase, days = 14, maxPages = 8, sortField = 'views', sortOrder = 'DESC', deadlineMs = 0, keepChannels = null, startToken = null }) => {
   const { data: aconns } = await supabase.from('tiktok_analytics_connections').select('access_token, refresh_token, shop_cipher, shop_id').not('access_token', 'is', null);
   const aconn = (aconns || []).find(c => String(c.shop_id) === String(shop_id));
   if (!aconn) return { videos: 0, skipped: 'no analytics conn' };
@@ -539,21 +539,22 @@ const syncShopVideosRecent = async ({ appKey, appSecret, shop_id, supabase, days
     u.sign = buildSign(appSecret, path, u);
     return ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(u)}`, { method: 'GET', headers: { 'x-tts-access-token': aconn.access_token, 'content-type': 'application/json' } }, 12000);
   };
-  let token = null, pages = 0, up = 0, firstCode = null, firstMsg = '', sampleDates = [];
+  let token = startToken || null, pages = 0, up = 0, firstCode = null, firstMsg = '', sampleDates = [], errored = false;
   while (pages < maxPages) {
     if (deadlineMs && Date.now() > deadlineMs) break;   // hết quỹ thời gian → để cú sau
-    let raw = await doCall(token); let j; try { j = JSON.parse(raw); } catch { firstMsg = String(raw).slice(0, 120); break; }
-    if (j?.code === 105002 && await refreshAnalyticsToken({ appKey, appSecret, conn: aconn, supabase, table: 'tiktok_analytics_connections' })) { raw = await doCall(token); try { j = JSON.parse(raw); } catch { break; } }
+    let raw = await doCall(token); let j; try { j = JSON.parse(raw); } catch { firstMsg = String(raw).slice(0, 120); errored = true; break; }
+    if (j?.code === 105002 && await refreshAnalyticsToken({ appKey, appSecret, conn: aconn, supabase, table: 'tiktok_analytics_connections' })) { raw = await doCall(token); try { j = JSON.parse(raw); } catch { errored = true; break; } }
     if (firstCode === null) { firstCode = j?.code; firstMsg = j?.message || ''; }
-    if (j?.code !== 0) break;
-    const vids = j.data?.videos || []; if (!vids.length) break;
+    if (j?.code !== 0) { errored = true; break; }
+    const vids = j.data?.videos || []; if (!vids.length) { token = null; break; }   // hết video → reset cursor (vòng sau quét lại từ đầu)
     const rows = vids.map(v => { const pt = v.video_post_time || ''; const prod = (v.products || [])[0] || {}; return { id: String(v.id), shop_id: String(shop_id), username: v.username || '', title: v.title || '', views: Number(v.views) || 0, gmv: numAmt(v.gmv), units_sold: Number(v.units_sold) || 0, sku_orders: Number(v.sku_orders) || 0, ctr: Number(v.click_through_rate) || 0, video_post_time: pt, post_date: pt ? pt.slice(0, 10) : null, product_id: String(prod.id || ''), product_name: prod.name || '', product_count: (v.products || []).length, synced_at: new Date().toISOString() }; }).filter(r => keepVideo(r, shop_id) || (keepChannels && keepChannels.has((r.username || '').replace(/^@/, '').trim().toLowerCase())));
     sampleDates.push(...rows.slice(0, 6).map(r => r.post_date));
     // GREATEST upsert: views/gmv/đơn CHỈ TĂNG, không cho view cửa sổ hẹp đè thấp lại bản gốc (Excel/lần trước).
     for (let i = 0; i < rows.length; i += 200) await supabase.rpc('upsert_shop_videos_max', { p_rows: rows.slice(i, i + 200) });
     up += rows.length; token = j.data?.next_page_token; pages++; if (!token) break;
   }
-  return { videos: up, api_code: firstCode, api_msg: firstMsg, sort: `${sortField} ${sortOrder}`, window_from: sd, sample_post_dates: sampleDates.slice(0, 8) };
+  // end_token: token để nhịp sau cào tiếp. errored (token cũ/hỏng) → reset null. !token (hết vòng) → null → vòng sau quét lại từ đầu.
+  return { videos: up, api_code: firstCode, api_msg: firstMsg, sort: `${sortField} ${sortOrder}`, window_from: sd, sample_post_dates: sampleDates.slice(0, 8), end_token: errored ? null : token };
 };
 // Window-total sync (1/4 → nay) → tiktok_shop_videos.views = "tổng view" (toàn data mình có). Cycling.
 const syncShopVideos = async ({ appKey, appSecret, shop_id, supabase, maxPages = 6 }) => {
@@ -791,7 +792,7 @@ async function handleSyncAffOrders({ params, appKey, appSecret, supabase, res })
 //   - DESC (view giảm dần): clip mới nhiều view.
 // Ngắt ~50s (deadline) → không timeout, không dồn cục. Idempotent (upsert GREATEST). Nhẹ: ~pages×2×số_gian lệnh gọi.
 async function handleSyncVideosFresh({ params, appKey, appSecret, supabase, res }) {
-  const { data: metas } = await supabase.from('tiktok_affiliate_sync_meta').select('shop_id, seller_name').not('shop_id', 'is', null);
+  const { data: metas } = await supabase.from('tiktok_affiliate_sync_meta').select('shop_id, seller_name, vfresh_asc_token').not('shop_id', 'is', null);
   const real = (metas || []).filter(m => m.shop_id && !String(m.shop_id).startsWith('noc:'));
   const days = Math.min(Math.max(Number(params.days) || 10, 1), 30);
   const pages = Math.min(Math.max(Number(params.pages) || 3, 1), 8);
@@ -803,9 +804,14 @@ async function handleSyncVideosFresh({ params, appKey, appSecret, supabase, res 
   for (const m of real) {
     if (Date.now() > deadline) { out.push({ shop: m.seller_name, status: 'skip_het_gio' }); continue; }
     try {
-      const asc  = await syncShopVideosRecent({ appKey, appSecret, shop_id: m.shop_id, supabase, days, maxPages: pages, sortOrder: 'ASC',  deadlineMs: deadline, keepChannels });
+      // Gian "đếm full" (VIDEO_FULL_SHOPS) → ASC dùng cursor quét SÂU DẦN qua các nhịp → bắt cả video GIỮA của
+      // kênh đã gửi đơn (hết warning oan, khỏi nạp Excel). Gian khác: ASC từ đầu mỗi lần (như cũ).
+      const isFull = VIDEO_FULL_SHOPS.has(String(m.shop_id));
+      const ascStart = isFull ? (m.vfresh_asc_token || null) : null;
+      const asc  = await syncShopVideosRecent({ appKey, appSecret, shop_id: m.shop_id, supabase, days, maxPages: pages, sortOrder: 'ASC',  deadlineMs: deadline, keepChannels, startToken: ascStart });
       const desc = await syncShopVideosRecent({ appKey, appSecret, shop_id: m.shop_id, supabase, days, maxPages: pages, sortOrder: 'DESC', deadlineMs: deadline, keepChannels });
-      out.push({ shop: m.seller_name, moi_asc: asc.videos, asc_code: asc.api_code, moi_desc: desc.videos, win_from: desc.window_from });
+      if (isFull) { try { await supabase.from('tiktok_affiliate_sync_meta').update({ vfresh_asc_token: asc.end_token || null }).eq('shop_id', m.shop_id); } catch { /* lưu cursor lỗi không chặn */ } }
+      out.push({ shop: m.seller_name, moi_asc: asc.videos, asc_code: asc.api_code, moi_desc: desc.videos, win_from: desc.window_from, asc_cursor: isFull ? (asc.end_token ? 'tiep' : 'het-vong') : '-' });
     } catch (e) { out.push({ shop: m.seller_name, error: e.message }); }
   }
   return res.status(200).json({ ok: true, shops: real.length, days, kenh_theo_doi: keepChannels.size, results: out });
