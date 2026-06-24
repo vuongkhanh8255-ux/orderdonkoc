@@ -450,8 +450,11 @@ const VIDEO_PERF_VERSION = '202409';
 //    Lọc ngay lúc CÀO (view lấy từ API là chính xác) → bảng nhẹ, query Hiệu suất KOC mượt.
 //    Bật theo shop để test trước; để Set() RỖNG = áp cho TẤT CẢ shop.
 const VIDEO_RULE_SHOPS = new Set([]); // RỖNG = áp rule lọc video rác cho TẤT CẢ shop
+// Gian GIỮ TẤT CẢ video (bỏ lọc <100 view) — đồng bộ với bảng koc_full_video_shops bên DB.
+// Thêm gian = thêm shop_id vào đây (sync) VÀ insert vào koc_full_video_shops (hiển thị).
+const VIDEO_FULL_SHOPS = new Set(['7495107349171898427']); // Bodymiss
 const videoRuleOn = (shop_id) => VIDEO_RULE_SHOPS.size === 0 || VIDEO_RULE_SHOPS.has(String(shop_id));
-const keepVideo = (r, shop_id) => !!r.id && (!videoRuleOn(shop_id) || r.views >= 100 || r.sku_orders > 0);
+const keepVideo = (r, shop_id) => !!r.id && (VIDEO_FULL_SHOPS.has(String(shop_id)) || !videoRuleOn(shop_id) || r.views >= 100 || r.sku_orders > 0);
 const monthWindow = (ym) => { const [y, m] = ym.split('-').map(Number); const nx = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`; return { sd: `${ym}-01`, ed: nx }; };
 const listMonths = (floorDate) => {
   const [fy, fm] = floorDate.split('-').map(Number);
