@@ -15,9 +15,7 @@ on:
         description: 'Số sản phẩm tối đa mỗi FS (mặc định 20)'
         required: false
         default: '20'
-  schedule:
-    # 2h sáng giờ VN (UTC+7) = 19:00 UTC hôm trước. Mỗi shop có template tự lấp hết khung trống.
-    - cron: '0 19 * * *'
+  # Cron đã CHUYỂN sang cron-job.org (ổn định hơn GitHub, đỡ trùng). Giữ workflow_dispatch để chạy tay khi cần.
 
 jobs:
   auto-fs:
