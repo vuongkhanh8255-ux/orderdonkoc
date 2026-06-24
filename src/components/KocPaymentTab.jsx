@@ -8,6 +8,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
 import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
 
@@ -23,6 +24,16 @@ const pitKeyOf = (r) => { const p = personKeyOf(r); return p ? `${p}|${(r.compan
 // Bóc id kênh (@username) từ link video; bóc id video từ link air (mỗi video 1 dòng).
 const extractUname = (url) => { const m = String(url || '').match(/@([^/?#\s]+)/); return m ? m[1].toLowerCase() : ''; };
 const extractVideoIds = (text) => [...new Set([...String(text || '').matchAll(/\/video\/(\d{6,})/g)].map(m => m[1]))];
+
+// Tách danh sách URL (mỗi dòng 1 link) — chỉ giữ http(s).
+const splitUrls = (v) => String(v || '').split('\n').map(s => s.trim()).filter(u => /^https?:\/\//i.test(u));
+const TAG_LABEL = { CCCD: 'CCCD', TinNhan: 'Tin nhắn', HopDong: 'Hợp đồng' };
+// Gom MỌI ảnh/file 1 dòng thanh toán: CCCD + tin nhắn + hợp đồng. KHÔNG gồm air_link (video).
+const rowImages = (r) => [
+  ...splitUrls(r.cccd_image).map(url => ({ url, tag: 'CCCD' })),
+  ...splitUrls(r.contract_link).map(url => ({ url, tag: 'TinNhan' })),
+  ...splitUrls(r.contract_file).map(url => ({ url, tag: 'HopDong' })),
+];
 
 const num = (v) => { const n = Number(String(v ?? '').replace(/[^\d-]/g, '')); return Number.isFinite(n) ? n : 0; };
 const fmtMoney = (v) => (Number(v) || 0).toLocaleString('vi-VN');
@@ -63,7 +74,8 @@ const KocPaymentTab = () => {
   const [fFrom, setFFrom] = useState('');           // lọc ngày TỪ (trong khoảng tháng đã chọn)
   const [fTo, setFTo] = useState('');               // lọc ngày ĐẾN
   const [selected, setSelected] = useState(() => new Set()); // chọn hàng loạt để thao tác
-  const [gallery, setGallery] = useState(null); // { title, urls:[] } — xem tất cả ảnh mấy bạn up
+  const [gallery, setGallery] = useState(null); // { title, items:[{url,tag}] } — xem TẤT CẢ ảnh/file 1 dòng
+  const [zipBusy, setZipBusy] = useState(null);  // { done, total } khi đang tải ZIP ảnh
   const [pwOk, setPwOk] = useState(false);          // đã nhập đúng mật khẩu thao tác (nhớ trong phiên)
   const [q, setQ] = useState('');
   const [payPage, setPayPage] = useState(1);
@@ -357,6 +369,45 @@ const KocPaymentTab = () => {
     XLSX.writeFile(wb, `thanh-toan-koc-${ym === 'all' ? 'tatca' : ym}.xlsx`);
   };
 
+  // Gom ẢNH + FILE (CCCD + tin nhắn + hợp đồng — KHÔNG gồm link video) thành 1 file ZIP, mỗi KOC 1 thư mục.
+  const exportZipImages = async () => {
+    const source = selected.size > 0 ? filtered.filter(r => selected.has(r.id)) : filtered;
+    const tasks = [];
+    source.forEach(r => {
+      const imgs = rowImages(r);
+      if (!imgs.length) return;
+      const folder = (r.full_name || r.beneficiary || r.channel_link || 'KOC').replace(/[\\/:*?"<>|\n\r]+/g, '_').trim().slice(0, 80) || 'KOC';
+      imgs.forEach(x => tasks.push({ folder, url: x.url, tag: x.tag }));
+    });
+    if (!tasks.length) { alert('Không có ảnh/file nào (CCCD/tin nhắn/hợp đồng) trong các dòng này.'); return; }
+    if (tasks.length > 400 && !confirm(`Sẽ tải ${tasks.length} ảnh/file — có thể nặng & hơi lâu. Tiếp tục?`)) return;
+    setZipBusy({ done: 0, total: tasks.length });
+    const zip = new JSZip();
+    const cnt = {}; let ok = 0, fail = 0;
+    const CONC = 6;
+    for (let i = 0; i < tasks.length; i += CONC) {
+      await Promise.all(tasks.slice(i, i + CONC).map(async (t) => {
+        try {
+          const resp = await fetch(t.url);
+          if (!resp.ok) throw new Error('http ' + resp.status);
+          const blob = await resp.blob();
+          const ext = (t.url.split('?')[0].split('.').pop() || 'bin').toLowerCase().slice(0, 5);
+          cnt[t.folder] = (cnt[t.folder] || 0) + 1;
+          zip.folder(t.folder).file(`${t.tag}_${cnt[t.folder]}.${ext}`, blob);
+          ok++;
+        } catch { fail++; }
+        setZipBusy(z => ({ ...(z || { total: tasks.length }), done: (z?.done || 0) + 1 }));
+      }));
+    }
+    if (!ok) { setZipBusy(null); alert('Không tải được ảnh nào (link có thể đã hỏng).'); return; }
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = `anh-thanh-toan-${ym === 'all' ? 'tatca' : ym}.zip`;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+    setZipBusy(null);
+    if (fail) alert(`✅ Đã tạo ZIP: ${ok} ảnh/file (mỗi KOC 1 thư mục).\n⚠️ ${fail} cái lỗi đã bỏ qua.`);
+  };
+
   // tháng gần đây cho dropdown
   const monthOptions = useMemo(() => {
     const out = [{ v: 'all', l: 'Tất cả' }]; const [yy, mm] = curYm().split('-').map(Number);
@@ -440,6 +491,7 @@ const KocPaymentTab = () => {
         <select value={fPaid} onChange={e => setFPaid(e.target.value)} style={{ ...inputStyle, width: 'auto' }}><option value="">Tất cả TT</option><option value="no">Chưa TT</option><option value="yes">Đã TT</option></select>
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 Tìm tên / kênh / STK / link video / ID kênh…" style={{ ...inputStyle, width: 220 }} />
         <button onClick={exportExcel} disabled={!filtered.length} title={selected.size > 0 ? `Xuất ${selected.size} dòng đã chọn` : 'Xuất toàn bộ dòng đang lọc'} style={{ padding: '9px 16px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 9, fontWeight: 700, cursor: filtered.length ? 'pointer' : 'default', opacity: filtered.length ? 1 : 0.5 }}>📥 Xuất Excel{selected.size > 0 ? ` (${selected.size} dòng chọn)` : ''}</button>
+        <button onClick={exportZipImages} disabled={!filtered.length || !!zipBusy} title="Gom ảnh CCCD + tin nhắn + hợp đồng (KHÔNG gồm video) thành 1 file ZIP, mỗi KOC 1 thư mục" style={{ padding: '9px 16px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 9, fontWeight: 700, cursor: (filtered.length && !zipBusy) ? 'pointer' : 'default', opacity: (filtered.length && !zipBusy) ? 1 : 0.5 }}>{zipBusy ? `📦 Đang tải ${zipBusy.done}/${zipBusy.total}…` : `📦 Tải ảnh (ZIP)${selected.size > 0 ? ` (${selected.size})` : ''}`}</button>
         <button onClick={load} style={{ padding: '9px 14px', background: '#fff', color: ACCENT, border: `1px solid ${ACCENT}55`, borderRadius: 9, fontWeight: 700, cursor: 'pointer' }}>🔄</button>
       </div>
 
@@ -550,12 +602,10 @@ const KocPaymentTab = () => {
                     <td style={{ ...td, textAlign: 'right', color: pitFlagKeys.has(pitKeyOf(r)) ? '#b45309' : '#94a3b8', fontWeight: pitFlagKeys.has(pitKeyOf(r)) ? 800 : 400 }} title={pitFlagKeys.has(pitKeyOf(r)) ? `Người này chi ≥ 2tr trong tháng tại ${r.company || 'công ty này'} nhưng chưa có PIT — cần khấu trừ thuế TNCN` : ''}>{pitFlagKeys.has(pitKeyOf(r)) ? '⚠️ ' : ''}{fmtMoney(r.pit)}</td>
                     <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: ACCENT }}>{fmtMoney(r.total)}</td>
                     <td style={{ ...td, textAlign: 'center' }}>{(() => {
-                      const imgIcon = (val, emoji, color, label) => { const u = (val || '').split('\n').map(s => s.trim()).filter(Boolean); if (!u.length) return null; return <button onClick={() => setGallery({ title: `${label} — ${r.full_name || r.beneficiary || ''}`, urls: u })} title={`Xem ${u.length} ${label.toLowerCase()}`} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color, marginLeft: 6, fontSize: 'inherit', padding: 0 }}>{emoji}{u.length > 1 ? u.length : ''}</button>; };
+                      const imgs = rowImages(r);  // CCCD + tin nhắn + hợp đồng (KHÔNG gồm video)
                       return <>
-                        {r.air_link ? <a href={r.air_link.split('\n')[0]} target="_blank" rel="noreferrer" title="Link air" style={{ color: '#7c3aed', textDecoration: 'none' }}>🎬</a> : '—'}
-                        {imgIcon(r.contract_link, '💬', '#0891b2', 'Tin nhắn')}
-                        {r.contract_file ? <a href={r.contract_file.split('\n')[0]} target="_blank" rel="noreferrer" title="Hợp đồng (file)" style={{ color: '#ea580c', textDecoration: 'none', marginLeft: 6 }}>📄</a> : ''}
-                        {imgIcon(r.cccd_image, '🪪', '#16a34a', 'Ảnh CCCD')}
+                        {r.air_link ? <a href={r.air_link.split('\n')[0]} target="_blank" rel="noreferrer" title="Link air (video)" style={{ color: '#7c3aed', textDecoration: 'none' }}>🎬</a> : '—'}
+                        {imgs.length > 0 && <button onClick={() => setGallery({ title: r.full_name || r.beneficiary || '', items: imgs })} title={`Xem tất cả ${imgs.length} ảnh/file (CCCD + tin nhắn + hợp đồng)`} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#0891b2', marginLeft: 8, fontSize: 'inherit', padding: 0, fontWeight: 700 }}>🖼️ {imgs.length}</button>}
                       </>;
                     })()}</td>
                     <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={!!r.accountant_approved} onChange={() => toggleApproved(r)} style={{ width: 17, height: 17, accentColor: '#16a34a', cursor: 'pointer' }} /></td>
@@ -584,29 +634,36 @@ const KocPaymentTab = () => {
         )}
       </div>
 
-      {gallery && (
+      {gallery && (() => {
+        const items = gallery.items || (gallery.urls || []).map(u => ({ url: u, tag: '' }));
+        return (
         <div onClick={() => setGallery(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.62)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 20, maxWidth: '92vw', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 24px 70px rgba(0,0,0,0.35)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 16 }}>
-              <h3 style={{ margin: 0, fontSize: '0.98rem', color: '#0f172a' }}>{gallery.title} · {gallery.urls.length} ảnh</h3>
+              <h3 style={{ margin: 0, fontSize: '0.98rem', color: '#0f172a' }}>{gallery.title ? gallery.title + ' · ' : ''}{items.length} ảnh/file</h3>
               <button onClick={() => setGallery(null)} style={{ border: 'none', background: '#f1f5f9', borderRadius: 8, width: 34, height: 34, cursor: 'pointer', fontSize: '1rem', flexShrink: 0 }}>✕</button>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, justifyContent: 'center' }}>
-              {gallery.urls.map((url, i) => (
+              {items.map((it, i) => {
+                const label = TAG_LABEL[it.tag] || `Ảnh ${i + 1}`;
+                return (
                 <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                  <a href={url} target="_blank" rel="noreferrer">
-                    <img src={url} alt="" referrerPolicy="no-referrer"
+                  {it.tag && <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>{label}</span>}
+                  <a href={it.url} target="_blank" rel="noreferrer">
+                    <img src={it.url} alt="" referrerPolicy="no-referrer"
                       onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'flex'; }}
                       style={{ maxWidth: 340, maxHeight: 460, objectFit: 'contain', borderRadius: 10, border: '1px solid #e5e7eb', display: 'block', background: '#f8fafc' }} />
-                    <span style={{ display: 'none', width: 220, height: 130, alignItems: 'center', justifyContent: 'center', borderRadius: 10, border: '1px dashed #cbd5e1', background: '#f8fafc', color: '#0891b2', fontWeight: 700, fontSize: '0.82rem' }}>📎 Mở ảnh {i + 1} ↗</span>
+                    <span style={{ display: 'none', width: 220, height: 130, alignItems: 'center', justifyContent: 'center', borderRadius: 10, border: '1px dashed #cbd5e1', background: '#f8fafc', color: '#0891b2', fontWeight: 700, fontSize: '0.82rem' }}>📎 Mở {label} ↗</span>
                   </a>
-                  <a href={url} target="_blank" rel="noreferrer" style={{ fontSize: '0.78rem', color: '#0891b2', fontWeight: 700, textDecoration: 'none' }}>⬇ Ảnh {i + 1} — mở / tải ↗</a>
+                  <a href={it.url} target="_blank" rel="noreferrer" style={{ fontSize: '0.78rem', color: '#0891b2', fontWeight: 700, textDecoration: 'none' }}>⬇ {label} — mở / tải ↗</a>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 };
