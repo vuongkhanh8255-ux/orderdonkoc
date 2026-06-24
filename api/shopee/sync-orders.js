@@ -131,12 +131,14 @@ function transformOrders(orders, shopId, shopName) {
       qty: i.model_quantity_purchased, price: i.model_discounted_price,
       original_price: i.model_original_price, sku: i.model_sku || i.item_sku,
     }));
+    // GMV ("Doanh số" Shopee) = Σ(giá bán item × SL) — KHÁC total_amount (tiền khách trả sau voucher/giảm).
+    const gmv = items.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.qty) || 0), 0);
     return {
       order_sn: o.order_sn, shop_id: shopId.toString(), shop_name: shopName,
       order_status: o.order_status, create_time: o.create_time,
       update_time: o.update_time, pay_time: o.pay_time || null,
       buyer_username: o.buyer_username, currency: o.currency || 'VND',
-      total_amount: o.total_amount || 0,
+      total_amount: o.total_amount || 0, gmv,
       shipping_fee: o.estimated_shipping_fee || 0,
       actual_shipping_fee: o.actual_shipping_fee || 0,
       shipping_carrier: o.checkout_shipping_carrier || '',
