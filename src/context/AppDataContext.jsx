@@ -490,7 +490,12 @@ export const AppDataProvider = ({ children }) => {
       alert('Vui lòng nhập CCCD đủ 12 chữ số.'); return;
     } const updatePayload = { koc_ho_ten: editingDonHang.koc_ho_ten, koc_id_kenh: editingDonHang.koc_id_kenh, koc_sdt: editingDonHang.koc_sdt, koc_dia_chi: editingDonHang.koc_dia_chi, koc_cccd: editingDonHang.koc_cccd, loai_ship: editingDonHang.loai_ship, trang_thai: editingDonHang.trang_thai, da_sua: true, };
     const { error } = await supabase.from('donguis').update(updatePayload).eq('id', editingDonHang.id); if (error) {
-      alert('Lỗi cập nhật đơn gửi: ' + error.message); return;
+      const m = String(error.message || '');
+      if (m.includes('KOC_TAG_CONFLICT')) {   // trigger DB chặn lách sửa id kênh sang kênh đã có người gắn tag
+        const [ch, staff, brand] = (m.split('KOC_TAG_CONFLICT|')[1] || '').split('\n')[0].split('|');
+        alert(`🚫 KHÔNG sửa được id kênh!\nKênh "${ch || editingDonHang.koc_id_kenh}" đã được "${staff || '?'}" gắn brand "${brand || '?'}" ở Hiệu suất KOC.\nKhông gửi brand này cho kênh này nữa (đã chặn cả cách lách bằng sửa id kênh).`); return;
+      }
+      alert('Lỗi cập nhật đơn gửi: ' + m); return;
     } await loadInitialData(); const editedOrderDate = new Date(editingDonHang.ngay_gui); if (editedOrderDate.getMonth() + 1 === parseInt(reportMonth, 10) && editedOrderDate.getFullYear() === parseInt(reportYear, 10)) {
       await handleGenerateReport();
     } setEditingDonHang(null);
