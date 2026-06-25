@@ -177,6 +177,15 @@ export default async function handler(req, res) {
   if (dbErr) return res.status(500).json({ error: dbErr.message });
   if (!shops?.length) return res.json({ success: true, message: 'No shops found', results: [] });
 
+  // ── TEST: soi escrow 1 đơn để biết field "trợ giá" → ?escrow_test=<order_sn>&shop_id=<id> ──
+  const escrowTest = url.searchParams.get('escrow_test');
+  if (escrowTest) {
+    const shop = shops[0];
+    const token = await refreshIfNeeded(supabase, shop);
+    const r = await shopeeApi(partnerKey, 'GET', '/api/v2/payment/get_escrow_detail', token.access_token, Number(shop.shop_id), { order_sn: escrowTest });
+    return res.json({ ok: true, order_sn: escrowTest, shop: shop.shop_name, escrow: r });
+  }
+
   // ── BACKFILL CÓ CHỦ ĐÍCH: lấp đúng khoảng [from_ts, to_ts] (vd lỗ hổng sync giữa kỳ) ──
   // Không dùng cơ chế dừng-sớm → cào FULL mọi đơn trong khoảng, chỉ bỏ đơn đã có (resumable).
   const fromTs = Number(url.searchParams.get('from_ts')) || 0;
