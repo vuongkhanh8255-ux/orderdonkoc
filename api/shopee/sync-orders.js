@@ -204,8 +204,11 @@ export default async function handler(req, res) {
           if (Date.now() > deadline) { r.partial = true; break; }
           const e = await shopeeApi(partnerKey, 'GET', '/api/v2/payment/get_escrow_detail', token.access_token, Number(shop.shop_id), { order_sn: row.order_sn });
           const bpi = e?.response?.buyer_payment_info;
-          if (bpi) { await supabase.from('shopee_orders').update({ income: bpi }).eq('order_sn', row.order_sn); r.filled++; }
-          else { r.errors++; }
+          if (bpi) {
+            // Trợ giá Shopee = voucher Shopee + coins (đều âm trong API → lấy giá trị dương). seller_voucher KHÔNG tính.
+            const subsidy = Math.max(0, -(Number(bpi.shopee_voucher) || 0)) + Math.max(0, -(Number(bpi.shopee_coins_redeemed) || 0));
+            await supabase.from('shopee_orders').update({ income: bpi, shopee_voucher: subsidy }).eq('order_sn', row.order_sn); r.filled++;
+          } else { r.errors++; }
           await sleep(70);
         }
       } catch (err) { r.error = err.message; }
