@@ -186,6 +186,34 @@ export default async function handler(req, res) {
     return res.json({ ok: true, order_sn: escrowTest, shop: shop.shop_name, escrow: r });
   }
 
+  // ── NẠP TRỢ GIÁ: lấy escrow cho đơn CHƯA có (income NULL) → lưu buyer_payment_info (để tính Doanh số gồm trợ giá) ──
+  if (url.searchParams.get('fill_subsidy') === '1') {
+    const fFrom = Number(url.searchParams.get('from_ts')) || 0;
+    const fTo   = Number(url.searchParams.get('to_ts')) || 0;
+    const results = [];
+    for (const shop of shops) {
+      const r = { shop_id: shop.shop_id, shop_name: shop.shop_name, filled: 0, errors: 0, partial: false };
+      if (Date.now() > deadline) { r.partial = true; results.push(r); continue; }
+      try {
+        const token = await refreshIfNeeded(supabase, shop);
+        let q = supabase.from('shopee_orders').select('order_sn').eq('shop_id', String(shop.shop_id)).is('income', null);
+        if (fFrom) q = q.gte('create_time', fFrom);
+        if (fTo) q = q.lt('create_time', fTo);
+        const { data: rows } = await q.limit(3000);
+        for (const row of (rows || [])) {
+          if (Date.now() > deadline) { r.partial = true; break; }
+          const e = await shopeeApi(partnerKey, 'GET', '/api/v2/payment/get_escrow_detail', token.access_token, Number(shop.shop_id), { order_sn: row.order_sn });
+          const bpi = e?.response?.buyer_payment_info;
+          if (bpi) { await supabase.from('shopee_orders').update({ income: bpi }).eq('order_sn', row.order_sn); r.filled++; }
+          else { r.errors++; }
+          await sleep(70);
+        }
+      } catch (err) { r.error = err.message; }
+      results.push(r);
+    }
+    return res.json({ ok: true, mode: 'fill_subsidy', results });
+  }
+
   // ── BACKFILL CÓ CHỦ ĐÍCH: lấp đúng khoảng [from_ts, to_ts] (vd lỗ hổng sync giữa kỳ) ──
   // Không dùng cơ chế dừng-sớm → cào FULL mọi đơn trong khoảng, chỉ bỏ đơn đã có (resumable).
   const fromTs = Number(url.searchParams.get('from_ts')) || 0;
