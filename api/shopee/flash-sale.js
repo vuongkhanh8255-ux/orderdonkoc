@@ -886,7 +886,6 @@ function fsBuildItems(rows) {
 
 async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, maxSlots) {
   const out = [];
-  let processed = 0;
   const slotsRes = await handleTimeSlots(supabase, shopId);
   const sd = slotsRes.ok ? slotsRes.data : null;
   const slots = Array.isArray(sd) ? sd : (sd?.time_slot_list || sd?.time_slot || []);
@@ -911,21 +910,35 @@ async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, m
     }
   } catch { /* list lỗi không chặn */ }
 
-  for (const slot of slots) {
+  // POOL sản phẩm: gom TẤT CẢ template, DEDUPE theo item_id → mỗi SP chỉ vào 1 khung.
+  // (Shopee KHÔNG cho 1 SP nằm ở nhiều Flash Sale cùng lúc → trước đây dùng chung SP nên khung sau bị
+  //  từ chối hết → rỗng. Giờ mỗi khung 1 BỘ SP RIÊNG → lấp được nhiều khung.)
+  const seenItem = new Set();
+  const rawPool = [];
+  for (const t of templates) {
+    for (const it of fsBuildItems(Array.isArray(t.rows) ? t.rows : [])) {
+      const iid = String(it.item_id);
+      if (!iid || seenItem.has(iid)) continue;
+      seenItem.add(iid); rawPool.push(it);
+    }
+  }
+  const pool = fsShuffle(rawPool); // ngẫu nhiên mỗi lần chạy
+  if (!pool.length) return [{ shopId, status: 'no_items' }];
+  const nModels = (its) => its.reduce((s, it) => s + (it.models?.length || 0), 0);
+
+  // Khung TRỐNG cần lấp (chưa có FS), tối đa maxSlots
+  const emptySlots = slots.filter((s) => { const id = s.timeslot_id || s.time_slot_id; return id && !used.has(String(id)); }).slice(0, maxSlots);
+  // Chia ĐỀU pool cho các khung trống → mỗi khung 1 bộ SP riêng, tối đa maxItems/khung (lấp được nhiều khung nhất).
+  const perSlot = emptySlots.length ? Math.min(maxItems, Math.max(1, Math.floor(pool.length / emptySlots.length))) : maxItems;
+
+  let ptr = 0;
+  for (const slot of emptySlots) {
     const slotId = slot.timeslot_id || slot.time_slot_id;
-    if (!slotId || used.has(String(slotId))) continue;
-    if (processed >= maxSlots) break; // giới hạn số FS/shop/lần để không quá hạn hàm (cron mỗi ngày tự lấp tiếp)
-    processed++;
+    if (ptr >= pool.length) break; // hết SP riêng → các khung còn lại để TRỐNG (không đủ SP, không tạo khung rỗng)
+    let items = pool.slice(ptr, ptr + perSlot);
+    ptr += items.length;
 
-    // FORM (template) random; PHÂN LOẠI khoá theo file — giữ đúng thứ tự, KHÔNG shuffle.
-    // ĐĂNG FULL FORM: gom TẤT CẢ sản phẩm của form (mỗi SP giữ ĐỦ model), chỉ chặn trần theo SỐ SẢN PHẨM.
-    // (Trước đây cắt theo DÒNG/model → form có SP nhiều model bị xé/rơi, ra "1/1 SP". Giờ cắt theo SẢN PHẨM.)
-    const tmpl = templates[Math.floor(Math.random() * templates.length)];
-    let items = fsBuildItems(Array.isArray(tmpl.rows) ? tmpl.rows : []).slice(0, maxItems);
-    if (!items.length) { out.push({ shopId, slotId, status: 'no_items' }); continue; }
-    const nModels = (its) => its.reduce((s, it) => s + (it.models?.length || 0), 0);
-
-    if (dryRun) { out.push({ shopId, slotId, status: 'dry_run', products: items.length, variants: nModels(items), template: tmpl.name }); continue; }
+    if (dryRun) { out.push({ shopId, slotId, status: 'dry_run', products: items.length, variants: nModels(items) }); continue; }
 
     const createRes = await handleCreate(supabase, shopId, { time_slot_id: slotId });
     if (!createRes.ok) { out.push({ shopId, slotId, status: 'create_fail', error: createRes.error || createRes.message }); continue; }
@@ -934,8 +947,7 @@ async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, m
 
     let addRes = await handleAddItems(supabase, shopId, { flash_sale_id: fsId, items });
     let tries = 0;
-    // CHỈ co lại khi Shopee TỪ CHỐI vì vượt trần SẢN PHẨM/FS của shop — bỏ bớt 1 SẢN PHẨM/lần
-    // (giữ nguyên đủ model của các SP còn lại). Mỗi khung dò độc lập (không kéo khung khác).
+    // CHỈ co lại khi Shopee TỪ CHỐI vì vượt trần SẢN PHẨM/FS của shop — bỏ bớt 1 SẢN PHẨM/lần.
     while (!addRes.ok && /exceed_max_item|max number of item/i.test(JSON.stringify(addRes)) && items.length > 1 && tries < 15) {
       items = items.slice(0, items.length - 1);
       addRes = await handleAddItems(supabase, shopId, { flash_sale_id: fsId, items });
@@ -943,9 +955,9 @@ async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, m
     }
     if (!addRes.ok) {
       try { await handleDelete(supabase, shopId, { flash_sale_id: fsId }); } catch { /* rollback */ }
-      out.push({ shopId, slotId, status: 'add_fail', error: addRes.error || addRes.message, template: tmpl.name });
+      out.push({ shopId, slotId, status: 'add_fail', error: addRes.error || addRes.message });
     } else {
-      out.push({ shopId, slotId, status: 'ok', fsId, products: addRes.added ?? items.length, failed: addRes.failed || 0, variants: nModels(items), template: tmpl.name });
+      out.push({ shopId, slotId, status: 'ok', fsId, products: addRes.added ?? items.length, failed: addRes.failed || 0, variants: nModels(items) });
     }
     await new Promise((r) => setTimeout(r, 300)); // giãn nhịp tránh rate-limit
   }
