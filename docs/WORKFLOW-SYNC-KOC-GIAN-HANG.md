@@ -71,8 +71,8 @@ So với Excel: **DB phải ≈ hoặc ≥ Excel** (DB cao hơn chút vì API đ
 | Body Miss Việt Nam | `7495107349171898427` | ✅ xong |
 | Milaganics Việt Nam | `7494813818973817115` | ✅ xong |
 | Moaw Moaws Việt Nam | `7495831977917385095` | ✅ xong |
+| eHerb Viet Nam | `7494529979361168222` | ✅ xong |
 | eHerb Hồ Chí Minh | `7495838925500090511` | ⏳ chờ Excel |
-| eHerb Viet Nam | `7494529979361168222` | ⏳ chờ Excel |
 | Healmii Việt Nam | `7494251668499498533` | (chưa làm) |
 
 ---
