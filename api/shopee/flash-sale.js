@@ -691,7 +691,15 @@ async function handleAddItems(supabase, shopId, body) {
   console.log('[FS AddItems] flash_sale_id:', flash_sale_id, 'items:', items.length, 'result:', JSON.stringify(result).slice(0, 500));
 
   if (result.error) return { ok: false, error: result.error, message: result.message, detail: result };
-  return { ok: true, data: result.response };
+  // Shopee có thể trả 200 NHƯNG kèm failed_items (SP bị từ chối: đã nằm ở FS khác, hết hàng, giá sai…).
+  // Nếu KHÔNG thêm được SP nào → coi là THẤT BẠI để auto-FS rollback (xoá khung rỗng), tránh khung trống.
+  const resp = result.response || {};
+  const failed = Array.isArray(resp.failed_items) ? resp.failed_items : [];
+  const added = items.length - failed.length;
+  if (added <= 0) {
+    return { ok: false, error: 'all_items_failed', message: failed[0]?.err_msg || failed[0]?.fail_message || 'Shopee từ chối toàn bộ sản phẩm', failed: failed.length, detail: resp };
+  }
+  return { ok: true, data: resp, added, failed: failed.length };
 }
 
 /** 6. List existing Flash Sales — PHÂN TRANG lấy HẾT (không còn cứng 50) */
@@ -889,7 +897,18 @@ async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, m
     const lr = await handleList(supabase, shopId);
     const ld = lr.data;
     const fsList = Array.isArray(ld) ? ld : (ld?.flash_sale_list || ld?.flash_sale || []);
-    used = new Set((fsList || []).map((f) => String(f.timeslot_id || f.time_slot_id)));
+    for (const f of (fsList || [])) {
+      const sid = String(f.timeslot_id || f.time_slot_id);
+      // Khung RỖNG (tạo hụt do trước đây không kiểm failed_items) → xoá để vòng dưới tạo lại + lấp SP.
+      // Guard: chỉ xoá khi số SP RÕ RÀNG = 0 (field có mặt); thiếu field → coi như đã có SP (an toàn).
+      const hasCount = ('item_count' in f) || ('enabled_item_count' in f);
+      const cnt = Number(f.item_count || 0) + Number(f.enabled_item_count || 0);
+      if (hasCount && cnt === 0 && f.flash_sale_id) {
+        try { await handleDelete(supabase, shopId, { flash_sale_id: f.flash_sale_id }); } catch { /* bỏ qua */ }
+      } else {
+        used.add(sid);
+      }
+    }
   } catch { /* list lỗi không chặn */ }
 
   for (const slot of slots) {
@@ -926,7 +945,7 @@ async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, m
       try { await handleDelete(supabase, shopId, { flash_sale_id: fsId }); } catch { /* rollback */ }
       out.push({ shopId, slotId, status: 'add_fail', error: addRes.error || addRes.message, template: tmpl.name });
     } else {
-      out.push({ shopId, slotId, status: 'ok', fsId, products: items.length, variants: nModels(items), template: tmpl.name });
+      out.push({ shopId, slotId, status: 'ok', fsId, products: addRes.added ?? items.length, failed: addRes.failed || 0, variants: nModels(items), template: tmpl.name });
     }
     await new Promise((r) => setTimeout(r, 300)); // giãn nhịp tránh rate-limit
   }
