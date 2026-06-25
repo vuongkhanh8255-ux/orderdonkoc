@@ -491,7 +491,9 @@ const syncShopVideoMonth = async ({ appKey, appSecret, aconn, shop_id, ym, supab
       meta.push({ id, shop_id: String(shop_id), username: v.username || '', title: v.title || '', video_post_time: pt, post_date: pt ? pt.slice(0, 10) : null, product_id: String(prod.id || ''), product_name: prod.name || '', product_count: (v.products || []).length, synced_at: new Date().toISOString() });
     }
     for (let i = 0; i < mrows.length; i += 200) await supabase.from('tiktok_video_monthly_views').upsert(mrows.slice(i, i + 200), { onConflict: 'id,ym' });
-    for (let i = 0; i < meta.length; i += 200) await supabase.from('tiktok_shop_videos').upsert(meta.slice(i, i + 200), { onConflict: 'id' });
+    // QUA RPC chống-wipe: post_date/username/title/product CHỈ ghi đè khi giá trị mới KHÔNG rỗng (coalesce giữ cũ).
+    // Trước đây .upsert thẳng → API trả thiếu post_time = đè post_date NULL → video rớt khỏi "Video kỳ" (mất ~63/đêm).
+    for (let i = 0; i < meta.length; i += 200) await supabase.rpc('upsert_shop_videos_max', { p_rows: meta.slice(i, i + 200) });
     up += mrows.length;
     token = j.data?.next_page_token;
     pages++;
@@ -893,7 +895,7 @@ async function handleFillKocViews({ params, appKey, appSecret, supabase, res }) 
     filled++;
   }
   for (let i = 0; i < mvRows.length; i += 200) await supabase.from('tiktok_video_monthly_views').upsert(mvRows.slice(i, i + 200), { onConflict: 'id,ym' });
-  for (let i = 0; i < metaRows.length; i += 200) await supabase.from('tiktok_shop_videos').upsert(metaRows.slice(i, i + 200), { onConflict: 'id' });
+  for (let i = 0; i < metaRows.length; i += 200) await supabase.rpc('upsert_shop_videos_max', { p_rows: metaRows.slice(i, i + 200) });
   await supabase.from('tiktok_affiliate_sync_meta').update({ viewfill_last_run_at: new Date().toISOString() }).eq('shop_id', shop_id);
   return res.status(200).json({ ok: true, shop_id, work: (work || []).length, filled, zero, errs });
 }
