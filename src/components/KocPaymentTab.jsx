@@ -386,10 +386,12 @@ const KocPaymentTab = () => {
   const exportZipImages = async () => {
     const source = selected.size > 0 ? filtered.filter(r => selected.has(r.id)) : filtered;
     const tasks = [];
+    const folderSet = new Set();
     source.forEach(r => {
       const imgs = rowImages(r);
       if (!imgs.length) return;
       const folder = (r.full_name || r.beneficiary || r.channel_link || 'KOC').replace(/[\\/:*?"<>|\n\r]+/g, '_').trim().slice(0, 80) || 'KOC';
+      folderSet.add(folder);
       imgs.forEach(x => tasks.push({ folder, url: x.url, tag: x.tag }));
     });
     if (!tasks.length) { alert('Không có ảnh/file nào (CCCD/tin nhắn/hợp đồng) trong các dòng này.'); return; }
@@ -416,7 +418,12 @@ const KocPaymentTab = () => {
     if (!ok) { setZipBusy(null); alert('Không tải được ảnh nào (link có thể đã hỏng).'); return; }
     const blob = await zip.generateAsync({ type: 'blob' });
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = `anh-thanh-toan-${ym === 'all' ? 'tatca' : ym}.zip`;
+    // Tên file zip NGOÀI: 1 KOC → đặt theo họ tên; nhiều KOC → ghi số lượng.
+    const names = [...folderSet];
+    const zipName = names.length === 1
+      ? `Anh - ${names[0]}.zip`
+      : `Anh thanh toan - ${names.length} KOC - ${ym === 'all' ? 'tatca' : ym}.zip`;
+    a.href = URL.createObjectURL(blob); a.download = zipName;
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
     setZipBusy(null);
     if (fail) alert(`✅ Đã tạo ZIP: ${ok} ảnh/file (mỗi KOC 1 thư mục).\n⚠️ ${fail} cái lỗi đã bỏ qua.`);
