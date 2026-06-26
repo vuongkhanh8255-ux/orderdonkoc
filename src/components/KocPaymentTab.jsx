@@ -406,7 +406,8 @@ const KocPaymentTab = () => {
           const blob = await resp.blob();
           const ext = (t.url.split('?')[0].split('.').pop() || 'bin').toLowerCase().slice(0, 5);
           cnt[t.folder] = (cnt[t.folder] || 0) + 1;
-          zip.folder(t.folder).file(`${t.tag}_${cnt[t.folder]}.${ext}`, blob);
+          // Tên file ghi RÕ họ tên KOC ở đầu → giải nén ra là biết của ai ngay. Vd: "NGUYỄN VĂN A_CCCD_1.jpg"
+          zip.folder(t.folder).file(`${t.folder}_${t.tag}_${cnt[t.folder]}.${ext}`, blob);
           ok++;
         } catch { fail++; }
         setZipBusy(z => ({ ...(z || { total: tasks.length }), done: (z?.done || 0) + 1 }));
