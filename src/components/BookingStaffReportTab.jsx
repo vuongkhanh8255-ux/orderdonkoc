@@ -481,7 +481,7 @@ function StaffDetailPanel({ r, range }) {
                     <thead><tr>
                       <th style={{ ...th, padding: '8px' }}>#</th><th style={{ ...th, padding: '8px' }}>KOC</th>
                       <th style={{ ...th, padding: '8px', textAlign: 'right' }}>GMV</th><th style={{ ...th, padding: '8px', textAlign: 'right' }}>View</th>
-                      <th style={{ ...th, padding: '8px', textAlign: 'right' }}>Video</th><th style={{ ...th, padding: '8px', textAlign: 'right' }} title="Cast trong tháng">CAST</th>
+                      <th style={{ ...th, padding: '8px', textAlign: 'right' }} title="Số video KOC ĐĂNG trong khung thời gian đang chọn (theo kỳ) — tương đương cột 'Video kỳ' bên Hiệu suất KOC. (Video tổng all-time cần thêm sau qua RPC.)">Video kỳ</th><th style={{ ...th, padding: '8px', textAlign: 'right' }} title="Cast trong tháng">CAST</th>
                       <th style={{ ...th, padding: '8px' }}>Định danh</th>
                       <th style={{ ...th, padding: '8px' }}>Ngày gắn</th>
                       <th style={{ ...th, padding: '8px' }} title="Có video air trong kỳ = Hoạt động · gắn ≥45 ngày mà 0 video = Sắp bị gỡ">Hiệu suất</th>
