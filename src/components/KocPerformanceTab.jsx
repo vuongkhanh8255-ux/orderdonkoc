@@ -315,6 +315,23 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
   const save = async () => {
     const sn = (staff || '').trim(); if (!sn) return;
     setBusy(true);
+    // RULE cooldown 30 ngày: KOC bị GỠ khỏi NS này thì 30 ngày sau mới gắn lại cho NS đó được
+    // (chống gỡ-rồi-gắn-lại để reset bộ đếm 45 ngày).
+    try {
+      const cutoff = new Date(Date.now() - 30 * 86400000).toISOString();
+      const { data: recentRm } = await supabase.from(HIST_TABLE)
+        .select('created_at').eq('koc_id', username).eq('brand_name', brand)
+        .eq('staff_name', sn).eq('action', 'remove').gte('created_at', cutoff)
+        .order('created_at', { ascending: false }).limit(1);
+      if (recentRm && recentRm.length) {
+        const rmAt = new Date(recentRm[0].created_at);
+        const canAt = new Date(rmAt.getTime() + 30 * 86400000);
+        const daysLeft = Math.max(1, Math.ceil((canAt - Date.now()) / 86400000));
+        setBusy(false);
+        alert(`⛔ @${username} vừa bị gỡ khỏi ${sn} ngày ${rmAt.toLocaleDateString('vi-VN')}.\nPhải chờ đủ 30 ngày — còn ${daysLeft} ngày nữa (tới ${canAt.toLocaleDateString('vi-VN')}) mới gắn lại cho ${sn} được.`);
+        return;
+      }
+    } catch { /* lỗi check thì cho gán (không chặn cứng) */ }
     const nowIso = new Date().toISOString();
     const record = isAdmin
       ? { koc_id: username, brand_name: brand, staff_name: sn, assigned_at: assignment?.assigned_at || nowIso, updated_at: nowIso, status: 'approved', approved_by: me, approved_at: nowIso, proposed_by: assignment?.proposed_by || null, proposed_at: assignment?.proposed_at || null }
@@ -532,6 +549,11 @@ export default function KocPerformanceTab() {
       setCastMap(m);
     }, () => {});
   }, []);
+  // Bỏ KOC ĐÃ BOOK CAST khỏi đề xuất gỡ: có cast = engagement thật (đã trả tiền book), dù chưa lên video.
+  const overdueWarnsCast = useMemo(
+    () => overdueWarns.filter(w => !castMap[(w.koc_id || '').toLowerCase().replace(/^@/, '')]),
+    [overdueWarns, castMap]
+  );
   // ── Admin chờ duyệt: đề xuất GÁN (ecom) + đề xuất GỠ (hệ thống: blacklist / 45 ngày) ──
   const pendingProposals = useMemo(() => {
     if (currentUser?.role !== 'admin') return [];
@@ -925,9 +947,9 @@ export default function KocPerformanceTab() {
                       </div>
                     </div>
                   )}
-                  {(blacklistAssigned.length > 0 || overdueWarns.length > 0) && (
+                  {(blacklistAssigned.length > 0 || overdueWarnsCast.length > 0) && (
                     <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 14px' }}>
-                      <div style={{ fontWeight: 800, color: '#dc2626', fontSize: '0.86rem', marginBottom: 8 }}>🗑️ Đề xuất GỠ chờ duyệt — {blacklistAssigned.length + overdueWarns.length} KOC <span style={{ color: '#94a3b8', fontWeight: 600 }}>(brand {brand})</span></div>
+                      <div style={{ fontWeight: 800, color: '#dc2626', fontSize: '0.86rem', marginBottom: 8 }}>🗑️ Đề xuất GỠ chờ duyệt — {blacklistAssigned.length + overdueWarnsCast.length} KOC <span style={{ color: '#94a3b8', fontWeight: 600 }}>(brand {brand})</span></div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {blacklistAssigned.map(b => (
                           <div key={'bl-' + b.koc} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.78rem', background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #fee2e2', flexWrap: 'wrap' }}>
@@ -936,7 +958,7 @@ export default function KocPerformanceTab() {
                             <button onClick={() => removeAssign(b.koc)} style={{ marginLeft: 'auto', padding: '5px 14px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>Duyệt gỡ</button>
                           </div>
                         ))}
-                        {overdueWarns.map(w => (
+                        {overdueWarnsCast.map(w => (
                           <div key={'od-' + w.koc_id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.78rem', background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #fee2e2', flexWrap: 'wrap' }}>
                             <a href={`https://www.tiktok.com/@${w.koc_id}`} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontWeight: 700, textDecoration: 'none' }}>@{w.koc_id}</a>
                             <span style={{ color: '#64748b' }}>NS: <b>{w.staff_name}</b> · gán <b>{w.days_since}</b> ngày · 0 video</span>
@@ -974,6 +996,7 @@ export default function KocPerformanceTab() {
                         ? <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 14, fontSize: '0.76rem', fontWeight: 800, color: '#fff', background: '#7c3aed' }} title="KOC đã book cast → không gán nhân sự quản lý">💸 Đã book cast — không gán</div>
                         : <KocAssignCell username={uname} brand={brand} assignments={assignMap[uname]} staffNames={staffNames} currentUser={currentUser} onChanged={refreshAssign} allBrands={allBrands} />}
                       {(() => {
+                        if (cast) return null; // KOC đã book cast → không cảnh báo gỡ
                         const w = warnMap[uname];
                         if (!w || (w.video_count || 0) > 0) return null;
                         if (w.days_since >= 45) return <div style={{ marginTop: 7, fontSize: '0.66rem', fontWeight: 700, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '4px 8px' }}>⚠️ {w.days_since} ngày · 0 video — cần xử lý</div>;
