@@ -15,6 +15,18 @@ import { useAppData } from '../context/AppDataContext';
 const ACCENT = '#ff6a2c';
 const COMPANIES = ['STELLA', 'OPTIMAX'];
 const BRANDS = ['BODYMISS', 'MILAGANICS', 'MOAWMOAWS', 'EHERB VN', 'HEALMI', 'MASUBE', 'REALSTEEL'];
+// Map gian TikTok đang sync video ↔ brand (để đối chiếu brand ghi trên phiếu vs gian THẬT của video).
+// Brand chuẩn hoá = viết HOA, bỏ khoảng trắng. Brand KHÔNG có ở đây (MASUBE/REALSTEEL…) = không sync video → bỏ qua, không soi.
+const SHOP_BRAND = {
+  '7495107349171898427': 'BODYMISS', '7495838925500090511': 'EHERB HCM', '7494529979361168222': 'EHERB VN',
+  '7494251668499498533': 'HEALMII', '7494813818973817115': 'MILAGANICS', '7495831977917385095': 'MOAW MOAWS',
+};
+const normBrand = (s) => String(s || '').toUpperCase().replace(/\s+/g, '');
+const BRAND_SHOP = {
+  BODYMISS: '7495107349171898427', EHERBHCM: '7495838925500090511', EHERBVN: '7494529979361168222',
+  HEALMII: '7494251668499498533', HEALMI: '7494251668499498533',
+  MILAGANICS: '7494813818973817115', MOAWMOAWS: '7495831977917385095',
+};
 const ACTION_PW = 'STELLA8255$';        // mật khẩu để tick Duyệt / Đã thanh toán (1 lần/phiên)
 const PIT_THRESHOLD = 2_000_000;        // tổng chi 1 người TRONG 1 CÔNG TY / 1 tháng ≥ ngưỡng này → cần PIT (thuế TNCN)
 const personKeyOf = (r) => (r.cccd || r.full_name || r.beneficiary || r.channel_link || '').trim().toLowerCase();
@@ -87,6 +99,9 @@ const KocPaymentTab = () => {
   const [uploading, setUploading] = useState('');
   const [vidMap, setVidMap] = useState({}); // id_video -> [đơn] TOÀN BỘ koc_payments (cảnh báo trùng video, kể cả khác tháng)
   const [dupBannerOpen, setDupBannerOpen] = useState(true); // thu gọn banner video trùng
+  const [linkBannerOpen, setLinkBannerOpen] = useState(true); // thu gọn banner link video lỗi
+  const [brandBannerOpen, setBrandBannerOpen] = useState(true); // thu gọn banner brand/video nghi sai
+  const [videoShops, setVideoShops] = useState(null); // {id_video: [shop_id,…]} — gian THẬT của video (null = chưa tải)
   const [dupVidOpen, setDupVidOpen] = useState(null);       // vid đang bung chi tiết 2 đơn
 
   const load = useCallback(async () => {
@@ -113,6 +128,24 @@ const KocPaymentTab = () => {
     setVidMap(m);
   }, []);
   useEffect(() => { loadVidMap(); }, [loadVidMap, rows]);
+
+  // Tra GIAN THẬT của mọi video (brand có sync) → đối chiếu brand ghi trên phiếu. Gọi 1 lần/lần load rows.
+  useEffect(() => {
+    const ids = [...new Set(
+      (rows || [])
+        .filter(r => BRAND_SHOP[normBrand(r.brand)] && num(r.cast_net) > 0)
+        .flatMap(r => extractVideoIds(r.air_link))
+        .filter(id => id.length === 19)
+    )];
+    if (!ids.length) { setVideoShops({}); return; }
+    let cancelled = false;
+    supabase.rpc('koc_payment_video_shops', { p_ids: ids }).then(({ data }) => {
+      if (cancelled) return;
+      const m = {}; (data || []).forEach(r => { m[r.content_id] = r.shops || []; });
+      setVideoShops(m);
+    }, () => { if (!cancelled) setVideoShops({}); });
+    return () => { cancelled = true; };
+  }, [rows]);
 
   // #1 id kênh bóc từ link air · #2 video trùng (so toàn bộ koc_payments, trừ đơn đang sửa)
   const formUnames = useMemo(() => [...new Set((form.air_link || '').split('\n').map(extractUname).filter(Boolean))], [form.air_link]);
@@ -351,6 +384,51 @@ const KocPaymentTab = () => {
     return { pitAlerts: alerts, pitFlagKeys: new Set(alerts.map(a => a.key)) };
   }, [filtered]);
 
+  // Cảnh báo LINK VIDEO BỊ LỘN/LỖI: ID video TikTok chuẩn = 19 số. Bắt 2 ca:
+  //  • Link có /video/<id> nhưng id ≠ 19 số (gõ thiếu/dư số → link hỏng, không trỏ tới video nào).
+  //  • Có cast (>0) mà air_link KHÔNG có link video nào → không gắn được cast vào video.
+  // STT tính theo danh sách ĐANG LỌC (khớp cột STT trong bảng). Chọn tháng "Tất cả" để soi hết.
+  const linkIssues = useMemo(() => {
+    const out = [];
+    filtered.forEach((r, i) => {
+      const lines = String(r.air_link || '').split('\n').map(s => s.trim()).filter(Boolean);
+      const badLinks = [];
+      lines.forEach(line => {
+        [...line.matchAll(/\/video\/(\d{6,})/g)].forEach(m => { if (m[1].length !== 19) badLinks.push({ id: m[1], line }); });
+      });
+      const noVideo = num(r.cast_net) > 0 && extractVideoIds(r.air_link).length === 0;
+      if (badLinks.length || noVideo) out.push({ stt: i + 1, row: r, badLinks, noVideo });
+    });
+    return out;
+  }, [filtered]);
+  const linkIssueIds = useMemo(() => new Set(linkIssues.map(x => x.row.id)), [linkIssues]);
+
+  // Cảnh báo BRAND/VIDEO NGHI SAI — đối chiếu gian THẬT của video (RPC) vs brand ghi trên phiếu.
+  //  • wrongshop: video CÓ trong hệ thống nhưng thuộc gian khác brand phiếu → gán sai brand (chắc chắn lỗi).
+  //  • notfound : video link 19 số nhưng KHÔNG thấy ở video lẫn đơn → link sai hoặc video chưa sync (cần kiểm tra).
+  // Chỉ soi brand có sync (BRAND_SHOP). STT theo danh sách đang lọc (khớp cột STT). Chờ videoShops tải xong.
+  const brandIssues = useMemo(() => {
+    if (!videoShops) return [];
+    const out = [];
+    filtered.forEach((r, i) => {
+      const expect = BRAND_SHOP[normBrand(r.brand)];
+      if (!expect || !(num(r.cast_net) > 0)) return;
+      const ids = [...new Set(extractVideoIds(r.air_link).filter(id => id.length === 19))];
+      for (const id of ids) {
+        const shops = videoShops[id];
+        if (!shops || !shops.length) { out.push({ stt: i + 1, row: r, id, type: 'notfound' }); }
+        else if (!shops.includes(expect)) {
+          const real = [...new Set(shops.map(s => SHOP_BRAND[s] || 'gian lạ'))].join(', ');
+          out.push({ stt: i + 1, row: r, id, type: 'wrongshop', real });
+        }
+      }
+    });
+    // wrongshop (chắc lỗi) lên trước, notfound (cần kiểm tra) xuống sau
+    return out.sort((a, b) => (a.type === b.type ? 0 : a.type === 'wrongshop' ? -1 : 1));
+  }, [filtered, videoShops]);
+  const brandIssueIds = useMemo(() => new Set(brandIssues.map(x => x.row.id)), [brandIssues]);
+  const issueIds = useMemo(() => new Set([...linkIssueIds, ...brandIssueIds]), [linkIssueIds, brandIssueIds]);
+
   const allVisibleSelected = filtered.length > 0 && filtered.every(r => selected.has(r.id));
   const toggleSelAll = () => setSelected(allVisibleSelected ? new Set() : new Set(filtered.map(r => r.id)));
 
@@ -578,6 +656,59 @@ const KocPaymentTab = () => {
         </div>
       )}
 
+      {/* Cảnh báo LINK VIDEO BỊ LỘN/LỖI — ID video ≠ 19 số hoặc có cast mà thiếu link video */}
+      {linkIssues.length > 0 && (
+        <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, padding: '12px 16px', marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <div style={{ fontWeight: 800, color: '#c2410c', fontSize: '0.9rem' }}>🔗 {linkIssues.length} dòng có LINK VIDEO bị lộn/lỗi — kiểm tra lại <span style={{ fontWeight: 600 }}>(ID video không đủ 19 số, hoặc có cast mà thiếu link video · theo bộ lọc hiện tại — chọn tháng “Tất cả” để soi hết)</span></div>
+            <button onClick={() => setLinkBannerOpen(o => !o)} style={{ flexShrink: 0, padding: '4px 12px', borderRadius: 8, border: '1px solid #fed7aa', background: '#fff', color: '#c2410c', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}>{linkBannerOpen ? '▲ Thu gọn' : `▼ Mở (${linkIssues.length})`}</button>
+          </div>
+          {linkBannerOpen && (
+            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {linkIssues.map(it => (
+                <div key={it.row.id} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontSize: '0.82rem', background: '#fff', border: '1px solid #fed7aa', borderRadius: 9, padding: '7px 12px' }}>
+                  <span style={{ fontWeight: 800, color: '#c2410c', background: '#ffedd5', borderRadius: 6, padding: '2px 9px' }}>STT {it.stt}</span>
+                  <span style={{ fontWeight: 700, color: '#0f172a' }}>{it.row.full_name || it.row.beneficiary || '—'}</span>
+                  <span style={{ color: '#64748b' }}>{fmtDate(it.row.pay_date)}{it.row.brand ? ' · ' + it.row.brand : ''} · {fmtMoney(it.row.cast_net)}đ</span>
+                  {it.noVideo && <span style={{ color: '#dc2626', fontWeight: 700 }}>⚠️ Có cast nhưng KHÔNG có link video</span>}
+                  {it.badLinks.map((b, k) => (
+                    <a key={k} href={b.line} target="_blank" rel="noreferrer" title={`Link: ${b.line}\nID video ${b.id.length} số (chuẩn 19 số) → nghi gõ sai`} style={{ color: '#b91c1c', fontWeight: 700, textDecoration: 'underline', wordBreak: 'break-all' }}>🚫 ID {b.id.length} số: …{b.id.slice(-8)}</a>
+                  ))}
+                  <button onClick={() => startEdit(it.row)} style={{ marginLeft: 'auto', padding: '4px 12px', borderRadius: 7, border: '1px solid #e2e8f0', background: '#f8fafc', color: ACCENT, fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>✏️ Mở đơn</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Cảnh báo BRAND/VIDEO NGHI SAI — đối chiếu gian thật của video (DB) vs brand ghi trên phiếu */}
+      {brandIssues.length > 0 && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, padding: '12px 16px', marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <div style={{ fontWeight: 800, color: '#dc2626', fontSize: '0.9rem' }}>🏷️ {brandIssues.length} video nghi GÁN SAI BRAND / chưa thấy trong hệ thống <span style={{ fontWeight: 600 }}>(đối chiếu gian thật của video · theo bộ lọc hiện tại — chọn “Tất cả” để soi hết)</span></div>
+            <button onClick={() => setBrandBannerOpen(o => !o)} style={{ flexShrink: 0, padding: '4px 12px', borderRadius: 8, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}>{brandBannerOpen ? '▲ Thu gọn' : `▼ Mở (${brandIssues.length})`}</button>
+          </div>
+          {brandBannerOpen && (
+            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {brandIssues.map((it, idx) => (
+                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontSize: '0.82rem', background: '#fff', border: `1px solid ${it.type === 'wrongshop' ? '#fecaca' : '#fde68a'}`, borderRadius: 9, padding: '7px 12px' }}>
+                  <span style={{ fontWeight: 800, color: '#c2410c', background: '#ffedd5', borderRadius: 6, padding: '2px 9px' }}>STT {it.stt}</span>
+                  <span style={{ fontWeight: 700, color: '#0f172a' }}>{it.row.full_name || it.row.beneficiary || '—'}</span>
+                  <span style={{ color: '#64748b' }}>{fmtDate(it.row.pay_date)} · {fmtMoney(it.row.cast_net)}đ</span>
+                  <span style={{ color: '#475569' }}>phiếu: <b>{it.row.brand}</b></span>
+                  {it.type === 'wrongshop'
+                    ? <span style={{ color: '#b91c1c', fontWeight: 800 }}>→ video thật ở gian: <b>{it.real}</b> ❗ gán sai brand</span>
+                    : <span style={{ color: '#b45309', fontWeight: 700 }}>→ ⚠️ chưa thấy trong hệ thống (link sai hoặc video chưa sync)</span>}
+                  <a href={`https://www.tiktok.com/video/${it.id}`} target="_blank" rel="noreferrer" style={{ color: '#7c3aed', fontWeight: 700, textDecoration: 'underline' }}>🔗 …{it.id.slice(-8)}</a>
+                  <button onClick={() => startEdit(it.row)} style={{ marginLeft: 'auto', padding: '4px 12px', borderRadius: 7, border: '1px solid #e2e8f0', background: '#f8fafc', color: ACCENT, fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>✏️ Mở đơn</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Thao tác hàng loạt — hiện khi đã chọn dòng */}
       {selected.size > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '10px 16px', marginBottom: 14 }}>
@@ -597,6 +728,7 @@ const KocPaymentTab = () => {
             <thead>
               <tr>
                 <th style={{ ...th, textAlign: 'center', width: 34 }}><input type="checkbox" checked={allVisibleSelected} onChange={toggleSelAll} title="Chọn tất cả dòng đang hiện" style={{ width: 16, height: 16, cursor: 'pointer' }} /></th>
+                <th style={{ ...th, textAlign: 'center', width: 40 }}>STT</th>
                 <th style={th}>Ngày</th><th style={th}>Nhân sự</th><th style={th}>Cty</th><th style={th}>Brand</th><th style={th}>ID kênh</th>
                 <th style={th}>Họ tên</th><th style={th}>CCCD</th><th style={th}>MST</th><th style={th}>Số TK</th><th style={th}>Ngân hàng</th>
                 <th style={{ ...th, textAlign: 'right' }}>Cast</th><th style={{ ...th, textAlign: 'right' }}>PIT</th><th style={{ ...th, textAlign: 'right' }}>Tổng</th>
@@ -604,11 +736,12 @@ const KocPaymentTab = () => {
               </tr>
             </thead>
             <tbody>
-              {loading ? (<tr><td colSpan={18} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải…</td></tr>)
-                : filtered.length === 0 ? (<tr><td colSpan={18} style={{ ...td, textAlign: 'center', padding: 36, color: '#9ca3af' }}>Chưa có thanh toán nào. Bấm “➕ Thêm thanh toán”.</td></tr>)
+              {loading ? (<tr><td colSpan={19} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải…</td></tr>)
+                : filtered.length === 0 ? (<tr><td colSpan={19} style={{ ...td, textAlign: 'center', padding: 36, color: '#9ca3af' }}>Chưa có thanh toán nào. Bấm “➕ Thêm thanh toán”.</td></tr>)
                 : pageRows.map((r, i) => (
-                  <tr key={r.id} style={{ background: selected.has(r.id) ? '#eff6ff' : r.paid ? '#fff7ed' : r.accountant_approved ? '#f0fdf4' : (i % 2 ? '#fcfcfd' : '#fff') }}>
+                  <tr key={r.id} style={{ background: selected.has(r.id) ? '#eff6ff' : issueIds.has(r.id) ? '#fff1f2' : r.paid ? '#fff7ed' : r.accountant_approved ? '#f0fdf4' : (i % 2 ? '#fcfcfd' : '#fff') }}>
                     <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSel(r.id)} style={{ width: 15, height: 15, cursor: 'pointer' }} /></td>
+                    <td style={{ ...td, textAlign: 'center', color: '#94a3b8', fontWeight: 700 }}>{(safePage - 1) * PAY_PAGE_SIZE + i + 1}</td>
                     <td style={td}>{fmtDate(r.pay_date)}</td>
                     <td style={td}>{r.staff || '—'}</td>
                     <td style={td}><span style={{ fontSize: '0.72rem', fontWeight: 700, color: r.company === 'OPTIMAX' ? '#7c3aed' : '#0891b2' }}>{r.company || '—'}</span></td>
@@ -625,6 +758,7 @@ const KocPaymentTab = () => {
                     <td style={{ ...td, textAlign: 'center' }}>{(() => {
                       const imgs = rowImages(r);  // CCCD + tin nhắn + hợp đồng (KHÔNG gồm video)
                       return <>
+                        {issueIds.has(r.id) && <span title="Dòng này có cảnh báo (link lỗi hoặc brand/video nghi sai) — xem thông báo phía trên" style={{ color: '#dc2626', marginRight: 6 }}>⚠️</span>}
                         {r.air_link ? <a href={r.air_link.split('\n')[0]} target="_blank" rel="noreferrer" title="Link air (video)" style={{ color: '#7c3aed', textDecoration: 'none' }}>🎬</a> : '—'}
                         {imgs.length > 0 && <button onClick={() => { setLightbox(null); setGallery({ title: r.full_name || r.beneficiary || '', items: imgs }); }} title={`Xem tất cả ${imgs.length} ảnh/file (CCCD + tin nhắn + hợp đồng)`} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#0891b2', marginLeft: 8, fontSize: 'inherit', padding: 0, fontWeight: 700 }}>🖼️ {imgs.length}</button>}
                       </>;
