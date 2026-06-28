@@ -9,6 +9,9 @@ import { supabase } from '../supabaseClient';
 
 const ACCENT = '#ff6a2c';
 const START = { y: 2026, m: 3 }; // rà từ tháng 3/2026 về sau
+// Nhân sự ĐÃ NGHỈ VIỆC → tạm ẩn khỏi mọi bảng đối chiếu (khớp danh sách ẩn ở Dashboard booking).
+const HIDDEN_STAFF = ['Ngọc Quỳnh', 'Anh Kiệt', 'Thiệu Huy'];
+const isHiddenStaff = (name) => HIDDEN_STAFF.some(h => String(name || '').toLowerCase().includes(h.toLowerCase()));
 
 const fmt = (n) => new Intl.NumberFormat('vi-VN').format(Math.round(Number(n) || 0));
 const fmtVnd = (n) => {
@@ -71,7 +74,7 @@ function BookingBudgetTab() {
   }, [fFrom, fTo]);
   useEffect(() => { load(); }, [load]);
 
-  const staffOptions = useMemo(() => [...new Set(rows.map(r => (r.staff || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi')), [rows]);
+  const staffOptions = useMemo(() => [...new Set(rows.map(r => (r.staff || '').trim()).filter(Boolean))].filter(s => !isHiddenStaff(s)).sort((a, b) => a.localeCompare(b, 'vi')), [rows]);
 
   const FULL_FROM = `${START.y}-${String(START.m).padStart(2, '0')}-01`;
   const allMonthChips = useMemo(() => monthsRange(FULL_FROM, todayYmd()), []); // dãy nút chọn tháng (cố định toàn kỳ)
@@ -93,6 +96,7 @@ function BookingBudgetTab() {
     const map = {};
     rows.forEach(r => {
       const s = r.staff || '—';
+      if (isHiddenStaff(s)) return;
       if (!map[s]) map[s] = { staff: s, total: 0, byMonth: {} };
       const c = Number(r.cast_net) || 0;
       map[s].byMonth[r.air_month] = (map[s].byMonth[r.air_month] || 0) + c;
@@ -103,7 +107,7 @@ function BookingBudgetTab() {
 
   const monthTotal = useMemo(() => {
     const t = {}; let grand = 0;
-    rows.forEach(r => { const c = Number(r.cast_net) || 0; t[r.air_month] = (t[r.air_month] || 0) + c; grand += c; });
+    rows.forEach(r => { if (isHiddenStaff(r.staff)) return; const c = Number(r.cast_net) || 0; t[r.air_month] = (t[r.air_month] || 0) + c; grand += c; });
     return { t, grand };
   }, [rows]);
 
@@ -116,6 +120,39 @@ function BookingBudgetTab() {
 
   const curMonthKey = months.length ? months[months.length - 1].key : '';
   const unresolvedTotal = useMemo(() => unresolved.reduce((a, r) => a + (Number(r.cast_net) || 0), 0), [unresolved]);
+
+  // ── ĐỊNH MỨC CAST (base) theo nhân sự × tháng = max(15tr, GMV lũy kế × 2.2%) ──
+  // GMV lũy kế lấy đúng như bảng "Performance theo nhân sự" (tiktok_performance theo tháng × air_links).
+  // Phase 1: CHỈ định mức base — CHƯA trừ đã xài / cộng dồn carryover.
+  const [dmRows, setDmRows] = useState([]);
+  const [dmLoading, setDmLoading] = useState(true);
+  useEffect(() => {
+    let alive = true; setDmLoading(true);
+    supabase.rpc('booking_dinhmuc_by_staff_month').then(({ data, error }) => {
+      if (!alive) return;
+      setDmRows(error ? [] : (data || []));
+      setDmLoading(false);
+    });
+    return () => { alive = false; };
+  }, []);
+  const dmPivot = useMemo(() => {
+    const mset = new Map(); const map = {};
+    dmRows.forEach(r => {
+      if (isHiddenStaff(r.staff)) return;
+      const key = `${r.year}-${String(r.month).padStart(2, '0')}`;
+      mset.set(key, { key, y: r.year, m: r.month, label: `T${r.month}/${String(r.year).slice(2)}`, full: `Tháng ${r.month}/${r.year}` });
+      if (!map[r.staff]) map[r.staff] = { staff: r.staff, byMonth: {}, total: 0 };
+      map[r.staff].byMonth[key] = { dm: Number(r.dinh_muc) || 0, gmv: Number(r.gmv_cum) || 0 };
+    });
+    const dmMonths = [...mset.values()].sort((a, b) => a.key.localeCompare(b.key));
+    const staffArr = Object.values(map);
+    staffArr.forEach(s => { s.total = dmMonths.reduce((a, m) => a + (s.byMonth[m.key]?.dm || 0), 0); });
+    staffArr.sort((a, b) => b.total - a.total);
+    const monthTot = {};
+    dmMonths.forEach(m => { monthTot[m.key] = staffArr.reduce((a, s) => a + (s.byMonth[m.key]?.dm || 0), 0); });
+    return { dmMonths, staffArr, monthTot, grand: staffArr.reduce((a, s) => a + s.total, 0) };
+  }, [dmRows]);
+  const shownDmStaff = useMemo(() => (fStaff ? dmPivot.staffArr.filter(s => s.staff === fStaff) : dmPivot.staffArr), [dmPivot, fStaff]);
 
   const KPIS = [
     { label: 'Tổng cast đã chi (từ T3)', val: fmtVnd(monthTotal.grand) + ' đ', sub: `${pivot.length} nhân sự`, icon: '💰', color: '#16a34a' },
@@ -167,6 +204,59 @@ function BookingBudgetTab() {
             <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: 2 }}>{k.sub}</div>
           </div>
         ))}
+      </div>
+
+      {/* ĐỊNH MỨC CAST theo nhân sự × tháng (base = GMV lũy kế × 2.2%, sàn 15tr) */}
+      <div style={{ ...card, padding: 0, overflow: 'hidden', marginBottom: 20, border: '1px solid #fed7aa' }}>
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid #fef3c7', background: '#fffbeb' }}>
+          <div style={{ fontWeight: 800, color: '#b45309', fontSize: '0.95rem' }}>📊 Định mức cast theo nhân sự × tháng ({shownDmStaff.length})</div>
+          <div style={{ fontSize: '0.76rem', color: '#92400e', marginTop: 3 }}>
+            Công thức: <b>max(15.000.000₫, GMV lũy kế × 2.2%)</b> · GMV lũy kế lấy đúng bảng “Performance theo nhân sự”. <b>Phase 1: chỉ định mức gốc</b> — CHƯA trừ đã xài / cộng dồn dư tháng trước (làm bước sau). Số nhỏ xám = GMV lũy kế tháng đó.
+          </div>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
+            <thead>
+              <tr>
+                <th style={{ ...th, textAlign: 'left' }}>#</th>
+                <th style={{ ...th, textAlign: 'left' }}>Nhân sự</th>
+                {dmPivot.dmMonths.map(m => <th key={m.key} style={th} title={m.full}>{m.label}</th>)}
+                <th style={{ ...th, color: ACCENT }}>Tổng định mức</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dmLoading && <tr><td colSpan={dmPivot.dmMonths.length + 3} style={{ ...td, textAlign: 'center', color: '#94a3b8', padding: 40 }}>⏳ Đang tải...</td></tr>}
+              {!dmLoading && shownDmStaff.length === 0 && <tr><td colSpan={dmPivot.dmMonths.length + 3} style={{ ...td, textAlign: 'center', color: '#94a3b8', padding: 40 }}>Không có dữ liệu định mức.</td></tr>}
+              {!dmLoading && shownDmStaff.map((s, i) => (
+                <tr key={s.staff} onMouseEnter={e => e.currentTarget.style.background = '#fffbeb'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                  <td style={{ ...td, textAlign: 'left', color: '#94a3b8', fontWeight: 700 }}>{i + 1}</td>
+                  <td style={{ ...td, textAlign: 'left', fontWeight: 700, color: '#0f172a' }}>{s.staff}</td>
+                  {dmPivot.dmMonths.map(m => {
+                    const c = s.byMonth[m.key];
+                    if (!c) return <td key={m.key} style={{ ...td, color: '#cbd5e1' }}>–</td>;
+                    const isMin = c.dm <= 15000000;
+                    return (
+                      <td key={m.key} style={td} title={`Định mức ${fmt(c.dm)}₫ · GMV lũy kế ${fmt(c.gmv)}₫${isMin ? ' (sàn 15tr)' : ' (2.2% GMV)'}`}>
+                        <div style={{ fontWeight: 700, color: isMin ? '#94a3b8' : '#0f172a' }}>{fmt(c.dm)}</div>
+                        <div style={{ fontSize: '0.66rem', color: '#cbd5e1' }}>{fmtVnd(c.gmv)}</div>
+                      </td>
+                    );
+                  })}
+                  <td style={{ ...td, fontWeight: 800, color: ACCENT }}>{fmt(s.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+            {!dmLoading && shownDmStaff.length > 0 && (
+              <tfoot>
+                <tr style={{ background: '#fffbeb', borderTop: '2px solid #fde68a' }}>
+                  <td style={{ ...td, textAlign: 'left', fontWeight: 800, color: '#92400e' }} colSpan={2}>TỔNG</td>
+                  {dmPivot.dmMonths.map(m => <td key={m.key} style={{ ...td, fontWeight: 800, color: '#92400e' }}>{fmt(dmPivot.monthTot[m.key] || 0)}</td>)}
+                  <td style={{ ...td, fontWeight: 800, color: ACCENT }}>{fmt(dmPivot.grand)}</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
       </div>
 
       {/* pivot nhân sự × tháng */}
