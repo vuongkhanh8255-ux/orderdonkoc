@@ -156,6 +156,39 @@ function BookingBudgetTab() {
   }, [dmRows]);
   const shownDmStaff = useMemo(() => (fStaff ? dmPivot.staffArr.filter(s => s.staff === fStaff) : dmPivot.staffArr), [dmPivot, fStaff]);
 
+  // ── NGÂN SÁCH CÒN LẠI theo nhân sự × tháng ──
+  // Mỗi tháng: ĐM thực = base(GMV×2.2%, sàn 15tr) + dư cộng dồn từ tháng trước · Còn lại = ĐM thực − đã xài.
+  // Dư (nếu xài không hết) cộng dồn sang tháng sau. Vượt (âm) KHÔNG trừ sang tháng sau (về 0).
+  const reconPivot = useMemo(() => {
+    const baseMap = {}; // staff -> monthKey -> base định mức
+    dmPivot.staffArr.forEach(s => { baseMap[s.staff] = {}; Object.entries(s.byMonth).forEach(([k, v]) => { baseMap[s.staff][k] = v.dm; }); });
+    const spentMap = {}; // staff -> monthKey -> đã xài
+    pivot.forEach(p => { spentMap[p.staff] = p.byMonth; });
+    const staffSet = new Set([...Object.keys(baseMap), ...Object.keys(spentMap)].filter(s => !isHiddenStaff(s)));
+    const mKeys = months.map(m => m.key); // T3 → nay (cùng cột với bảng đã chi)
+    const staffArr = [...staffSet].map(staff => {
+      let started = false, carry = 0, totalXai = 0, lastConLai = 0;
+      const cells = {};
+      mKeys.forEach(mk => {
+        const hasBase = baseMap[staff]?.[mk] != null;
+        const xai = spentMap[staff]?.[mk] || 0;
+        if (!started && !hasBase && xai <= 0) return; // chưa hoạt động tháng này → bỏ qua
+        started = true;
+        const base = baseMap[staff]?.[mk] ?? 15000000; // tháng không có GMV → sàn 15tr
+        const dmThuc = base + carry;
+        const conLai = dmThuc - xai;
+        cells[mk] = { base, carryIn: carry, dmThuc, xai, conLai };
+        carry = Math.max(0, conLai); lastConLai = conLai; totalXai += xai;
+      });
+      return { staff, cells, totalXai, lastConLai };
+    }).filter(s => Object.keys(s.cells).length > 0);
+    staffArr.sort((a, b) => b.totalXai - a.totalXai);
+    const monthTot = {}; // tổng còn lại mỗi tháng (chỉ ô có data)
+    mKeys.forEach(mk => { monthTot[mk] = staffArr.reduce((a, s) => a + (s.cells[mk]?.conLai || 0), 0); });
+    return { mKeys: months, staffArr, monthTot };
+  }, [dmPivot, pivot, months]);
+  const shownRecon = useMemo(() => (fStaff ? reconPivot.staffArr.filter(s => s.staff === fStaff) : reconPivot.staffArr), [reconPivot, fStaff]);
+
   const KPIS = [
     { label: 'Tổng cast đã chi (từ T3)', val: fmtVnd(monthTotal.grand) + ' đ', sub: `${pivot.length} nhân sự`, icon: '💰', color: '#16a34a' },
     { label: `Cast tháng này (${months[months.length - 1]?.label || ''})`, val: fmtVnd(monthTotal.t[curMonthKey] || 0) + ' đ', sub: 'theo ngày video air', icon: '🔥', color: '#ea580c' },
@@ -264,7 +297,7 @@ function BookingBudgetTab() {
       {/* pivot nhân sự × tháng */}
       <div style={{ ...card, padding: 0, overflow: 'hidden', marginBottom: 20 }}>
         <div style={{ padding: '14px 18px', borderBottom: '1px solid #f1f5f9', fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>
-          👥 Cast thật theo nhân sự ({shownPivot.length}) — đơn vị: đồng
+          💸 Cast đã chi theo nhân sự ({shownPivot.length}) — đơn vị: đồng · cast THẬT từ Thanh toán KOC, theo tháng video air
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
@@ -298,6 +331,59 @@ function BookingBudgetTab() {
                   <td style={{ ...td, textAlign: 'left', fontWeight: 800, color: '#92400e' }} colSpan={2}>TỔNG</td>
                   {months.map(m => <td key={m.key} style={{ ...td, fontWeight: 800, color: '#92400e' }}>{fmt(shownMonthTotal.t[m.key] || 0)}</td>)}
                   <td style={{ ...td, fontWeight: 800, color: ACCENT }}>{fmt(shownMonthTotal.grand)}</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+      </div>
+
+      {/* NGÂN SÁCH CÒN LẠI = Định mức thực (base + dư cộng dồn) − Đã xài */}
+      <div style={{ ...card, padding: 0, overflow: 'hidden', marginBottom: 20, border: '1px solid #bbf7d0' }}>
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid #dcfce7', background: '#f0fdf4' }}>
+          <div style={{ fontWeight: 800, color: '#15803d', fontSize: '0.95rem' }}>🏦 Ngân sách còn lại theo nhân sự × tháng ({shownRecon.length})</div>
+          <div style={{ fontSize: '0.76rem', color: '#166534', marginTop: 3 }}>
+            <b>Còn lại = Định mức thực − Đã xài</b> · ĐM thực = base (GMV×2.2%, sàn 15tr) <b>+ dư cộng dồn từ tháng trước</b>. Dư xài không hết → cộng sang tháng sau; vượt (đỏ) không trừ sang sau. Số nhỏ xám = “ĐM thực − đã chi” tháng đó.
+          </div>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
+            <thead>
+              <tr>
+                <th style={{ ...th, textAlign: 'left' }}>#</th>
+                <th style={{ ...th, textAlign: 'left' }}>Nhân sự</th>
+                {reconPivot.mKeys.map(m => <th key={m.key} style={th} title={m.full}>{m.label}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {(loading || dmLoading) && <tr><td colSpan={reconPivot.mKeys.length + 2} style={{ ...td, textAlign: 'center', color: '#94a3b8', padding: 40 }}>⏳ Đang tải...</td></tr>}
+              {!loading && !dmLoading && shownRecon.length === 0 && <tr><td colSpan={reconPivot.mKeys.length + 2} style={{ ...td, textAlign: 'center', color: '#94a3b8', padding: 40 }}>Không có dữ liệu.</td></tr>}
+              {!loading && !dmLoading && shownRecon.map((s, i) => (
+                <tr key={s.staff} onMouseEnter={e => e.currentTarget.style.background = '#f0fdf4'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                  <td style={{ ...td, textAlign: 'left', color: '#94a3b8', fontWeight: 700 }}>{i + 1}</td>
+                  <td style={{ ...td, textAlign: 'left', fontWeight: 700, color: '#0f172a' }}>{s.staff}</td>
+                  {reconPivot.mKeys.map(m => {
+                    const c = s.cells[m.key];
+                    if (!c) return <td key={m.key} style={{ ...td, color: '#cbd5e1' }}>–</td>;
+                    const over = c.conLai < 0;
+                    return (
+                      <td key={m.key} style={td} title={`ĐM thực ${fmt(c.dmThuc)}₫ (base ${fmt(c.base)}${c.carryIn > 0 ? ' + dư ' + fmt(c.carryIn) : ''}) − đã chi ${fmt(c.xai)}₫ = ${fmt(c.conLai)}₫`}>
+                        <div style={{ fontWeight: 800, color: over ? '#dc2626' : '#15803d' }}>{over ? '▲ ' : ''}{fmt(c.conLai)}</div>
+                        <div style={{ fontSize: '0.66rem', color: '#cbd5e1' }}>{fmtVnd(c.dmThuc)} − {fmtVnd(c.xai)}</div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+            {!loading && !dmLoading && shownRecon.length > 0 && (
+              <tfoot>
+                <tr style={{ background: '#f0fdf4', borderTop: '2px solid #bbf7d0' }}>
+                  <td style={{ ...td, textAlign: 'left', fontWeight: 800, color: '#166534' }} colSpan={2}>TỔNG CÒN LẠI</td>
+                  {reconPivot.mKeys.map(m => {
+                    const v = reconPivot.monthTot[m.key] || 0;
+                    return <td key={m.key} style={{ ...td, fontWeight: 800, color: v < 0 ? '#dc2626' : '#166534' }}>{fmt(v)}</td>;
+                  })}
                 </tr>
               </tfoot>
             )}

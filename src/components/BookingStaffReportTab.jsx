@@ -481,7 +481,8 @@ function StaffDetailPanel({ r, range }) {
                     <thead><tr>
                       <th style={{ ...th, padding: '8px' }}>#</th><th style={{ ...th, padding: '8px' }}>KOC</th>
                       <th style={{ ...th, padding: '8px', textAlign: 'right' }}>GMV</th><th style={{ ...th, padding: '8px', textAlign: 'right' }}>View</th>
-                      <th style={{ ...th, padding: '8px', textAlign: 'right' }} title="Số video KOC ĐĂNG trong khung thời gian đang chọn (theo kỳ) — tương đương cột 'Video kỳ' bên Hiệu suất KOC. (Video tổng all-time cần thêm sau qua RPC.)">Video kỳ</th><th style={{ ...th, padding: '8px', textAlign: 'right' }} title="Cast trong tháng">CAST</th>
+                      <th style={{ ...th, padding: '8px', textAlign: 'right' }} title="Tổng video KOC đã đăng (all-time) — giống 'Video tổng' bên Hiệu suất KOC">Video tổng</th>
+                      <th style={{ ...th, padding: '8px', textAlign: 'right' }} title="Video đăng trong khung thời gian đang chọn — giống 'Video kỳ' bên Hiệu suất KOC">Video kỳ</th><th style={{ ...th, padding: '8px', textAlign: 'right' }} title="Cast trong tháng">CAST</th>
                       <th style={{ ...th, padding: '8px' }}>Định danh</th>
                       <th style={{ ...th, padding: '8px' }}>Ngày gắn</th>
                       <th style={{ ...th, padding: '8px' }} title="Có video air trong kỳ = Hoạt động · gắn ≥45 ngày mà 0 video = Sắp bị gỡ">Hiệu suất</th>
@@ -496,7 +497,8 @@ function StaffDetailPanel({ r, range }) {
                             <td style={{ ...td, padding: '9px 8px' }}><a href={`https://www.tiktok.com/@${k.uname}`} target="_blank" rel="noreferrer" style={{ color: '#475569', textDecoration: 'none', fontWeight: 600 }}>@{k.uname}</a></td>
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'right', fontWeight: 800, color: '#16a34a' }}>{fmtVnd(k.gmv)}</td>
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'right', color: '#0891b2' }}>{fmtView(k.views)}</td>
-                            <td style={{ ...td, padding: '9px 8px', textAlign: 'right', color: '#7c3aed', fontWeight: 700 }}>{fmt(k.videos)}</td>
+                            <td style={{ ...td, padding: '9px 8px', textAlign: 'right', color: '#7c3aed', fontWeight: 800 }}>{fmt(k.videos_total)}</td>
+                            <td style={{ ...td, padding: '9px 8px', textAlign: 'right', color: '#a78bda', fontWeight: 600 }}>{fmt(k.videos)}</td>
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'right', color: '#ea580c' }}>{num(k.cast) > 0 ? fmtVnd(k.cast) : '—'}</td>
                             <td style={{ ...td, padding: '9px 8px', fontSize: '0.76rem', color: a ? '#0f172a' : '#cbd5e1', fontWeight: a ? 600 : 400 }}>{a ? `✓ ${a.staff}${a.brand ? ' · ' + a.brand : ''}` : '— chưa'}</td>
                             <td style={{ ...td, padding: '9px 8px', fontSize: '0.76rem', color: '#64748b' }}>{a ? sinceLabel(a.since) : '—'}</td>
