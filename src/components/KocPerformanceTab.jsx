@@ -961,7 +961,7 @@ export default function KocPerformanceTab() {
                         {overdueWarnsCast.map(w => (
                           <div key={'od-' + w.koc_id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.78rem', background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #fee2e2', flexWrap: 'wrap' }}>
                             <a href={`https://www.tiktok.com/@${w.koc_id}`} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontWeight: 700, textDecoration: 'none' }}>@{w.koc_id}</a>
-                            <span style={{ color: '#64748b' }}>NS: <b>{w.staff_name}</b> · gán <b>{w.days_since}</b> ngày · 0 video</span>
+                            <span style={{ color: '#64748b' }}>NS: <b>{w.staff_name}</b> · gán từ <b>{w.since_date ? new Date(w.since_date).toLocaleDateString('vi-VN') : '—'}</b> ({w.days_since} ngày) · 0 video</span>
                             <button onClick={() => removeAssign(w.koc_id)} style={{ marginLeft: 'auto', padding: '5px 14px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>Duyệt gỡ</button>
                           </div>
                         ))}
