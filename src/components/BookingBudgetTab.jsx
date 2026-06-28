@@ -137,9 +137,11 @@ function BookingBudgetTab() {
   }, []);
   const dmPivot = useMemo(() => {
     const mset = new Map(); const map = {};
+    const minKey = `${START.y}-${String(START.m).padStart(2, '0')}`; // chỉ tính từ T3/2026 trở đi
     dmRows.forEach(r => {
       if (isHiddenStaff(r.staff)) return;
       const key = `${r.year}-${String(r.month).padStart(2, '0')}`;
+      if (key < minKey) return;
       mset.set(key, { key, y: r.year, m: r.month, label: `T${r.month}/${String(r.year).slice(2)}`, full: `Tháng ${r.month}/${r.year}` });
       if (!map[r.staff]) map[r.staff] = { staff: r.staff, byMonth: {}, total: 0 };
       map[r.staff].byMonth[key] = { dm: Number(r.dinh_muc) || 0, gmv: Number(r.gmv_cum) || 0 };
