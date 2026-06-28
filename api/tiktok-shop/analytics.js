@@ -1163,14 +1163,12 @@ async function handleKocVideos({ params, appKey, appSecret, supabase, res }) {
     top_product_id: String(r.top_product_id || ''), product_count: Number(r.product_count) || 0,
   }));
 
-  // Bổ sung video KOC đã ĐĂNG trong kỳ nhưng CHƯA ra đơn (lấy từ bảng video) → "VIDEO ĐÃ LÊN" hiện đủ
+  // Bổ sung TẤT CẢ video KOC đã ĐĂNG (mọi thời điểm, kể cả chưa ra đơn) → "VIDEO ĐÃ LÊN" khớp với VIDEO TỔNG.
+  // (Trước đây lọc post_date theo kỳ → KOC không đăng video trong kỳ thì danh sách thiếu so với VIDEO TỔNG.)
   try {
     const cn = norm(creator).replace(/^@/, '');
-    let vq = supabase.from('tiktok_shop_videos').select('id, post_date, video_post_time, product_id')
-      .eq('shop_id', shopId).or(`username.ilike.${cn},username.ilike.@${cn}`);
-    if (start) vq = vq.gte('post_date', start);
-    if (end)   vq = vq.lte('post_date', end);
-    const { data: tvids } = await vq;
+    const { data: tvids } = await supabase.from('tiktok_shop_videos').select('id, post_date, video_post_time, product_id')
+      .eq('shop_id', shopId).or(`username.ilike.${cn},username.ilike.@${cn}`).limit(2000);
     const have = new Set(videos.map(v => v.content_id));
     for (const tv of (tvids || [])) {
       const id = String(tv.id);
