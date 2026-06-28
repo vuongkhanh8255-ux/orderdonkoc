@@ -288,6 +288,38 @@ function StaffDetailPanel({ r, range }) {
   const daily = Array.isArray(det?.daily) ? det.daily : [];
   const kocs = Array.isArray(det?.kocs) ? det.kocs : [];
 
+  // ── Định danh KOC (CHỈ UI — dùng bảng koc_brand_assignments có sẵn, KHÔNG đụng RPC agent ads) ──
+  const [assignMap, setAssignMap] = useState({});
+  const [onlyWarn, setOnlyWarn] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    supabase.from('koc_brand_assignments')
+      .select('koc_id, brand_name, staff_name, approved_at, assigned_at').eq('status', 'approved')
+      .then(({ data }) => {
+        if (!alive) return;
+        const m = {};
+        (data || []).forEach(a => {
+          const k = (a.koc_id || '').toLowerCase().replace(/^@/, '');
+          const since = a.approved_at || a.assigned_at;
+          if (!m[k] || a.staff_name === r.ten_nhansu) m[k] = { brand: a.brand_name, staff: a.staff_name, since };
+        });
+        setAssignMap(m);
+      });
+    return () => { alive = false; };
+  }, [r.ten_nhansu]);
+  const assignOf = (uname) => assignMap[(uname || '').toLowerCase().replace(/^@/, '')] || null;
+  const daysSince = (s) => s ? Math.floor((Date.now() - new Date(s).getTime()) / 86400000) : null;
+  const sinceLabel = (s) => s ? new Date(s).toLocaleDateString('vi-VN') : '—';
+  // Hiệu suất định danh: có video trong kỳ = Hoạt động; gắn ≥45 ngày mà 0 video trong kỳ = Sắp bị gỡ
+  const perfTag = (k) => {
+    const a = assignOf(k.uname); if (!a) return { txt: '—', color: '#cbd5e1', warn: false };
+    const d = daysSince(a.since);
+    if (num(k.videos) > 0) return { txt: '✓ Hoạt động', color: '#16a34a', warn: false };
+    if (d != null && d >= 45) return { txt: '⚠️ Sắp bị gỡ', color: '#dc2626', warn: true };
+    return { txt: `○ ${d ?? '?'}d chưa air`, color: '#d97706', warn: false };
+  };
+  const warnCount = kocs.filter(k => perfTag(k).warn).length;
+
   const budget = BUDGET(r.aff_gmv);
   const cast = num(r.cast_used);
   const remain = budget - cast;
@@ -426,7 +458,15 @@ function StaffDetailPanel({ r, range }) {
 
             {/* Top KOC table */}
             <div>
-              <div style={{ fontWeight: 700, color: '#475569', marginBottom: 8, fontSize: '0.85rem' }}>🏅 Top KOC theo GMV ({kocs.length})</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ fontWeight: 700, color: '#475569', fontSize: '0.85rem' }}>🏅 Top KOC theo GMV ({kocs.length})</div>
+                {warnCount > 0 && (
+                  <button onClick={() => setOnlyWarn(v => !v)} title="KOC gắn định danh ≥45 ngày mà chưa air video trong kỳ"
+                    style={{ padding: '5px 12px', borderRadius: 7, border: `1px solid ${onlyWarn ? '#dc2626' : '#fecaca'}`, background: onlyWarn ? '#dc2626' : '#fff', color: onlyWarn ? '#fff' : '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>
+                    ⚠️ Sắp bị gỡ ({warnCount}){onlyWarn ? ' ✕' : ''}
+                  </button>
+                )}
+              </div>
               {loadingDet ? <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>⏳ Đang tải...</div> : kocs.length === 0 ? <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Không có dữ liệu.</div> : (
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -434,11 +474,14 @@ function StaffDetailPanel({ r, range }) {
                       <th style={{ ...th, padding: '8px' }}>#</th><th style={{ ...th, padding: '8px' }}>KOC</th>
                       <th style={{ ...th, padding: '8px', textAlign: 'right' }}>GMV</th><th style={{ ...th, padding: '8px', textAlign: 'right' }}>View</th>
                       <th style={{ ...th, padding: '8px', textAlign: 'right' }}>Video</th><th style={{ ...th, padding: '8px', textAlign: 'right' }} title="Cast trong tháng">CAST</th>
+                      <th style={{ ...th, padding: '8px' }}>Định danh</th>
+                      <th style={{ ...th, padding: '8px' }}>Ngày gắn</th>
+                      <th style={{ ...th, padding: '8px' }} title="Có video air trong kỳ = Hoạt động · gắn ≥45 ngày mà 0 video = Sắp bị gỡ">Hiệu suất</th>
                       {/* TẠM ẨN ROAS — chưa tính chính xác: <th>ROAS</th> */}
                     </tr></thead>
                     <tbody>
-                      {kocs.slice(0, 20).map((k, i) => {
-                        const kb = perfBadge(k.gmv, k.cast);
+                      {(onlyWarn ? kocs.filter(k => perfTag(k).warn) : kocs).slice(0, 20).map((k, i) => {
+                        const a = assignOf(k.uname); const pt = perfTag(k);
                         return (
                           <tr key={k.uname}>
                             <td style={{ ...td, padding: '9px 8px', color: '#94a3b8', fontWeight: 700 }}>{i + 1}</td>
@@ -447,6 +490,9 @@ function StaffDetailPanel({ r, range }) {
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'right', color: '#0891b2' }}>{fmtView(k.views)}</td>
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'right', color: '#7c3aed', fontWeight: 700 }}>{fmt(k.videos)}</td>
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'right', color: '#ea580c' }}>{num(k.cast) > 0 ? fmtVnd(k.cast) : '—'}</td>
+                            <td style={{ ...td, padding: '9px 8px', fontSize: '0.76rem', color: a ? '#0f172a' : '#cbd5e1', fontWeight: a ? 600 : 400 }}>{a ? `✓ ${a.staff}${a.brand ? ' · ' + a.brand : ''}` : '— chưa'}</td>
+                            <td style={{ ...td, padding: '9px 8px', fontSize: '0.76rem', color: '#64748b' }}>{a ? sinceLabel(a.since) : '—'}</td>
+                            <td style={{ ...td, padding: '9px 8px', fontSize: '0.76rem', fontWeight: 700, color: pt.color }}>{pt.txt}</td>
                             {/* TẠM ẨN ROAS — chưa tính chính xác */}
                           </tr>
                         );
