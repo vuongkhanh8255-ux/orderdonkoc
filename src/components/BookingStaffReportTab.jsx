@@ -319,6 +319,14 @@ function StaffDetailPanel({ r, range }) {
     return { txt: `○ ${d ?? '?'}d chưa air`, color: '#d97706', warn: false };
   };
   const warnCount = kocs.filter(k => perfTag(k).warn).length;
+  // Phân trang bảng Top KOC (RPC trả đủ — chỉ chia trang ở UI)
+  const [kocPage, setKocPage] = useState(1);
+  useEffect(() => { setKocPage(1); }, [onlyWarn, r.nhansu_id, range.start, range.end]);
+  const filteredKocs = onlyWarn ? kocs.filter(k => perfTag(k).warn) : kocs;
+  const KOC_PER_PAGE = 15;
+  const kocTotalPages = Math.max(1, Math.ceil(filteredKocs.length / KOC_PER_PAGE));
+  const kocPageC = Math.min(kocPage, kocTotalPages);
+  const pagedKocs = filteredKocs.slice((kocPageC - 1) * KOC_PER_PAGE, kocPageC * KOC_PER_PAGE);
 
   const budget = BUDGET(r.aff_gmv);
   const cast = num(r.cast_used);
@@ -480,11 +488,11 @@ function StaffDetailPanel({ r, range }) {
                       {/* TẠM ẨN ROAS — chưa tính chính xác: <th>ROAS</th> */}
                     </tr></thead>
                     <tbody>
-                      {(onlyWarn ? kocs.filter(k => perfTag(k).warn) : kocs).slice(0, 20).map((k, i) => {
+                      {pagedKocs.map((k, i) => {
                         const a = assignOf(k.uname); const pt = perfTag(k);
                         return (
                           <tr key={k.uname}>
-                            <td style={{ ...td, padding: '9px 8px', color: '#94a3b8', fontWeight: 700 }}>{i + 1}</td>
+                            <td style={{ ...td, padding: '9px 8px', color: '#94a3b8', fontWeight: 700 }}>{(kocPageC - 1) * KOC_PER_PAGE + i + 1}</td>
                             <td style={{ ...td, padding: '9px 8px' }}><a href={`https://www.tiktok.com/@${k.uname}`} target="_blank" rel="noreferrer" style={{ color: '#475569', textDecoration: 'none', fontWeight: 600 }}>@{k.uname}</a></td>
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'right', fontWeight: 800, color: '#16a34a' }}>{fmtVnd(k.gmv)}</td>
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'right', color: '#0891b2' }}>{fmtView(k.views)}</td>
@@ -499,6 +507,15 @@ function StaffDetailPanel({ r, range }) {
                       })}
                     </tbody>
                   </table>
+                  {kocTotalPages > 1 && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 10 }}>
+                      <button onClick={() => setKocPage(p => Math.max(1, p - 1))} disabled={kocPageC <= 1}
+                        style={{ padding: '5px 12px', borderRadius: 7, border: '1px solid #e5e7eb', background: '#fff', color: kocPageC <= 1 ? '#cbd5e1' : '#475569', fontWeight: 600, fontSize: '0.78rem', cursor: kocPageC <= 1 ? 'default' : 'pointer' }}>‹ Trước</button>
+                      <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>Trang {kocPageC}/{kocTotalPages} · {filteredKocs.length} KOC</span>
+                      <button onClick={() => setKocPage(p => Math.min(kocTotalPages, p + 1))} disabled={kocPageC >= kocTotalPages}
+                        style={{ padding: '5px 12px', borderRadius: 7, border: '1px solid #e5e7eb', background: '#fff', color: kocPageC >= kocTotalPages ? '#cbd5e1' : '#475569', fontWeight: 600, fontSize: '0.78rem', cursor: kocPageC >= kocTotalPages ? 'default' : 'pointer' }}>Sau ›</button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
