@@ -433,8 +433,8 @@ function StaffDetailPanel({ r, range }) {
                     <thead><tr>
                       <th style={{ ...th, padding: '8px' }}>#</th><th style={{ ...th, padding: '8px' }}>KOC</th>
                       <th style={{ ...th, padding: '8px', textAlign: 'right' }}>GMV</th><th style={{ ...th, padding: '8px', textAlign: 'right' }}>View</th>
-                      <th style={{ ...th, padding: '8px', textAlign: 'right' }}>Video</th><th style={{ ...th, padding: '8px', textAlign: 'right' }}>CAST</th>
-                      <th style={{ ...th, padding: '8px', textAlign: 'right' }}>ROAS</th>
+                      <th style={{ ...th, padding: '8px', textAlign: 'right' }}>Video</th><th style={{ ...th, padding: '8px', textAlign: 'right' }} title="Cast trong tháng">CAST</th>
+                      {/* TẠM ẨN ROAS — chưa tính chính xác: <th>ROAS</th> */}
                     </tr></thead>
                     <tbody>
                       {kocs.slice(0, 20).map((k, i) => {
@@ -447,7 +447,7 @@ function StaffDetailPanel({ r, range }) {
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'right', color: '#0891b2' }}>{fmtView(k.views)}</td>
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'right', color: '#7c3aed', fontWeight: 700 }}>{fmt(k.videos)}</td>
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'right', color: '#ea580c' }}>{num(k.cast) > 0 ? fmtVnd(k.cast) : '—'}</td>
-                            <td style={{ ...td, padding: '9px 8px', textAlign: 'right' }}><span style={{ color: kb.color, fontWeight: 800 }}>{kb.roas === Infinity ? '∞' : kb.roas.toFixed(1) + 'x'}</span></td>
+                            {/* TẠM ẨN ROAS — chưa tính chính xác */}
                           </tr>
                         );
                       })}

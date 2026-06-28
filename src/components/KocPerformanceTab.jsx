@@ -70,7 +70,7 @@ const SALES_SORTS = [
   { key: 'vperiod',    label: 'Video kỳ' },
   { key: 'commission', label: 'Hoa hồng' },
   { key: 'cast',       label: 'Cast (chi phí)' },
-  { key: 'roas',       label: 'ROAS' },
+  // { key: 'roas',       label: 'ROAS' }, // TẠM ẨN — ROAS chưa tính chính xác
 ];
 
 // Cache kết quả koc_orders theo (shop|seller|từ|đến) trong phiên → chọn lại khoảng đã xem là ra liền.
@@ -775,8 +775,8 @@ export default function KocPerformanceTab() {
             { label: 'Tổng view', value: fmtViews(totals.views), icon: '👁', sub: fillSub, health: viewHealth, note: 'Tổng lượt xem video PHÁT SINH trong kỳ (view-tháng, KHÔNG cộng dồn lũy kế). Mỗi video mỗi tháng 1 dòng "view đẻ trong tháng đó"; chọn kỳ nào thì cộng các tháng trong kỳ. Đèn báo bên dưới cho biết data tháng đang xem còn tươi (cron sống) hay đứng.' },
             { label: 'Tổng cast', value: `${fmtVnd(totals.cast || 0)} đ`, icon: '💵' },
             { label: 'Tổng chi phí mẫu', value: `${fmtVnd(totals.sample_cost || 0)} đ`, icon: '🎁' },
-            { label: 'ROAS tổng', value: fmtRoas(roasOf(totals.gmv, totals.commission, totals.cast, totals.sample_cost)), icon: '📊' },
-          ].map(s => (
+            // { label: 'ROAS tổng', value: fmtRoas(roasOf(totals.gmv, totals.commission, totals.cast, totals.sample_cost)), icon: '📊' }, // TẠM ẨN — ROAS chưa tính chính xác
+          ].filter(Boolean).map(s => (
             <div key={s.label} style={{ position: 'relative', background: '#fff', borderRadius: 14, padding: '15px 18px', border: '1px solid #eef1f5', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ width: 28, height: 28, borderRadius: 8, background: '#fff4ec', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', flexShrink: 0 }}>{s.icon}</span>
@@ -832,7 +832,7 @@ export default function KocPerformanceTab() {
                   <th style={th}>Hoa hồng</th>
                   <th style={th}>💵 Cast</th>
                   <th style={th} title="Chi phí hàng mẫu gửi KOC trong kỳ đang chọn: cost×1.08 + 5k vận hành + ship (Thường 20k/Hỏa tốc 50k)">🎁 Chi phí mẫu</th>
-                  <th style={th} title="ROAS = GMV / (Hoa hồng + Cast + Chi phí mẫu) — doanh thu trên mỗi đồng chi phí">📊 ROAS</th>
+                  {/* TẠM ẨN ROAS — chưa tính chính xác: <th style={th}>📊 ROAS</th> */}
                   <th style={th}>Gần nhất</th>
                 </tr>
               </thead>
@@ -859,7 +859,7 @@ export default function KocPerformanceTab() {
                         <td style={td}>{fmtVnd(c.commission)} đ</td>
                         <td style={{ ...td, color: c.cast > 0 ? '#16a34a' : '#cbd5e1', fontWeight: c.cast > 0 ? 700 : 400 }}>{c.cast > 0 ? `${fmtVnd(c.cast)} đ` : '—'}</td>
                         <td style={{ ...td, color: c.sample_cost > 0 ? '#d97706' : '#cbd5e1', fontWeight: c.sample_cost > 0 ? 700 : 400 }}>{c.sample_cost > 0 ? `${fmtVnd(c.sample_cost)} đ` : '—'}</td>
-                        <td style={{ ...td, fontWeight: 800, color: roasColor(c.roas) }} title={c.roas != null ? `${fmtVnd(c.gmv)} / (${fmtVnd(c.commission)} + ${fmtVnd(c.cast)} + ${fmtVnd(c.sample_cost)})` : 'Chưa có chi phí'}>{fmtRoas(c.roas)}</td>
+                        {/* TẠM ẨN ROAS — chưa tính chính xác */}
                         <td style={{ ...td, color: '#94a3b8', fontSize: '0.78rem' }}>{fromUnix(c.last_order)}</td>
                       </tr>
                       {open && (
