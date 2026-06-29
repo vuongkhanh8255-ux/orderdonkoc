@@ -96,13 +96,16 @@ function KocClipStatus() {
         const { data, error } = await supabase.rpc('koc_clip_detail', { p_ch: ch, p_brand: brand });
         setDetail(d => ({ ...d, [key]: error ? { dons: [], clips: [] } : (data || { dons: [], clips: [] }) }));
     };
-    useEffect(() => {
-        let alive = true;
+    const [loading, setLoading] = useState(false);
+    // Tải lại MỖI lần mở panel + có nút Tải lại → không dính data cũ (lúc mở trang sớm video chưa sync xong).
+    const reload = () => {
+        setLoading(true);
         supabase.rpc('koc_clip_status').then(({ data, error }) => {
-            if (alive) setRows(error ? [] : (Array.isArray(data) ? data : []));
+            setRows(error ? [] : (Array.isArray(data) ? data : []));
+            setLoading(false);
         });
-        return () => { alive = false; };
-    }, []);
+    };
+    useEffect(() => { reload(); }, []);
     useEffect(() => { setPage(1); }, [q, tab]);
     if (!rows) return null;
     const stat = (r) => (!r.mapped ? 'unknown' : r.co_clip ? 'done' : 'pending');
@@ -122,8 +125,8 @@ function KocClipStatus() {
     );
     return (
         <div style={{ background: '#f0f9ff', border: '1.5px solid #0ea5e9', borderRadius: 12, padding: '14px 18px', marginBottom: '1.5rem' }}>
-            <div onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
-                <div style={{ fontWeight: 800, color: '#0369a1', fontSize: '1rem' }}>📋 Tình trạng lên clip KOC — đơn từ 01/06 ({cnt.all} kênh · <span style={{ color: '#16a34a' }}>{cnt.done} đã lên</span> · <span style={{ color: '#dc2626' }}>{cnt.pending} chưa</span>)</div>
+            <div onClick={() => setOpen(o => { if (!o) reload(); return !o; })} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
+                <div style={{ fontWeight: 800, color: '#0369a1', fontSize: '1rem' }}>📋 Tình trạng lên clip KOC — đơn từ 01/06 ({cnt.all} kênh · <span style={{ color: '#16a34a' }}>{cnt.done} đã lên</span> · <span style={{ color: '#dc2626' }}>{cnt.pending} chưa</span>){loading ? ' · ⏳ đang tải…' : ''}</div>
                 <span style={{ color: '#0369a1', fontWeight: 700 }}>{open ? '▲ Thu gọn' : '▼ Xem chi tiết'}</span>
             </div>
             {open && (
@@ -135,6 +138,8 @@ function KocClipStatus() {
                         {chip('unknown', `❔ Chưa rõ (${cnt.unknown})`, '#64748b')}
                         <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔎 Tìm kênh / brand / nhân sự…"
                             style={{ flex: 1, minWidth: 200, maxWidth: 320, padding: '6px 10px', borderRadius: 8, border: '1px solid #7dd3fc', fontSize: '0.85rem' }} />
+                        <button onClick={(e) => { e.stopPropagation(); reload(); }} disabled={loading}
+                            style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #0ea5e9', background: '#fff', color: '#0369a1', fontWeight: 700, fontSize: '0.82rem', cursor: loading ? 'default' : 'pointer', opacity: loading ? 0.6 : 1 }}>{loading ? '⏳ Đang tải…' : '🔄 Tải lại'}</button>
                     </div>
                     <div style={{ maxHeight: 420, overflowY: 'auto', background: '#fff', borderRadius: 8, border: '1px solid #bae6fd' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
@@ -226,13 +231,15 @@ function KocNoVideoWarnings({ email }) {
     const [open, setOpen] = useState(false);
     const [q, setQ] = useState('');
     const [busy, setBusy] = useState({});
-    useEffect(() => {
-        let alive = true;
+    const [loading, setLoading] = useState(false);
+    const reload = () => {
+        setLoading(true);
         supabase.rpc('koc_no_video_warnings').then(({ data, error }) => {
-            if (alive) setRows(error ? [] : (Array.isArray(data) ? data : []));
+            setRows(error ? [] : (Array.isArray(data) ? data : []));
+            setLoading(false);
         });
-        return () => { alive = false; };
-    }, []);
+    };
+    useEffect(() => { reload(); }, []);
     const handleGo = async (it) => {
         if (!window.confirm(`Gỡ cảnh báo cho kênh @${it.id_kenh} (brand ${it.brand})?`)) return;
         setBusy(b => ({ ...b, [it.dongui_id]: true }));
@@ -249,14 +256,18 @@ function KocNoVideoWarnings({ email }) {
     const sorted = [...filtered].sort((a, b) => (b.days_ago || 0) - (a.days_ago || 0));
     return (
         <div style={{ background: '#fff7ed', border: '1.5px solid #ea580c', borderRadius: 12, padding: '14px 18px', marginBottom: '1.5rem' }}>
-            <div onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
-                <div style={{ fontWeight: 800, color: '#c2410c', fontSize: '1rem' }}>🎬 Cảnh báo KOC chưa lên video sau 14 ngày ({rows.length})</div>
+            <div onClick={() => setOpen(o => { if (!o) reload(); return !o; })} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
+                <div style={{ fontWeight: 800, color: '#c2410c', fontSize: '1rem' }}>🎬 Cảnh báo KOC chưa lên video sau 14 ngày ({rows.length}){loading ? ' · ⏳ đang tải…' : ''}</div>
                 <span style={{ color: '#c2410c', fontWeight: 700 }}>{open ? '▲ Thu gọn' : '▼ Xem chi tiết'}</span>
             </div>
             {open && (
                 <div style={{ marginTop: 12 }}>
-                    <input value={q} onChange={e => setQ(e.target.value)} placeholder="Lọc theo kênh / brand / nhân sự…"
-                        style={{ width: '100%', maxWidth: 360, padding: '6px 10px', borderRadius: 8, border: '1px solid #fdba74', marginBottom: 10, fontSize: '0.85rem' }} />
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
+                        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Lọc theo kênh / brand / nhân sự…"
+                            style={{ flex: 1, minWidth: 200, maxWidth: 360, padding: '6px 10px', borderRadius: 8, border: '1px solid #fdba74', fontSize: '0.85rem' }} />
+                        <button onClick={(e) => { e.stopPropagation(); reload(); }} disabled={loading}
+                            style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #ea580c', background: '#fff', color: '#c2410c', fontWeight: 700, fontSize: '0.82rem', cursor: loading ? 'default' : 'pointer', opacity: loading ? 0.6 : 1 }}>{loading ? '⏳ Đang tải…' : '🔄 Tải lại'}</button>
+                    </div>
                     <div style={{ maxHeight: 340, overflowY: 'auto', background: '#fff', borderRadius: 8, border: '1px solid #fed7aa' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                             <thead>
