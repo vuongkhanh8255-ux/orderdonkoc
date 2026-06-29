@@ -191,7 +191,12 @@ const KocPaymentTab = () => {
       if (editingId) { const { error } = await supabase.from('koc_payments').update(payload).eq('id', editingId); if (error) throw error; }
       else { const { error } = await supabase.from('koc_payments').insert(payload); if (error) throw error; }
       cancel(); load();
-    } catch (e) { alert('Lỗi khi lưu: ' + (e.message || e)); }
+    } catch (e) {
+      const msg = String(e.message || e);
+      if (msg.includes('KOC_PAYMENT_INCOMPLETE')) {
+        alert('⚠️ Phải điền ĐẦY ĐỦ mới lưu được.\nCòn thiếu: ' + (msg.split('KOC_PAYMENT_INCOMPLETE|')[1] || '').split('\n')[0] + '.\n(Nếu vẫn thấy lỗi sau khi điền đủ → tải lại trang để dùng bản mới.)');
+      } else alert('Lỗi khi lưu: ' + msg);
+    }
     finally { setSaving(false); }
   };
 
@@ -298,7 +303,12 @@ const KocPaymentTab = () => {
     const patch = { [field]: next };
     if (field === 'paid') patch.paid_at = next ? new Date().toISOString() : null;
     const { error } = await supabase.from('koc_payments').update(patch).eq('id', r.id);
-    if (error) { alert('Lỗi cập nhật: ' + error.message); load(); }
+    if (error) {
+      const msg = String(error.message || '');
+      if (msg.includes('KOC_PAYMENT_INCOMPLETE')) alert('🚫 Đơn còn THIẾU: ' + (msg.split('KOC_PAYMENT_INCOMPLETE|')[1] || '').split('\n')[0] + '.\nPhải điền đủ mới duyệt được.');
+      else alert('Lỗi cập nhật: ' + msg);
+      load();
+    }
   };
   const toggleApproved = (r) => {
     if (!r.accountant_approved) {   // đang BẬT duyệt → bắt đủ thông tin
