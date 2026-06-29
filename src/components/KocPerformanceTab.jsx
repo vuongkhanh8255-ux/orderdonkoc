@@ -275,7 +275,10 @@ const HIDDEN_STAFF = ['Anh Kiệt', 'Thiệu Huy'];
 const brandOfShop = (sellerName) => {
   const s = (sellerName || '').toUpperCase();
   if (s.includes('BODY')) return 'BODYMISS';
-  if (s.includes('EHERB') && s.includes('HCM')) return 'EHERB HCM';
+  // eHerb có 2 gian RIÊNG: VN ("eHerb Viet Nam") và HCM ("eHerb Hồ Chí Minh").
+  // Tên gian HCM ghi đầy đủ "Hồ Chí Minh" chứ KHÔNG phải "HCM" → phải bắt cả 2 cách viết,
+  // không thì cả 2 gian cùng ra 'EHERB' → gán nhãn dùng chung, gán VN là HCM đổi theo (BUG).
+  if (s.includes('EHERB') && (s.includes('HCM') || s.includes('HỒ CHÍ MINH') || s.includes('HO CHI MINH'))) return 'EHERB HCM';
   if (s.includes('EHERB')) return 'EHERB';
   if (s.includes('MILAGANIC')) return 'MILAGANICS';
   if (s.includes('MOAW')) return 'MOAW MOAWS';
