@@ -523,20 +523,14 @@ export default function KocPerformanceTab() {
     setWarnMap(m);
   }, [brand, shopId]);
   useEffect(() => { reloadWarnings(); }, [reloadWarnings]);
+  // Nạp lại cảnh báo mỗi khi số liệu shop tải xong → warnMap luôn khớp DB mới nhất (chống hiện cảnh báo cũ)
+  useEffect(() => { if (data) reloadWarnings(); }, [data, reloadWarnings]);
   const refreshAssign = useCallback(() => { reloadAssignments(); reloadWarnings(); }, [reloadAssignments, reloadWarnings]);
-  // "Đã có video" lấy từ CHÍNH số liệu trang đang hiển thị (data.creators — nguồn đơn hàng, tươi như danh sách video ở trên),
-  // KHÔNG đợi bảng tiktok_shop_videos (trễ 1-2 tuần). KOC nào trang đã thấy có video kỳ HOẶC doanh số cho brand này thì không báo "0 video".
-  const activeUsers = useMemo(() => {
-    const s = new Set();
-    for (const c of (data?.creators || [])) {
-      if ((Number(c.vperiod) || 0) > 0 || (Number(c.gmv) || 0) > 0 || (Number(c.views) || 0) > 0) s.add((c.username || '').toLowerCase().replace(/^@/, ''));
-    }
-    return s;
-  }, [data]);
-  const overdueWarns = useMemo(() => Object.values(warnMap).filter(w => {
-    const u = (w.koc_id || '').toLowerCase().replace(/^@/, '');
-    return (w.video_count || 0) === 0 && !activeUsers.has(u) && w.days_since >= 45;
-  }).sort((a, b) => b.days_since - a.days_since), [warnMap, activeUsers]);
+  // video_count từ RPC koc_assignment_warnings = số clip ĐĂNG SAU ngày gán (nguồn chuẩn koc_video_unit:
+  // gộp đơn affiliate VIDEO + bảng video). 0 = chưa đăng clip MỚI nào kể từ khi gán -> cảnh báo, dù video CŨ vẫn còn view/bán.
+  const overdueWarns = useMemo(() => Object.values(warnMap)
+    .filter(w => (w.video_count || 0) === 0 && w.days_since >= 45)
+    .sort((a, b) => b.days_since - a.days_since), [warnMap]);
   const removeAssign = async (kocId) => {
     if (!confirm(`Loại định danh @${kocId} khỏi brand ${brand}? (gán ≥45 ngày mà chưa lên video)`)) return;
     // Gỡ qua RPC server (chắc ăn + ghi lịch sử) thay vì delete client (bundle cũ từng xoá hụt)
@@ -1026,8 +1020,8 @@ export default function KocPerformanceTab() {
                       {(() => {
                         if (cast) return null; // KOC đã book cast → không cảnh báo gỡ
                         const w = warnMap[uname];
+                        // video_count = clip ĐĂNG SAU ngày gán (không tính video cũ còn view/bán) -> >0 nghĩa là đã có clip mới
                         if (!w || (w.video_count || 0) > 0) return null;
-                        if ((Number(c.vperiod) || 0) > 0 || (Number(c.gmv) || 0) > 0 || (Number(c.views) || 0) > 0) return null; // trang đã thấy KOC có video/doanh số/view brand này → không báo 0 (khỏi đợi bảng video trễ)
                         if (w.days_since >= 45) return <div style={{ marginTop: 7, fontSize: '0.66rem', fontWeight: 700, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '4px 8px' }}>⚠️ {w.days_since} ngày · 0 video — cần xử lý</div>;
                         if (w.days_since >= 38) return <div style={{ marginTop: 7, fontSize: '0.66rem', fontWeight: 700, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '4px 8px' }}>⏳ sắp hết hạn — còn {45 - w.days_since} ngày, 0 video</div>;
                         return null;
