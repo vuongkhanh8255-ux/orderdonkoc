@@ -569,7 +569,8 @@ export default function KocPerformanceTab() {
     return out.sort((x, y) => new Date(y.proposed_at || 0) - new Date(x.proposed_at || 0));
   }, [assignMap, currentUser]);
   const blacklistAssigned = useMemo(() => {
-    if (currentUser?.role !== 'admin' || !blacklist.size) return [];
+    // booking + ecom được XEM (không gỡ); chỉ admin mới bấm "Duyệt gỡ".
+    if (!['admin', 'ecom', 'booking'].includes(currentUser?.role) || !blacklist.size) return [];
     return Object.entries(assignMap)
       .filter(([koc, arr]) => blacklist.has(koc) && (arr || []).some(a => a.brand_name === brand))
       .map(([koc, arr]) => ({ koc, staff_name: (arr.find(a => a.brand_name === brand) || {}).staff_name || '' }));
@@ -928,7 +929,7 @@ export default function KocPerformanceTab() {
                 </button>
                 <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>⛔ viền đỏ = KOC blacklist (không gán được)</span>
               </div>
-              {currentUser?.role === 'admin' && (pendingProposals.length > 0 || blacklistAssigned.length > 0 || overdueWarns.length > 0) && (
+              {['admin', 'ecom', 'booking'].includes(currentUser?.role) && (pendingProposals.length > 0 || blacklistAssigned.length > 0 || overdueWarnsCast.length > 0) && (
                 <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {pendingProposals.length > 0 && (
                     <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px' }}>
@@ -955,14 +956,18 @@ export default function KocPerformanceTab() {
                           <div key={'bl-' + b.koc} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.78rem', background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #fee2e2', flexWrap: 'wrap' }}>
                             <a href={`https://www.tiktok.com/@${b.koc}`} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontWeight: 700, textDecoration: 'none' }}>@{b.koc}</a>
                             <span style={{ color: '#dc2626', fontWeight: 700 }}>⛔ BLACKLIST</span><span style={{ color: '#64748b' }}>· NS: <b>{b.staff_name}</b></span>
-                            <button onClick={() => removeAssign(b.koc)} style={{ marginLeft: 'auto', padding: '5px 14px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>Duyệt gỡ</button>
+                            {currentUser?.role === 'admin'
+                              ? <button onClick={() => removeAssign(b.koc)} style={{ marginLeft: 'auto', padding: '5px 14px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>Duyệt gỡ</button>
+                              : <span style={{ marginLeft: 'auto', color: '#94a3b8', fontWeight: 600, fontSize: '0.72rem' }}>⏳ chờ admin gỡ</span>}
                           </div>
                         ))}
                         {overdueWarnsCast.map(w => (
                           <div key={'od-' + w.koc_id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.78rem', background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #fee2e2', flexWrap: 'wrap' }}>
                             <a href={`https://www.tiktok.com/@${w.koc_id}`} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontWeight: 700, textDecoration: 'none' }}>@{w.koc_id}</a>
                             <span style={{ color: '#64748b' }}>NS: <b>{w.staff_name}</b> · gán từ <b>{w.since_date ? new Date(w.since_date).toLocaleDateString('vi-VN') : '—'}</b> ({w.days_since} ngày) · 0 video</span>
-                            <button onClick={() => removeAssign(w.koc_id)} style={{ marginLeft: 'auto', padding: '5px 14px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>Duyệt gỡ</button>
+                            {currentUser?.role === 'admin'
+                              ? <button onClick={() => removeAssign(w.koc_id)} style={{ marginLeft: 'auto', padding: '5px 14px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>Duyệt gỡ</button>
+                              : <span style={{ marginLeft: 'auto', color: '#94a3b8', fontWeight: 600, fontSize: '0.72rem' }}>⏳ chờ admin gỡ</span>}
                           </div>
                         ))}
                       </div>
