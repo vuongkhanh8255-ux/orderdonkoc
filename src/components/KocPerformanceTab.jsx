@@ -529,7 +529,7 @@ export default function KocPerformanceTab() {
   const activeUsers = useMemo(() => {
     const s = new Set();
     for (const c of (data?.creators || [])) {
-      if ((Number(c.vperiod) || 0) > 0 || (Number(c.gmv) || 0) > 0) s.add((c.username || '').toLowerCase().replace(/^@/, ''));
+      if ((Number(c.vperiod) || 0) > 0 || (Number(c.gmv) || 0) > 0 || (Number(c.views) || 0) > 0) s.add((c.username || '').toLowerCase().replace(/^@/, ''));
     }
     return s;
   }, [data]);
@@ -1016,7 +1016,7 @@ export default function KocPerformanceTab() {
                         if (cast) return null; // KOC đã book cast → không cảnh báo gỡ
                         const w = warnMap[uname];
                         if (!w || (w.video_count || 0) > 0) return null;
-                        if ((Number(c.vperiod) || 0) > 0 || (Number(c.gmv) || 0) > 0) return null; // trang đã thấy KOC có video/doanh số brand này → không báo 0 (khỏi đợi bảng video trễ)
+                        if ((Number(c.vperiod) || 0) > 0 || (Number(c.gmv) || 0) > 0 || (Number(c.views) || 0) > 0) return null; // trang đã thấy KOC có video/doanh số/view brand này → không báo 0 (khỏi đợi bảng video trễ)
                         if (w.days_since >= 45) return <div style={{ marginTop: 7, fontSize: '0.66rem', fontWeight: 700, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '4px 8px' }}>⚠️ {w.days_since} ngày · 0 video — cần xử lý</div>;
                         if (w.days_since >= 38) return <div style={{ marginTop: 7, fontSize: '0.66rem', fontWeight: 700, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '4px 8px' }}>⏳ sắp hết hạn — còn {45 - w.days_since} ngày, 0 video</div>;
                         return null;
