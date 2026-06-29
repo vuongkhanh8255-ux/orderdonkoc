@@ -130,6 +130,17 @@ const KocPaymentTab = () => {
   }, []);
   useEffect(() => { loadVidMap(); }, [loadVidMap, rows]);
 
+  // CẢNH BÁO SAI BRAND: lệnh điền brand ≠ shop mà LINK thực sự bán (link là sự thật, brand điền tay sai được).
+  const [brandAudit, setBrandAudit] = useState([]);
+  const [brandBannerOpen, setBrandBannerOpen] = useState(true);
+  useEffect(() => { supabase.rpc('koc_payment_brand_audit').then(({ data }) => setBrandAudit(data || [])).catch(() => {}); }, [rows]);
+  const brandWarnMap = useMemo(() => { const m = {}; (brandAudit || []).forEach(r => { (m[r.pay_id] = m[r.pay_id] || []).push(r); }); return m; }, [brandAudit]);
+  const brandWarnByStaff = useMemo(() => {
+    const m = {}; (brandAudit || []).forEach(r => { const k = (r.staff || '').trim() || '(không ghi tên)'; (m[k] = m[k] || []).push(r); });
+    return Object.entries(m).map(([staff, list]) => ({ staff, list, lenh: new Set(list.map(x => x.pay_id)).size })).sort((a, b) => b.lenh - a.lenh);
+  }, [brandAudit]);
+  const [brandStaffOpen, setBrandStaffOpen] = useState(null); // staff đang bung chi tiết
+
   // #1 id kênh bóc từ link air · #2 video trùng (so toàn bộ koc_payments, trừ đơn đang sửa)
   const formUnames = useMemo(() => [...new Set((form.air_link || '').split('\n').map(extractUname).filter(Boolean))], [form.air_link]);
   const dupVideos = useMemo(() => {
@@ -638,6 +649,44 @@ const KocPaymentTab = () => {
         </div>
       )}
 
+      {/* Cảnh báo SAI BRAND — brand điền tay KHÁC gian mà LINK thực sự bán. Link là chuẩn (cast đã tính đúng theo gian của link), chỉ cần sửa lại ô brand cho khớp. */}
+      {brandAudit.length > 0 && (
+        <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, padding: '12px 16px', marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <div style={{ fontWeight: 800, color: '#c2410c', fontSize: '0.9rem' }}>⚠️ {new Set(brandAudit.map(r => r.pay_id)).size} lệnh điền SAI BRAND — brand điền tay khác gian mà <b>LINK</b> thực sự bán <span style={{ fontWeight: 600, color: '#9a3412' }}>(cast vẫn tính ĐÚNG theo gian của link · chỉ cần sửa lại ô brand cho khớp)</span></div>
+            <button onClick={() => setBrandBannerOpen(o => !o)} style={{ flexShrink: 0, padding: '4px 12px', borderRadius: 8, border: '1px solid #fed7aa', background: '#fff', color: '#c2410c', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}>{brandBannerOpen ? '▲ Thu gọn' : `▼ Mở (${brandWarnByStaff.length} người)`}</button>
+          </div>
+          {brandBannerOpen && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+              {brandWarnByStaff.map(g => (
+                <span key={g.staff} onClick={() => setBrandStaffOpen(brandStaffOpen === g.staff ? null : g.staff)} title="Bấm xem chi tiết các lệnh"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: brandStaffOpen === g.staff ? '#c2410c' : '#fff', border: '1px solid #fed7aa', borderRadius: 20, padding: '4px 12px', fontSize: '0.78rem', fontWeight: 700, color: brandStaffOpen === g.staff ? '#fff' : '#9a3412', cursor: 'pointer' }}>
+                  {g.staff} · {g.lenh} lệnh
+                </span>
+              ))}
+            </div>
+          )}
+          {brandBannerOpen && brandStaffOpen && (() => {
+            const g = brandWarnByStaff.find(x => x.staff === brandStaffOpen); if (!g) return null;
+            return (
+              <div style={{ marginTop: 10, background: '#fff', border: '1px solid #fed7aa', borderRadius: 10, padding: '10px 14px' }}>
+                <div style={{ fontWeight: 800, color: '#c2410c', fontSize: '0.84rem', marginBottom: 6 }}>👤 {g.staff} — {g.list.length} link gắn sai gian:</div>
+                {g.list.map((a, i) => (
+                  <div key={a.pay_id + a.video_id} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '7px 0', borderTop: i ? '1px solid #f1f5f9' : 'none', fontSize: '0.82rem' }}>
+                    <span style={{ fontWeight: 700, color: '#0f172a' }}>{i + 1}. {a.full_name || '—'}</span>
+                    <span style={{ color: '#64748b' }}>{fmtDate(a.pay_date)}</span>
+                    <span><span style={{ color: '#dc2626', fontWeight: 700, textDecoration: 'line-through' }}>{a.brand_typed || '(trống)'}</span> <span style={{ color: '#94a3b8' }}>→ link bán ở</span> <b style={{ color: '#16a34a' }}>{a.link_shop}</b></span>
+                    <a href={`https://www.tiktok.com/search?q=${a.video_id}`} target="_blank" rel="noreferrer" style={{ color: '#7c3aed', textDecoration: 'none', fontWeight: 600 }}>🎬 …{String(a.video_id).slice(-6)}</a>
+                    <button onClick={() => { const row = rows.find(r => r.id === a.pay_id); if (row) startEdit(row); else alert('Đơn này ở THÁNG KHÁC. Đổi bộ lọc tháng về "Tất cả" rồi bấm lại để mở/sửa.'); }}
+                      style={{ marginLeft: 'auto', padding: '4px 12px', borderRadius: 7, border: '1px solid #e2e8f0', background: '#f8fafc', color: ACCENT, fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>✏️ Sửa brand</button>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
       {/* Thao tác hàng loạt — hiện khi đã chọn dòng */}
       {selected.size > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '10px 16px', marginBottom: 14 }}>
@@ -672,7 +721,7 @@ const KocPaymentTab = () => {
                     <td style={td}>{fmtDate(r.pay_date)}</td>
                     <td style={td}>{r.staff || '—'}</td>
                     <td style={td}><span style={{ fontSize: '0.72rem', fontWeight: 700, color: r.company === 'OPTIMAX' ? '#7c3aed' : '#0891b2' }}>{r.company || '—'}</span></td>
-                    <td style={td}>{r.brand || '—'}</td>
+                    <td style={td}>{(() => { const w = brandWarnMap[r.id]; if (!w) return r.brand || '—'; const shops = [...new Set(w.map(x => x.link_shop))].join(', '); return <span title={`⚠️ Điền brand "${r.brand || '(trống)'}" nhưng link bán ở: ${shops}. Sửa lại brand cho khớp (cast đã tính đúng theo link).`} style={{ color: '#c2410c', fontWeight: 700, cursor: 'help' }}>⚠️ {r.brand || '—'}</span>; })()}</td>
                     <td style={td}>{(() => { const u = extractUname(r.channel_link) || extractUname(r.air_link); return u ? <a href={`https://www.tiktok.com/@${u}`} target="_blank" rel="noreferrer" style={{ color: '#0891b2', textDecoration: 'none', fontWeight: 600 }}>@{u}</a> : '—'; })()}</td>
                     <td style={{ ...td, fontWeight: 600 }} title={r.beneficiary || ''}>{(() => { const m = missingFields(r); if (!m.length) return null; return r.paid ? <span title={'🟡 Đã thanh toán — còn thiếu (không bắt buộc): ' + m.join(', ')} style={{ color: '#d97706', marginRight: 4, cursor: 'help' }}>🟡</span> : <span title={'⚠️ THIẾU: ' + m.join(', ')} style={{ color: '#dc2626', marginRight: 4, cursor: 'help' }}>⚠️</span>; })()}{r.full_name || r.beneficiary || '—'}</td>
                     <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.78rem' }}>{r.cccd || '—'}</td>
