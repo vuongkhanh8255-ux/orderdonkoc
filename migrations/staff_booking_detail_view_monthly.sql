@@ -10,9 +10,12 @@ as $function$
   with rng as (select p_from::timestamptz as ts0, (p_to + 1)::timestamptz as ts1, p_from as d0, p_to as d1),
   months as (select to_char(gs,'YYYY-MM') ym
     from rng, generate_series(date_trunc('month', rng.d0), date_trunc('month', rng.d1), interval '1 month') gs),
+  -- eHerb + eHerb HCM TÍNH CHUNG: cả 2 brand map sang CẢ 2 shop (sa distinct nên ko đếm đôi).
   brand_map(brand_name, shop_id) as (values
-    ('BODYMISS','7495107349171898427'), ('EHERB','7494529979361168222'),
-    ('EHERB HCM','7495838925500090511'), ('MILAGANICS','7494813818973817115'),
+    ('BODYMISS','7495107349171898427'),
+    ('EHERB','7494529979361168222'), ('EHERB','7495838925500090511'),
+    ('EHERB HCM','7494529979361168222'), ('EHERB HCM','7495838925500090511'),
+    ('MILAGANICS','7494813818973817115'),
     ('MOAW MOAWS','7495831977917385095'), ('HEALMI','7494251668499498533')),
   sa as (select distinct lower(regexp_replace(a.koc_id,'^@','')) as uname, bm.shop_id
     from koc_brand_assignments a join nhansu n on lower(trim(n.ten_nhansu))=lower(trim(a.staff_name))
