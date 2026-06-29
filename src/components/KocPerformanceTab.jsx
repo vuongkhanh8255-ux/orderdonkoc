@@ -524,8 +524,19 @@ export default function KocPerformanceTab() {
   }, [brand, shopId]);
   useEffect(() => { reloadWarnings(); }, [reloadWarnings]);
   const refreshAssign = useCallback(() => { reloadAssignments(); reloadWarnings(); }, [reloadAssignments, reloadWarnings]);
-  // 60 ngày (không phải 45): video/đơn affiliate vào DB trễ ~1-2 tuần, chờ đủ lâu mới dám kết luận "0 video" để khỏi báo nhầm KOC đã đăng
-  const overdueWarns = useMemo(() => Object.values(warnMap).filter(w => (w.video_count || 0) === 0 && w.days_since >= 60).sort((a, b) => b.days_since - a.days_since), [warnMap]);
+  // "Đã có video" lấy từ CHÍNH số liệu trang đang hiển thị (data.creators — nguồn đơn hàng, tươi như danh sách video ở trên),
+  // KHÔNG đợi bảng tiktok_shop_videos (trễ 1-2 tuần). KOC nào trang đã thấy có video kỳ HOẶC doanh số cho brand này thì không báo "0 video".
+  const activeUsers = useMemo(() => {
+    const s = new Set();
+    for (const c of (data?.creators || [])) {
+      if ((Number(c.vperiod) || 0) > 0 || (Number(c.gmv) || 0) > 0) s.add((c.username || '').toLowerCase().replace(/^@/, ''));
+    }
+    return s;
+  }, [data]);
+  const overdueWarns = useMemo(() => Object.values(warnMap).filter(w => {
+    const u = (w.koc_id || '').toLowerCase().replace(/^@/, '');
+    return (w.video_count || 0) === 0 && !activeUsers.has(u) && w.days_since >= 45;
+  }).sort((a, b) => b.days_since - a.days_since), [warnMap, activeUsers]);
   const removeAssign = async (kocId) => {
     if (!confirm(`Loại định danh @${kocId} khỏi brand ${brand}? (gán ≥45 ngày mà chưa lên video)`)) return;
     await supabase.from(ASSIGN_TABLE).delete().eq('koc_id', kocId).eq('brand_name', brand);
@@ -1005,8 +1016,9 @@ export default function KocPerformanceTab() {
                         if (cast) return null; // KOC đã book cast → không cảnh báo gỡ
                         const w = warnMap[uname];
                         if (!w || (w.video_count || 0) > 0) return null;
-                        if (w.days_since >= 60) return <div style={{ marginTop: 7, fontSize: '0.66rem', fontWeight: 700, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '4px 8px' }}>⚠️ {w.days_since} ngày · 0 video — cần xử lý</div>;
-                        if (w.days_since >= 50) return <div style={{ marginTop: 7, fontSize: '0.66rem', fontWeight: 700, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '4px 8px' }}>⏳ sắp hết hạn — còn {60 - w.days_since} ngày, 0 video</div>;
+                        if ((Number(c.vperiod) || 0) > 0 || (Number(c.gmv) || 0) > 0) return null; // trang đã thấy KOC có video/doanh số brand này → không báo 0 (khỏi đợi bảng video trễ)
+                        if (w.days_since >= 45) return <div style={{ marginTop: 7, fontSize: '0.66rem', fontWeight: 700, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '4px 8px' }}>⚠️ {w.days_since} ngày · 0 video — cần xử lý</div>;
+                        if (w.days_since >= 38) return <div style={{ marginTop: 7, fontSize: '0.66rem', fontWeight: 700, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '4px 8px' }}>⏳ sắp hết hạn — còn {45 - w.days_since} ngày, 0 video</div>;
                         return null;
                       })()}
                     </div>
