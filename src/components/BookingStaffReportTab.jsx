@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, ScatterChart, Scatter, ZAxis, Cell, LabelList } from 'recharts';
 import { supabase } from '../supabaseClient';
-import { budgetRemainingByStaff } from '../lib/bookingBudget';
+import { budgetRemainingByStaff, BUDGET_START } from '../lib/bookingBudget';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const num = (n) => Number(n || 0);
@@ -54,9 +54,10 @@ const labelStyle = { fontSize: '0.66rem', fontWeight: 800, color: '#94a3b8', tex
 const PRESETS = [{ label: 'Hôm qua', days: 1, single: true }, { label: '7 ngày', days: 7 }, { label: '30 ngày', days: 30 }, { label: '90 ngày', days: 90 }];
 
 function BookingStaffReportTab() {
+  // Lọc theo THÁNG (khớp module Tạm đối chiếu) — mặc định tháng hiện tại.
   const [range, setRange] = useState(() => {
-    const end = new Date(); const start = new Date(); start.setDate(start.getDate() - 30);
-    return { start: toYmd(start), end: toYmd(end) };
+    const d = new Date();
+    return { start: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`, end: toYmd(d) };
   });
   const [rows, setRows] = useState([]);
   const [prevRows, setPrevRows] = useState([]);
@@ -74,10 +75,20 @@ function BookingStaffReportTab() {
     return () => { alive = false; };
   }, [range.end]);
 
-  const setQuick = (p) => {
-    if (p.single) { const d = new Date(); d.setDate(d.getDate() - p.days); setRange({ start: toYmd(d), end: toYmd(d) }); }
-    else { const end = new Date(); const start = new Date(); start.setDate(start.getDate() - p.days); setRange({ start: toYmd(start), end: toYmd(end) }); }
+  // Danh sách THÁNG (từ T3/2026 → nay) + chọn 1 tháng = lọc trọn tháng đó (khớp Tạm đối chiếu).
+  const MONTHS = useMemo(() => {
+    const out = []; let y = BUDGET_START.y, m = BUDGET_START.m;
+    const now = new Date(); const ey = now.getFullYear(), em = now.getMonth() + 1;
+    while (y < ey || (y === ey && m <= em)) { out.push({ ym: `${y}-${String(m).padStart(2, '0')}`, label: `T${m}` }); m++; if (m > 12) { m = 1; y++; } }
+    return out;
+  }, []);
+  const pickMonth = (ym) => {
+    const [y, m] = ym.split('-').map(Number);
+    const last = new Date(y, m, 0).getDate(); const today = toYmd(new Date());
+    let end = `${ym}-${String(last).padStart(2, '0')}`; if (end > today) end = today;
+    setRange({ start: `${ym}-01`, end });
   };
+  const curYm = String(range.end).slice(0, 7);
 
   const load = useCallback(async () => {
     setLoading(true); setErr(''); setPrevRows([]);
@@ -113,15 +124,19 @@ function BookingStaffReportTab() {
   const budgetTot = useMemo(() => filtered.reduce((a, r) => {
     const b = budgetByStaff[r.ten_nhansu]; return { conLai: a.conLai + (b?.conLai || 0), dmThuc: a.dmThuc + (b?.dmThuc || 0) };
   }, { conLai: 0, dmThuc: 0 }), [filtered, budgetByStaff]);
+  // CAST đã xài THEO THÁNG AIR (hàm chung) — để mọi số cast khớp Tạm đối chiếu (ko dùng cast theo pay_date nữa).
+  const castTot = useMemo(() => filtered.reduce((a, r) => a + (budgetByStaff[r.ten_nhansu]?.xai || 0), 0), [filtered, budgetByStaff]);
   const delta = (cur, prev) => prev > 0 ? ((cur - prev) / prev * 100) : (cur > 0 ? 100 : 0);
 
   const resetFilters = () => { setSelStaff(''); setFProduct(''); };
   const exportExcel = async () => {
     const XLSX = await import('xlsx').then(m => m.default || m);
     const aoa = [['Nhân sự', 'Đơn gửi', 'Mẫu', 'Chi phí mẫu', 'TS/ngày', 'SP chính', 'KOC gắn', 'Video', 'View', 'GMV', 'CAST dùng', 'CAST còn lại', 'ROAS', 'Hiệu suất']];
-    filtered.forEach(r => { const b = perfBadge(r.aff_gmv, r.cast_used);
-      const remain = budgetByStaff[r.ten_nhansu]?.conLai ?? (BUDGET(r.aff_gmv) - num(r.cast_used));
-      aoa.push([r.ten_nhansu, r.so_don, r.so_mau, Math.round(r.chi_phi_mau), r.tan_suat, r.top_product || '', r.koc_count, r.aff_videos, r.aff_views, Math.round(r.aff_gmv), Math.round(r.cast_used), Math.round(remain), b.roas === Infinity ? '∞' : b.roas.toFixed(1), b.label]); });
+    filtered.forEach(r => { const bg = budgetByStaff[r.ten_nhansu];
+      const castM = bg ? bg.xai : num(r.cast_used);
+      const remain = bg ? bg.conLai : (BUDGET(r.aff_gmv) - num(r.cast_used));
+      const bd2 = perfBadge(r.aff_gmv, castM);
+      aoa.push([r.ten_nhansu, r.so_don, r.so_mau, Math.round(r.chi_phi_mau), r.tan_suat, r.top_product || '', r.koc_count, r.aff_videos, r.aff_views, Math.round(r.aff_gmv), Math.round(castM), Math.round(remain), bd2.roas === Infinity ? '∞' : bd2.roas.toFixed(1), bd2.label]); });
     const ws = XLSX.utils.aoa_to_sheet(aoa); const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'BaoCaoNhanSu'); XLSX.writeFile(wb, `bao-cao-nhan-su-${range.start}_${range.end}.xlsx`);
   };
@@ -130,10 +145,10 @@ function BookingStaffReportTab() {
     { label: 'Tổng đơn gửi', val: fmt(T.don), d: delta(T.don, P.don), sub: `${fmt(T.mau)} mẫu`, icon: '📦', color: '#f97316' },
     { label: 'Chi phí mẫu', val: fmtVnd(T.chiphi) + ' đ', d: delta(T.chiphi, P.chiphi), sub: `${T.mau > 0 ? fmtVnd(T.chiphi / T.mau) : 0}/mẫu`, icon: '🧾', color: '#e11d48' },
     { label: 'KOC đã gắn', val: fmt(T.koc), d: delta(T.koc, P.koc), sub: `${rows.length} nhân sự`, icon: '🏷️', color: '#9333ea' },
-    { label: 'GMV (KOC gắn)', val: fmtVnd(T.gmv) + ' đ', d: delta(T.gmv, P.gmv), sub: `ROAS ${T.cast > 0 ? (T.gmv / T.cast).toFixed(1) : '∞'}x`, icon: '💰', color: '#16a34a' },
+    { label: 'GMV (KOC gắn)', val: fmtVnd(T.gmv) + ' đ', d: delta(T.gmv, P.gmv), sub: `ROAS ${castTot > 0 ? (T.gmv / castTot).toFixed(1) : '∞'}x`, icon: '💰', color: '#16a34a' },
     { label: 'Video', val: fmt(T.video), d: delta(T.video, P.video), sub: `${fmtView(T.view)} view`, icon: '🎬', color: '#7c3aed' },
     { label: 'View', val: fmtView(T.view), d: delta(T.view, P.view), sub: `${T.video > 0 ? fmtView(T.view / T.video) : 0}/video`, icon: '👁️', color: '#0891b2' },
-    { label: 'CAST đã dùng', val: fmtVnd(T.cast) + ' đ', d: delta(T.cast, P.cast), sub: `${budgetTot.dmThuc > 0 ? (T.cast / budgetTot.dmThuc * 100).toFixed(0) : 0}% ngân sách`, icon: '🔥', color: '#ea580c' },
+    { label: 'CAST đã dùng', val: fmtVnd(castTot) + ' đ', d: null, sub: `${budgetTot.dmThuc > 0 ? (castTot / budgetTot.dmThuc * 100).toFixed(0) : 0}% ngân sách`, icon: '🔥', color: '#ea580c' },
     { label: 'Ngân sách còn lại', val: fmtVnd(budgetTot.conLai) + ' đ', d: null, sub: `ĐM thực ${fmtVnd(budgetTot.dmThuc)} · khớp Tạm đối chiếu`, icon: '💵', color: '#0ea5e9' },
   ];
 
@@ -157,15 +172,12 @@ function BookingStaffReportTab() {
         </div>
         <div style={{ width: 1, height: 38, background: '#e5e7eb', alignSelf: 'center' }} />
         <div>
-          <div style={labelStyle}>Khung thời gian</div>
-          <div style={{ display: 'flex', gap: 0, background: '#f1f5f9', borderRadius: 8, padding: 3 }}>
-            {PRESETS.map(p => {
-              let eS, eE;
-              if (p.single) { const d = new Date(); d.setDate(d.getDate() - p.days); eS = toYmd(d); eE = toYmd(d); }
-              else { eE = toYmd(new Date()); const s = new Date(); s.setDate(s.getDate() - p.days); eS = toYmd(s); }
-              const active = range.start === eS && range.end === eE;
+          <div style={labelStyle}>Tháng (khớp Tạm đối chiếu)</div>
+          <div style={{ display: 'flex', gap: 0, background: '#f1f5f9', borderRadius: 8, padding: 3, flexWrap: 'wrap' }}>
+            {MONTHS.map(mo => {
+              const active = curYm === mo.ym && range.start === `${mo.ym}-01`;
               return (
-                <button key={p.label} onClick={() => setQuick(p)} style={{ padding: '6px 14px', borderRadius: 6, fontSize: '0.76rem', fontWeight: 700, border: 'none', background: active ? 'linear-gradient(135deg,#ff8a4c,#ff6a2c)' : 'transparent', color: active ? '#fff' : '#64748b', cursor: 'pointer', boxShadow: active ? '0 4px 12px rgba(255,106,44,0.4)' : 'none' }}>{p.label}</button>
+                <button key={mo.ym} onClick={() => pickMonth(mo.ym)} style={{ padding: '6px 14px', borderRadius: 6, fontSize: '0.76rem', fontWeight: 700, border: 'none', background: active ? 'linear-gradient(135deg,#ff8a4c,#ff6a2c)' : 'transparent', color: active ? '#fff' : '#64748b', cursor: 'pointer', boxShadow: active ? '0 4px 12px rgba(255,106,44,0.4)' : 'none' }}>{mo.label}</button>
               );
             })}
           </div>
@@ -248,7 +260,7 @@ function BookingStaffReportTab() {
                     <td style={{ ...td, textAlign: 'right', color: '#7c3aed', fontWeight: 700 }}>{fmt(r.aff_videos)}</td>
                     <td style={{ ...td, textAlign: 'right', color: '#0891b2' }}>{fmtView(r.aff_views)}</td>
                     <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: '#16a34a' }}>{fmtVnd(r.aff_gmv)}</td>
-                    <td style={{ ...td, textAlign: 'right', color: '#ea580c', fontWeight: 700 }}>{fmtVnd(r.cast_used)}</td>
+                    <td style={{ ...td, textAlign: 'right', color: '#ea580c', fontWeight: 700 }}>{fmtVnd(bg ? bg.xai : num(r.cast_used))}</td>
                     <td style={{ ...td, textAlign: 'right', color: remain < 0 ? '#dc2626' : '#0ea5e9', fontWeight: 700 }}
                         title={bg ? `Ngân sách còn lại tháng ${String(range.end).slice(5, 7)} (khớp 'Tạm đối chiếu'): ĐM thực ${fmtVnd(bg.dmThuc)}${bg.extra > 0 ? ' (gồm cộng tay ' + fmtVnd(bg.extra) + ')' : ''} − đã chi ${fmtVnd(bg.xai)}` : ''}>{fmtVnd(remain)}</td>
                   </tr>
@@ -260,7 +272,7 @@ function BookingStaffReportTab() {
       </div>
       <p style={{ color: '#94a3b8', fontSize: '0.76rem', marginTop: 10 }}>* Chi phí mẫu = cost (cột AMIS V2) ×1.08×SL + 5k + ship (giống Module 1). CAST đã dùng = koc_payments. Ngân sách = max(15tr, GMV×2.2%). Chi tiết hiện bên dưới — bấm dòng khác để đổi nhân sự.</p>
 
-      {selectedRow && <StaffDetailPanel r={selectedRow} range={range} />}
+      {selectedRow && <StaffDetailPanel r={selectedRow} range={range} bg={budgetByStaff[selectedRow.ten_nhansu]} />}
     </div>
   );
 }
@@ -291,7 +303,7 @@ const Mini = ({ label, val, color = '#475569', icon }) => (
 );
 
 // ── Panel chi tiết nhân sự (hiện INLINE bên dưới bảng) ─────────────────────────
-function StaffDetailPanel({ r, range }) {
+function StaffDetailPanel({ r, range, bg }) {
   const [det, setDet] = useState(null);
   const [loadingDet, setLoadingDet] = useState(true);
   const [sendMetric, setSendMetric] = useState('mau');   // tần suất gửi: don | mau
@@ -345,10 +357,11 @@ function StaffDetailPanel({ r, range }) {
   const kocPageC = Math.min(kocPage, kocTotalPages);
   const pagedKocs = filteredKocs.slice((kocPageC - 1) * KOC_PER_PAGE, kocPageC * KOC_PER_PAGE);
 
-  const budget = BUDGET(r.aff_gmv);
-  const cast = num(r.cast_used);
-  const remain = budget - cast;
-  const b = perfBadge(r.aff_gmv, r.cast_used);
+  // Ngân sách + cast THEO HÀM CHUNG (carryover + cộng tay, cast theo tháng air) → khớp Tạm đối chiếu.
+  const budget = bg ? bg.dmThuc : BUDGET(r.aff_gmv);
+  const cast = bg ? bg.xai : num(r.cast_used);
+  const remain = bg ? bg.conLai : (budget - cast);
+  const b = perfBadge(r.aff_gmv, cast);
   const len = rangeLen(range.start, range.end);
   const burn = len > 0 ? cast / len : 0;
   const avgKoc = num(r.koc_count) > 0 ? cast / num(r.koc_count) : 0;
