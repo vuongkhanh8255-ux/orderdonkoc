@@ -524,7 +524,8 @@ export default function KocPerformanceTab() {
   }, [brand, shopId]);
   useEffect(() => { reloadWarnings(); }, [reloadWarnings]);
   const refreshAssign = useCallback(() => { reloadAssignments(); reloadWarnings(); }, [reloadAssignments, reloadWarnings]);
-  const overdueWarns = useMemo(() => Object.values(warnMap).filter(w => (w.video_count || 0) === 0 && w.days_since >= 45).sort((a, b) => b.days_since - a.days_since), [warnMap]);
+  // 60 ngày (không phải 45): video/đơn affiliate vào DB trễ ~1-2 tuần, chờ đủ lâu mới dám kết luận "0 video" để khỏi báo nhầm KOC đã đăng
+  const overdueWarns = useMemo(() => Object.values(warnMap).filter(w => (w.video_count || 0) === 0 && w.days_since >= 60).sort((a, b) => b.days_since - a.days_since), [warnMap]);
   const removeAssign = async (kocId) => {
     if (!confirm(`Loại định danh @${kocId} khỏi brand ${brand}? (gán ≥45 ngày mà chưa lên video)`)) return;
     await supabase.from(ASSIGN_TABLE).delete().eq('koc_id', kocId).eq('brand_name', brand);
@@ -1004,8 +1005,8 @@ export default function KocPerformanceTab() {
                         if (cast) return null; // KOC đã book cast → không cảnh báo gỡ
                         const w = warnMap[uname];
                         if (!w || (w.video_count || 0) > 0) return null;
-                        if (w.days_since >= 45) return <div style={{ marginTop: 7, fontSize: '0.66rem', fontWeight: 700, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '4px 8px' }}>⚠️ {w.days_since} ngày · 0 video — cần xử lý</div>;
-                        if (w.days_since >= 38) return <div style={{ marginTop: 7, fontSize: '0.66rem', fontWeight: 700, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '4px 8px' }}>⏳ sắp hết hạn — còn {45 - w.days_since} ngày, 0 video</div>;
+                        if (w.days_since >= 60) return <div style={{ marginTop: 7, fontSize: '0.66rem', fontWeight: 700, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '4px 8px' }}>⚠️ {w.days_since} ngày · 0 video — cần xử lý</div>;
+                        if (w.days_since >= 50) return <div style={{ marginTop: 7, fontSize: '0.66rem', fontWeight: 700, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '4px 8px' }}>⏳ sắp hết hạn — còn {60 - w.days_since} ngày, 0 video</div>;
                         return null;
                       })()}
                     </div>
