@@ -16,7 +16,8 @@ as $function$
     ('EHERB','7494529979361168222'), ('EHERB','7495838925500090511'),
     ('EHERB HCM','7494529979361168222'), ('EHERB HCM','7495838925500090511'),
     ('MILAGANICS','7494813818973817115'),
-    ('MOAW MOAWS','7495831977917385095'), ('HEALMI','7494251668499498533')),
+    ('MOAW MOAWS','7495831977917385095'),
+    ('HEALMII','7494251668499498533'), ('HEALMI','7494251668499498533')),
   sa as (select distinct lower(regexp_replace(a.koc_id,'^@','')) as uname, bm.shop_id
     from koc_brand_assignments a join nhansu n on lower(trim(n.ten_nhansu))=lower(trim(a.staff_name))
     left join brand_map bm on bm.brand_name=a.brand_name

@@ -16,7 +16,9 @@ as $function$
     ('EHERB','7494529979361168222'), ('EHERB','7495838925500090511'),
     ('EHERB HCM','7494529979361168222'), ('EHERB HCM','7495838925500090511'),
     ('MILAGANICS','7494813818973817115'),
-    ('MOAW MOAWS','7495831977917385095'), ('HEALMI','7494251668499498533')),
+    ('MOAW MOAWS','7495831977917385095'),
+    -- assignment ghi 'HEALMII' (2 chữ I) — phải khớp đúng, kẻo 14 KOC Healmii sót GMV. Giữ cả 'HEALMI' phòng hờ.
+    ('HEALMII','7494251668499498533'), ('HEALMI','7494251668499498533')),
   latest_col as materialized (
     select h as col from costing_data, jsonb_array_elements_text(headers) h
     where h like 'COSTING T% AMIS V2'
