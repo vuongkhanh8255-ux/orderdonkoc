@@ -43,6 +43,22 @@ const curYm = () => todayYmd().slice(0, 7);
 const monthRange = (ym) => { const [y, m] = ym.split('-').map(Number); const start = `${ym}-01`; const end = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`; return { start, end }; };
 const fmtDate = (s) => { if (!s) return ''; const p = String(s).slice(0, 10).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : s; };
 
+// Mục BẮT BUỘC. Hợp đồng chỉ bắt khi cast ≥ 2tr (dưới 2tr không cần). Trả mảng tên mục còn thiếu.
+const CONTRACT_REQUIRED_FROM = 2_000_000;
+const has = (v) => v != null && String(v).trim() !== '';
+const missingFields = (r) => {
+  const m = [];
+  if (!has(r.full_name) && !has(r.beneficiary)) m.push('Họ tên');
+  if (!has(r.bank_account)) m.push('STK');
+  if (!has(r.bank_name)) m.push('Ngân hàng');
+  if (!has(r.air_link)) m.push('Link air');
+  if (!has(r.cccd)) m.push('CCCD');
+  if (!has(r.cccd_image)) m.push('Ảnh CCCD');
+  if (!has(r.contract_link)) m.push('Tin nhắn');
+  if (num(r.cast_net) >= CONTRACT_REQUIRED_FROM && !has(r.contract_file)) m.push('Hợp đồng');
+  return m;
+};
+
 const EMPTY = {
   pay_date: todayYmd(), staff: '', company: 'STELLA', brand: '', channel_link: '',
   cast_net: 0, pit: 0, total: 0, bank_account: '', bank_name: '', beneficiary: '',
@@ -153,6 +169,9 @@ const KocPaymentTab = () => {
     if (!form.brand || !form.brand.trim()) miss.push('Brand');
     if (!form.staff || !form.staff.trim()) miss.push('Nhân sự booking');
     if (!form.company || !form.company.trim()) miss.push('Công ty');
+    if (!has(form.cccd_image)) miss.push('Ảnh CCCD');
+    if (!has(form.contract_link)) miss.push('Tin nhắn (ảnh)');
+    if (num(form.cast_net) >= CONTRACT_REQUIRED_FROM && !has(form.contract_file)) miss.push('Hợp đồng (cast ≥ 2tr)');
     if (miss.length) { alert('⚠️ Phải điền ĐẦY ĐỦ mới lưu được.\nCòn thiếu: ' + miss.join(', ') + '.'); return; }
     const mstDigits = (form.tax_code || '').replace(/\D/g, '');
     const isBiz = mstDigits.length === 10 || mstDigits.length === 13; // MST công ty/HKD: 10 hoặc 13 số
@@ -281,7 +300,13 @@ const KocPaymentTab = () => {
     const { error } = await supabase.from('koc_payments').update(patch).eq('id', r.id);
     if (error) { alert('Lỗi cập nhật: ' + error.message); load(); }
   };
-  const toggleApproved = (r) => { if (!ensurePw()) return; setField(r, 'accountant_approved', !r.accountant_approved); };
+  const toggleApproved = (r) => {
+    if (!r.accountant_approved) {   // đang BẬT duyệt → bắt đủ thông tin
+      const m = missingFields(r);
+      if (m.length) { alert(`🚫 Chưa đủ thông tin — đơn "${r.full_name || r.beneficiary || ''}" còn THIẾU: ${m.join(', ')}.\nSửa đơn điền đủ rồi mới duyệt được.`); return; }
+    }
+    if (!ensurePw()) return; setField(r, 'accountant_approved', !r.accountant_approved);
+  };
   const togglePaid     = (r) => { if (!ensurePw()) return; setField(r, 'paid', !r.paid); };
 
   // ── Chọn hàng loạt + thao tác hàng loạt (cũng cần mật khẩu) ──
@@ -289,8 +314,12 @@ const KocPaymentTab = () => {
   const clearSel = () => setSelected(new Set());
   const bulkSet = async (field, value) => {
     if (!selected.size) { alert('Chưa chọn dòng nào.'); return; }
-    if (!ensurePw()) return;
     const ids = [...selected];
+    if (field === 'accountant_approved' && value) {   // duyệt hàng loạt → chặn đơn thiếu thông tin
+      const bad = rows.filter(x => ids.includes(x.id) && missingFields(x).length);
+      if (bad.length) { alert(`🚫 ${bad.length}/${ids.length} đơn đang chọn còn THIẾU thông tin → không duyệt được.\n` + bad.slice(0, 4).map(x => `• ${x.full_name || x.beneficiary || '?'}: ${missingFields(x).join(', ')}`).join('\n') + (bad.length > 4 ? '\n…' : '')); return; }
+    }
+    if (!ensurePw()) return;
     const extra = field === 'paid' ? { paid_at: value ? new Date().toISOString() : null } : {};
     setRows(prev => prev.map(x => ids.includes(x.id) ? { ...x, [field]: value, ...extra } : x));
     const { error } = await supabase.from('koc_payments').update({ [field]: value, ...extra }).in('id', ids);
@@ -526,6 +555,25 @@ const KocPaymentTab = () => {
         ))}
       </div>
 
+      {/* Cảnh báo THIẾU THÔNG TIN — phải điền đủ mới duyệt được (Ảnh CCCD · Tin nhắn · cast≥2tr cần Hợp đồng) */}
+      {(() => {
+        const bad = filtered.filter(r => missingFields(r).length);
+        if (!bad.length) return null;
+        return (
+          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, padding: '12px 16px', marginBottom: 14 }}>
+            <div style={{ fontWeight: 800, color: '#b91c1c', fontSize: '0.9rem', marginBottom: 8 }}>⚠️ {bad.length} đơn THIẾU thông tin — chưa đủ để duyệt. Bấm tên để mở sửa.</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, maxHeight: 120, overflowY: 'auto' }}>
+              {bad.slice(0, 60).map(r => (
+                <span key={r.id} onClick={() => startEdit(r)} title="Bấm để sửa đơn này" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #fecaca', borderRadius: 20, padding: '4px 12px', fontSize: '0.76rem', fontWeight: 700, color: '#b91c1c', cursor: 'pointer' }}>
+                  {r.full_name || r.beneficiary || '?'} <span style={{ fontWeight: 500, color: '#ef4444' }}>· thiếu {missingFields(r).join(', ')}</span>
+                </span>
+              ))}
+              {bad.length > 60 && <span style={{ fontSize: '0.76rem', color: '#94a3b8', alignSelf: 'center' }}>… +{bad.length - 60} đơn nữa</span>}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Cảnh báo PIT — người có tổng ≥ 2tr trong kỳ mà chưa khấu trừ thuế TNCN */}
       {pitAlerts.length > 0 && (
         <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '12px 16px', marginBottom: 14 }}>
@@ -607,14 +655,14 @@ const KocPaymentTab = () => {
               {loading ? (<tr><td colSpan={18} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải…</td></tr>)
                 : filtered.length === 0 ? (<tr><td colSpan={18} style={{ ...td, textAlign: 'center', padding: 36, color: '#9ca3af' }}>Chưa có thanh toán nào. Bấm “➕ Thêm thanh toán”.</td></tr>)
                 : pageRows.map((r, i) => (
-                  <tr key={r.id} style={{ background: selected.has(r.id) ? '#eff6ff' : r.paid ? '#fff7ed' : r.accountant_approved ? '#f0fdf4' : (i % 2 ? '#fcfcfd' : '#fff') }}>
+                  <tr key={r.id} style={{ background: missingFields(r).length ? '#fff1f2' : selected.has(r.id) ? '#eff6ff' : r.paid ? '#fff7ed' : r.accountant_approved ? '#f0fdf4' : (i % 2 ? '#fcfcfd' : '#fff'), boxShadow: missingFields(r).length ? 'inset 4px 0 0 #ef4444' : 'none' }}>
                     <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSel(r.id)} style={{ width: 15, height: 15, cursor: 'pointer' }} /></td>
                     <td style={td}>{fmtDate(r.pay_date)}</td>
                     <td style={td}>{r.staff || '—'}</td>
                     <td style={td}><span style={{ fontSize: '0.72rem', fontWeight: 700, color: r.company === 'OPTIMAX' ? '#7c3aed' : '#0891b2' }}>{r.company || '—'}</span></td>
                     <td style={td}>{r.brand || '—'}</td>
                     <td style={td}>{(() => { const u = extractUname(r.channel_link) || extractUname(r.air_link); return u ? <a href={`https://www.tiktok.com/@${u}`} target="_blank" rel="noreferrer" style={{ color: '#0891b2', textDecoration: 'none', fontWeight: 600 }}>@{u}</a> : '—'; })()}</td>
-                    <td style={{ ...td, fontWeight: 600 }} title={r.beneficiary || ''}>{r.full_name || r.beneficiary || '—'}</td>
+                    <td style={{ ...td, fontWeight: 600 }} title={r.beneficiary || ''}>{(() => { const m = missingFields(r); return m.length ? <span title={'⚠️ THIẾU: ' + m.join(', ')} style={{ color: '#dc2626', marginRight: 4, cursor: 'help' }}>⚠️</span> : null; })()}{r.full_name || r.beneficiary || '—'}</td>
                     <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.78rem' }}>{r.cccd || '—'}</td>
                     <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.78rem' }}>{r.tax_code || '—'}</td>
                     <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.78rem' }}>{r.bank_account || '—'}</td>
