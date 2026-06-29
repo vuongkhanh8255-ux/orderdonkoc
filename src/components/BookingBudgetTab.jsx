@@ -135,6 +135,13 @@ function BookingBudgetTab() {
     });
     return () => { alive = false; };
   }, []);
+  // Ngân sách CỘNG TAY (booking_budget_extra) → cộng vào ĐM thực. extraMap[staff][ym] = số tiền.
+  const [extraMap, setExtraMap] = useState({});
+  useEffect(() => {
+    supabase.from('booking_budget_extra').select('staff_name, ym, amount').then(({ data }) => {
+      const m = {}; (data || []).forEach(r => { const x = (m[r.staff_name] = m[r.staff_name] || {}); x[r.ym] = (x[r.ym] || 0) + (Number(r.amount) || 0); }); setExtraMap(m);
+    });
+  }, []);
   const dmPivot = useMemo(() => {
     const mset = new Map(); const map = {};
     const minKey = `${START.y}-${String(START.m).padStart(2, '0')}`; // chỉ tính từ T3/2026 trở đi
@@ -172,12 +179,13 @@ function BookingBudgetTab() {
       mKeys.forEach(mk => {
         const hasBase = baseMap[staff]?.[mk] != null;
         const xai = spentMap[staff]?.[mk] || 0;
-        if (!started && !hasBase && xai <= 0) return; // chưa hoạt động tháng này → bỏ qua
+        const ex = extraMap[staff]?.[mk] || 0; // ngân sách cộng tay tháng này
+        if (!started && !hasBase && xai <= 0 && ex <= 0) return; // chưa hoạt động tháng này → bỏ qua
         started = true;
         const base = baseMap[staff]?.[mk] ?? 15000000; // tháng không có GMV → sàn 15tr
-        const dmThuc = base + carry;
+        const dmThuc = base + carry + ex;
         const conLai = dmThuc - xai;
-        cells[mk] = { base, carryIn: carry, dmThuc, xai, conLai };
+        cells[mk] = { base, extra: ex, carryIn: carry, dmThuc, xai, conLai };
         carry = Math.max(0, conLai); lastConLai = conLai; totalXai += xai;
       });
       return { staff, cells, totalXai, lastConLai };
@@ -186,7 +194,7 @@ function BookingBudgetTab() {
     const monthTot = {}; // tổng còn lại mỗi tháng (chỉ ô có data)
     mKeys.forEach(mk => { monthTot[mk] = staffArr.reduce((a, s) => a + (s.cells[mk]?.conLai || 0), 0); });
     return { mKeys: months, staffArr, monthTot };
-  }, [dmPivot, pivot, months]);
+  }, [dmPivot, pivot, months, extraMap]);
   const shownRecon = useMemo(() => (fStaff ? reconPivot.staffArr.filter(s => s.staff === fStaff) : reconPivot.staffArr), [reconPivot, fStaff]);
 
   const KPIS = [
@@ -367,7 +375,7 @@ function BookingBudgetTab() {
                     if (!c) return <td key={m.key} style={{ ...td, color: '#cbd5e1' }}>–</td>;
                     const over = c.conLai < 0;
                     return (
-                      <td key={m.key} style={td} title={`ĐM thực ${fmt(c.dmThuc)}₫ (base ${fmt(c.base)}${c.carryIn > 0 ? ' + dư ' + fmt(c.carryIn) : ''}) − đã chi ${fmt(c.xai)}₫ = ${fmt(c.conLai)}₫`}>
+                      <td key={m.key} style={td} title={`ĐM thực ${fmt(c.dmThuc)}₫ (base ${fmt(c.base)}${c.carryIn > 0 ? ' + dư ' + fmt(c.carryIn) : ''}${c.extra > 0 ? ' + cộng tay ' + fmt(c.extra) : ''}) − đã chi ${fmt(c.xai)}₫ = ${fmt(c.conLai)}₫`}>
                         <div style={{ fontWeight: 800, color: over ? '#dc2626' : '#15803d' }}>{over ? '▲ ' : ''}{fmt(c.conLai)}</div>
                         <div style={{ fontSize: '0.66rem', color: '#cbd5e1' }}>{fmtVnd(c.dmThuc)} − {fmtVnd(c.xai)}</div>
                       </td>

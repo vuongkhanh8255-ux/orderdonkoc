@@ -5,6 +5,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, ScatterChart, Scatter, ZAxis, Cell, LabelList } from 'recharts';
 import { supabase } from '../supabaseClient';
+import { budgetRemainingByStaff } from '../lib/bookingBudget';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const num = (n) => Number(n || 0);
@@ -64,6 +65,14 @@ function BookingStaffReportTab() {
   const [selStaff, setSelStaff] = useState('');
   const [fProduct, setFProduct] = useState('');
   const [selectedId, setSelectedId] = useState(null);
+  // NGÂN SÁCH (carryover + cộng tay) — DÙNG CHUNG hàm với Tạm đối chiếu → cột "Ngân sách còn lại" KHỚP 100%.
+  // Lấy ngân sách của THÁNG cuối kỳ (range.end).
+  const [budgetByStaff, setBudgetByStaff] = useState({});
+  useEffect(() => {
+    let alive = true;
+    budgetRemainingByStaff(String(range.end).slice(0, 7)).then(b => { if (alive) setBudgetByStaff(b); }, () => {});
+    return () => { alive = false; };
+  }, [range.end]);
 
   const setQuick = (p) => {
     if (p.single) { const d = new Date(); d.setDate(d.getDate() - p.days); setRange({ start: toYmd(d), end: toYmd(d) }); }
@@ -100,14 +109,19 @@ function BookingStaffReportTab() {
   }), { don: 0, mau: 0, koc: 0, gmv: 0, video: 0, view: 0, cast: 0, budget: 0, chiphi: 0 });
   const T = useMemo(() => sumRows(filtered), [filtered]);
   const P = useMemo(() => sumRows(prevRows), [prevRows]);
+  // Tổng ngân sách (theo hàm chung) — cho KPI "CAST còn lại" khớp Tạm đối chiếu.
+  const budgetTot = useMemo(() => filtered.reduce((a, r) => {
+    const b = budgetByStaff[r.ten_nhansu]; return { conLai: a.conLai + (b?.conLai || 0), dmThuc: a.dmThuc + (b?.dmThuc || 0) };
+  }, { conLai: 0, dmThuc: 0 }), [filtered, budgetByStaff]);
   const delta = (cur, prev) => prev > 0 ? ((cur - prev) / prev * 100) : (cur > 0 ? 100 : 0);
 
   const resetFilters = () => { setSelStaff(''); setFProduct(''); };
   const exportExcel = async () => {
     const XLSX = await import('xlsx').then(m => m.default || m);
     const aoa = [['Nhân sự', 'Đơn gửi', 'Mẫu', 'Chi phí mẫu', 'TS/ngày', 'SP chính', 'KOC gắn', 'Video', 'View', 'GMV', 'CAST dùng', 'CAST còn lại', 'ROAS', 'Hiệu suất']];
-    filtered.forEach(r => { const b = perfBadge(r.aff_gmv, r.cast_used); const budget = BUDGET(r.aff_gmv);
-      aoa.push([r.ten_nhansu, r.so_don, r.so_mau, Math.round(r.chi_phi_mau), r.tan_suat, r.top_product || '', r.koc_count, r.aff_videos, r.aff_views, Math.round(r.aff_gmv), Math.round(r.cast_used), Math.round(budget - r.cast_used), b.roas === Infinity ? '∞' : b.roas.toFixed(1), b.label]); });
+    filtered.forEach(r => { const b = perfBadge(r.aff_gmv, r.cast_used);
+      const remain = budgetByStaff[r.ten_nhansu]?.conLai ?? (BUDGET(r.aff_gmv) - num(r.cast_used));
+      aoa.push([r.ten_nhansu, r.so_don, r.so_mau, Math.round(r.chi_phi_mau), r.tan_suat, r.top_product || '', r.koc_count, r.aff_videos, r.aff_views, Math.round(r.aff_gmv), Math.round(r.cast_used), Math.round(remain), b.roas === Infinity ? '∞' : b.roas.toFixed(1), b.label]); });
     const ws = XLSX.utils.aoa_to_sheet(aoa); const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'BaoCaoNhanSu'); XLSX.writeFile(wb, `bao-cao-nhan-su-${range.start}_${range.end}.xlsx`);
   };
@@ -119,8 +133,8 @@ function BookingStaffReportTab() {
     { label: 'GMV (KOC gắn)', val: fmtVnd(T.gmv) + ' đ', d: delta(T.gmv, P.gmv), sub: `ROAS ${T.cast > 0 ? (T.gmv / T.cast).toFixed(1) : '∞'}x`, icon: '💰', color: '#16a34a' },
     { label: 'Video', val: fmt(T.video), d: delta(T.video, P.video), sub: `${fmtView(T.view)} view`, icon: '🎬', color: '#7c3aed' },
     { label: 'View', val: fmtView(T.view), d: delta(T.view, P.view), sub: `${T.video > 0 ? fmtView(T.view / T.video) : 0}/video`, icon: '👁️', color: '#0891b2' },
-    { label: 'CAST đã dùng', val: fmtVnd(T.cast) + ' đ', d: delta(T.cast, P.cast), sub: `${T.budget > 0 ? (T.cast / T.budget * 100).toFixed(0) : 0}% ngân sách`, icon: '🔥', color: '#ea580c' },
-    { label: 'CAST còn lại', val: fmtVnd(T.budget - T.cast) + ' đ', d: null, sub: `Ngân sách ${fmtVnd(T.budget)}`, icon: '💵', color: '#0ea5e9' },
+    { label: 'CAST đã dùng', val: fmtVnd(T.cast) + ' đ', d: delta(T.cast, P.cast), sub: `${budgetTot.dmThuc > 0 ? (T.cast / budgetTot.dmThuc * 100).toFixed(0) : 0}% ngân sách`, icon: '🔥', color: '#ea580c' },
+    { label: 'Ngân sách còn lại', val: fmtVnd(budgetTot.conLai) + ' đ', d: null, sub: `ĐM thực ${fmtVnd(budgetTot.dmThuc)} · khớp Tạm đối chiếu`, icon: '💵', color: '#0ea5e9' },
   ];
 
   return (
@@ -209,14 +223,16 @@ function BookingStaffReportTab() {
                 <th style={{ ...th, textAlign: 'right' }}>TS/ngày</th><th style={th}>SP chính</th>
                 <th style={{ ...th, textAlign: 'right' }}>KOC</th><th style={{ ...th, textAlign: 'right' }}>Video</th>
                 <th style={{ ...th, textAlign: 'right' }}>View</th><th style={{ ...th, textAlign: 'right' }}>GMV</th>
-                <th style={{ ...th, textAlign: 'right' }}>CAST dùng</th><th style={{ ...th, textAlign: 'right' }}>CAST còn</th>
+                <th style={{ ...th, textAlign: 'right' }}>CAST dùng</th><th style={{ ...th, textAlign: 'right' }} title="Ngân sách còn lại tháng cuối kỳ — khớp 100% với module Tạm đối chiếu (carryover + cộng tay)">Ngân sách còn</th>
               </tr>
             </thead>
             <tbody>
               {loading && <tr><td colSpan={13} style={{ ...td, textAlign: 'center', color: '#94a3b8', padding: 40 }}>⏳ Đang tải...</td></tr>}
               {!loading && filtered.length === 0 && <tr><td colSpan={13} style={{ ...td, textAlign: 'center', color: '#94a3b8', padding: 40 }}>Không có dữ liệu.</td></tr>}
               {!loading && filtered.map((r, i) => {
-                const budget = BUDGET(r.aff_gmv); const remain = budget - num(r.cast_used);
+                // Ngân sách còn lại = hàm chung (carryover + cộng tay) → KHỚP Tạm đối chiếu. Fallback số cũ khi chưa load.
+                const bg = budgetByStaff[r.ten_nhansu];
+                const remain = bg ? bg.conLai : (BUDGET(r.aff_gmv) - num(r.cast_used));
                 const isSel = selectedRow && r.nhansu_id === selectedRow.nhansu_id;
                 return (
                   <tr key={r.nhansu_id} onClick={() => setSelectedId(r.nhansu_id)} style={{ cursor: 'pointer', background: isSel ? '#fff7ed' : '#fff', boxShadow: isSel ? 'inset 3px 0 0 #f97316' : 'none' }}
@@ -233,7 +249,8 @@ function BookingStaffReportTab() {
                     <td style={{ ...td, textAlign: 'right', color: '#0891b2' }}>{fmtView(r.aff_views)}</td>
                     <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: '#16a34a' }}>{fmtVnd(r.aff_gmv)}</td>
                     <td style={{ ...td, textAlign: 'right', color: '#ea580c', fontWeight: 700 }}>{fmtVnd(r.cast_used)}</td>
-                    <td style={{ ...td, textAlign: 'right', color: remain < 0 ? '#dc2626' : '#0ea5e9', fontWeight: 700 }}>{fmtVnd(remain)}</td>
+                    <td style={{ ...td, textAlign: 'right', color: remain < 0 ? '#dc2626' : '#0ea5e9', fontWeight: 700 }}
+                        title={bg ? `Ngân sách còn lại tháng ${String(range.end).slice(5, 7)} (khớp 'Tạm đối chiếu'): ĐM thực ${fmtVnd(bg.dmThuc)}${bg.extra > 0 ? ' (gồm cộng tay ' + fmtVnd(bg.extra) + ')' : ''} − đã chi ${fmtVnd(bg.xai)}` : ''}>{fmtVnd(remain)}</td>
                   </tr>
                 );
               })}
