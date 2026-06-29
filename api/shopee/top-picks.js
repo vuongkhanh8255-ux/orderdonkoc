@@ -466,11 +466,21 @@ async function runAutoBoost(supabase, shopId, { source = 'cron', force = false }
   // Select next batch & boost
   const rotationIndex = schedule.rotation_index || 0;
   const batch = selectBatch(itemIds, rotationIndex, BOOST_BATCH_SIZE);
-  let boostResult;
-  try {
-    boostResult = await boostItems(supabase, shopId, batch);
-  } catch (e) {
-    boostResult = { ok: false, error: e.message };
+  // RETRY khi "hết slot": cron chạy mỗi 4h = đúng thời gian boost (4h) → có phiên bắn lúc boost cũ
+  // chưa kịp hết hạn (lệch vài chục giây) → Shopee báo "reached shop's bump slot limit". Chờ slot cũ
+  // hết hạn rồi đẩy lại (tối đa 2 lần, mỗi lần 25s) → khoảng trống top giảm từ ~4h xuống <1 phút.
+  const isSlotLimit = (r) => /slot limit|bump.*limit|boost.*limit|limit.*(boost|bump)/i.test(`${r?.error || ''} ${r?.message || ''}`);
+  const SLOT_RETRY_MAX = 2, SLOT_RETRY_WAIT_MS = 25000;
+  let boostResult, slotRetries = 0;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      boostResult = await boostItems(supabase, shopId, batch);
+    } catch (e) {
+      boostResult = { ok: false, error: e.message };
+    }
+    if (boostResult.ok || !isSlotLimit(boostResult) || attempt >= SLOT_RETRY_MAX) break;
+    slotRetries = attempt + 1;
+    await new Promise(r => setTimeout(r, SLOT_RETRY_WAIT_MS)); // chờ boost cũ hết hạn
   }
 
   // Parse success/fail
@@ -492,6 +502,9 @@ async function runAutoBoost(supabase, shopId, { source = 'cron', force = false }
     failCount = batch.length;
     message = boostResult.message || boostResult.error || 'Lỗi đẩy sản phẩm';
   }
+  if (slotRetries > 0) message += status === 'error'
+    ? ` (đã thử lại ${slotRetries} lần, slot vẫn đầy)`
+    : ` (đẩy lại sau ${slotRetries} lần chờ slot)`;
 
   // Advance rotation + stamp last_run_at (always, when attempted — prevents retry spam; cron retries next cycle)
   const newRotation = itemIds.length > 0 ? (rotationIndex + batch.length) % itemIds.length : 0;
