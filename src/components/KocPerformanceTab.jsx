@@ -579,6 +579,7 @@ export default function KocPerformanceTab() {
   // KOC vào blacklist → TỰ ĐỘNG gỡ hết định danh (mọi brand), khỏi cần bấm "Duyệt gỡ" thủ công.
   const purgedRef = useRef(false);
   useEffect(() => {
+    if (currentUser?.role !== 'admin') return; // CHỈ admin tự-gỡ; booking/ecom chỉ XEM (kẻo churn assignMap → lắc panel)
     if (!blacklist.size || !Object.keys(assignMap).length || purgedRef.current) return;
     if (!Object.keys(assignMap).some(k => blacklist.has(k))) return;   // không có KOC blacklist nào còn định danh
     purgedRef.current = true;
