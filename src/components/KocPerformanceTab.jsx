@@ -539,8 +539,10 @@ export default function KocPerformanceTab() {
   }).sort((a, b) => b.days_since - a.days_since), [warnMap, activeUsers]);
   const removeAssign = async (kocId) => {
     if (!confirm(`Loại định danh @${kocId} khỏi brand ${brand}? (gán ≥45 ngày mà chưa lên video)`)) return;
-    await supabase.from(ASSIGN_TABLE).delete().eq('koc_id', kocId).eq('brand_name', brand);
-    await supabase.from(HIST_TABLE).insert({ koc_id: kocId, brand_name: brand, action: 'remove', actor: currentUser?.username || '' }).then(() => {}, () => {});
+    // Gỡ qua RPC server (chắc ăn + ghi lịch sử) thay vì delete client (bundle cũ từng xoá hụt)
+    const { data, error } = await supabase.rpc('koc_remove_assignment', { p_koc: kocId, p_brand: brand, p_actor: currentUser?.username || 'admin' });
+    if (error) { alert('Lỗi gỡ định danh: ' + error.message); return; }
+    if (!data) { alert(`Không tìm thấy định danh @${kocId} ở brand ${brand} (có thể đã gỡ rồi).`); }
     refreshAssign();
   };
 
@@ -580,8 +582,17 @@ export default function KocPerformanceTab() {
     for (const [koc, arr] of Object.entries(assignMap)) for (const a of (arr || [])) if (a.status === 'proposed') out.push({ koc, ...a });
     return out.sort((x, y) => new Date(y.proposed_at || 0) - new Date(x.proposed_at || 0));
   }, [assignMap, currentUser]);
+  // KOC vào blacklist → TỰ ĐỘNG gỡ hết định danh (mọi brand), khỏi cần bấm "Duyệt gỡ" thủ công.
+  const purgedRef = useRef(false);
+  useEffect(() => {
+    if (!blacklist.size || !Object.keys(assignMap).length || purgedRef.current) return;
+    if (!Object.keys(assignMap).some(k => blacklist.has(k))) return;   // không có KOC blacklist nào còn định danh
+    purgedRef.current = true;
+    supabase.rpc('koc_purge_blacklist_assignments', { p_actor: currentUser?.username || 'auto' })
+      .then(({ data }) => { if (data) reloadAssignments(); }, () => { purgedRef.current = false; });
+  }, [assignMap, blacklist, currentUser, reloadAssignments]);
+  // Sau khi auto-gỡ ở trên, danh sách này còn rỗng — giữ lại phòng trường hợp purge chưa chạy xong.
   const blacklistAssigned = useMemo(() => {
-    // booking + ecom được XEM (không gỡ); chỉ admin mới bấm "Duyệt gỡ".
     if (!['admin', 'ecom', 'booking'].includes(currentUser?.role) || !blacklist.size) return [];
     return Object.entries(assignMap)
       .filter(([koc, arr]) => blacklist.has(koc) && (arr || []).some(a => a.brand_name === brand))
