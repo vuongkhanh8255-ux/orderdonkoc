@@ -169,9 +169,11 @@ const KocPaymentTab = () => {
     if (!form.brand || !form.brand.trim()) miss.push('Brand');
     if (!form.staff || !form.staff.trim()) miss.push('Nhân sự booking');
     if (!form.company || !form.company.trim()) miss.push('Công ty');
-    if (!has(form.cccd_image)) miss.push('Ảnh CCCD');
-    if (!has(form.contract_link)) miss.push('Tin nhắn (ảnh)');
-    if (num(form.cast_net) >= CONTRACT_REQUIRED_FROM && !has(form.contract_file)) miss.push('Hợp đồng (cast ≥ 2tr)');
+    if (!form.paid) {   // đơn ĐÃ thanh toán thì miễn bắt buộc đính kèm (đã xong)
+      if (!has(form.cccd_image)) miss.push('Ảnh CCCD');
+      if (!has(form.contract_link)) miss.push('Tin nhắn (ảnh)');
+      if (num(form.cast_net) >= CONTRACT_REQUIRED_FROM && !has(form.contract_file)) miss.push('Hợp đồng (cast ≥ 2tr)');
+    }
     if (miss.length) { alert('⚠️ Phải điền ĐẦY ĐỦ mới lưu được.\nCòn thiếu: ' + miss.join(', ') + '.'); return; }
     const mstDigits = (form.tax_code || '').replace(/\D/g, '');
     const isBiz = mstDigits.length === 10 || mstDigits.length === 13; // MST công ty/HKD: 10 hoặc 13 số
@@ -311,7 +313,7 @@ const KocPaymentTab = () => {
     }
   };
   const toggleApproved = (r) => {
-    if (!r.accountant_approved) {   // đang BẬT duyệt → bắt đủ thông tin
+    if (!r.accountant_approved && !r.paid) {   // đang BẬT duyệt (đơn chưa TT) → bắt đủ thông tin
       const m = missingFields(r);
       if (m.length) { alert(`🚫 Chưa đủ thông tin — đơn "${r.full_name || r.beneficiary || ''}" còn THIẾU: ${m.join(', ')}.\nSửa đơn điền đủ rồi mới duyệt được.`); return; }
     }
@@ -326,7 +328,7 @@ const KocPaymentTab = () => {
     if (!selected.size) { alert('Chưa chọn dòng nào.'); return; }
     const ids = [...selected];
     if (field === 'accountant_approved' && value) {   // duyệt hàng loạt → chặn đơn thiếu thông tin
-      const bad = rows.filter(x => ids.includes(x.id) && missingFields(x).length);
+      const bad = rows.filter(x => ids.includes(x.id) && !x.paid && missingFields(x).length);
       if (bad.length) { alert(`🚫 ${bad.length}/${ids.length} đơn đang chọn còn THIẾU thông tin → không duyệt được.\n` + bad.slice(0, 4).map(x => `• ${x.full_name || x.beneficiary || '?'}: ${missingFields(x).join(', ')}`).join('\n') + (bad.length > 4 ? '\n…' : '')); return; }
     }
     if (!ensurePw()) return;
@@ -567,7 +569,7 @@ const KocPaymentTab = () => {
 
       {/* Cảnh báo THIẾU THÔNG TIN — phải điền đủ mới duyệt được (Ảnh CCCD · Tin nhắn · cast≥2tr cần Hợp đồng) */}
       {(() => {
-        const bad = filtered.filter(r => missingFields(r).length);
+        const bad = filtered.filter(r => missingFields(r).length && !r.paid);
         if (!bad.length) return null;
         return (
           <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, padding: '12px 16px', marginBottom: 14 }}>
@@ -665,14 +667,14 @@ const KocPaymentTab = () => {
               {loading ? (<tr><td colSpan={18} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải…</td></tr>)
                 : filtered.length === 0 ? (<tr><td colSpan={18} style={{ ...td, textAlign: 'center', padding: 36, color: '#9ca3af' }}>Chưa có thanh toán nào. Bấm “➕ Thêm thanh toán”.</td></tr>)
                 : pageRows.map((r, i) => (
-                  <tr key={r.id} style={{ background: missingFields(r).length ? '#fff1f2' : selected.has(r.id) ? '#eff6ff' : r.paid ? '#fff7ed' : r.accountant_approved ? '#f0fdf4' : (i % 2 ? '#fcfcfd' : '#fff'), boxShadow: missingFields(r).length ? 'inset 4px 0 0 #ef4444' : 'none' }}>
+                  <tr key={r.id} style={{ background: (missingFields(r).length && !r.paid) ? '#fff1f2' : (missingFields(r).length && r.paid) ? '#fffbeb' : selected.has(r.id) ? '#eff6ff' : r.paid ? '#fff7ed' : r.accountant_approved ? '#f0fdf4' : (i % 2 ? '#fcfcfd' : '#fff'), boxShadow: (missingFields(r).length && !r.paid) ? 'inset 4px 0 0 #ef4444' : (missingFields(r).length && r.paid) ? 'inset 4px 0 0 #f59e0b' : 'none' }}>
                     <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSel(r.id)} style={{ width: 15, height: 15, cursor: 'pointer' }} /></td>
                     <td style={td}>{fmtDate(r.pay_date)}</td>
                     <td style={td}>{r.staff || '—'}</td>
                     <td style={td}><span style={{ fontSize: '0.72rem', fontWeight: 700, color: r.company === 'OPTIMAX' ? '#7c3aed' : '#0891b2' }}>{r.company || '—'}</span></td>
                     <td style={td}>{r.brand || '—'}</td>
                     <td style={td}>{(() => { const u = extractUname(r.channel_link) || extractUname(r.air_link); return u ? <a href={`https://www.tiktok.com/@${u}`} target="_blank" rel="noreferrer" style={{ color: '#0891b2', textDecoration: 'none', fontWeight: 600 }}>@{u}</a> : '—'; })()}</td>
-                    <td style={{ ...td, fontWeight: 600 }} title={r.beneficiary || ''}>{(() => { const m = missingFields(r); return m.length ? <span title={'⚠️ THIẾU: ' + m.join(', ')} style={{ color: '#dc2626', marginRight: 4, cursor: 'help' }}>⚠️</span> : null; })()}{r.full_name || r.beneficiary || '—'}</td>
+                    <td style={{ ...td, fontWeight: 600 }} title={r.beneficiary || ''}>{(() => { const m = missingFields(r); if (!m.length) return null; return r.paid ? <span title={'🟡 Đã thanh toán — còn thiếu (không bắt buộc): ' + m.join(', ')} style={{ color: '#d97706', marginRight: 4, cursor: 'help' }}>🟡</span> : <span title={'⚠️ THIẾU: ' + m.join(', ')} style={{ color: '#dc2626', marginRight: 4, cursor: 'help' }}>⚠️</span>; })()}{r.full_name || r.beneficiary || '—'}</td>
                     <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.78rem' }}>{r.cccd || '—'}</td>
                     <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.78rem' }}>{r.tax_code || '—'}</td>
                     <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.78rem' }}>{r.bank_account || '—'}</td>
