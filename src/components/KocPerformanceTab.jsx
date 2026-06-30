@@ -56,9 +56,9 @@ const KocAvatar = ({ username, url, size = 30 }) => {
 // ── Search box ─────────────────────────────────────────────────────────────────
 const SearchBox = ({ value, onChange }) => (
   <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-    <span style={{ position: 'absolute', left: 10, fontSize: '0.85rem', color: '#94a3b8' }}>🔍</span>
+    <span style={{ position: 'absolute', left: 10, fontSize: '0.85rem', color: '#64748b' }}>🔍</span>
     <input value={value} onChange={e => onChange(e.target.value)} placeholder="Tìm tên KOC…" style={{ ...inputStyle, paddingLeft: 30, width: 180 }} />
-    {value && <button onClick={() => onChange('')} style={{ position: 'absolute', right: 8, border: 'none', background: 'transparent', cursor: 'pointer', color: '#94a3b8', fontSize: '0.9rem' }}>✕</button>}
+    {value && <button onClick={() => onChange('')} style={{ position: 'absolute', right: 8, border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b', fontSize: '0.9rem' }}>✕</button>}
   </div>
 );
 
@@ -80,21 +80,21 @@ const SALES_CACHE = new Map();
 // ── Drill-down: sản phẩm 1 KOC kéo đơn (theo đúng khoảng ngày đang chọn) ─────────
 const PROD_GRID = '22px 36px 1fr 62px 62px 72px 104px';
 const ProductBreakdown = ({ state }) => {
-  if (!state || state.loading) return <div style={{ padding: 14, color: '#94a3b8', fontSize: '0.82rem' }}>⏳ Đang tải sản phẩm…</div>;
+  if (!state || state.loading) return <div style={{ padding: 14, color: '#64748b', fontSize: '0.82rem' }}>⏳ Đang tải sản phẩm…</div>;
   if (state.error) return <div style={{ padding: 14, color: '#b91c1c', fontSize: '0.82rem' }}>❌ {state.error}</div>;
   const ps = state.products || [];
-  if (!ps.length) return <div style={{ padding: 14, color: '#94a3b8', fontSize: '0.82rem' }}>Không có sản phẩm trong khoảng này.</div>;
+  if (!ps.length) return <div style={{ padding: 14, color: '#64748b', fontSize: '0.82rem' }}>Không có sản phẩm trong khoảng này.</div>;
   const cell = { fontSize: '0.8rem', whiteSpace: 'nowrap' };
   return (
     <div style={{ padding: '10px 16px', background: '#fafafa' }}>
       <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>📦 Sản phẩm KOC làm video / kéo đơn ({ps.length})</div>
-      <div style={{ display: 'grid', gridTemplateColumns: PROD_GRID, gap: 8, alignItems: 'center', padding: '0 10px 4px', fontSize: '0.66rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: PROD_GRID, gap: 8, alignItems: 'center', padding: '0 10px 4px', fontSize: '0.7rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
         <span></span><span></span><span>Sản phẩm</span><span style={{ textAlign: 'right' }} title="Tổng clip đã đăng (toàn thời gian)">V.tổng</span><span style={{ textAlign: 'right' }} title="Clip đăng trong khoảng ngày đang chọn">V.kỳ</span><span style={{ textAlign: 'right' }}>Đơn</span><span style={{ textAlign: 'right' }}>GMV</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {ps.map((p, i) => (
           <div key={p.product_id || i} style={{ display: 'grid', gridTemplateColumns: PROD_GRID, gap: 8, alignItems: 'center', background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #f1f5f9' }}>
-            <span style={{ fontWeight: 800, color: '#94a3b8', fontSize: '0.78rem' }}>{i + 1}</span>
+            <span style={{ fontWeight: 800, color: '#64748b', fontSize: '0.78rem' }}>{i + 1}</span>
             {p.image
               ? <img src={p.image} alt="" referrerPolicy="no-referrer" style={{ width: 34, height: 34, borderRadius: 6, objectFit: 'cover' }} />
               : <span style={{ width: 34, height: 34, borderRadius: 6, background: '#f1f5f9', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>📦</span>}
@@ -118,10 +118,10 @@ const VID_GRID = '20px 56px 1fr 76px 56px 60px 34px 70px 76px';
 const ymShort = (ym) => ym ? 'T' + Number(ym.split('-')[1]) : 'Tháng';
 const VideoBreakdown = ({ state, username }) => {
   const [sort, setSort] = useState({ key: 'date', dir: 'desc' });
-  if (!state || state.loading) return <div style={{ padding: 14, color: '#94a3b8', fontSize: '0.82rem' }}>⏳ Đang tải video…</div>;
+  if (!state || state.loading) return <div style={{ padding: 14, color: '#64748b', fontSize: '0.82rem' }}>⏳ Đang tải video…</div>;
   if (state.error) return <div style={{ padding: 14, color: '#b91c1c', fontSize: '0.82rem' }}>❌ {state.error}</div>;
   const vs = state.videos || [];
-  if (!vs.length) return <div style={{ padding: 14, color: '#94a3b8', fontSize: '0.82rem' }}>Không có video kéo đơn trong khoảng này.</div>;
+  if (!vs.length) return <div style={{ padding: 14, color: '#64748b', fontSize: '0.82rem' }}>Không có video kéo đơn trong khoảng này.</div>;
   const cell = { fontSize: '0.8rem', whiteSpace: 'nowrap' };
   const mlabel = ymShort(state.ym);
   // Sắp xếp: bấm tiêu đề cột (cùng cột → đảo chiều). Mặc định ngày đăng mới nhất trước.
@@ -137,20 +137,20 @@ const VideoBreakdown = ({ state, username }) => {
   const arrow = (key) => sort.key === key ? (sort.dir === 'desc' ? ' ↓' : ' ↑') : '';
   const sortTh = (key, label, align) => (
     <span onClick={() => clickSort(key)} title="Bấm để sắp xếp"
-      style={{ cursor: 'pointer', userSelect: 'none', textAlign: align || 'left', color: sort.key === key ? ACCENT : '#94a3b8', fontWeight: sort.key === key ? 800 : 700 }}>
+      style={{ cursor: 'pointer', userSelect: 'none', textAlign: align || 'left', color: sort.key === key ? ACCENT : '#64748b', fontWeight: sort.key === key ? 800 : 700 }}>
       {label}{arrow(key)}
     </span>
   );
   return (
     <div style={{ padding: '4px 16px 14px' }}>
       <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>🎬 Video KOC đã lên ({vs.length}) · bấm tiêu đề cột để sắp xếp · 👁 Tổng = view toàn bộ · 👁 {mlabel} = view trong tháng được chọn</div>
-      <div style={{ display: 'grid', gridTemplateColumns: VID_GRID, gap: 8, alignItems: 'center', padding: '0 10px 4px', fontSize: '0.64rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: VID_GRID, gap: 8, alignItems: 'center', padding: '0 10px 4px', fontSize: '0.7rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
         <span></span><span>Video</span><span>Sản phẩm</span>{sortTh('date', 'Ngày đăng')}{sortTh('views', '👁 Tổng', 'right')}{sortTh('month_views', `👁 ${mlabel}`, 'right')}{sortTh('orders', 'Đơn', 'right')}{sortTh('gmv', 'GMV', 'right')}{sortTh('cast', '💵 Cast', 'right')}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {sorted.map((v, i) => (
           <div key={v.content_id || i} style={{ display: 'grid', gridTemplateColumns: VID_GRID, gap: 8, alignItems: 'center', background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #f1f5f9' }}>
-            <span style={{ fontWeight: 800, color: '#94a3b8', fontSize: '0.76rem' }}>{i + 1}</span>
+            <span style={{ fontWeight: 800, color: '#64748b', fontSize: '0.76rem' }}>{i + 1}</span>
             {v.content_type === 'VIDEO'
               ? <a href={`https://www.tiktok.com/@${username}/video/${v.content_id}`} target="_blank" rel="noreferrer" title={v.title || ''} style={{ color: '#7c3aed', fontWeight: 700, textDecoration: 'none', fontSize: '0.8rem' }}>🎬 Xem ↗</a>
               : <span style={{ color: '#dc2626', fontWeight: 700, fontSize: '0.8rem' }}>🔴 {v.content_type || 'Khác'}</span>}
@@ -226,7 +226,7 @@ function DateRangePicker({ start, end, min, onChange }) {
         style={{ ...dateInputStyle, width: 'auto', minWidth: 118, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
         <span style={{ fontSize: '0.9rem' }}>📅</span>
         <span>{fmtRangeLabel(start, end)}</span>
-        <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>▾</span>
+        <span style={{ color: '#64748b', fontSize: '0.7rem' }}>▾</span>
       </button>
       {open && (
         <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 60, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, boxShadow: '0 12px 32px rgba(15,23,42,0.16)', padding: 12, width: 258 }}>
@@ -236,7 +236,7 @@ function DateRangePicker({ start, end, min, onChange }) {
             <button type="button" onClick={() => shift(1)} style={navBtn}>›</button>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 4 }}>
-            {DOW_VN.map(d => <div key={d} style={{ textAlign: 'center', fontSize: '0.66rem', fontWeight: 700, color: '#94a3b8' }}>{d}</div>)}
+            {DOW_VN.map(d => <div key={d} style={{ textAlign: 'center', fontSize: '0.7rem', fontWeight: 700, color: '#64748b' }}>{d}</div>)}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
             {cells.map((d, i) => {
@@ -304,7 +304,7 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
   const [hist, setHist] = useState(null); // lịch sử (null = chưa tải)
 
   const status = assignment?.status; // 'proposed' | 'approved' | undefined
-  const color = status === 'approved' ? '#16a34a' : status === 'proposed' ? '#d97706' : '#94a3b8';
+  const color = status === 'approved' ? '#16a34a' : status === 'proposed' ? '#d97706' : '#64748b';
   const bg = status === 'approved' ? '#f0fdf4' : status === 'proposed' ? '#fffbeb' : '#f8fafc';
   const border = status === 'approved' ? '#bbf7d0' : status === 'proposed' ? '#fde68a' : '#e5e7eb';
 
@@ -369,12 +369,12 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
           style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 11px', borderRadius: 14, fontSize: '0.78rem', fontWeight: 700, cursor: canInteract ? 'pointer' : 'default', color, background: bg, border: `1px solid ${border}`, maxWidth: 210, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {assignment ? <>{status === 'proposed' ? '🟡' : '🟢'} {assignment.staff_name}</> : (canInteract ? '+ Gán' : '—')}
         </button>
-        {assignment && <span style={{ fontSize: '0.66rem', color: '#94a3b8', paddingLeft: 2 }}>📅 từ {assignDate(assignment)}</span>}
+        {assignment && <span style={{ fontSize: '0.7rem', color: '#64748b', paddingLeft: 2 }}>📅 từ {assignDate(assignment)}</span>}
       </div>
       {open && (
         <div onClick={close} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 22, width: 370, fontFamily: "'Outfit', sans-serif", boxShadow: '0 20px 50px rgba(0,0,0,0.25)' }}>
-            <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>{isAdmin ? 'Gán nhân sự' : 'Đề xuất nhân sự'}</div>
+            <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>{isAdmin ? 'Gán nhân sự' : 'Đề xuất nhân sự'}</div>
             <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', margin: '4px 0 2px' }}>@{username}</div>
             <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: 14 }}>Brand: <b style={{ color: ACCENT }}>{brand}</b></div>
             <select value={staff} onChange={e => setStaff(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 9, border: '1.5px solid #e5e7eb', fontSize: '0.88rem', marginBottom: 10, boxSizing: 'border-box' }}>
@@ -393,10 +393,10 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
               {hist !== null && (
                 <div style={{ maxHeight: 150, overflowY: 'auto', marginTop: 6, border: '1px solid #f1f5f9', borderRadius: 8 }}>
                   {hist.length === 0
-                    ? <div style={{ padding: 10, fontSize: '0.74rem', color: '#94a3b8' }}>Chưa có lịch sử</div>
+                    ? <div style={{ padding: 10, fontSize: '0.74rem', color: '#64748b' }}>Chưa có lịch sử</div>
                     : hist.map((h, i) => (
                       <div key={i} style={{ padding: '6px 10px', fontSize: '0.72rem', color: '#475569', borderTop: i ? '1px solid #f1f5f9' : 'none' }}>
-                        <b>{HIST_LABEL[h.action] || h.action}</b>{h.staff_name ? ` ${h.staff_name}` : ''} · {h.brand_name || '—'} · <span style={{ color: '#94a3b8' }}>{h.actor || '?'} · {new Date(h.created_at).toLocaleString('vi-VN')}</span>
+                        <b>{HIST_LABEL[h.action] || h.action}</b>{h.staff_name ? ` ${h.staff_name}` : ''} · {h.brand_name || '—'} · <span style={{ color: '#64748b' }}>{h.actor || '?'} · {new Date(h.created_at).toLocaleString('vi-VN')}</span>
                       </div>
                     ))}
                 </div>
@@ -718,7 +718,7 @@ export default function KocPerformanceTab() {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 900, color: '#0f172a', margin: '0 0 4px' }}>🌟 Hiệu suất KOC</h1>
-          <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: '0 0 14px' }}>
+          <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 14px' }}>
             Doanh số thật KOC mang về cho shop (đơn affiliate) {data?.shop && <b style={{ color: ACCENT }}>· {data.shop}</b>}
           </p>
         </div>
@@ -740,7 +740,7 @@ export default function KocPerformanceTab() {
                 </div>
                 <div style={{ maxHeight: 420, overflowY: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 7 }}>
                   {allPendingProposals.length === 0 ? (
-                    <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.82rem', padding: '18px 0' }}>🎉 Không có đề xuất nào chờ duyệt.</div>
+                    <div style={{ textAlign: 'center', color: '#64748b', fontSize: '0.82rem', padding: '18px 0' }}>🎉 Không có đề xuất nào chờ duyệt.</div>
                   ) : allPendingProposals.map(p => (
                     <div key={'topp-' + p.brand_name + '-' + p.koc} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.79rem', background: '#fffdf7', borderRadius: 9, padding: '9px 11px', border: '1px solid #fde68a', flexWrap: 'wrap' }}>
                       <a href={`https://www.tiktok.com/@${p.koc}`} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontWeight: 800, textDecoration: 'none' }}>@{p.koc}</a>
@@ -803,16 +803,16 @@ export default function KocPerformanceTab() {
             <div key={s.label} style={{ position: 'relative', height: '100%', minHeight: 150, boxSizing: 'border-box', background: '#fff', borderRadius: 14, padding: '15px 18px', border: '1px solid #eef1f5', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ width: 28, height: 28, borderRadius: 8, background: '#fff4ec', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', flexShrink: 0 }}>{s.icon}</span>
-                <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px' }}>{s.label}</span>
+                <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px' }}>{s.label}</span>
                 {s.note && (
                   <button onClick={() => setNoteOpen(noteOpen === s.label ? null : s.label)} title="Bấm xem giải thích"
-                    style={{ marginLeft: 'auto', width: 18, height: 18, borderRadius: '50%', border: 'none', background: noteOpen === s.label ? ACCENT : '#eef1f5', color: noteOpen === s.label ? '#fff' : '#94a3b8', fontSize: '0.7rem', fontWeight: 800, cursor: 'pointer', lineHeight: '18px', padding: 0, flexShrink: 0 }}>i</button>
+                    style={{ marginLeft: 'auto', width: 18, height: 18, borderRadius: '50%', border: 'none', background: noteOpen === s.label ? ACCENT : '#eef1f5', color: noteOpen === s.label ? '#fff' : '#64748b', fontSize: '0.7rem', fontWeight: 800, cursor: 'pointer', lineHeight: '18px', padding: 0, flexShrink: 0 }}>i</button>
                 )}
               </div>
               <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#0f172a', marginTop: 8 }}>{s.value}</div>
-              {s.sub && <div style={{ fontSize: '0.64rem', color: ACCENT, fontWeight: 700, marginTop: 3 }}>{s.sub}</div>}
+              {s.sub && <div style={{ fontSize: '0.7rem', color: ACCENT, fontWeight: 700, marginTop: 3 }}>{s.sub}</div>}
               {s.health && (
-                <div style={{ marginTop: 6, fontSize: '0.62rem', fontWeight: 700, lineHeight: 1.4, color: s.health.color, background: s.health.bg, border: `1px solid ${s.health.border}`, borderRadius: 7, padding: '5px 7px' }}>{s.health.text}</div>
+                <div style={{ marginTop: 6, fontSize: '0.7rem', fontWeight: 700, lineHeight: 1.4, color: s.health.color, background: s.health.bg, border: `1px solid ${s.health.border}`, borderRadius: 7, padding: '5px 7px' }}>{s.health.text}</div>
               )}
               {s.note && noteOpen === s.label && (
                 <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30, marginTop: 6, background: '#0f172a', color: '#f1f5f9', fontSize: '0.74rem', lineHeight: 1.55, padding: '11px 13px', borderRadius: 10, boxShadow: '0 10px 30px rgba(0,0,0,0.28)', fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>
@@ -824,7 +824,7 @@ export default function KocPerformanceTab() {
           );
           const zone = (slice, label) => (
             <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: '0.64rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 7 }}>{label}</div>
+              <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 7 }}>{label}</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gridAutoRows: '1fr', gap: 12 }}>{slice.map(kpiCard)}</div>
             </div>
           );
@@ -835,14 +835,14 @@ export default function KocPerformanceTab() {
           </>);
         })())}
 
-      {loading && <div style={{ textAlign: 'center', padding: 60, color: '#94a3b8' }}>⏳ Đang tải doanh số…</div>}
+      {loading && <div style={{ textAlign: 'center', padding: 60, color: '#64748b' }}>⏳ Đang tải doanh số…</div>}
       {!loading && error && (
         <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, padding: 20, color: '#b91c1c', fontSize: '0.86rem' }}>
           ❌ {error}<button onClick={() => fetchSales(true)} style={{ marginLeft: 12, padding: '4px 12px', borderRadius: 8, border: '1px solid #fecaca', background: '#fff', color: '#b91c1c', fontWeight: 700, cursor: 'pointer' }}>Thử lại</button>
         </div>
       )}
       {!loading && !error && data && rows.length === 0 && (
-        <div style={{ textAlign: 'center', padding: 50, color: '#94a3b8', fontSize: '0.88rem' }}>
+        <div style={{ textAlign: 'center', padding: 50, color: '#64748b', fontSize: '0.88rem' }}>
           {serverSearching ? `🔎 Đang tìm KOC "${search}"…`
             : search ? <>Không tìm thấy KOC "{search}" trong khoảng ngày / shop này.<br /><span style={{ fontSize: '0.8rem' }}>Thử đổi sang khoảng "Tất cả" hoặc bỏ chọn shop cụ thể.</span></>
             : <>Chưa có đơn affiliate trong khoảng này.<br /><span style={{ fontSize: '0.8rem' }}>Nếu shop vừa kết nối, dữ liệu đang được đồng bộ — quay lại sau vài phút.</span></>}
@@ -876,7 +876,7 @@ export default function KocPerformanceTab() {
                   return (
                     <React.Fragment key={c.username || i}>
                       <tr onClick={() => toggleExpand(c.username)} style={{ background: open ? '#fff7ed' : (rank % 2 ? '#fcfcfd' : '#fff'), cursor: 'pointer' }}>
-                        <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: rank < 3 ? ACCENT : '#94a3b8' }}>{rank + 1}</td>
+                        <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: rank < 3 ? ACCENT : '#64748b' }}>{rank + 1}</td>
                         <td style={{ ...td, textAlign: 'left' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                             <span style={{ color: '#cbd5e1', fontSize: '0.7rem', width: 10 }}>{open ? '▼' : '▶'}</span>
@@ -893,7 +893,7 @@ export default function KocPerformanceTab() {
                         <td style={{ ...td, color: c.cast > 0 ? '#16a34a' : '#cbd5e1', fontWeight: c.cast > 0 ? 700 : 400 }}>{c.cast > 0 ? `${fmtVnd(c.cast)} đ` : '—'}</td>
                         <td style={{ ...td, color: c.sample_cost > 0 ? '#d97706' : '#cbd5e1', fontWeight: c.sample_cost > 0 ? 700 : 400 }}>{c.sample_cost > 0 ? `${fmtVnd(c.sample_cost)} đ` : '—'}</td>
                         {/* TẠM ẨN ROAS — chưa tính chính xác */}
-                        <td style={{ ...td, color: '#94a3b8', fontSize: '0.78rem' }}>{fromUnix(c.last_order)}</td>
+                        <td style={{ ...td, color: '#64748b', fontSize: '0.78rem' }}>{fromUnix(c.last_order)}</td>
                       </tr>
                       {open && (
                         <tr><td colSpan={12} style={{ padding: 0, borderTop: `2px solid ${ACCENT}`, background: '#fafafa' }}>
@@ -923,7 +923,7 @@ export default function KocPerformanceTab() {
                 for (let p = s; p <= e; p++) pages.push(p);
                 if (e < totalPages) { if (e < totalPages - 1) pages.push('…'); pages.push(totalPages); }
                 return pages.map((p, idx) => p === '…'
-                  ? <span key={`e${idx}`} style={{ padding: '0 4px', color: '#94a3b8' }}>…</span>
+                  ? <span key={`e${idx}`} style={{ padding: '0 4px', color: '#64748b' }}>…</span>
                   : <button key={p} onClick={() => setKocPage(p)} style={pgBtn(p === kocPage, false)}>{p}</button>);
               })()}
               <button onClick={() => setKocPage(p => Math.min(totalPages, p + 1))} disabled={kocPage === totalPages} style={pgBtn(false, kocPage === totalPages)}>Sau ›</button>
@@ -932,7 +932,7 @@ export default function KocPerformanceTab() {
               </select>
             </div>
           )}
-          <div style={{ padding: '8px 14px', fontSize: '0.72rem', color: '#94a3b8', borderTop: '1px solid #f1f5f9' }}>
+          <div style={{ padding: '8px 14px', fontSize: '0.72rem', color: '#64748b', borderTop: '1px solid #f1f5f9' }}>
             💡 Bấm vào 1 KOC để xem sản phẩm họ làm video / kéo đơn (theo đúng khoảng ngày đang chọn).
             {data && data.count > (data.shown || 0) && <span> · Bảng hiển thị top {fmtNum(data.shown)}/{fmtNum(data.count)} KOC theo GMV (tổng phía trên vẫn tính đủ).</span>}
           </div>
@@ -945,13 +945,13 @@ export default function KocPerformanceTab() {
           <div onClick={() => setShowAssignPanel(v => !v)}
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', cursor: 'pointer', borderBottom: showAssignPanel ? '1px solid #f1f5f9' : 'none' }}>
             <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#0f172a' }}>
-              🏷️ Định danh KOC <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '0.8rem' }}>· {data.shop} → brand <b style={{ color: ACCENT }}>{brand}</b></span>
+              🏷️ Định danh KOC <span style={{ color: '#64748b', fontWeight: 600, fontSize: '0.8rem' }}>· {data.shop} → brand <b style={{ color: ACCENT }}>{brand}</b></span>
             </h3>
             <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>{showAssignPanel ? '▲ Thu gọn' : '▼ Mở'}</span>
           </div>
           {showAssignPanel && (
             <div style={{ padding: 16 }}>
-              <p style={{ margin: '0 0 12px', fontSize: '0.74rem', color: '#94a3b8' }}>
+              <p style={{ margin: '0 0 12px', fontSize: '0.74rem', color: '#64748b' }}>
                 Gán nhân sự quản lý KOC cho brand này. {currentUser?.role === 'admin' ? 'Bạn gán là duyệt luôn 🟢.' : currentUser?.role === 'ecom' ? 'Bạn gửi đề xuất 🟡, admin duyệt sau.' : 'Chỉ admin/ecom thao tác được.'} Chip viền đứt = đã định danh ở brand khác.
               </p>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
@@ -959,13 +959,13 @@ export default function KocPerformanceTab() {
                   style={{ padding: '6px 14px', borderRadius: 9, border: `1.5px solid ${onlyUnassigned ? ACCENT : '#e5e7eb'}`, background: onlyUnassigned ? '#fff7ed' : '#fff', color: onlyUnassigned ? '#e85518' : '#64748b', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}>
                   🔎 {onlyUnassigned ? `Chỉ chưa định danh (${fmtNum(assignRows.length)})` : 'Chỉ KOC chưa định danh'}
                 </button>
-                <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>⛔ viền đỏ = KOC blacklist (không gán được)</span>
+                <span style={{ fontSize: '0.72rem', color: '#64748b' }}>⛔ viền đỏ = KOC blacklist (không gán được)</span>
               </div>
               {['admin', 'ecom', 'booking'].includes(currentUser?.role) && (pendingProposals.length > 0 || blacklistAssigned.length > 0 || overdueWarnsCast.length > 0) && (
                 <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {pendingProposals.length > 0 && (
                     <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px' }}>
-                      <div style={{ fontWeight: 800, color: '#b45309', fontSize: '0.86rem', marginBottom: 8 }}>🔔 {pendingProposals.length} đề xuất GÁN chờ duyệt <span style={{ color: '#94a3b8', fontWeight: 600 }}>(brand {brand})</span></div>
+                      <div style={{ fontWeight: 800, color: '#b45309', fontSize: '0.86rem', marginBottom: 8 }}>🔔 {pendingProposals.length} đề xuất GÁN chờ duyệt <span style={{ color: '#64748b', fontWeight: 600 }}>(brand {brand})</span></div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {pendingProposals.map(p => (
                           <div key={'pp-' + p.koc} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.78rem', background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #fde68a', flexWrap: 'wrap' }}>
@@ -982,7 +982,7 @@ export default function KocPerformanceTab() {
                   )}
                   {(blacklistAssigned.length > 0 || overdueWarnsCast.length > 0) && (
                     <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 14px' }}>
-                      <div style={{ fontWeight: 800, color: '#dc2626', fontSize: '0.86rem', marginBottom: 8 }}>🗑️ Đề xuất GỠ chờ duyệt — {blacklistAssigned.length + overdueWarnsCast.length} KOC <span style={{ color: '#94a3b8', fontWeight: 600 }}>(brand {brand})</span></div>
+                      <div style={{ fontWeight: 800, color: '#dc2626', fontSize: '0.86rem', marginBottom: 8 }}>🗑️ Đề xuất GỠ chờ duyệt — {blacklistAssigned.length + overdueWarnsCast.length} KOC <span style={{ color: '#64748b', fontWeight: 600 }}>(brand {brand})</span></div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {blacklistAssigned.map(b => (
                           <div key={'bl-' + b.koc} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.78rem', background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #fee2e2', flexWrap: 'wrap' }}>
@@ -990,7 +990,7 @@ export default function KocPerformanceTab() {
                             <span style={{ color: '#dc2626', fontWeight: 700 }}>⛔ BLACKLIST</span><span style={{ color: '#64748b' }}>· NS: <b>{b.staff_name}</b></span>
                             {currentUser?.role === 'admin'
                               ? <button onClick={() => removeAssign(b.koc)} style={{ marginLeft: 'auto', padding: '5px 14px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>Duyệt gỡ</button>
-                              : <span style={{ marginLeft: 'auto', color: '#94a3b8', fontWeight: 600, fontSize: '0.72rem' }}>⏳ chờ admin gỡ</span>}
+                              : <span style={{ marginLeft: 'auto', color: '#64748b', fontWeight: 600, fontSize: '0.72rem' }}>⏳ chờ admin gỡ</span>}
                           </div>
                         ))}
                         {overdueWarnsCast.map(w => (
@@ -999,7 +999,7 @@ export default function KocPerformanceTab() {
                             <span style={{ color: '#64748b' }}>NS: <b>{w.staff_name}</b> · gán từ <b>{w.since_date ? new Date(w.since_date).toLocaleDateString('vi-VN') : '—'}</b> ({w.days_since} ngày) · 0 video</span>
                             {currentUser?.role === 'admin'
                               ? <button onClick={() => removeAssign(w.koc_id)} style={{ marginLeft: 'auto', padding: '5px 14px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>Duyệt gỡ</button>
-                              : <span style={{ marginLeft: 'auto', color: '#94a3b8', fontWeight: 600, fontSize: '0.72rem' }}>⏳ chờ admin gỡ</span>}
+                              : <span style={{ marginLeft: 'auto', color: '#64748b', fontWeight: 600, fontSize: '0.72rem' }}>⏳ chờ admin gỡ</span>}
                           </div>
                         ))}
                       </div>
@@ -1015,11 +1015,11 @@ export default function KocPerformanceTab() {
                   return (
                     <div key={c.username || i} style={{ border: isBlack ? '2px solid #ef4444' : cast ? '2.5px solid #7c3aed' : '1.5px solid #fed7aa', borderRadius: 12, padding: 12, background: isBlack ? '#fef2f2' : cast ? '#f5f3ff' : '#fffdfb', boxShadow: isBlack ? '0 1px 4px rgba(239,68,68,0.14)' : cast ? '0 3px 14px rgba(124,58,237,0.30)' : '0 1px 3px rgba(255,106,44,0.06)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
-                        <span style={{ fontSize: '0.72rem', fontWeight: 800, color: i < 3 ? ACCENT : '#cbd5e1', width: 18, flexShrink: 0 }}>{i + 1}</span>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 800, color: i < 3 ? ACCENT : '#94a3b8', width: 18, flexShrink: 0 }}>{i + 1}</span>
                         <KocAvatar username={c.username} url={avatarMap[c.username]?.avatar} size={34} />
                         <div style={{ minWidth: 0, flex: 1 }}>
                           <a href={`https://www.tiktok.com/@${uname}`} target="_blank" rel="noreferrer" style={{ display: 'block', fontWeight: 700, color: ACCENT, fontSize: '0.84rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'none' }}>@{uname}</a>
-                          <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>{fmtVnd(c.gmv)}đ · {c.vperiod > 0 ? `${fmtNum(c.vperiod)} video kỳ` : '0 video kỳ'}</div>
+                          <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{fmtVnd(c.gmv)}đ · {c.vperiod > 0 ? `${fmtNum(c.vperiod)} video kỳ` : '0 video kỳ'}</div>
                         </div>
                       </div>
                       {cast && (
@@ -1037,8 +1037,8 @@ export default function KocPerformanceTab() {
                         const w = warnMap[uname];
                         // video_count = clip ĐĂNG SAU ngày gán (không tính video cũ còn view/bán) -> >0 nghĩa là đã có clip mới
                         if (!w || (w.video_count || 0) > 0) return null;
-                        if (w.days_since >= 45) return <div style={{ marginTop: 7, fontSize: '0.66rem', fontWeight: 700, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '4px 8px' }}>⚠️ {w.days_since} ngày · 0 video — cần xử lý</div>;
-                        if (w.days_since >= 38) return <div style={{ marginTop: 7, fontSize: '0.66rem', fontWeight: 700, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '4px 8px' }}>⏳ sắp hết hạn — còn {45 - w.days_since} ngày, 0 video</div>;
+                        if (w.days_since >= 45) return <div style={{ marginTop: 7, fontSize: '0.7rem', fontWeight: 700, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '4px 8px' }}>⚠️ {w.days_since} ngày · 0 video — cần xử lý</div>;
+                        if (w.days_since >= 38) return <div style={{ marginTop: 7, fontSize: '0.7rem', fontWeight: 700, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '4px 8px' }}>⏳ sắp hết hạn — còn {45 - w.days_since} ngày, 0 video</div>;
                         return null;
                       })()}
                     </div>
