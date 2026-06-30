@@ -629,8 +629,8 @@ const OrderTab = () => {
         }
 
         // ⚠️ Đơn bất thường → bắt xác nhận lại 1 lần nữa (tránh kế toán phải hỏi lại):
-        //   - có sản phẩm số lượng > 2, HOẶC  - đơn có từ 2 sản phẩm trở lên
-        const hasHighQty = previewList.some(it => it.so_luong > 2);
+        //   - có sản phẩm số lượng TỪ 2 trở lên, HOẶC  - đơn có từ 2 sản phẩm trở lên
+        const hasHighQty = previewList.some(it => it.so_luong >= 2);
         const multiProduct = previewList.length >= 2;
         if (hasHighQty || multiProduct) {
             setConfirmOpen(true);
@@ -830,14 +830,14 @@ const OrderTab = () => {
                         </div>
 
                         {previewList.length > 0 && (() => {
-                            const highQty = previewList.some(it => it.so_luong > 2);
+                            const highQty = previewList.some(it => it.so_luong >= 2);
                             const multi = previewList.length >= 2;
                             if (!highQty && !multi) return null;
                             return (
                                 <div style={{ marginTop: '1rem', padding: '12px 16px', background: '#FEF3C7', border: '1px solid #FCD34D', borderRadius: '10px', color: '#92400E', fontSize: '0.92rem', fontWeight: 600, animation: 'fadeIn 0.4s', display: 'flex', alignItems: 'center', gap: '10px' }}>
                                     <span style={{ fontSize: '1.3rem' }}>🔔</span>
                                     <span>
-                                        Đơn này {multi && <b>có {previewList.length} sản phẩm</b>}{multi && highQty && ' và '}{highQty && <b>có sản phẩm số lượng &gt; 2</b>} → khi bấm <b>Gửi Đơn</b> sẽ phải <b>xác nhận lại 1 lần nữa</b>.
+                                        Đơn này {multi && <b>có {previewList.length} sản phẩm</b>}{multi && highQty && ' và '}{highQty && <b>có sản phẩm số lượng từ 2 trở lên</b>} → khi bấm <b>Gửi Đơn</b> sẽ phải <b>xác nhận lại 1 lần nữa</b>.
                                     </span>
                                 </div>
                             );
@@ -1119,7 +1119,7 @@ const OrderTab = () => {
                         </p>
                         <ul style={{ margin: '0 0 16px', paddingLeft: '20px', color: '#374151', fontSize: '0.92rem' }}>
                             {previewList.length >= 2 && <li>Đơn có <b>{previewList.length} sản phẩm</b> khác nhau.</li>}
-                            {previewList.some(it => it.so_luong > 2) && <li>Có sản phẩm <b>số lượng &gt; 2</b> (đánh dấu đỏ bên dưới).</li>}
+                            {previewList.some(it => it.so_luong >= 2) && <li>Có sản phẩm <b>số lượng từ 2 trở lên</b> (đánh dấu đỏ bên dưới).</li>}
                         </ul>
                         <div style={{ maxHeight: '260px', overflowY: 'auto', border: '1px solid #eee', borderRadius: '8px' }}>
                             <table style={{ width: '100%', fontSize: '0.9rem', borderCollapse: 'collapse' }}>
@@ -1128,7 +1128,7 @@ const OrderTab = () => {
                                 </thead>
                                 <tbody>
                                     {previewList.map((item, idx) => {
-                                        const high = item.so_luong > 2;
+                                        const high = item.so_luong >= 2;
                                         return (
                                             <tr key={idx} style={{ borderBottom: '1px solid #eee', background: high ? '#FEF2F2' : 'transparent' }}>
                                                 <td style={{ padding: '8px', fontWeight: 'bold', color: '#333' }}>{item.ten_brand}</td>
