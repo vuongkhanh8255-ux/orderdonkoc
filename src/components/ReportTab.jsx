@@ -90,6 +90,9 @@ const ProductRows = ({ items }) => (
 );
 
 const Card = ({ children, style }) => <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(15,23,42,0.05)', ...style }}>{children}</div>;
+
+// brand.key → brand chuẩn hóa của RPC report_booking_cast (cast booking đã chi, theo ngày air; eHerb/Healmi đã gộp)
+const CAST_CANON = { bodymiss: 'BODYMISS', moaw: 'MOAW', mila: 'MILAGANICS', eherb: 'EHERB', healmi: 'HEALMI' };
 const SectionTitle = ({ children }) => <h2 style={{ fontSize: '1.05rem', fontWeight: 900, color: '#0f172a', margin: '28px 0 12px' }}>{children}</h2>;
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -164,7 +167,19 @@ export default function ReportTab() {
         booking.prevTotal = (prevR.data || []).reduce((a, r) => a + (Number(r.so_don) || 0), 0);
       }
 
-      setReport({ brand, start, end, prevStart, prevEnd, shopRows, totGmv, totOrders, totAov, prevAov, pTot, productSections, booking });
+      // 4) NGÂN SÁCH ĐÃ CHI (cast booking) theo brand — ngày AIR (khớp Module 7 / Tạm đối chiếu). eHerb/Healmi gộp.
+      let bookingCast = { cur: 0, prev: 0 };
+      const canon = CAST_CANON[brand.key];
+      if (canon) {
+        const [cR, pR] = await Promise.all([
+          supabase.rpc('report_booking_cast', { p_from: start, p_to: end }),
+          supabase.rpc('report_booking_cast', { p_from: prevStart, p_to: prevEnd }),
+        ]);
+        bookingCast.cur = (cR.data || []).filter(r => r.brand_canon === canon).reduce((a, r) => a + (Number(r.cast_net) || 0), 0);
+        bookingCast.prev = (pR.data || []).filter(r => r.brand_canon === canon).reduce((a, r) => a + (Number(r.cast_net) || 0), 0);
+      }
+
+      setReport({ brand, start, end, prevStart, prevEnd, shopRows, totGmv, totOrders, totAov, prevAov, pTot, productSections, booking, bookingCast });
     } catch (e) { setError(e.message || 'Lỗi tạo báo cáo'); }
     finally { setLoading(false); }
   };
@@ -258,6 +273,7 @@ export default function ReportTab() {
               { l: 'Tổng GMV', v: `${fmtVnd(report.totGmv)} đ`, c: pct(report.totGmv, report.pTot.gmv) },
               { l: 'Tổng đơn', v: fmtNum(report.totOrders), c: pct(report.totOrders, report.pTot.orders) },
               { l: 'AOV', v: `${fmtVnd(report.totAov)} đ`, c: pct(report.totAov, report.prevAov) },
+              { l: 'Ngân sách đã chi', v: `${fmtVnd(report.bookingCast?.cur || 0)} đ`, c: pct(report.bookingCast?.cur || 0, report.bookingCast?.prev || 0) },
               { l: 'Số gian hàng', v: fmtNum(report.shopRows.length), c: null },
             ].map(k => (
               <Card key={k.l} style={{ borderLeft: `4px solid ${ACCENT}` }}>
@@ -281,6 +297,7 @@ export default function ReportTab() {
                   { l: 'Đơn hàng', cur: fmtNum(report.totOrders), prev: fmtNum(report.pTot.orders), c: pct(report.totOrders, report.pTot.orders) },
                   { l: 'AOV', cur: `${fmtVnd(report.totAov)} đ`, prev: `${fmtVnd(report.prevAov)} đ`, c: pct(report.totAov, report.prevAov) },
                   ...(report.brand.brandIds?.length ? [{ l: 'Đơn booking gửi', cur: fmtNum(report.booking.total), prev: fmtNum(report.booking.prevTotal || 0), c: pct(report.booking.total, report.booking.prevTotal || 0) }] : []),
+                  ...(CAST_CANON[report.brand.key] ? [{ l: 'Ngân sách đã chi (cast)', cur: `${fmtVnd(report.bookingCast?.cur || 0)} đ`, prev: `${fmtVnd(report.bookingCast?.prev || 0)} đ`, c: pct(report.bookingCast?.cur || 0, report.bookingCast?.prev || 0) }] : []),
                 ].map(r => (
                   <tr key={r.l} style={{ borderTop: '1px solid #f1f5f9' }}>
                     <td style={{ padding: '9px 16px', fontWeight: 600 }}>{r.l}</td>
