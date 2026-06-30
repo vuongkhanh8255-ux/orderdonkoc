@@ -187,6 +187,8 @@ const KocPaymentTab = () => {
       if (num(form.cast_net) >= CONTRACT_REQUIRED_FROM && !has(form.contract_file)) miss.push('Hợp đồng (cast ≥ 2tr)');
     }
     if (miss.length) { alert('⚠️ Phải điền ĐẦY ĐỦ mới lưu được.\nCòn thiếu: ' + miss.join(', ') + '.'); return; }
+    const vids = extractVideoIds(form.air_link);
+    if (vids.length > 1) { alert(`⚠️ Mỗi thanh toán CHỈ điền 1 link video (đang có ${vids.length} link).\nMỗi video tách thành 1 phiếu riêng nha.`); return; }
     const mstDigits = (form.tax_code || '').replace(/\D/g, '');
     const isBiz = mstDigits.length === 10 || mstDigits.length === 13; // MST công ty/HKD: 10 hoặc 13 số
     if (!isBiz && cccdDigits.length !== 12) { alert(`⚠️ Cá nhân: CCCD phải đúng 12 số (đang ${cccdDigits.length} số).\nCông ty/HKD: điền ô "Mã số thuế" 10 hoặc 13 số.`); return; }
@@ -511,10 +513,10 @@ const KocPaymentTab = () => {
 
             <Field label="Link kênh"><input value={form.channel_link} onChange={e => setForm(f => ({ ...f, channel_link: e.target.value }))} placeholder="https://tiktok.com/@..." style={inputStyle} /></Field>
             <div style={{ gridColumn: 'span 3' }}>
-              <Field label="Link air (*) — BẮT BUỘC · mỗi video 1 dòng">
-                <textarea value={form.air_link}
-                  onChange={e => { const v = e.target.value; const u = extractUname((v.split('\n').find(Boolean) || '')); setForm(f => ({ ...f, air_link: v, channel_link: (f.channel_link && f.channel_link.trim()) ? f.channel_link : (u ? `https://www.tiktok.com/@${u}` : f.channel_link) })); }}
-                  rows={1} placeholder="https://tiktok.com/@.../video/..." style={{ ...inputStyle, resize: 'vertical' }} />
+              <Field label="Link air (*) — BẮT BUỘC · CHỈ 1 LINK VIDEO">
+                <input value={form.air_link}
+                  onChange={e => { const v = e.target.value.replace(/[\r\n]+/g, ' ').trim(); const u = extractUname(v); setForm(f => ({ ...f, air_link: v, channel_link: (f.channel_link && f.channel_link.trim()) ? f.channel_link : (u ? `https://www.tiktok.com/@${u}` : f.channel_link) })); }}
+                  placeholder="https://tiktok.com/@.../video/..." style={inputStyle} />
               </Field>
               {formUnames.length > 0 && <div style={{ fontSize: '0.74rem', color: '#0891b2', marginTop: 4, fontWeight: 700 }}>🆔 ID kênh: {formUnames.map(u => '@' + u).join(', ')}</div>}
               {dupVideos.length > 0 && <div style={{ fontSize: '0.76rem', color: '#dc2626', fontWeight: 700, marginTop: 4, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 7, padding: '5px 9px' }}>⚠️ VIDEO TRÙNG (đã có thanh toán khác): {dupVideos.map(d => `…${d.vid.slice(-6)} ← ${d.who.join(', ')}`).join(' · ')}</div>}
