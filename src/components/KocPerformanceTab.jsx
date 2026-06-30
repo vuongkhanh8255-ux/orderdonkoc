@@ -273,17 +273,18 @@ const HIST_LABEL = { assign: '🟢 Gán', propose: '🟡 Đề xuất', approve:
 const HIDDEN_STAFF = ['Anh Kiệt', 'Thiệu Huy'];
 // Shop seller_name → brand_name (khớp convention bên Booking: EHERB / MILAGANICS / ...)
 const brandOfShop = (sellerName) => {
-  const s = (sellerName || '').toUpperCase();
+  // BỎ DẤU tiếng Việt trước khi so (NFD + xoá dấu) → tránh lệch Unicode "Hồ" (NFC vs NFD)
+  // làm "eHerb Hồ Chí Minh" không khớp 'HỒ CHÍ MINH' → cả 2 gian eHerb cùng ra 'EHERB' (BUG).
+  const s = (sellerName || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toUpperCase();
   if (s.includes('BODY')) return 'BODYMISS';
-  // eHerb có 2 gian RIÊNG: VN ("eHerb Viet Nam") và HCM ("eHerb Hồ Chí Minh").
-  // Tên gian HCM ghi đầy đủ "Hồ Chí Minh" chứ KHÔNG phải "HCM" → phải bắt cả 2 cách viết,
-  // không thì cả 2 gian cùng ra 'EHERB' → gán nhãn dùng chung, gán VN là HCM đổi theo (BUG).
-  if (s.includes('EHERB') && (s.includes('HCM') || s.includes('HỒ CHÍ MINH') || s.includes('HO CHI MINH'))) return 'EHERB HCM';
+  // eHerb có 2 gian RIÊNG: VN ("eHerb Viet Nam") và HCM ("eHerb Hồ Chí Minh"). Gian HCM tên đầy đủ
+  // "Ho Chi Minh" chứ KHÔNG có "HCM" → phải bắt cả 2 cách viết (sau khi bỏ dấu là 'HO CHI MINH').
+  if (s.includes('EHERB') && (s.includes('HCM') || s.includes('HO CHI MINH'))) return 'EHERB HCM';
   if (s.includes('EHERB')) return 'EHERB';
   if (s.includes('MILAGANIC')) return 'MILAGANICS';
   if (s.includes('MOAW')) return 'MOAW MOAWS';
   if (s.includes('HEALMII')) return 'HEALMII';
-  return s.replace(/\s*VIỆT NAM\s*/g, '').trim() || '—';
+  return s.replace(/\s*VIET NAM\s*/g, '').trim() || '—';
 };
 
 const assignDate = (a) => { if (!a) return ''; const d = a.status === 'approved' ? (a.approved_at || a.assigned_at) : (a.proposed_at || a.assigned_at); return d ? new Date(d).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }) : ''; };
