@@ -785,7 +785,7 @@ export default function KocPerformanceTab() {
       )}
 
       {!loading && data && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, marginBottom: 18 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 12, marginBottom: 18 }}>
           {[
             { label: 'Tổng GMV', value: `${fmtVnd(totals.gmv)} đ`, icon: '💰' },
             { label: 'GMV Video', value: `${fmtVnd(totals.gmv_video || 0)} đ`, icon: '🎬' },
