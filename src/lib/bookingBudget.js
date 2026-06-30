@@ -5,7 +5,7 @@
 import { supabase } from '../supabaseClient';
 
 export const BUDGET_START = { y: 2026, m: 3 };
-const HIDDEN = ['Ngọc Quỳnh', 'Anh Kiệt', 'Thiệu Huy'];
+const HIDDEN = ['Ngọc Quỳnh', 'Anh Kiệt', 'Thiệu Huy', 'Trúc Linh'];
 export const isHiddenStaff = (name) => HIDDEN.some(h => String(name || '').toLowerCase().includes(h.toLowerCase()));
 
 // Dãy tháng 'YYYY-MM' từ T3/2026 → tháng của toYmd (mặc định hôm nay).

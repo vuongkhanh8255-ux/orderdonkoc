@@ -6,12 +6,11 @@
 // Panel "Cần đối chiếu" liệt kê đơn không suy ra được ngày air → qua Module 5 sửa link.
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
+// DÙNG CHUNG hàm tính ngân sách + danh sách ẩn với Báo cáo nhân sự → 2 chỗ KHỚP 100%, hết lệch.
+import { computeBudget, isHiddenStaff } from '../lib/bookingBudget';
 
 const ACCENT = '#ff6a2c';
 const START = { y: 2026, m: 3 }; // rà từ tháng 3/2026 về sau
-// Nhân sự ĐÃ NGHỈ VIỆC → tạm ẩn khỏi mọi bảng đối chiếu (khớp danh sách ẩn ở Dashboard booking).
-const HIDDEN_STAFF = ['Ngọc Quỳnh', 'Anh Kiệt', 'Thiệu Huy', 'Trúc Linh'];
-const isHiddenStaff = (name) => HIDDEN_STAFF.some(h => String(name || '').toLowerCase().includes(h.toLowerCase()));
 
 const fmt = (n) => new Intl.NumberFormat('vi-VN').format(Math.round(Number(n) || 0));
 const fmtVnd = (n) => {
@@ -180,27 +179,14 @@ function BookingBudgetTab() {
     dmPivot.staffArr.forEach(s => { baseMap[s.staff] = {}; Object.entries(s.byMonth).forEach(([k, v]) => { baseMap[s.staff][k] = v.dm; }); });
     const spentMap = {}; // staff -> monthKey -> đã xài
     pivot.forEach(p => { spentMap[p.staff] = p.byMonth; });
-    const staffSet = new Set([...Object.keys(baseMap), ...Object.keys(spentMap)].filter(s => !isHiddenStaff(s)));
     const mKeys = months.map(m => m.key); // T3 → nay (cùng cột với bảng đã chi)
-    const staffArr = [...staffSet].map(staff => {
-      let started = false, carry = 0, totalXai = 0, lastConLai = 0;
-      const cells = {};
-      mKeys.forEach(mk => {
-        const hasBase = baseMap[staff]?.[mk] != null;
-        const xai = spentMap[staff]?.[mk] || 0;
-        const ex = extraMap[staff]?.[mk] || 0; // ngân sách cộng tay tháng này
-        if (!started && !hasBase && xai <= 0 && ex <= 0) return; // chưa hoạt động tháng này → bỏ qua
-        started = true;
-        const base = baseMap[staff]?.[mk] ?? 15000000; // tháng chưa có định mức (vd tháng hiện tại) → sàn 15tr (cột hờ ở bảng ĐỊNH MỨC giải thích đây là tạm tính)
-        const dmThuc = base + carry + ex;
-        const conLai = dmThuc - xai;
-        cells[mk] = { base, extra: ex, carryIn: carry, dmThuc, xai, conLai };
-        carry = Math.max(0, conLai); lastConLai = conLai; totalXai += xai;
-      });
-      return { staff, cells, totalXai, lastConLai };
-    }).filter(s => Object.keys(s.cells).length > 0);
-    staffArr.sort((a, b) => b.totalXai - a.totalXai);
-    const monthTot = {}; // tổng còn lại mỗi tháng (chỉ ô có data)
+    // CÙNG hàm computeBudget với Báo cáo nhân sự → carryover/cộng-tay/sàn-15tr/ẩn-nhân-sự y hệt, KHỚP 100%.
+    const computed = computeBudget(baseMap, spentMap, extraMap, mKeys);
+    const staffArr = Object.entries(computed).map(([staff, v]) => ({
+      staff, cells: v.cells, lastConLai: v.lastConLai,
+      totalXai: Object.values(v.cells).reduce((a, c) => a + c.xai, 0),
+    })).sort((a, b) => b.totalXai - a.totalXai);
+    const monthTot = {};
     mKeys.forEach(mk => { monthTot[mk] = staffArr.reduce((a, s) => a + (s.cells[mk]?.conLai || 0), 0); });
     return { mKeys: months, staffArr, monthTot };
   }, [dmPivot, pivot, months, extraMap]);

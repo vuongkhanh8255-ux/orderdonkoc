@@ -308,12 +308,19 @@ function StaffDetailPanel({ r, range, bg }) {
   const [loadingDet, setLoadingDet] = useState(true);
   const [sendMetric, setSendMetric] = useState('mau');   // tần suất gửi: don | mau
   const [perfMetric, setPerfMetric] = useState('video'); // hiệu suất: video | views
+  const [castVids, setCastVids] = useState(null);        // danh sách video booking cast (xài tiền cho video/brand/SP gì)
   useEffect(() => {
     let alive = true; setLoadingDet(true);
     supabase.rpc('staff_booking_detail', { p_nhansu_id: r.nhansu_id, p_from: range.start, p_to: range.end })
       .then(({ data }) => { if (alive) { setDet(data || { daily: [], kocs: [] }); setLoadingDet(false); } });
     return () => { alive = false; };
   }, [r.nhansu_id, range.start, range.end]);
+  useEffect(() => {
+    let alive = true; setCastVids(null);
+    supabase.rpc('booking_cast_detail', { p_staff: r.ten_nhansu, p_from: range.start, p_to: range.end })
+      .then(({ data }) => { if (alive) setCastVids(data || []); }, () => { if (alive) setCastVids([]); });
+    return () => { alive = false; };
+  }, [r.ten_nhansu, range.start, range.end]);
   const daily = Array.isArray(det?.daily) ? det.daily : [];
   const kocs = Array.isArray(det?.kocs) ? det.kocs : [];
 
@@ -365,6 +372,9 @@ function StaffDetailPanel({ r, range, bg }) {
   const len = rangeLen(range.start, range.end);
   const burn = len > 0 ? cast / len : 0;
   const avgKoc = num(r.koc_count) > 0 ? cast / num(r.koc_count) : 0;
+  const vth = { padding: '6px 8px', textAlign: 'center', color: '#64748b', fontWeight: 700, fontSize: '0.7rem', whiteSpace: 'nowrap' };
+  const vtd = { padding: '6px 8px', textAlign: 'center', color: '#334155' };
+  const castVidTot = Array.isArray(castVids) ? castVids.reduce((a, v) => a + (num(v.cast_net) || 0), 0) : 0;
 
   // brand distribution (donut)
   const bd = r.brand_dist && typeof r.brand_dist === 'object' ? r.brand_dist : {};
@@ -581,6 +591,39 @@ function StaffDetailPanel({ r, range, bg }) {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
               <Mini icon="⏱️" label="Burn rate / ngày" val={fmtVnd(burn) + 'đ'} color="#475569" />
               <Mini icon="⚖️" label="CAST / GMV" val={num(r.aff_gmv) > 0 ? (cast / num(r.aff_gmv) * 100).toFixed(1) + '%' : '—'} color="#475569" />
+            </div>
+
+            {/* DANH SÁCH VIDEO BOOKING CAST — xài tiền cho video / brand / sản phẩm gì, khi nào (nguồn: Thanh toán KOC) */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                <div style={{ fontWeight: 700, color: '#475569', fontSize: '0.85rem' }}>🎬 Video booking cast trong kỳ {Array.isArray(castVids) ? `· ${castVids.length} video` : ''}</div>
+                {Array.isArray(castVids) && castVids.length > 0 && <span style={{ fontSize: '0.72rem', color: '#ea580c', fontWeight: 700 }}>Σ cast {fmtVnd(castVidTot)}đ</span>}
+              </div>
+              {!Array.isArray(castVids) ? chartLoading(120)
+                : castVids.length === 0 ? <div style={{ fontSize: '0.78rem', color: '#94a3b8', padding: 12, textAlign: 'center', background: '#f8fafc', borderRadius: 10 }}>Chưa có video cast trong kỳ.</div>
+                : (
+                <div style={{ maxHeight: 340, overflowY: 'auto', border: '1px solid #f1f5f9', borderRadius: 10 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.74rem' }}>
+                    <thead>
+                      <tr style={{ background: '#f8fafc', position: 'sticky', top: 0, zIndex: 1 }}>
+                        <th style={vth}>Ngày air</th><th style={vth}>Brand</th><th style={{ ...vth, textAlign: 'left' }}>Sản phẩm</th><th style={{ ...vth, textAlign: 'right' }}>Cast</th><th style={vth}>Link</th><th style={vth}>TT</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {castVids.map((v, i) => (
+                        <tr key={i} style={{ borderTop: '1px solid #f1f5f9' }}>
+                          <td style={vtd}>{v.air_date ? new Date(v.air_date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—'}</td>
+                          <td style={{ ...vtd, fontWeight: 700, color: BRAND_COLOR[(v.brand || '').toUpperCase()] || '#475569' }}>{v.brand || '—'}</td>
+                          <td style={{ ...vtd, textAlign: 'left', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={v.product_name || v.video_title || ''}>{v.product_name || v.video_title || <span style={{ color: '#cbd5e1' }}>(chưa có)</span>}</td>
+                          <td style={{ ...vtd, textAlign: 'right', fontWeight: 700, color: '#ea580c' }}>{fmtVnd(v.cast_net)}</td>
+                          <td style={vtd}>{v.air_link ? <a href={v.air_link.split('\n')[0].trim()} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }} title="Mở video">🎬</a> : '—'}</td>
+                          <td style={vtd} title={v.paid ? 'Đã thanh toán' : 'Chưa thanh toán'}>{v.paid ? '✅' : '⏳'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             {/* Scatter GMV vs CAST theo KOC */}
