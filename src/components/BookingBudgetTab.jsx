@@ -182,7 +182,7 @@ function BookingBudgetTab() {
         const ex = extraMap[staff]?.[mk] || 0; // ngân sách cộng tay tháng này
         if (!started && !hasBase && xai <= 0 && ex <= 0) return; // chưa hoạt động tháng này → bỏ qua
         started = true;
-        const base = baseMap[staff]?.[mk] ?? 15000000; // tháng không có GMV → sàn 15tr
+        const base = baseMap[staff]?.[mk] ?? 0; // tháng CHƯA tính được định mức (vd tháng hiện tại) → base 0, KHÔNG tự cho sàn 15tr (chỉ giữ dư cộng dồn + cộng tay)
         const dmThuc = base + carry + ex;
         const conLai = dmThuc - xai;
         cells[mk] = { base, extra: ex, carryIn: carry, dmThuc, xai, conLai };
