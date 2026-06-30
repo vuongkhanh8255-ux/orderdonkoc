@@ -800,7 +800,7 @@ export default function KocPerformanceTab() {
             // { label: 'ROAS tổng', value: fmtRoas(roasOf(totals.gmv, totals.commission, totals.cast, totals.sample_cost)), icon: '📊' }, // TẠM ẨN — ROAS chưa tính chính xác
           ].filter(Boolean);
           const kpiCard = (s) => (
-            <div key={s.label} style={{ position: 'relative', height: '100%', boxSizing: 'border-box', background: '#fff', borderRadius: 14, padding: '15px 18px', border: '1px solid #eef1f5', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+            <div key={s.label} style={{ position: 'relative', height: '100%', minHeight: 150, boxSizing: 'border-box', background: '#fff', borderRadius: 14, padding: '15px 18px', border: '1px solid #eef1f5', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ width: 28, height: 28, borderRadius: 8, background: '#fff4ec', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', flexShrink: 0 }}>{s.icon}</span>
                 <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px' }}>{s.label}</span>
@@ -829,8 +829,8 @@ export default function KocPerformanceTab() {
             </div>
           );
           return (<>
-            {zone(__cards.slice(0, 4), '💰 Doanh thu (GMV)')}
-            {zone(__cards.slice(4, 8), '🎬 Video & lượt xem')}
+            {zone(__cards.slice(0, 5), '💰 Doanh thu (GMV)')}
+            {zone(__cards.slice(5, 8), '🎬 Video & lượt xem')}
             {zone(__cards.slice(8), '💸 Chi phí')}
           </>);
         })())}
