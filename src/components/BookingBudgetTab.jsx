@@ -10,7 +10,7 @@ import { supabase } from '../supabaseClient';
 const ACCENT = '#ff6a2c';
 const START = { y: 2026, m: 3 }; // rà từ tháng 3/2026 về sau
 // Nhân sự ĐÃ NGHỈ VIỆC → tạm ẩn khỏi mọi bảng đối chiếu (khớp danh sách ẩn ở Dashboard booking).
-const HIDDEN_STAFF = ['Ngọc Quỳnh', 'Anh Kiệt', 'Thiệu Huy'];
+const HIDDEN_STAFF = ['Ngọc Quỳnh', 'Anh Kiệt', 'Thiệu Huy', 'Trúc Linh'];
 const isHiddenStaff = (name) => HIDDEN_STAFF.some(h => String(name || '').toLowerCase().includes(h.toLowerCase()));
 
 const fmt = (n) => new Intl.NumberFormat('vi-VN').format(Math.round(Number(n) || 0));
@@ -153,14 +153,23 @@ function BookingBudgetTab() {
       if (!map[r.staff]) map[r.staff] = { staff: r.staff, byMonth: {}, total: 0 };
       map[r.staff].byMonth[key] = { dm: Number(r.dinh_muc) || 0, gmv: Number(r.gmv_cum) || 0 };
     });
+    // CỘT HỜ: tháng trong khoảng đang xem mà ĐỊNH MỨC CHƯA tính (vd tháng hiện tại) → cột tạm, sàn 15tr, để người ta biết là chưa chốt
+    const placeholderKeys = [];
+    months.forEach(m => {
+      if (m.key >= minKey && !mset.has(m.key)) {
+        mset.set(m.key, { key: m.key, label: m.label, full: m.full, placeholder: true });
+        placeholderKeys.push(m.key);
+      }
+    });
     const dmMonths = [...mset.values()].sort((a, b) => a.key.localeCompare(b.key));
     const staffArr = Object.values(map);
+    staffArr.forEach(s => { placeholderKeys.forEach(k => { if (!s.byMonth[k]) s.byMonth[k] = { dm: 15000000, gmv: null, placeholder: true }; }); });
     staffArr.forEach(s => { s.total = dmMonths.reduce((a, m) => a + (s.byMonth[m.key]?.dm || 0), 0); });
     staffArr.sort((a, b) => b.total - a.total);
     const monthTot = {};
     dmMonths.forEach(m => { monthTot[m.key] = staffArr.reduce((a, s) => a + (s.byMonth[m.key]?.dm || 0), 0); });
     return { dmMonths, staffArr, monthTot, grand: staffArr.reduce((a, s) => a + s.total, 0) };
-  }, [dmRows]);
+  }, [dmRows, months]);
   const shownDmStaff = useMemo(() => (fStaff ? dmPivot.staffArr.filter(s => s.staff === fStaff) : dmPivot.staffArr), [dmPivot, fStaff]);
 
   // ── NGÂN SÁCH CÒN LẠI theo nhân sự × tháng ──
@@ -182,7 +191,7 @@ function BookingBudgetTab() {
         const ex = extraMap[staff]?.[mk] || 0; // ngân sách cộng tay tháng này
         if (!started && !hasBase && xai <= 0 && ex <= 0) return; // chưa hoạt động tháng này → bỏ qua
         started = true;
-        const base = baseMap[staff]?.[mk] ?? 0; // tháng CHƯA tính được định mức (vd tháng hiện tại) → base 0, KHÔNG tự cho sàn 15tr (chỉ giữ dư cộng dồn + cộng tay)
+        const base = baseMap[staff]?.[mk] ?? 15000000; // tháng chưa có định mức (vd tháng hiện tại) → sàn 15tr (cột hờ ở bảng ĐỊNH MỨC giải thích đây là tạm tính)
         const dmThuc = base + carry + ex;
         const conLai = dmThuc - xai;
         cells[mk] = { base, extra: ex, carryIn: carry, dmThuc, xai, conLai };
@@ -254,7 +263,7 @@ function BookingBudgetTab() {
         <div style={{ padding: '14px 18px', borderBottom: '1px solid #fef3c7', background: '#fffbeb' }}>
           <div style={{ fontWeight: 800, color: '#b45309', fontSize: '0.95rem' }}>📊 Định mức cast theo nhân sự × tháng ({shownDmStaff.length})</div>
           <div style={{ fontSize: '0.76rem', color: '#92400e', marginTop: 3 }}>
-            Công thức: <b>max(15.000.000₫, GMV lũy kế × 2.2%)</b> · GMV lũy kế lấy đúng bảng “Performance theo nhân sự”. <b>Phase 1: chỉ định mức gốc</b> — CHƯA trừ đã xài / cộng dồn dư tháng trước (làm bước sau). Số nhỏ xám = GMV lũy kế tháng đó.
+            Công thức: <b>max(15.000.000₫, GMV lũy kế × 2.2%)</b> · GMV lũy kế lấy đúng bảng “Performance theo nhân sự”. <b>Phase 1: chỉ định mức gốc</b> — CHƯA trừ đã xài / cộng dồn dư tháng trước (làm bước sau). Số nhỏ xám = GMV lũy kế tháng đó. <b>Cột có ⏳</b> = tháng định mức <b>chưa chốt</b> (GMV chưa tính đủ) → tạm tính <b>sàn 15tr</b>, sẽ cập nhật khi đủ data.
           </div>
         </div>
         <div style={{ overflowX: 'auto' }}>
@@ -263,7 +272,7 @@ function BookingBudgetTab() {
               <tr>
                 <th style={{ ...th, textAlign: 'left' }}>#</th>
                 <th style={{ ...th, textAlign: 'left' }}>Nhân sự</th>
-                {dmPivot.dmMonths.map(m => <th key={m.key} style={th} title={m.full}>{m.label}</th>)}
+                {dmPivot.dmMonths.map(m => <th key={m.key} style={th} title={m.placeholder ? `${m.full} — ĐỊNH MỨC CHƯA CHỐT (GMV chưa tính đủ), tạm tính sàn 15tr` : m.full}>{m.label}{m.placeholder ? ' ⏳' : ''}</th>)}
                 <th style={{ ...th, color: ACCENT }}>Tổng định mức</th>
               </tr>
             </thead>
@@ -277,6 +286,12 @@ function BookingBudgetTab() {
                   {dmPivot.dmMonths.map(m => {
                     const c = s.byMonth[m.key];
                     if (!c) return <td key={m.key} style={{ ...td, color: '#cbd5e1' }}>–</td>;
+                    if (c.placeholder) return (
+                      <td key={m.key} style={{ ...td, background: '#fffbeb' }} title="Định mức tháng này CHƯA chốt (GMV chưa tính đủ) — tạm tính theo sàn 15.000.000₫. Sẽ cập nhật khi GMV đủ.">
+                        <div style={{ fontWeight: 700, color: '#b45309' }}>{fmt(c.dm)}</div>
+                        <div style={{ fontSize: '0.62rem', color: '#d97706', fontStyle: 'italic' }}>⏳ tạm · sàn 15tr</div>
+                      </td>
+                    );
                     const isMin = c.dm <= 15000000;
                     return (
                       <td key={m.key} style={td} title={`Định mức ${fmt(c.dm)}₫ · GMV lũy kế ${fmt(c.gmv)}₫${isMin ? ' (sàn 15tr)' : ' (2.2% GMV)'}`}>
