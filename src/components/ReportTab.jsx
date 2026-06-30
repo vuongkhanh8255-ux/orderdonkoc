@@ -179,7 +179,24 @@ export default function ReportTab() {
         bookingCast.prev = (pR.data || []).filter(r => r.brand_canon === canon).reduce((a, r) => a + (Number(r.cast_net) || 0), 0);
       }
 
-      setReport({ brand, start, end, prevStart, prevEnd, shopRows, totGmv, totOrders, totAov, prevAov, pTot, productSections, booking, bookingCast });
+      // 5) CHI PHÍ GỬI MẪU (cost AMIS×1.08×SL +5k +ship) + DANH SÁCH KOC đã book cast
+      let sampleCost = { cur: 0, prev: 0 };
+      let castKocs = [];
+      if (brand.brandIds?.length) {
+        const [scR, scP] = await Promise.all([
+          supabase.rpc('report_sample_cost', { p_brand_ids: brand.brandIds, p_from: start, p_to: end }),
+          supabase.rpc('report_sample_cost', { p_brand_ids: brand.brandIds, p_from: prevStart, p_to: prevEnd }),
+        ]);
+        sampleCost.cur = Number(scR.data) || 0;
+        sampleCost.prev = Number(scP.data) || 0;
+      }
+      if (canon) {
+        const kR = await supabase.rpc('report_booking_cast_kocs', { p_from: start, p_to: end });
+        castKocs = (kR.data || []).filter(r => r.brand_canon === canon)
+          .map(r => ({ koc: r.koc, name: r.full_name, cast: Number(r.cast_net) || 0, n: Number(r.n) || 0 }));
+      }
+
+      setReport({ brand, start, end, prevStart, prevEnd, shopRows, totGmv, totOrders, totAov, prevAov, pTot, productSections, booking, bookingCast, sampleCost, castKocs });
     } catch (e) { setError(e.message || 'Lỗi tạo báo cáo'); }
     finally { setLoading(false); }
   };
@@ -190,6 +207,7 @@ export default function ReportTab() {
     utils.book_append_sheet(wb, utils.json_to_sheet(report.shopRows.map(s => ({ 'Gian hàng': s.name, 'Sàn': s.platform, 'GMV': Math.round(s.gmv), 'Đơn': s.orders, 'AOV': Math.round(s.aov) }))), 'Doanh thu');
     if (report.booking.byStaff.length) utils.book_append_sheet(wb, utils.json_to_sheet(report.booking.byStaff.map(s => ({ 'Nhân sự': s.name, 'Đơn đã gửi': s.count, 'SL sản phẩm': s.qty }))), 'Booking-Nhân sự');
     if (report.booking.products.length) utils.book_append_sheet(wb, utils.json_to_sheet(report.booking.products.map(p => ({ 'Sản phẩm': p.name, 'SL gửi': p.qty, 'Số đơn': p.orders }))), 'Booking-Sản phẩm');
+    if (report.castKocs?.length) utils.book_append_sheet(wb, utils.json_to_sheet(report.castKocs.map(k => ({ 'KOC': '@' + k.koc, 'Tên': k.name || '', 'Cast (đ)': Math.round(k.cast), 'Số video': k.n }))), 'KOC-Cast');
     const prodRows = [];
     report.productSections.forEach(ps => ps.items.forEach((it, i) => prodRows.push({ 'Gian hàng': ps.shop.name, 'Hạng': i + 1, 'Sản phẩm': it.name, 'SL bán': it.qty, 'Doanh thu': Math.round(it.gmv) })));
     if (prodRows.length) utils.book_append_sheet(wb, utils.json_to_sheet(prodRows), 'Sản phẩm');
@@ -274,6 +292,7 @@ export default function ReportTab() {
               { l: 'Tổng đơn', v: fmtNum(report.totOrders), c: pct(report.totOrders, report.pTot.orders) },
               { l: 'AOV', v: `${fmtVnd(report.totAov)} đ`, c: pct(report.totAov, report.prevAov) },
               { l: 'Ngân sách đã chi', v: `${fmtVnd(report.bookingCast?.cur || 0)} đ`, c: pct(report.bookingCast?.cur || 0, report.bookingCast?.prev || 0) },
+              { l: 'Chi phí gửi mẫu', v: `${fmtVnd(report.sampleCost?.cur || 0)} đ`, c: pct(report.sampleCost?.cur || 0, report.sampleCost?.prev || 0) },
               { l: 'Số gian hàng', v: fmtNum(report.shopRows.length), c: null },
             ].map(k => (
               <Card key={k.l} style={{ borderLeft: `4px solid ${ACCENT}` }}>
@@ -298,6 +317,7 @@ export default function ReportTab() {
                   { l: 'AOV', cur: `${fmtVnd(report.totAov)} đ`, prev: `${fmtVnd(report.prevAov)} đ`, c: pct(report.totAov, report.prevAov) },
                   ...(report.brand.brandIds?.length ? [{ l: 'Đơn booking gửi', cur: fmtNum(report.booking.total), prev: fmtNum(report.booking.prevTotal || 0), c: pct(report.booking.total, report.booking.prevTotal || 0) }] : []),
                   ...(CAST_CANON[report.brand.key] ? [{ l: 'Ngân sách đã chi (cast)', cur: `${fmtVnd(report.bookingCast?.cur || 0)} đ`, prev: `${fmtVnd(report.bookingCast?.prev || 0)} đ`, c: pct(report.bookingCast?.cur || 0, report.bookingCast?.prev || 0) }] : []),
+                  ...(report.brand.brandIds?.length ? [{ l: 'Chi phí gửi mẫu', cur: `${fmtVnd(report.sampleCost?.cur || 0)} đ`, prev: `${fmtVnd(report.sampleCost?.prev || 0)} đ`, c: pct(report.sampleCost?.cur || 0, report.sampleCost?.prev || 0) }] : []),
                 ].map(r => (
                   <tr key={r.l} style={{ borderTop: '1px solid #f1f5f9' }}>
                     <td style={{ padding: '9px 16px', fontWeight: 600 }}>{r.l}</td>
@@ -309,6 +329,37 @@ export default function ReportTab() {
               </tbody>
             </table>
           </Card>
+
+          {/* KOC đã book cast */}
+          {report.castKocs?.length > 0 && (<>
+            <SectionTitle>🎤 KOC đã book cast ({report.castKocs.length})</SectionTitle>
+            <Card style={{ padding: 0, overflow: 'hidden' }}>
+              <div style={{ maxHeight: 380, overflowY: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
+                  <thead><tr style={{ background: '#f8fafc' }}>
+                    <th style={thL}>#</th><th style={thL}>KOC</th><th style={thL}>Tên</th>
+                    <th style={thR}>Cast</th><th style={thR}>Số video</th>
+                  </tr></thead>
+                  <tbody>
+                    {report.castKocs.map((k, i) => (
+                      <tr key={k.koc} style={{ borderTop: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '9px 12px', color: '#94a3b8', fontWeight: 700 }}>{i + 1}</td>
+                        <td style={{ padding: '9px 12px' }}><a href={`https://www.tiktok.com/@${k.koc}`} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontWeight: 700, textDecoration: 'none' }}>@{k.koc}</a></td>
+                        <td style={{ padding: '9px 12px', color: '#334155' }}>{k.name || '—'}</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 800, color: '#ea580c' }}>{fmtVnd(k.cast)} đ</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'right' }}>{fmtNum(k.n)}</td>
+                      </tr>
+                    ))}
+                    <tr style={{ borderTop: '2px solid #e2e8f0', background: '#fff7ed' }}>
+                      <td colSpan={3} style={{ padding: '9px 12px', fontWeight: 800 }}>Tổng ({report.castKocs.length} KOC)</td>
+                      <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 900, color: '#ea580c' }}>{fmtVnd(report.castKocs.reduce((a, k) => a + k.cast, 0))} đ</td>
+                      <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 800 }}>{fmtNum(report.castKocs.reduce((a, k) => a + k.n, 0))}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </>)}
 
           {/* Doanh thu theo gian hàng */}
           {report.shopRows.length > 0 && (<>
