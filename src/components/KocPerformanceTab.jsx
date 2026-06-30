@@ -785,8 +785,8 @@ export default function KocPerformanceTab() {
       )}
 
       {!loading && data && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 12, marginBottom: 18 }}>
-          {[
+        (() => {
+          const __cards = [
             { label: 'Tổng GMV', value: `${fmtVnd(totals.gmv)} đ`, icon: '💰' },
             { label: 'GMV Video', value: `${fmtVnd(totals.gmv_video || 0)} đ`, icon: '🎬' },
             { label: 'GMV Live', value: `${fmtVnd(totals.gmv_live || 0)} đ`, icon: '📺' },
@@ -798,8 +798,9 @@ export default function KocPerformanceTab() {
             { label: 'Tổng cast', value: `${fmtVnd(totals.cast || 0)} đ`, icon: '💵' },
             { label: 'Tổng chi phí mẫu', value: `${fmtVnd(totals.sample_cost || 0)} đ`, icon: '🎁' },
             // { label: 'ROAS tổng', value: fmtRoas(roasOf(totals.gmv, totals.commission, totals.cast, totals.sample_cost)), icon: '📊' }, // TẠM ẨN — ROAS chưa tính chính xác
-          ].filter(Boolean).map(s => (
-            <div key={s.label} style={{ position: 'relative', background: '#fff', borderRadius: 14, padding: '15px 18px', border: '1px solid #eef1f5', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+          ].filter(Boolean);
+          const kpiCard = (s) => (
+            <div key={s.label} style={{ position: 'relative', height: '100%', boxSizing: 'border-box', background: '#fff', borderRadius: 14, padding: '15px 18px', border: '1px solid #eef1f5', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ width: 28, height: 28, borderRadius: 8, background: '#fff4ec', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', flexShrink: 0 }}>{s.icon}</span>
                 <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px' }}>{s.label}</span>
@@ -820,9 +821,19 @@ export default function KocPerformanceTab() {
                 </div>
               )}
             </div>
-          ))}
-        </div>
-      )}
+          );
+          const zone = (slice, label) => (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: '0.64rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 7 }}>{label}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gridAutoRows: '1fr', gap: 12 }}>{slice.map(kpiCard)}</div>
+            </div>
+          );
+          return (<>
+            {zone(__cards.slice(0, 4), '💰 Doanh thu (GMV)')}
+            {zone(__cards.slice(4, 8), '🎬 Video & lượt xem')}
+            {zone(__cards.slice(8), '💸 Chi phí')}
+          </>);
+        })())}
 
       {loading && <div style={{ textAlign: 'center', padding: 60, color: '#94a3b8' }}>⏳ Đang tải doanh số…</div>}
       {!loading && error && (
