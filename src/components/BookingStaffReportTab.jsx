@@ -504,7 +504,7 @@ function StaffDetailPanel({ r, range, bg }) {
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead><tr>
-                      <th style={{ ...th, padding: '8px' }}>#</th><th style={{ ...th, padding: '8px' }}>KOC</th>
+                      <th style={{ ...th, padding: '8px' }}>#</th><th style={{ ...th, padding: '8px', width: '100%' }}>KOC</th>
                       <th style={{ ...th, padding: '8px' }} title="1 KOC air nhiều brand = tách thành nhiều dòng, KHÔNG gộp">Brand</th>
                       <th style={{ ...th, padding: '8px', textAlign: 'right' }}>GMV</th><th style={{ ...th, padding: '8px', textAlign: 'right' }}>View</th>
                       <th style={{ ...th, padding: '8px', textAlign: 'right' }} title="Tổng video KOC đã đăng cho brand này (all-time)">Video tổng</th>
@@ -519,7 +519,7 @@ function StaffDetailPanel({ r, range, bg }) {
                         return (
                           <tr key={k.uname + '|' + (k.brand || '')}>
                             <td style={{ ...td, padding: '9px 8px', color: '#94a3b8', fontWeight: 700 }}>{(kocPageC - 1) * KOC_PER_PAGE + i + 1}</td>
-                            <td style={{ ...td, padding: '9px 8px' }}><a href={`https://www.tiktok.com/@${k.uname}`} target="_blank" rel="noreferrer" style={{ color: '#475569', textDecoration: 'none', fontWeight: 600 }}>@{k.uname}</a></td>
+                            <td style={{ ...td, padding: '9px 8px', width: '100%' }}><a href={`https://www.tiktok.com/@${k.uname}`} target="_blank" rel="noreferrer" style={{ color: '#475569', textDecoration: 'none', fontWeight: 600 }}>@{k.uname}</a></td>
                             <td style={{ ...td, padding: '9px 8px', fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>{k.brand || '—'}</td>
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'right', fontWeight: 800, color: '#16a34a' }}>{fmtVnd(k.gmv)}</td>
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'right', color: '#0891b2' }}>{fmtView(k.views)}</td>
