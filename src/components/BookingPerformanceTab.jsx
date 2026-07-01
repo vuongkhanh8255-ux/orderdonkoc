@@ -145,24 +145,15 @@ const KocIdentityOverview = ({ data = [], brandHeaders = [], formatNumber, staff
                     remoteAssignments[buildAssignmentKey(item.koc_id, item.brand_name)] = item;
                 });
 
-                // Merge: giữ localStorage-only items + Supabase thắng khi conflict
-                const merged = { ...localAssignments, ...remoteAssignments };
+                // DB LÀ NGUỒN CHUẨN DUY NHẤT: sau khi Supabase trả về thì DÙNG HẲN remote (kể cả
+                // định danh đã bị xoá). KHÔNG merge localStorage-only + KHÔNG upsert ngược lên DB nữa.
+                // (BUG cũ: gỡ định danh ở tab Hiệu suất KOC xong, Booking dashboard mount lại thấy nó
+                // "chỉ có ở localStorage" → tự upsert lại lên DB → HỒI SINH định danh đã gỡ, giữ nguyên
+                // ngày gán cũ → nút "Duyệt gỡ" như vô dụng. localStorage giờ chỉ là cache hiển-thị-nhanh,
+                // luôn GHI ĐÈ = snapshot DB mới nhất.)
                 if (isMounted) {
-                    setAssignments(merged);
-                    saveLocalKocAssignments(merged);
-                }
-
-                // Push các item chỉ có trong localStorage lên Supabase (migration 1 lần)
-                const localOnlyItems = Object.values(localAssignments).filter(item =>
-                    item?.koc_id && item?.brand_name &&
-                    !remoteAssignments[buildAssignmentKey(item.koc_id, item.brand_name)]
-                );
-                if (localOnlyItems.length > 0) {
-                    const { error: upsertErr } = await supabase
-                        .from(KOC_ASSIGNMENTS_TABLE)
-                        .upsert(localOnlyItems, { onConflict: 'koc_id,brand_name' });
-                    if (upsertErr) console.warn('Cannot migrate local assignments to Supabase:', upsertErr);
-                    else console.log(`Migrated ${localOnlyItems.length} local assignments to Supabase`);
+                    setAssignments(remoteAssignments);
+                    saveLocalKocAssignments(remoteAssignments);
                 }
             });
 
