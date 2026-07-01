@@ -506,12 +506,12 @@ function StaffDetailPanel({ r, range, bg }) {
                     <thead><tr>
                       <th style={{ ...th, padding: '8px' }}>#</th><th style={{ ...th, padding: '8px', width: '100%' }}>KOC</th>
                       <th style={{ ...th, padding: '8px' }} title="1 KOC air nhiều brand = tách thành nhiều dòng, KHÔNG gộp">Brand</th>
-                      <th style={{ ...th, padding: '8px', textAlign: 'right' }}>GMV</th><th style={{ ...th, padding: '8px', textAlign: 'right' }}>View</th>
-                      <th style={{ ...th, padding: '8px', textAlign: 'right' }} title="Tổng video KOC đã đăng cho brand này (all-time)">Video tổng</th>
-                      <th style={{ ...th, padding: '8px', textAlign: 'right' }} title="Video đăng cho brand này trong khung thời gian đang chọn">Video kỳ</th><th style={{ ...th, padding: '8px', textAlign: 'right' }} title="Cast trong tháng">CAST</th>
-                      <th style={{ ...th, padding: '8px' }} title="Ngày gắn định danh brand này">Ngày gắn</th>
-                      <th style={{ ...th, padding: '8px' }} title="Video mới nhất KOC đăng cho brand này (all-time)">📅 Ngày air gần nhất</th>
-                      <th style={{ ...th, padding: '8px' }} title="Mốc bị gỡ định danh = ngày air gần nhất + 45 ngày (cứ air là gia hạn); brand chưa air lần nào thì tính từ ngày gắn + 45. Quá hạn = nên gỡ.">⏳ Thời gian bị gỡ tag</th>
+                      <th style={{ ...th, padding: '8px', textAlign: 'center' }}>GMV</th><th style={{ ...th, padding: '8px', textAlign: 'center' }}>View</th>
+                      <th style={{ ...th, padding: '8px', textAlign: 'center' }} title="Tổng video KOC đã đăng cho brand này (all-time)">Video tổng</th>
+                      <th style={{ ...th, padding: '8px', textAlign: 'center' }} title="Video đăng cho brand này trong khung thời gian đang chọn">Video kỳ</th><th style={{ ...th, padding: '8px', textAlign: 'center' }} title="Cast trong tháng">CAST</th>
+                      <th style={{ ...th, padding: '8px', textAlign: 'center' }} title="Ngày gắn định danh brand này">Ngày gắn</th>
+                      <th style={{ ...th, padding: '8px', textAlign: 'center' }} title="Video mới nhất KOC đăng cho brand này (all-time)">📅 Ngày air gần nhất</th>
+                      <th style={{ ...th, padding: '8px', textAlign: 'center' }} title="Mốc bị gỡ định danh = ngày air gần nhất + 45 ngày (cứ air là gia hạn); brand chưa air lần nào thì tính từ ngày gắn + 45. Quá hạn = nên gỡ.">⏳ Thời gian bị gỡ tag</th>
                     </tr></thead>
                     <tbody>
                       {pagedKocs.map((k, i) => {
@@ -521,14 +521,14 @@ function StaffDetailPanel({ r, range, bg }) {
                             <td style={{ ...td, padding: '9px 8px', color: '#94a3b8', fontWeight: 700 }}>{(kocPageC - 1) * KOC_PER_PAGE + i + 1}</td>
                             <td style={{ ...td, padding: '9px 8px', width: '100%' }}><a href={`https://www.tiktok.com/@${k.uname}`} target="_blank" rel="noreferrer" style={{ color: '#475569', textDecoration: 'none', fontWeight: 600 }}>@{k.uname}</a></td>
                             <td style={{ ...td, padding: '9px 8px', fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>{k.brand || '—'}</td>
-                            <td style={{ ...td, padding: '9px 8px', textAlign: 'right', fontWeight: 800, color: '#16a34a' }}>{fmtVnd(k.gmv)}</td>
-                            <td style={{ ...td, padding: '9px 8px', textAlign: 'right', color: '#0891b2' }}>{fmtView(k.views)}</td>
-                            <td style={{ ...td, padding: '9px 8px', textAlign: 'right', color: '#7c3aed', fontWeight: 800 }}>{fmt(k.videos_total)}</td>
-                            <td style={{ ...td, padding: '9px 8px', textAlign: 'right', color: '#a78bda', fontWeight: 600 }}>{fmt(k.videos)}</td>
-                            <td style={{ ...td, padding: '9px 8px', textAlign: 'right', color: '#ea580c' }}>{num(k.cast) > 0 ? fmtVnd(k.cast) : '—'}</td>
-                            <td style={{ ...td, padding: '9px 8px', fontSize: '0.76rem', color: '#64748b' }}>{dateLabel(k.since)}</td>
-                            <td style={{ ...td, padding: '9px 8px', fontSize: '0.76rem', fontWeight: 600, color: k.last_air ? '#0891b2' : '#f59e0b' }}>{k.last_air ? dateLabel(k.last_air) : '— chưa air'}</td>
-                            <td style={{ ...td, padding: '9px 8px', fontSize: '0.74rem', fontWeight: 700, color: ti.color }}>{ti.txt}</td>
+                            <td style={{ ...td, padding: '9px 8px', textAlign: 'center', fontWeight: 800, color: '#16a34a' }}>{fmtVnd(k.gmv)}</td>
+                            <td style={{ ...td, padding: '9px 8px', textAlign: 'center', color: '#0891b2' }}>{fmtView(k.views)}</td>
+                            <td style={{ ...td, padding: '9px 8px', textAlign: 'center', color: '#7c3aed', fontWeight: 800 }}>{fmt(k.videos_total)}</td>
+                            <td style={{ ...td, padding: '9px 8px', textAlign: 'center', color: '#a78bda', fontWeight: 600 }}>{fmt(k.videos)}</td>
+                            <td style={{ ...td, padding: '9px 8px', textAlign: 'center', color: '#ea580c' }}>{num(k.cast) > 0 ? fmtVnd(k.cast) : '—'}</td>
+                            <td style={{ ...td, padding: '9px 8px', textAlign: 'center', fontSize: '0.76rem', color: '#64748b' }}>{dateLabel(k.since)}</td>
+                            <td style={{ ...td, padding: '9px 8px', textAlign: 'center', fontSize: '0.76rem', fontWeight: 600, color: k.last_air ? '#0891b2' : '#f59e0b' }}>{k.last_air ? dateLabel(k.last_air) : '— chưa air'}</td>
+                            <td style={{ ...td, padding: '9px 8px', textAlign: 'center', fontSize: '0.74rem', fontWeight: 700, color: ti.color }}>{ti.txt}</td>
                           </tr>
                         );
                       })}
