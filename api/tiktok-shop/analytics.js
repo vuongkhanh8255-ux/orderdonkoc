@@ -925,9 +925,10 @@ async function handleKocFind({ params, supabase, res }) {
   if (q.length < 2) return res.status(200).json({ ok: true, creators: [], note: 'Gõ ít nhất 2 ký tự' });
   const start = params.start_date || AFF_SYNC_FLOOR_DATE;
   const end = params.end_date || null;
-  // Tìm theo TÊN → quét TOÀN BỘ shop (p_shop_id=null) để gõ tên là ra dù đang ở tab shop nào.
-  // (KOC có thể bán cho shop khác với shop đang xem — vd linh.latvat thuộc eHerb, không phải Bodymiss.)
-  const { data: stats, error } = await supabase.rpc('koc_order_stats', { p_shop_id: null, p_start: start, p_end: end, p_search: q });
+  // Tìm theo TÊN — CHỈ trong shop đang xem (Khánh chốt 1/7: "brand nào ra brand đó, đừng lộn xà ngầu").
+  // Trước đây quét TOÀN BỘ shop (p_shop_id=null) → search ở Bodymiss ra cả KOC MOAW/eHerb → gán nhầm brand.
+  const shopId = params.shop_id ? String(params.shop_id) : null;
+  const { data: stats, error } = await supabase.rpc('koc_order_stats', { p_shop_id: shopId, p_start: start, p_end: end, p_search: q });
   if (error) return res.status(200).json({ ok: false, error: error.message });
   // views/cast/sample để 0 (KOC nhỏ thường ~0); bấm vào dòng sẽ tải chi tiết video/sản phẩm thật.
   const creators = (stats || []).slice(0, 50).map(s => ({
