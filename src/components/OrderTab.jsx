@@ -402,6 +402,11 @@ function AddressPicker({ value, onChange }) {
     );
 }
 
+// Nhân sự ĐÃ NGHỈ/ẩn — không hiện trong dropdown chọn nhân sự (Khánh 1/7). KHÔNG xoá DB (đơn cũ còn tham
+// chiếu) → chỉ lọc khỏi dropdown. Đơn cũ vẫn hiện đúng tên người gửi trong bảng.
+const ORDER_HIDDEN_STAFF = ['Ngọc Quỳnh', 'Trúc Linh', 'Thiệu Huy', 'Anh Kiệt'];
+const isHiddenStaffName = (n) => ORDER_HIDDEN_STAFF.includes((n || '').trim());
+
 const OrderTab = () => {
     const {
         user,
@@ -890,7 +895,7 @@ const OrderTab = () => {
                             <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151' }}>Nhân sự gửi (*)</label>
                             <select value={selectedNhanSu} onChange={e => setSelectedNhanSu(e.target.value)} required style={{ width: '100%' }}>
                                 <option value="">-- Chọn nhân sự --</option>
-                                {nhanSus.map(nhansu => (<option key={nhansu.id} value={nhansu.id}>{nhansu.ten_nhansu}</option>))}
+                                {nhanSus.filter(n => !isHiddenStaffName(n.ten_nhansu)).map(nhansu => (<option key={nhansu.id} value={nhansu.id}>{nhansu.ten_nhansu}</option>))}
                             </select>
                         </div>
 
@@ -1014,7 +1019,7 @@ const OrderTab = () => {
                             style={{ padding: '10px 15px', borderRadius: '6px', border: '1px solid #ccc', fontSize: '1rem', minWidth: '250px' }}
                         >
                             <option value="">-- Chọn nhân sự để xem biểu đồ --</option>
-                            {nhanSus.map(ns => (
+                            {nhanSus.filter(n => !isHiddenStaffName(n.ten_nhansu)).map(ns => (
                                 <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>
                             ))}
                         </select>
@@ -1088,7 +1093,7 @@ const OrderTab = () => {
                         placeholder={!filterBrand ? "Chọn Brand trước" : "Tất cả Sản phẩm"}
                         style={{ flex: '1 1 320px', opacity: !filterBrand ? 0.6 : 1, pointerEvents: !filterBrand ? 'none' : 'auto' }}
                     />
-                    <select value={filterNhanSu} onChange={e => setFilterNhanSu(e.target.value)} style={{ flex: '1 1 180px' }}><option value="">Tất cả nhân sự</option>{nhanSus.map(ns => <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>)}</select>
+                    <select value={filterNhanSu} onChange={e => setFilterNhanSu(e.target.value)} style={{ flex: '1 1 180px' }}><option value="">Tất cả nhân sự</option>{nhanSus.filter(n => !isHiddenStaffName(n.ten_nhansu)).map(ns => <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>)}</select>
                     <select value={filterLoaiShip} onChange={e => setFilterLoaiShip(e.target.value)} style={{ flex: '1 1 150px' }}><option value="">Tất cả loại ship</option><option value="Ship thường">Ship thường</option><option value="Hỏa tốc">Hỏa tốc</option></select>
                     <select value={filterEditedStatus} onChange={e => setFilterEditedStatus(e.target.value)} style={{ flex: '1 1 150px' }}><option value="all">Tất cả</option><option value="edited">Đơn đã sửa</option><option value="unedited">Đơn chưa sửa</option></select>
                     <div style={{ display:'flex', alignItems:'center', gap:4, flex:'1 1 280px' }}>
