@@ -439,6 +439,22 @@ const OrderTab = () => {
         });
     }, []);
 
+    // ── CHẶN ORDER KÊNH YẾU: cào view 7 video mới (bỏ video ghim), < 1500 → không cho tạo đơn ──
+    const VIEW_GATE_ON = true;                       // cờ bật/tắt (đổi false = về y như cũ, không chặn)
+    const [chanView, setChanView] = useState(null);  // { loading, username, total_view, video_count, dat, videos, err, nguong }
+    const normKenh = (k) => String(k || '').trim().replace(/^@/, '').replace(/.*tiktok\.com\/@?/i, '').replace(/[/?#].*$/, '').toLowerCase();
+    const checkChannelView = async (raw) => {
+        const u = normKenh(raw);
+        if (!u) { setChanView(null); return; }
+        setChanView({ loading: true, username: u });
+        try {
+            const { data, error } = await supabase.functions.invoke('koc-channel-views', { body: { username: u } });
+            if (error || !data?.ok) { setChanView({ username: u, err: 'Không kiểm tra được view (thử lại sau)' }); return; }
+            setChanView({ username: u, total_view: data.total_view, video_count: data.video_count, dat: data.dat, videos: data.videos || [], err: data.err, nguong: data.nguong || 1500 });
+        } catch (e) { setChanView({ username: u, err: e.message }); }
+    };
+    useEffect(() => { setChanView(null); }, [idKenh]);  // đổi ID kênh → xoá kết quả cũ
+
     // #3: Kênh + brand đã có người gắn tag (approved) ở Hiệu suất KOC → không ai gửi brand đó cho kênh đó nữa.
     const [assignments, setAssignments] = useState([]); // {koc_id, brand_name, staff_name}
     useEffect(() => {
@@ -600,6 +616,19 @@ const OrderTab = () => {
         if (!diaChi || !diaChi.trim()) { alert("Vui lòng chọn Tỉnh/Thành phố và Phường/Xã nhận hàng!"); return; }
         if (previewList.length === 0) { alert("Vui lòng chọn ít nhất 1 sản phẩm!"); return; }
 
+        // CHẶN KÊNH YẾU: tổng view 7 video < 1500 → không cho tạo đơn. Cào lỗi/chưa cào thì cảnh báo nhưng CHO qua (tránh kẹt đơn).
+        if (VIEW_GATE_ON) {
+            if (!chanView || chanView.loading || chanView.username !== normKenh(idKenh)) {
+                checkChannelView(idKenh);
+                alert('⏳ Đang kiểm tra view kênh (7 video, bỏ ghim)... đợi 2-3 giây rồi bấm "Tạo đơn" lại nha.');
+                return;
+            }
+            if (chanView.dat === false && !chanView.err) {
+                alert(`🚫 Kênh @${chanView.username} — tổng view ${chanView.video_count} video (bỏ ghim) = ${Number(chanView.total_view).toLocaleString('vi-VN')} < ${Number(chanView.nguong).toLocaleString('vi-VN')}.\nKênh chưa đủ view → KHÔNG được tạo đơn.`);
+                return;
+            }
+        }
+
         // Blacklist check — nếu chưa load được thì block lại, reload rồi thử
         if (!blacklistLoaded) {
             alert('⏳ Đang tải danh sách blacklist, vui lòng thử lại sau giây lát.');
@@ -744,7 +773,31 @@ const OrderTab = () => {
                             </div>
                             <div>
                                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151' }}>ID Kênh (*)</label>
-                                <input type="text" value={idKenh} onChange={e => setIdKenh(e.target.value)} onBlur={handleIdKenhBlur} required placeholder="Nhập ID kênh..." style={{ width: '100%' }} />
+                                <input type="text" value={idKenh} onChange={e => setIdKenh(e.target.value)} onBlur={e => { handleIdKenhBlur(e); if (VIEW_GATE_ON) checkChannelView(idKenh); }} required placeholder="Nhập ID kênh..." style={{ width: '100%' }} />
+                                {VIEW_GATE_ON && chanView && (
+                                    <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, fontSize: '0.8rem', border: '1px solid', ...(chanView.loading ? { background: '#f8fafc', borderColor: '#e2e8f0', color: '#64748b' } : chanView.err ? { background: '#fffbeb', borderColor: '#fde68a', color: '#92400e' } : chanView.dat ? { background: '#f0fdf4', borderColor: '#bbf7d0', color: '#166534' } : { background: '#fef2f2', borderColor: '#fecaca', color: '#b91c1c' }) }}>
+                                        {chanView.loading ? '⏳ Đang cào view kênh...' : chanView.err ? `⚠️ ${chanView.err} — vẫn cho tạo đơn` : (
+                                            <>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                                    <b>{chanView.dat ? '✅ ĐẠT' : '🚫 KHÔNG ĐẠT'}</b>
+                                                    <span>Tổng view {chanView.video_count} video (bỏ ghim): <b>{Number(chanView.total_view).toLocaleString('vi-VN')}</b> / ngưỡng {Number(chanView.nguong).toLocaleString('vi-VN')}</span>
+                                                    <a href={`https://www.tiktok.com/@${chanView.username}`} target="_blank" rel="noreferrer" style={{ marginLeft: 'auto', color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>Mở TikTok @{chanView.username} ↗</a>
+                                                    <span onClick={() => checkChannelView(idKenh)} title="Cào lại" style={{ cursor: 'pointer', fontWeight: 700 }}>🔄</span>
+                                                </div>
+                                                {chanView.videos?.length > 0 && (
+                                                    <div style={{ display: 'flex', gap: 5, marginTop: 6, overflowX: 'auto' }}>
+                                                        {chanView.videos.map((v, i) => (
+                                                            <div key={i} title={`${Number(v.view).toLocaleString('vi-VN')} view`} style={{ flexShrink: 0, textAlign: 'center' }}>
+                                                                <img src={v.cover} alt="" style={{ width: 42, height: 56, objectFit: 'cover', borderRadius: 5, border: '1px solid #e2e8f0' }} />
+                                                                <div style={{ fontSize: '0.62rem', color: '#64748b' }}>{Number(v.view) >= 1000 ? (v.view / 1000).toFixed(1) + 'K' : v.view}</div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         </div>
 
