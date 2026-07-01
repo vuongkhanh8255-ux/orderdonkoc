@@ -43,6 +43,12 @@ const curYm = () => todayYmd().slice(0, 7);
 const monthRange = (ym) => { const [y, m] = ym.split('-').map(Number); const start = `${ym}-01`; const end = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`; return { start, end }; };
 const fmtDate = (s) => { if (!s) return ''; const p = String(s).slice(0, 10).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : s; };
 
+// Video ĐƯỢC PHÉP có 2 phiếu (KOC cọc trước 50% rồi 50% sau khi air) → KHÔNG báo "video trùng".
+// Chỉ thêm đúng case đã xác minh cọc trước, đừng thêm bừa kẻo che double-pay thật.
+const DUP_OK_VIDEOS = new Set([
+  '7647014449299377416', // LÊ TRUNG QUÂN @kiukiu9486 · Trúc Quỳnh · MOAW · cọc 2,5tr + air 2,5tr = 5tr
+]);
+
 // Mục BẮT BUỘC. Hợp đồng chỉ bắt khi cast ≥ 2tr (dưới 2tr không cần). Trả mảng tên mục còn thiếu.
 const CONTRACT_REQUIRED_FROM = 2_000_000;
 const has = (v) => v != null && String(v).trim() !== '';
@@ -145,6 +151,7 @@ const KocPaymentTab = () => {
   const formUnames = useMemo(() => [...new Set((form.air_link || '').split('\n').map(extractUname).filter(Boolean))], [form.air_link]);
   const dupVideos = useMemo(() => {
     return extractVideoIds(form.air_link).map(vid => {
+      if (DUP_OK_VIDEOS.has(vid)) return null;   // video cọc trước → cho phép 2 phiếu
       const others = (vidMap[vid] || []).filter(x => x.id !== editingId);
       return others.length ? { vid, who: [...new Set(others.map(o => o.name))] } : null;
     }).filter(Boolean);
@@ -152,6 +159,7 @@ const KocPaymentTab = () => {
   // #2 list-level: video bị ≥2 đơn (double-pay) trong TOÀN BỘ koc_payments
   const dupList = useMemo(() => Object.entries(vidMap)
     .map(([vid, arr]) => {
+      if (DUP_OK_VIDEOS.has(vid)) return null;   // video cọc trước → không tính trùng
       const seen = new Map(); arr.forEach(a => { if (!seen.has(a.id)) seen.set(a.id, a); });
       const payments = [...seen.values()];
       return payments.length > 1 ? { vid, payments, names: [...new Set(payments.map(x => x.name))], n: payments.length } : null;
