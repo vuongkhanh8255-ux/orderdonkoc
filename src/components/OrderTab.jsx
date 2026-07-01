@@ -789,25 +789,8 @@ const OrderTab = ({ currentUser } = {}) => {
     ];
     const summaryExportHeaders = [{ label: "Loại Ship", key: "loai_ship" }, { label: "Sản Phẩm", key: "ten_san_pham" }, { label: "Barcode", key: "barcode" }, { label: "Brand", key: "ten_brand" }, { label: "Tổng Số Lượng", key: "total_quantity" }];
 
-    const runRecoveryData = async () => {
-        alert("Tính năng cứu hộ hiện đang tắt. (Code vẫn ở đây nếu cần bật lại)");
-    };
-
     return (
         <>
-            {/* NÚT CỨU HỘ */}
-            <button
-                onClick={runRecoveryData}
-                style={{
-                    position: 'fixed', bottom: 10, left: 10, zIndex: 9999,
-                    padding: '10px 20px', backgroundColor: '#e74c3c', color: 'white',
-                    fontWeight: 'bold', fontSize: '14px', border: '3px solid white',
-                    borderRadius: '8px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)', cursor: 'pointer', opacity: 0.7
-                }}
-            >
-                🚑 CỨU HỘ
-            </button>
-
             <div style={{ position: 'relative', textAlign: 'center', marginBottom: '2rem' }}>
                 <h1 className="page-header">QUẢN LÝ ĐƠN HÀNG KOC</h1>
             </div>
