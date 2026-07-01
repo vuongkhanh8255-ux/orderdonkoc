@@ -407,7 +407,7 @@ function AddressPicker({ value, onChange }) {
 const ORDER_HIDDEN_STAFF = ['Ngọc Quỳnh', 'Trúc Linh', 'Thiệu Huy', 'Anh Kiệt'];
 const isHiddenStaffName = (n) => ORDER_HIDDEN_STAFF.includes((n || '').trim());
 
-const OrderTab = () => {
+const OrderTab = ({ currentUser } = {}) => {
     const {
         user,
         brands, nhanSus, sanPhams,
@@ -481,6 +481,27 @@ const OrderTab = () => {
             if (error || !data?.ok || !link) setViewPopup(vp => vp?.play === videoId ? { ...vp, playErr: 'Không tải được video (thử lại hoặc mở TikTok)' } : vp);
             else setViewPopup(vp => vp?.play === videoId ? { ...vp, playUrl: link } : vp);
         } catch (e) { setViewPopup(vp => vp?.play === videoId ? { ...vp, playErr: e.message } : vp); }
+    };
+
+    // ── KOC ƯU TIÊN: được tạo đơn dù không đủ view (bỏ qua check). Chỉ ADMIN thêm/xoá. ──
+    const isAdmin = currentUser?.role === 'admin';
+    const [whitelist, setWhitelist] = useState([]);   // [{username, note}]
+    const [wlInput, setWlInput] = useState('');
+    const [wlOpen, setWlOpen] = useState(false);
+    const whitelistSet = useMemo(() => new Set(whitelist.map(w => w.username)), [whitelist]);
+    const loadWhitelist = () => supabase.from('koc_view_whitelist').select('username, note').order('created_at', { ascending: false }).then(({ data }) => setWhitelist(data || []));
+    useEffect(() => { loadWhitelist(); }, []);
+    const addWhitelist = async () => {
+        const u = normKenh(wlInput);
+        if (!u) return;
+        const { error } = await supabase.from('koc_view_whitelist').upsert({ username: u, added_by: currentUser?.username || 'admin' }, { onConflict: 'username' });
+        if (error) { alert('Lỗi thêm: ' + error.message); return; }
+        setWlInput(''); loadWhitelist();
+    };
+    const removeWhitelist = async (u) => {
+        const { error } = await supabase.from('koc_view_whitelist').delete().eq('username', u);
+        if (error) { alert('Lỗi xoá: ' + error.message); return; }
+        loadWhitelist();
     };
 
     // #3: Kênh + brand đã có người gắn tag (approved) ở Hiệu suất KOC → không ai gửi brand đó cho kênh đó nữa.
@@ -646,7 +667,8 @@ const OrderTab = () => {
 
         // CHẶN: chỉ cho gửi khi kênh ĐẠT (cào được + tổng view 7 video >= 1500).
         // Không ĐẠT vì bất kỳ lý do (view yếu HOẶC ID kênh sai/không tìm thấy) → KHÔNG cho gửi (chống gõ ID giả né check).
-        if (VIEW_GATE_ON) {
+        // KOC ưu tiên (admin thêm) → BỎ QUA check hoàn toàn.
+        if (VIEW_GATE_ON && !whitelistSet.has(normKenh(idKenh))) {
             if (!chanView || chanView.loading || chanView.username !== normKenh(idKenh)) {
                 checkChannelView(idKenh);
                 alert('⏳ Đang kiểm tra view kênh (7 video, bỏ ghim)... đợi 2-3 giây rồi bấm "Tạo đơn" lại nha.');
@@ -792,6 +814,34 @@ const OrderTab = () => {
 
             <KocContactWarnings />
 
+            {isAdmin && (
+                <div className="mirinda-card" style={{ padding: '16px 20px', marginBottom: '1.5rem', border: '2px solid #bfdbfe', background: '#f8fbff' }}>
+                    <div onClick={() => setWlOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flexWrap: 'wrap' }}>
+                        <b style={{ color: '#1d4ed8', fontSize: '1rem' }}>⭐ KOC ưu tiên — bỏ qua check view ({whitelist.length})</b>
+                        <span style={{ fontSize: '0.78rem', color: '#64748b' }}>(chỉ admin) — KOC trong đây được tạo đơn dù &lt;1500 view</span>
+                        <span style={{ marginLeft: 'auto', fontWeight: 700 }}>{wlOpen ? '▲' : '▼'}</span>
+                    </div>
+                    {wlOpen && (
+                        <div style={{ marginTop: 12 }}>
+                            <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                                <input value={wlInput} onChange={e => setWlInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addWhitelist(); } }} placeholder="Nhập ID kênh (vd @tenkenh)..." style={{ flex: '1 1 240px', padding: '8px 12px', borderRadius: 8, border: '1.5px solid #cbd5e1' }} />
+                                <button type="button" onClick={addWhitelist} className="btn-primary">+ Thêm ưu tiên</button>
+                            </div>
+                            {whitelist.length === 0 ? <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Chưa có KOC ưu tiên nào.</div> : (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                    {whitelist.map(w => (
+                                        <span key={w.username} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 20, padding: '5px 12px', fontSize: '0.82rem', fontWeight: 700, color: '#1d4ed8' }}>
+                                            @{w.username}
+                                            <span onClick={() => removeWhitelist(w.username)} title="Xoá khỏi ưu tiên" style={{ cursor: 'pointer', color: '#dc2626', fontWeight: 800 }}>✕</span>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
             <div style={{ display: 'flex', gap: '2rem', marginBottom: '2rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <div className="mirinda-card" style={{ flex: 1, padding: '30px' }}>
                     <h2 className="section-title" style={{ fontSize: '1.5rem', marginBottom: '1.5rem', color: '#FF6600', borderBottom: '2px solid #FFF7ED', paddingBottom: '10px' }}>
@@ -807,6 +857,9 @@ const OrderTab = () => {
                             <div>
                                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151' }}>ID Kênh (*)</label>
                                 <input type="text" value={idKenh} onChange={e => setIdKenh(e.target.value)} onBlur={e => { handleIdKenhBlur(e); if (VIEW_GATE_ON) checkChannelView(idKenh); }} required placeholder="Nhập ID kênh..." style={{ width: '100%' }} />
+                                {idKenh && whitelistSet.has(normKenh(idKenh)) && (
+                                    <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, fontSize: '0.8rem', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', fontWeight: 700 }}>⭐ KOC ưu tiên — được tạo đơn dù không đủ view (bỏ qua check).</div>
+                                )}
                                 {VIEW_GATE_ON && chanView && (
                                     <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, fontSize: '0.8rem', border: '1px solid', ...(chanView.loading ? { background: '#f8fafc', borderColor: '#e2e8f0', color: '#64748b' } : (chanView.err || !chanView.dat) ? { background: '#fef2f2', borderColor: '#fecaca', color: '#b91c1c' } : { background: '#f0fdf4', borderColor: '#bbf7d0', color: '#166534' }) }}>
                                         {chanView.loading ? '⏳ Đang cào view kênh...' : chanView.err ? <span>🚫 {chanView.err} — <b>ID kênh sai/không tìm thấy → KHÔNG gửi được.</b> Kiểm tra lại ID hoặc <span onClick={() => checkChannelView(idKenh)} style={{ cursor: 'pointer', textDecoration: 'underline', fontWeight: 700 }}>🔄 cào lại</span>.</span> : (
