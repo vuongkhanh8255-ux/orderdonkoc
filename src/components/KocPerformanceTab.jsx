@@ -674,13 +674,25 @@ export default function KocPerformanceTab() {
   const pagedRows = rows.slice(pageOffset, pageOffset + pageSize);
   // Panel định danh: lọc "chỉ KOC chưa định danh (brand này) + không blacklist" để gán nhanh
   const assignRows = useMemo(() => {
-    if (!onlyUnassigned) return rows;
-    return rows.filter(c => {
-      const u = (c.username || '').toLowerCase().replace(/^@/, '');
-      if (blacklist.has(u)) return false;
-      return !((assignMap[u] || []).some(a => a.brand_name === brand));
-    });
-  }, [rows, onlyUnassigned, assignMap, brand, blacklist]);
+    const q = search.trim();
+    if (onlyUnassigned) {
+      return rows.filter(c => {
+        const u = (c.username || '').toLowerCase().replace(/^@/, '');
+        if (blacklist.has(u)) return false;
+        return !((assignMap[u] || []).some(a => a.brand_name === brand));
+      });
+    }
+    if (q) return rows; // đang search: giữ nguyên kết quả search
+    // KHÔNG search: LUÔN kèm KOC đã định danh brand này dù GMV kỳ = 0 (không có trong data.creators của kỳ) →
+    // gỡ/quản tag không bị "mất thẻ". Xếp GMV kỳ: KOC 0đ nằm cuối, KOC có doanh số vẫn đúng thứ hạng.
+    const present = new Set(rows.map(c => (c.username || '').toLowerCase().replace(/^@/, '')));
+    const extra = [];
+    for (const [u, arr] of Object.entries(assignMap)) {
+      if (present.has(u) || blacklist.has(u)) continue;
+      if ((arr || []).some(a => a.brand_name === brand && a.staff_name)) extra.push({ username: u, gmv: 0, vperiod: 0 });
+    }
+    return extra.length ? [...rows, ...extra] : rows;
+  }, [rows, onlyUnassigned, assignMap, brand, blacklist, search]);
   const totals = data?.totals || { gmv: 0, orders: 0, commission: 0, views: 0, cast: 0 };
   const sync = data?.sync;
   const countSync = data?.count_sync;

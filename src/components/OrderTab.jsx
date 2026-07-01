@@ -402,7 +402,12 @@ function AddressPicker({ value, onChange }) {
     );
 }
 
-const OrderTab = () => {
+// Nhân sự ĐÃ NGHỈ/ẩn — không hiện trong dropdown chọn nhân sự (Khánh 1/7). KHÔNG xoá DB (đơn cũ còn tham
+// chiếu) → chỉ lọc khỏi dropdown. Đơn cũ vẫn hiện đúng tên người gửi trong bảng.
+const ORDER_HIDDEN_STAFF = ['Ngọc Quỳnh', 'Trúc Linh', 'Thiệu Huy', 'Anh Kiệt'];
+const isHiddenStaffName = (n) => ORDER_HIDDEN_STAFF.includes((n || '').trim());
+
+const OrderTab = ({ currentUser } = {}) => {
     const {
         user,
         brands, nhanSus, sanPhams,
@@ -438,6 +443,66 @@ const OrderTab = () => {
             setBlacklistLoaded(true);
         });
     }, []);
+
+    // ── CHẶN ORDER KÊNH YẾU: cào view 7 video mới (bỏ video ghim), < 1500 → không cho tạo đơn ──
+    const VIEW_GATE_ON = true;                       // cờ bật/tắt (đổi false = về y như cũ, không chặn)
+    const [chanView, setChanView] = useState(null);  // { loading, username, total_view, video_count, dat, videos, err, nguong }
+    const normKenh = (k) => String(k || '').trim().replace(/^@/, '').replace(/.*tiktok\.com\/@?/i, '').replace(/[/?#].*$/, '').toLowerCase();
+    const checkChannelView = async (raw) => {
+        const u = normKenh(raw);
+        if (!u) { setChanView(null); return; }
+        setChanView({ loading: true, username: u });
+        try {
+            const { data, error } = await supabase.functions.invoke('koc-channel-views', { body: { username: u } });
+            if (error || !data?.ok) { setChanView({ username: u, err: 'Không kiểm tra được view (thử lại sau)' }); return; }
+            setChanView({ username: u, total_view: data.total_view, video_count: data.video_count, dat: data.dat, videos: data.videos || [], err: data.err, nguong: data.nguong || 1500 });
+        } catch (e) { setChanView({ username: u, err: e.message }); }
+    };
+    useEffect(() => { setChanView(null); }, [idKenh]);  // đổi ID kênh → xoá kết quả cũ
+
+    // Popup cào view cho 1 kênh trong BẢNG DANH SÁCH đơn (hiện ảnh + view như tool ngoài)
+    const [viewPopup, setViewPopup] = useState(null);   // { username, loading, ...data, err }
+    const openViewPopup = async (raw) => {
+        const u = normKenh(raw);
+        if (!u) return;
+        setViewPopup({ username: u, loading: true });
+        try {
+            const { data, error } = await supabase.functions.invoke('koc-channel-views', { body: { username: u } });
+            if (error || !data?.ok) setViewPopup({ username: u, err: 'Không cào được (thử lại)' });
+            else setViewPopup({ username: u, ...data });
+        } catch (e) { setViewPopup({ username: u, err: e.message }); }
+    };
+    // Lấy link mp4 trực tiếp để PHÁT TẠI CHỖ (lách chặn embed video gắn giỏ)
+    const openPlay = async (videoId, uname) => {
+        setViewPopup(vp => ({ ...vp, play: videoId, playUrl: null, playErr: null }));
+        try {
+            const { data, error } = await supabase.functions.invoke('koc-channel-views', { body: { video_id: videoId, vuser: uname } });
+            const link = data?.hdplay || data?.play;
+            if (error || !data?.ok || !link) setViewPopup(vp => vp?.play === videoId ? { ...vp, playErr: 'Không tải được video (thử lại hoặc mở TikTok)' } : vp);
+            else setViewPopup(vp => vp?.play === videoId ? { ...vp, playUrl: link } : vp);
+        } catch (e) { setViewPopup(vp => vp?.play === videoId ? { ...vp, playErr: e.message } : vp); }
+    };
+
+    // ── KOC ƯU TIÊN: được tạo đơn dù không đủ view (bỏ qua check). Chỉ ADMIN thêm/xoá. ──
+    const isAdmin = currentUser?.role === 'admin';
+    const [whitelist, setWhitelist] = useState([]);   // [{username, note}]
+    const [wlInput, setWlInput] = useState('');
+    const [wlOpen, setWlOpen] = useState(false);
+    const whitelistSet = useMemo(() => new Set(whitelist.map(w => w.username)), [whitelist]);
+    const loadWhitelist = () => supabase.from('koc_view_whitelist').select('username, note').order('created_at', { ascending: false }).then(({ data }) => setWhitelist(data || []));
+    useEffect(() => { loadWhitelist(); }, []);
+    const addWhitelist = async () => {
+        const u = normKenh(wlInput);
+        if (!u) return;
+        const { error } = await supabase.from('koc_view_whitelist').upsert({ username: u, added_by: currentUser?.username || 'admin' }, { onConflict: 'username' });
+        if (error) { alert('Lỗi thêm: ' + error.message); return; }
+        setWlInput(''); loadWhitelist();
+    };
+    const removeWhitelist = async (u) => {
+        const { error } = await supabase.from('koc_view_whitelist').delete().eq('username', u);
+        if (error) { alert('Lỗi xoá: ' + error.message); return; }
+        loadWhitelist();
+    };
 
     // #3: Kênh + brand đã có người gắn tag (approved) ở Hiệu suất KOC → không ai gửi brand đó cho kênh đó nữa.
     const [assignments, setAssignments] = useState([]); // {koc_id, brand_name, staff_name}
@@ -600,6 +665,25 @@ const OrderTab = () => {
         if (!diaChi || !diaChi.trim()) { alert("Vui lòng chọn Tỉnh/Thành phố và Phường/Xã nhận hàng!"); return; }
         if (previewList.length === 0) { alert("Vui lòng chọn ít nhất 1 sản phẩm!"); return; }
 
+        // CHẶN: chỉ cho gửi khi kênh ĐẠT (cào được + tổng view 7 video >= 1500).
+        // Không ĐẠT vì bất kỳ lý do (view yếu HOẶC ID kênh sai/không tìm thấy) → KHÔNG cho gửi (chống gõ ID giả né check).
+        // KOC ưu tiên (admin thêm) → BỎ QUA check hoàn toàn.
+        if (VIEW_GATE_ON && !whitelistSet.has(normKenh(idKenh))) {
+            if (!chanView || chanView.loading || chanView.username !== normKenh(idKenh)) {
+                checkChannelView(idKenh);
+                alert('⏳ Đang kiểm tra view kênh (7 video, bỏ ghim)... đợi 2-3 giây rồi bấm "Tạo đơn" lại nha.');
+                return;
+            }
+            if (!chanView.dat) {
+                if (chanView.err) {
+                    alert(`🚫 Kênh @${chanView.username}: ${chanView.err}\n→ ID kênh sai / không tìm thấy nên KHÔNG gửi được.\nKiểm tra lại ID kênh, hoặc bấm 🔄 cào lại. Nếu chắc ID đúng mà vẫn lỗi → báo admin.`);
+                } else {
+                    alert(`🚫 Kênh @${chanView.username} — tổng view ${chanView.video_count} video (bỏ ghim) = ${Number(chanView.total_view).toLocaleString('vi-VN')} < ${Number(chanView.nguong).toLocaleString('vi-VN')}.\nKênh chưa đủ view → KHÔNG gửi được.`);
+                }
+                return;
+            }
+        }
+
         // Blacklist check — nếu chưa load được thì block lại, reload rồi thử
         if (!blacklistLoaded) {
             alert('⏳ Đang tải danh sách blacklist, vui lòng thử lại sau giây lát.');
@@ -729,8 +813,34 @@ const OrderTab = () => {
             </div>
 
             <KocContactWarnings />
-            <KocNoVideoWarnings email={user?.email} />
-            <KocClipStatus />
+
+            {isAdmin && (
+                <div className="mirinda-card" style={{ padding: '16px 20px', marginBottom: '1.5rem', border: '2px solid #bfdbfe', background: '#f8fbff' }}>
+                    <div onClick={() => setWlOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flexWrap: 'wrap' }}>
+                        <b style={{ color: '#1d4ed8', fontSize: '1rem' }}>⭐ KOC ưu tiên — bỏ qua check view ({whitelist.length})</b>
+                        <span style={{ fontSize: '0.78rem', color: '#64748b' }}>(chỉ admin) — KOC trong đây được tạo đơn dù &lt;1500 view</span>
+                        <span style={{ marginLeft: 'auto', fontWeight: 700 }}>{wlOpen ? '▲' : '▼'}</span>
+                    </div>
+                    {wlOpen && (
+                        <div style={{ marginTop: 12 }}>
+                            <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                                <input value={wlInput} onChange={e => setWlInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addWhitelist(); } }} placeholder="Nhập ID kênh (vd @tenkenh)..." style={{ flex: '1 1 240px', padding: '8px 12px', borderRadius: 8, border: '1.5px solid #cbd5e1' }} />
+                                <button type="button" onClick={addWhitelist} className="btn-primary">+ Thêm ưu tiên</button>
+                            </div>
+                            {whitelist.length === 0 ? <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Chưa có KOC ưu tiên nào.</div> : (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                    {whitelist.map(w => (
+                                        <span key={w.username} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 20, padding: '5px 12px', fontSize: '0.82rem', fontWeight: 700, color: '#1d4ed8' }}>
+                                            @{w.username}
+                                            <span onClick={() => removeWhitelist(w.username)} title="Xoá khỏi ưu tiên" style={{ cursor: 'pointer', color: '#dc2626', fontWeight: 800 }}>✕</span>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
 
             <div style={{ display: 'flex', gap: '2rem', marginBottom: '2rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <div className="mirinda-card" style={{ flex: 1, padding: '30px' }}>
@@ -746,7 +856,34 @@ const OrderTab = () => {
                             </div>
                             <div>
                                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151' }}>ID Kênh (*)</label>
-                                <input type="text" value={idKenh} onChange={e => setIdKenh(e.target.value)} onBlur={handleIdKenhBlur} required placeholder="Nhập ID kênh..." style={{ width: '100%' }} />
+                                <input type="text" value={idKenh} onChange={e => setIdKenh(e.target.value)} onBlur={e => { handleIdKenhBlur(e); if (VIEW_GATE_ON) checkChannelView(idKenh); }} required placeholder="Nhập ID kênh..." style={{ width: '100%' }} />
+                                {idKenh && whitelistSet.has(normKenh(idKenh)) && (
+                                    <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, fontSize: '0.8rem', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', fontWeight: 700 }}>⭐ KOC ưu tiên — được tạo đơn dù không đủ view (bỏ qua check).</div>
+                                )}
+                                {VIEW_GATE_ON && chanView && (
+                                    <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, fontSize: '0.8rem', border: '1px solid', ...(chanView.loading ? { background: '#f8fafc', borderColor: '#e2e8f0', color: '#64748b' } : (chanView.err || !chanView.dat) ? { background: '#fef2f2', borderColor: '#fecaca', color: '#b91c1c' } : { background: '#f0fdf4', borderColor: '#bbf7d0', color: '#166534' }) }}>
+                                        {chanView.loading ? '⏳ Đang cào view kênh...' : chanView.err ? <span>🚫 {chanView.err} — <b>ID kênh sai/không tìm thấy → KHÔNG gửi được.</b> Kiểm tra lại ID hoặc <span onClick={() => checkChannelView(idKenh)} style={{ cursor: 'pointer', textDecoration: 'underline', fontWeight: 700 }}>🔄 cào lại</span>.</span> : (
+                                            <>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                                    <b>{chanView.dat ? '✅ ĐẠT' : '🚫 KHÔNG ĐẠT'}</b>
+                                                    <span>Tổng view {chanView.video_count} video (bỏ ghim): <b>{Number(chanView.total_view).toLocaleString('vi-VN')}</b> / ngưỡng {Number(chanView.nguong).toLocaleString('vi-VN')}</span>
+                                                    <a href={`https://www.tiktok.com/@${chanView.username}`} target="_blank" rel="noreferrer" style={{ marginLeft: 'auto', color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>Mở TikTok @{chanView.username} ↗</a>
+                                                    <span onClick={() => checkChannelView(idKenh)} title="Cào lại" style={{ cursor: 'pointer', fontWeight: 700 }}>🔄</span>
+                                                </div>
+                                                {chanView.videos?.length > 0 && (
+                                                    <div style={{ display: 'flex', gap: 5, marginTop: 6, overflowX: 'auto' }}>
+                                                        {chanView.videos.map((v, i) => (
+                                                            <div key={i} title={`${Number(v.view).toLocaleString('vi-VN')} view`} style={{ flexShrink: 0, textAlign: 'center' }}>
+                                                                <img src={v.cover} alt="" style={{ width: 42, height: 56, objectFit: 'cover', borderRadius: 5, border: '1px solid #e2e8f0' }} />
+                                                                <div style={{ fontSize: '0.62rem', color: '#64748b' }}>{Number(v.view) >= 1000 ? (v.view / 1000).toFixed(1) + 'K' : v.view}</div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -811,7 +948,7 @@ const OrderTab = () => {
                             <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151' }}>Nhân sự gửi (*)</label>
                             <select value={selectedNhanSu} onChange={e => setSelectedNhanSu(e.target.value)} required style={{ width: '100%' }}>
                                 <option value="">-- Chọn nhân sự --</option>
-                                {nhanSus.map(nhansu => (<option key={nhansu.id} value={nhansu.id}>{nhansu.ten_nhansu}</option>))}
+                                {nhanSus.filter(n => !isHiddenStaffName(n.ten_nhansu)).map(nhansu => (<option key={nhansu.id} value={nhansu.id}>{nhansu.ten_nhansu}</option>))}
                             </select>
                         </div>
 
@@ -935,7 +1072,7 @@ const OrderTab = () => {
                             style={{ padding: '10px 15px', borderRadius: '6px', border: '1px solid #ccc', fontSize: '1rem', minWidth: '250px' }}
                         >
                             <option value="">-- Chọn nhân sự để xem biểu đồ --</option>
-                            {nhanSus.map(ns => (
+                            {nhanSus.filter(n => !isHiddenStaffName(n.ten_nhansu)).map(ns => (
                                 <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>
                             ))}
                         </select>
@@ -1009,7 +1146,7 @@ const OrderTab = () => {
                         placeholder={!filterBrand ? "Chọn Brand trước" : "Tất cả Sản phẩm"}
                         style={{ flex: '1 1 320px', opacity: !filterBrand ? 0.6 : 1, pointerEvents: !filterBrand ? 'none' : 'auto' }}
                     />
-                    <select value={filterNhanSu} onChange={e => setFilterNhanSu(e.target.value)} style={{ flex: '1 1 180px' }}><option value="">Tất cả nhân sự</option>{nhanSus.map(ns => <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>)}</select>
+                    <select value={filterNhanSu} onChange={e => setFilterNhanSu(e.target.value)} style={{ flex: '1 1 180px' }}><option value="">Tất cả nhân sự</option>{nhanSus.filter(n => !isHiddenStaffName(n.ten_nhansu)).map(ns => <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>)}</select>
                     <select value={filterLoaiShip} onChange={e => setFilterLoaiShip(e.target.value)} style={{ flex: '1 1 150px' }}><option value="">Tất cả loại ship</option><option value="Ship thường">Ship thường</option><option value="Hỏa tốc">Hỏa tốc</option></select>
                     <select value={filterEditedStatus} onChange={e => setFilterEditedStatus(e.target.value)} style={{ flex: '1 1 150px' }}><option value="all">Tất cả</option><option value="edited">Đơn đã sửa</option><option value="unedited">Đơn chưa sửa</option></select>
                     <div style={{ display:'flex', alignItems:'center', gap:4, flex:'1 1 280px' }}>
@@ -1036,6 +1173,49 @@ const OrderTab = () => {
                 {pageNumbers.map(number => (<button key={number} onClick={() => setCurrentPage(number)} disabled={isLoading} className={currentPage === number ? 'btn-pagination-active' : 'btn-pagination'}>{number}</button>))}
                 <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || isLoading} className="btn-pagination btn-pagination-text">TRANG SAU</button>
             </div>
+
+            {viewPopup && (
+                <div onClick={() => setViewPopup(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 20, width: 'min(460px, 92vw)', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                            <b style={{ fontSize: '1.05rem', color: '#FF6600' }}>👁️ View kênh @{viewPopup.username}</b>
+                            <a href={`https://www.tiktok.com/@${viewPopup.username}`} target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontWeight: 700, textDecoration: 'none', fontSize: '0.85rem' }}>Mở TikTok ↗</a>
+                            <span onClick={() => openViewPopup(viewPopup.username)} title="Cào lại" style={{ cursor: 'pointer', fontWeight: 700 }}>🔄</span>
+                            <button onClick={() => setViewPopup(null)} style={{ marginLeft: 'auto', border: 'none', background: '#f1f5f9', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', fontWeight: 700 }}>Đóng</button>
+                        </div>
+                        {viewPopup.loading ? <div style={{ padding: 30, textAlign: 'center', color: '#64748b' }}>⏳ Đang cào view kênh...</div>
+                            : viewPopup.err ? <div style={{ padding: 16, background: '#fef2f2', color: '#b91c1c', borderRadius: 10 }}>🚫 {viewPopup.err} — ID kênh có thể sai / không tồn tại.</div>
+                            : viewPopup.play ? (
+                                <div>
+                                    <button onClick={() => setViewPopup(vp => ({ ...vp, play: null, playUrl: null, playErr: null }))} style={{ border: 'none', background: '#f1f5f9', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', fontWeight: 700, marginBottom: 8 }}>← Danh sách video</button>
+                                    {viewPopup.playErr ? (
+                                        <div style={{ padding: 16, background: '#fffbeb', color: '#92400e', borderRadius: 10 }}>⚠️ {viewPopup.playErr}. <a href={`https://www.tiktok.com/@${viewPopup.username}/video/${viewPopup.play}`} target="_blank" rel="noreferrer" style={{ fontWeight: 700 }}>Mở trên TikTok ↗</a></div>
+                                    ) : !viewPopup.playUrl ? (
+                                        <div style={{ padding: 30, textAlign: 'center', color: '#64748b' }}>⏳ Đang tải video...</div>
+                                    ) : (
+                                        <video src={viewPopup.playUrl} controls autoPlay playsInline style={{ width: '100%', maxHeight: '68vh', borderRadius: 10, background: '#000' }} />
+                                    )}
+                                </div>
+                            ) : (<>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, marginBottom: 12, fontWeight: 800, flexWrap: 'wrap', ...(viewPopup.dat ? { background: '#f0fdf4', color: '#166534' } : { background: '#fef2f2', color: '#b91c1c' }) }}>
+                                    {viewPopup.dat ? '✅ ĐẠT' : '🚫 KHÔNG ĐẠT'}
+                                    <span style={{ fontWeight: 600 }}>Tổng view {viewPopup.video_count} video (bỏ ghim): <b>{Number(viewPopup.total_view).toLocaleString('vi-VN')}</b> / ngưỡng {Number(viewPopup.nguong || 1500).toLocaleString('vi-VN')}</span>
+                                </div>
+                                {viewPopup.videos?.length > 0 && (
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: 8 }}>
+                                        {viewPopup.videos.map((v, i) => (
+                                            <div key={i} onClick={() => openPlay(v.id, viewPopup.username)} title="Bấm để xem video ngay tại đây" style={{ textAlign: 'center', cursor: 'pointer', position: 'relative' }}>
+                                                <img src={v.cover} alt="" style={{ width: '100%', aspectRatio: '3/4', objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0' }} />
+                                                <span style={{ position: 'absolute', top: '38%', left: '50%', transform: 'translate(-50%,-50%)', fontSize: '1.4rem', color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.6)', pointerEvents: 'none' }}>▶</span>
+                                                <div style={{ fontSize: '0.7rem', color: '#475569', fontWeight: 700 }}>{Number(v.view).toLocaleString('vi-VN')}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </>)}
+                    </div>
+                </div>
+            )}
 
             <div className="mirinda-card" style={{ padding: '0', overflow: 'hidden' }}>
                 <div style={{ width: '100%', overflowX: 'auto' }}>
@@ -1072,7 +1252,10 @@ const OrderTab = () => {
                                                 <td style={{ width: `${columnWidths.ngayGui}px`, padding: '12px', border: '1px solid #ddd' }}>{new Date(donHang.ngay_gui).toLocaleString('vi-VN')}</td>
                                                 <td style={{ width: `${columnWidths.hoTenKOC}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.koc_ho_ten, donHang.original_koc_ho_ten) }}>{donHang.koc_ho_ten}</td>
                                                 <td style={{ width: `${columnWidths.cccd}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.koc_cccd, donHang.original_koc_cccd) }}>{donHang.koc_cccd}</td>
-                                                <td style={{ width: `${columnWidths.idKenh}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.koc_id_kenh, donHang.original_koc_id_kenh) }}>{donHang.koc_id_kenh}</td>
+                                                <td style={{ width: `${columnWidths.idKenh}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.koc_id_kenh, donHang.original_koc_id_kenh) }}>
+                                                    <span>{donHang.koc_id_kenh}</span>
+                                                    {donHang.koc_id_kenh && <button type="button" onClick={() => openViewPopup(donHang.koc_id_kenh)} title="Cào view kênh (ảnh + view)" style={{ marginLeft: 6, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '1rem', padding: 0 }}>👁️</button>}
+                                                </td>
                                                 <td style={{ width: `${columnWidths.sdt}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.koc_sdt, donHang.original_koc_sdt) }}>{donHang.koc_sdt}</td>
                                                 <td style={{ width: `${columnWidths.diaChi}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.koc_dia_chi, donHang.original_koc_dia_chi) }}>
                                                     <div>{donHang.koc_dia_chi}</div>

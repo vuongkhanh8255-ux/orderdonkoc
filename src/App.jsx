@@ -426,7 +426,7 @@ function AppMain({ user, onLogout, allowedViews }) {
           <Suspense fallback={<TabLoadingFallback />}>
           {currentView === 'dashboard' && <DashboardTab />}
           {currentView === 'staff_report' && <BookingStaffReportTab />}
-          {currentView === 'order' && <OrderTab />}
+          {currentView === 'order' && <OrderTab currentUser={user} />}
           {currentView === 'contract' && <ContractTab />}
           {currentView === 'airlinks' && <AirLinksTab />}
           {currentView === 'booking_material' && <BookingMaterialTab />}
