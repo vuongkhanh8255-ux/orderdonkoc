@@ -1,7 +1,8 @@
 -- 1/7/2026 — TÁCH KOC THEO BRAND ở bảng "Top KOC theo GMV" (drill-down Báo cáo nhân sự).
 -- Trước: 1 KOC = 1 dòng, gộp mọi brand → không biết brand nào KOC chưa air để đẩy.
--- Nay: 1 KOC × 1 brand (canonical) = 1 dòng riêng. Brand canonical: EHERB*(VN+HCM)→EHERB (chung shop),
--- HEALMI*→HEALMI, MOAW*→MOAW. Trả thêm: brand, last_air (ngày air gần nhất all-time), since (ngày gắn).
+-- Nay: 1 KOC × 1 brand (canonical) = 1 dòng riêng. eHerb VN và eHerb HCM là 2 SHOP KHÁC NHAU → 2 brand
+-- RIÊNG (EHERB=VN shop 7494529979361168222, EHERB HCM=HCM shop 7495838925500090511). HEALMI*→HEALMI,
+-- MOAW*→MOAW. Trả thêm: brand, last_air (ngày air gần nhất all-time), since (ngày gắn).
 -- Khớp Khánh chốt 1/7: "thời gian bị gỡ tag" = last_air + 45 ngày (air là gia hạn); chưa air → since + 45. (UI tính).
 -- daily/GMV tổng của nhân sự KHÔNG đổi (chỉ bảng KOC tách theo brand).
 create or replace function public.staff_booking_detail(p_nhansu_id uuid, p_from date, p_to date)
@@ -10,16 +11,18 @@ as $function$
   with rng as (select p_from::timestamptz as ts0, (p_to + 1)::timestamptz as ts1, p_from as d0, p_to as d1),
   months as (select to_char(gs,'YYYY-MM') ym
     from rng, generate_series(date_trunc('month', rng.d0), date_trunc('month', rng.d1), interval '1 month') gs),
-  -- brand CANONICAL -> shop(s). eHerb VN+HCM CHUNG 2 shop; Healmi/Healmii; Moaw.
+  -- brand CANONICAL -> shop. eHerb VN và eHerb HCM là 2 SHOP RIÊNG (KHÔNG gộp); Healmi/Healmii; Moaw.
   brand_map(brand_canon, shop_id) as (values
     ('BODYMISS','7495107349171898427'),
-    ('EHERB','7494529979361168222'), ('EHERB','7495838925500090511'),
+    ('EHERB','7494529979361168222'),
+    ('EHERB HCM','7495838925500090511'),
     ('MILAGANICS','7494813818973817115'),
     ('MOAW','7495831977917385095'),
     ('HEALMI','7494251668499498533')),
   -- assignment của nhân sự này, brand canonical hoá + ngày gắn (since)
   asg as (select lower(regexp_replace(a.koc_id,'^@','')) as uname,
-      case when upper(regexp_replace(a.brand_name,'[^A-Za-z0-9]','','g')) like 'EHERB%'  then 'EHERB'
+      case when upper(regexp_replace(a.brand_name,'[^A-Za-z0-9]','','g')) like 'EHERB%' and upper(regexp_replace(a.brand_name,'[^A-Za-z0-9]','','g')) like '%HCM%' then 'EHERB HCM'
+           when upper(regexp_replace(a.brand_name,'[^A-Za-z0-9]','','g')) like 'EHERB%'  then 'EHERB'
            when upper(regexp_replace(a.brand_name,'[^A-Za-z0-9]','','g')) like 'HEALMI%' then 'HEALMI'
            when upper(regexp_replace(a.brand_name,'[^A-Za-z0-9]','','g')) like 'MOAW%'   then 'MOAW'
            else upper(regexp_replace(a.brand_name,'[^A-Za-z0-9]','','g')) end as brand_canon,
@@ -32,7 +35,8 @@ as $function$
     from asg join brand_map bm on bm.brand_canon = asg.brand_canon),
   -- cast theo brand (canonical), lọc theo pay_date (giữ nguyên logic cột CAST cũ)
   cast_p as (select lower((regexp_match(p.channel_link, '@([^/?#]+)'))[1]) as uname,
-      case when upper(regexp_replace(coalesce(p.brand,''),'[^A-Za-z0-9]','','g')) like 'EHERB%'  then 'EHERB'
+      case when upper(regexp_replace(coalesce(p.brand,''),'[^A-Za-z0-9]','','g')) like 'EHERB%' and upper(regexp_replace(coalesce(p.brand,''),'[^A-Za-z0-9]','','g')) like '%HCM%' then 'EHERB HCM'
+           when upper(regexp_replace(coalesce(p.brand,''),'[^A-Za-z0-9]','','g')) like 'EHERB%'  then 'EHERB'
            when upper(regexp_replace(coalesce(p.brand,''),'[^A-Za-z0-9]','','g')) like 'HEALMI%' then 'HEALMI'
            when upper(regexp_replace(coalesce(p.brand,''),'[^A-Za-z0-9]','','g')) like 'MOAW%'   then 'MOAW'
            else upper(regexp_replace(coalesce(p.brand,''),'[^A-Za-z0-9]','','g')) end as brand_canon,
