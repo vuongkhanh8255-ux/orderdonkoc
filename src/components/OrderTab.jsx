@@ -729,8 +729,6 @@ const OrderTab = () => {
             </div>
 
             <KocContactWarnings />
-            <KocNoVideoWarnings email={user?.email} />
-            <KocClipStatus />
 
             <div style={{ display: 'flex', gap: '2rem', marginBottom: '2rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <div className="mirinda-card" style={{ flex: 1, padding: '30px' }}>
