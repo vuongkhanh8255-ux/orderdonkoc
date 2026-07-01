@@ -455,6 +455,19 @@ const OrderTab = () => {
     };
     useEffect(() => { setChanView(null); }, [idKenh]);  // đổi ID kênh → xoá kết quả cũ
 
+    // Popup cào view cho 1 kênh trong BẢNG DANH SÁCH đơn (hiện ảnh + view như tool ngoài)
+    const [viewPopup, setViewPopup] = useState(null);   // { username, loading, ...data, err }
+    const openViewPopup = async (raw) => {
+        const u = normKenh(raw);
+        if (!u) return;
+        setViewPopup({ username: u, loading: true });
+        try {
+            const { data, error } = await supabase.functions.invoke('koc-channel-views', { body: { username: u } });
+            if (error || !data?.ok) setViewPopup({ username: u, err: 'Không cào được (thử lại)' });
+            else setViewPopup({ username: u, ...data });
+        } catch (e) { setViewPopup({ username: u, err: e.message }); }
+    };
+
     // #3: Kênh + brand đã có người gắn tag (approved) ở Hiệu suất KOC → không ai gửi brand đó cho kênh đó nữa.
     const [assignments, setAssignments] = useState([]); // {koc_id, brand_name, staff_name}
     useEffect(() => {
@@ -616,15 +629,20 @@ const OrderTab = () => {
         if (!diaChi || !diaChi.trim()) { alert("Vui lòng chọn Tỉnh/Thành phố và Phường/Xã nhận hàng!"); return; }
         if (previewList.length === 0) { alert("Vui lòng chọn ít nhất 1 sản phẩm!"); return; }
 
-        // CHẶN KÊNH YẾU: tổng view 7 video < 1500 → không cho tạo đơn. Cào lỗi/chưa cào thì cảnh báo nhưng CHO qua (tránh kẹt đơn).
+        // CHẶN: chỉ cho gửi khi kênh ĐẠT (cào được + tổng view 7 video >= 1500).
+        // Không ĐẠT vì bất kỳ lý do (view yếu HOẶC ID kênh sai/không tìm thấy) → KHÔNG cho gửi (chống gõ ID giả né check).
         if (VIEW_GATE_ON) {
             if (!chanView || chanView.loading || chanView.username !== normKenh(idKenh)) {
                 checkChannelView(idKenh);
                 alert('⏳ Đang kiểm tra view kênh (7 video, bỏ ghim)... đợi 2-3 giây rồi bấm "Tạo đơn" lại nha.');
                 return;
             }
-            if (chanView.dat === false && !chanView.err) {
-                alert(`🚫 Kênh @${chanView.username} — tổng view ${chanView.video_count} video (bỏ ghim) = ${Number(chanView.total_view).toLocaleString('vi-VN')} < ${Number(chanView.nguong).toLocaleString('vi-VN')}.\nKênh chưa đủ view → KHÔNG được tạo đơn.`);
+            if (!chanView.dat) {
+                if (chanView.err) {
+                    alert(`🚫 Kênh @${chanView.username}: ${chanView.err}\n→ ID kênh sai / không tìm thấy nên KHÔNG gửi được.\nKiểm tra lại ID kênh, hoặc bấm 🔄 cào lại. Nếu chắc ID đúng mà vẫn lỗi → báo admin.`);
+                } else {
+                    alert(`🚫 Kênh @${chanView.username} — tổng view ${chanView.video_count} video (bỏ ghim) = ${Number(chanView.total_view).toLocaleString('vi-VN')} < ${Number(chanView.nguong).toLocaleString('vi-VN')}.\nKênh chưa đủ view → KHÔNG gửi được.`);
+                }
                 return;
             }
         }
@@ -775,8 +793,8 @@ const OrderTab = () => {
                                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151' }}>ID Kênh (*)</label>
                                 <input type="text" value={idKenh} onChange={e => setIdKenh(e.target.value)} onBlur={e => { handleIdKenhBlur(e); if (VIEW_GATE_ON) checkChannelView(idKenh); }} required placeholder="Nhập ID kênh..." style={{ width: '100%' }} />
                                 {VIEW_GATE_ON && chanView && (
-                                    <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, fontSize: '0.8rem', border: '1px solid', ...(chanView.loading ? { background: '#f8fafc', borderColor: '#e2e8f0', color: '#64748b' } : chanView.err ? { background: '#fffbeb', borderColor: '#fde68a', color: '#92400e' } : chanView.dat ? { background: '#f0fdf4', borderColor: '#bbf7d0', color: '#166534' } : { background: '#fef2f2', borderColor: '#fecaca', color: '#b91c1c' }) }}>
-                                        {chanView.loading ? '⏳ Đang cào view kênh...' : chanView.err ? `⚠️ ${chanView.err} — vẫn cho tạo đơn` : (
+                                    <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, fontSize: '0.8rem', border: '1px solid', ...(chanView.loading ? { background: '#f8fafc', borderColor: '#e2e8f0', color: '#64748b' } : (chanView.err || !chanView.dat) ? { background: '#fef2f2', borderColor: '#fecaca', color: '#b91c1c' } : { background: '#f0fdf4', borderColor: '#bbf7d0', color: '#166534' }) }}>
+                                        {chanView.loading ? '⏳ Đang cào view kênh...' : chanView.err ? <span>🚫 {chanView.err} — <b>ID kênh sai/không tìm thấy → KHÔNG gửi được.</b> Kiểm tra lại ID hoặc <span onClick={() => checkChannelView(idKenh)} style={{ cursor: 'pointer', textDecoration: 'underline', fontWeight: 700 }}>🔄 cào lại</span>.</span> : (
                                             <>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                                     <b>{chanView.dat ? '✅ ĐẠT' : '🚫 KHÔNG ĐẠT'}</b>
@@ -1088,6 +1106,37 @@ const OrderTab = () => {
                 <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || isLoading} className="btn-pagination btn-pagination-text">TRANG SAU</button>
             </div>
 
+            {viewPopup && (
+                <div onClick={() => setViewPopup(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 20, width: 'min(460px, 92vw)', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                            <b style={{ fontSize: '1.05rem', color: '#FF6600' }}>👁️ View kênh @{viewPopup.username}</b>
+                            <a href={`https://www.tiktok.com/@${viewPopup.username}`} target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontWeight: 700, textDecoration: 'none', fontSize: '0.85rem' }}>Mở TikTok ↗</a>
+                            <span onClick={() => openViewPopup(viewPopup.username)} title="Cào lại" style={{ cursor: 'pointer', fontWeight: 700 }}>🔄</span>
+                            <button onClick={() => setViewPopup(null)} style={{ marginLeft: 'auto', border: 'none', background: '#f1f5f9', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', fontWeight: 700 }}>Đóng</button>
+                        </div>
+                        {viewPopup.loading ? <div style={{ padding: 30, textAlign: 'center', color: '#64748b' }}>⏳ Đang cào view kênh...</div>
+                            : viewPopup.err ? <div style={{ padding: 16, background: '#fef2f2', color: '#b91c1c', borderRadius: 10 }}>🚫 {viewPopup.err} — ID kênh có thể sai / không tồn tại.</div>
+                            : (<>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, marginBottom: 12, fontWeight: 800, flexWrap: 'wrap', ...(viewPopup.dat ? { background: '#f0fdf4', color: '#166534' } : { background: '#fef2f2', color: '#b91c1c' }) }}>
+                                    {viewPopup.dat ? '✅ ĐẠT' : '🚫 KHÔNG ĐẠT'}
+                                    <span style={{ fontWeight: 600 }}>Tổng view {viewPopup.video_count} video (bỏ ghim): <b>{Number(viewPopup.total_view).toLocaleString('vi-VN')}</b> / ngưỡng {Number(viewPopup.nguong || 1500).toLocaleString('vi-VN')}</span>
+                                </div>
+                                {viewPopup.videos?.length > 0 && (
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: 8 }}>
+                                        {viewPopup.videos.map((v, i) => (
+                                            <div key={i} style={{ textAlign: 'center' }}>
+                                                <img src={v.cover} alt="" style={{ width: '100%', aspectRatio: '3/4', objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0' }} />
+                                                <div style={{ fontSize: '0.7rem', color: '#475569', fontWeight: 700 }}>{Number(v.view).toLocaleString('vi-VN')}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </>)}
+                    </div>
+                </div>
+            )}
+
             <div className="mirinda-card" style={{ padding: '0', overflow: 'hidden' }}>
                 <div style={{ width: '100%', overflowX: 'auto' }}>
                     <table style={{ width: '100%' }}>
@@ -1123,7 +1172,10 @@ const OrderTab = () => {
                                                 <td style={{ width: `${columnWidths.ngayGui}px`, padding: '12px', border: '1px solid #ddd' }}>{new Date(donHang.ngay_gui).toLocaleString('vi-VN')}</td>
                                                 <td style={{ width: `${columnWidths.hoTenKOC}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.koc_ho_ten, donHang.original_koc_ho_ten) }}>{donHang.koc_ho_ten}</td>
                                                 <td style={{ width: `${columnWidths.cccd}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.koc_cccd, donHang.original_koc_cccd) }}>{donHang.koc_cccd}</td>
-                                                <td style={{ width: `${columnWidths.idKenh}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.koc_id_kenh, donHang.original_koc_id_kenh) }}>{donHang.koc_id_kenh}</td>
+                                                <td style={{ width: `${columnWidths.idKenh}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.koc_id_kenh, donHang.original_koc_id_kenh) }}>
+                                                    <span>{donHang.koc_id_kenh}</span>
+                                                    {donHang.koc_id_kenh && <button type="button" onClick={() => openViewPopup(donHang.koc_id_kenh)} title="Cào view kênh (ảnh + view)" style={{ marginLeft: 6, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '1rem', padding: 0 }}>👁️</button>}
+                                                </td>
                                                 <td style={{ width: `${columnWidths.sdt}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.koc_sdt, donHang.original_koc_sdt) }}>{donHang.koc_sdt}</td>
                                                 <td style={{ width: `${columnWidths.diaChi}px`, padding: '12px', border: '1px solid #ddd', ...getCellStyle(donHang.koc_dia_chi, donHang.original_koc_dia_chi) }}>
                                                     <div>{donHang.koc_dia_chi}</div>
