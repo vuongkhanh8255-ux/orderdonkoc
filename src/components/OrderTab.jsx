@@ -467,6 +467,16 @@ const OrderTab = () => {
             else setViewPopup({ username: u, ...data });
         } catch (e) { setViewPopup({ username: u, err: e.message }); }
     };
+    // Lấy link mp4 trực tiếp để PHÁT TẠI CHỖ (lách chặn embed video gắn giỏ)
+    const openPlay = async (videoId, uname) => {
+        setViewPopup(vp => ({ ...vp, play: videoId, playUrl: null, playErr: null }));
+        try {
+            const { data, error } = await supabase.functions.invoke('koc-channel-views', { body: { video_id: videoId, vuser: uname } });
+            const link = data?.hdplay || data?.play;
+            if (error || !data?.ok || !link) setViewPopup(vp => vp?.play === videoId ? { ...vp, playErr: 'Không tải được video (thử lại hoặc mở TikTok)' } : vp);
+            else setViewPopup(vp => vp?.play === videoId ? { ...vp, playUrl: link } : vp);
+        } catch (e) { setViewPopup(vp => vp?.play === videoId ? { ...vp, playErr: e.message } : vp); }
+    };
 
     // #3: Kênh + brand đã có người gắn tag (approved) ở Hiệu suất KOC → không ai gửi brand đó cho kênh đó nữa.
     const [assignments, setAssignments] = useState([]); // {koc_id, brand_name, staff_name}
@@ -1119,8 +1129,14 @@ const OrderTab = () => {
                             : viewPopup.err ? <div style={{ padding: 16, background: '#fef2f2', color: '#b91c1c', borderRadius: 10 }}>🚫 {viewPopup.err} — ID kênh có thể sai / không tồn tại.</div>
                             : viewPopup.play ? (
                                 <div>
-                                    <button onClick={() => setViewPopup(vp => ({ ...vp, play: null }))} style={{ border: 'none', background: '#f1f5f9', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', fontWeight: 700, marginBottom: 8 }}>← Danh sách video</button>
-                                    <iframe src={`https://www.tiktok.com/embed/v2/${viewPopup.play}`} title="TikTok video" allow="autoplay; encrypted-media; fullscreen" allowFullScreen style={{ width: '100%', height: 640, border: 'none', borderRadius: 10 }} />
+                                    <button onClick={() => setViewPopup(vp => ({ ...vp, play: null, playUrl: null, playErr: null }))} style={{ border: 'none', background: '#f1f5f9', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', fontWeight: 700, marginBottom: 8 }}>← Danh sách video</button>
+                                    {viewPopup.playErr ? (
+                                        <div style={{ padding: 16, background: '#fffbeb', color: '#92400e', borderRadius: 10 }}>⚠️ {viewPopup.playErr}. <a href={`https://www.tiktok.com/@${viewPopup.username}/video/${viewPopup.play}`} target="_blank" rel="noreferrer" style={{ fontWeight: 700 }}>Mở trên TikTok ↗</a></div>
+                                    ) : !viewPopup.playUrl ? (
+                                        <div style={{ padding: 30, textAlign: 'center', color: '#64748b' }}>⏳ Đang tải video...</div>
+                                    ) : (
+                                        <video src={viewPopup.playUrl} controls autoPlay playsInline style={{ width: '100%', maxHeight: '68vh', borderRadius: 10, background: '#000' }} />
+                                    )}
                                 </div>
                             ) : (<>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, marginBottom: 12, fontWeight: 800, flexWrap: 'wrap', ...(viewPopup.dat ? { background: '#f0fdf4', color: '#166534' } : { background: '#fef2f2', color: '#b91c1c' }) }}>
@@ -1130,7 +1146,7 @@ const OrderTab = () => {
                                 {viewPopup.videos?.length > 0 && (
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: 8 }}>
                                         {viewPopup.videos.map((v, i) => (
-                                            <div key={i} onClick={() => setViewPopup(vp => ({ ...vp, play: v.id }))} title="Bấm để xem video ngay tại đây" style={{ textAlign: 'center', cursor: 'pointer', position: 'relative' }}>
+                                            <div key={i} onClick={() => openPlay(v.id, viewPopup.username)} title="Bấm để xem video ngay tại đây" style={{ textAlign: 'center', cursor: 'pointer', position: 'relative' }}>
                                                 <img src={v.cover} alt="" style={{ width: '100%', aspectRatio: '3/4', objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0' }} />
                                                 <span style={{ position: 'absolute', top: '38%', left: '50%', transform: 'translate(-50%,-50%)', fontSize: '1.4rem', color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.6)', pointerEvents: 'none' }}>▶</span>
                                                 <div style={{ fontSize: '0.7rem', color: '#475569', fontWeight: 700 }}>{Number(v.view).toLocaleString('vi-VN')}</div>
