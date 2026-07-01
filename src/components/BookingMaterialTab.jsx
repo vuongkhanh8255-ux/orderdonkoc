@@ -26,7 +26,7 @@ export default function BookingMaterialTab() {
   const [rows, setRows] = useState([]);
   const [sel, setSel] = useState('');
   const [loading, setLoading] = useState(true);
-  const [draft, setDraft] = useState({ brief: '', skus: [] });
+  const [draft, setDraft] = useState({ brief: '', skus: [], products: [] });
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState('');   // '' | 'image_zip' | 'cert_pdf'
   const [products, setProducts] = useState([]); // SP của brand (từ dashboard booking: bảng sanphams)
@@ -47,7 +47,7 @@ export default function BookingMaterialTab() {
 
   // Nạp draft khi đổi brand
   useEffect(() => {
-    if (cur) setDraft({ brief: cur.brief || '', skus: Array.isArray(cur.skus) ? cur.skus : [] });
+    if (cur) setDraft({ brief: cur.brief || '', skus: Array.isArray(cur.skus) ? cur.skus : [], products: Array.isArray(cur.products) ? cur.products : [] });
   }, [sel, cur?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Lấy danh sách SP của brand đang chọn (từ dashboard booking: brands → sanphams)
@@ -126,22 +126,6 @@ export default function BookingMaterialTab() {
     return { url: data.publicUrl, path, size: file.size };
   };
 
-  // File đính kèm (zip ảnh / pdf kiểm định) → thêm vào cột files
-  const uploadFile = async (kind, file) => {
-    if (!file || !cur) return;
-    if (file.size > MAX_BYTES) { alert(`File quá lớn (>${fmtSize(MAX_BYTES)}). Hãy chia nhỏ hoặc nén lại.`); return; }
-    setBusy(kind);
-    try {
-      const { url, path, size } = await putFile(kind, file);
-      const entry = { kind, name: file.name, url, path, size, uploaded_at: new Date().toISOString() };
-      const files = [...(Array.isArray(cur.files) ? cur.files : []), entry];
-      const { error } = await supabase.from('booking_materials').update({ files, updated_at: new Date().toISOString() }).eq('id', cur.id);
-      if (error) throw error;
-      patchRow(cur.brand, { files });
-    } catch (e) { alert('Lỗi upload: ' + e.message); }
-    finally { setBusy(''); }
-  };
-
   // Avatar/logo brand
   const uploadAvatar = async (file) => {
     if (!file || !cur) return;
@@ -209,18 +193,45 @@ export default function BookingMaterialTab() {
     await supabase.from('booking_materials').update({ skus, updated_at: new Date().toISOString() }).eq('id', cur.id);
   };
 
-  const deleteFile = async (entry) => {
+  // ── SẢN PHẨM (mỗi SP 1 khung: ảnh .zip + giấy kiểm định .pdf riêng) ──
+  const persistProducts = async (next) => {
+    setDraft(d => ({ ...d, products: next }));
+    patchRow(cur.brand, { products: next });
+    const { error } = await supabase.from('booking_materials').update({ products: next, updated_at: new Date().toISOString() }).eq('id', cur.id);
+    if (error) alert('Lỗi lưu sản phẩm: ' + error.message);
+  };
+  const addProduct = () => {
+    const id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `p${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
+    persistProducts([...(draft.products || []), { id, name: '', files: [] }]);
+  };
+  const renameProduct = (id, name) => setDraft(d => ({ ...d, products: (d.products || []).map(p => p.id === id ? { ...p, name } : p) }));
+  const commitProducts = () => persistProducts(draft.products || []); // lưu tên khi rời ô
+  const removeProduct = (id) => {
+    const p = (draft.products || []).find(x => x.id === id);
+    if (!confirm(`Xoá sản phẩm "${p?.name || ''}"? (file đã up trên storage không bị xoá)`)) return;
+    persistProducts((draft.products || []).filter(x => x.id !== id));
+  };
+  const uploadProductFile = async (pid, kind, file) => {
+    if (!file || !cur) return;
+    if (file.size > MAX_BYTES) { alert(`File quá lớn (>${fmtSize(MAX_BYTES)}). Hãy chia nhỏ hoặc nén lại.`); return; }
+    setBusy(`${pid}:${kind}`);
+    try {
+      const { url, path, size } = await putFile(`${pid}/${kind}`, file);
+      const entry = { kind, name: file.name, url, path, size, uploaded_at: new Date().toISOString() };
+      const next = (draft.products || []).map(p => p.id === pid ? { ...p, files: [...(p.files || []), entry] } : p);
+      await persistProducts(next);
+    } catch (e) { alert('Lỗi upload: ' + e.message); }
+    finally { setBusy(''); }
+  };
+  const deleteProductFile = async (pid, entry) => {
     if (!cur || !confirm(`Xoá file "${entry.name}"?`)) return;
     try {
       if (entry.path) await supabase.storage.from(BUCKET).remove([entry.path]);
-      const files = (cur.files || []).filter(f => (f.path || f.url) !== (entry.path || entry.url));
-      const { error } = await supabase.from('booking_materials').update({ files, updated_at: new Date().toISOString() }).eq('id', cur.id);
-      if (error) throw error;
-      patchRow(cur.brand, { files });
+      const next = (draft.products || []).map(p => p.id === pid ? { ...p, files: (p.files || []).filter(f => (f.path || f.url) !== (entry.path || entry.url)) } : p);
+      await persistProducts(next);
     } catch (e) { alert('Lỗi xoá file: ' + e.message); }
   };
-
-  const filesOf = (kind) => (cur?.files || []).filter(f => f.kind === kind);
+  const prodFiles = (product, kind) => (product.files || []).filter(f => f.kind === kind);
 
   if (loading) return <div style={{ padding: 30, color: '#94a3b8' }}>⏳ Đang tải material…</div>;
 
@@ -302,12 +313,33 @@ export default function BookingMaterialTab() {
             </button>
           </div>
 
-          {/* Files: zip ảnh + pdf kiểm định */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))', gap: 16 }}>
-            <FileBox title="🖼️ Ảnh sản phẩm (.zip)" hint="Nén ảnh thành file .zip rồi up lên" accept=".zip,application/zip,application/x-zip-compressed"
-              files={filesOf('image_zip')} busy={busy === 'image_zip'} onUpload={f => uploadFile('image_zip', f)} onDelete={deleteFile} />
-            <FileBox title="📄 Giấy kiểm định (.pdf)" hint="Up file PDF kiểm định" accept=".pdf,application/pdf"
-              files={filesOf('cert_pdf')} busy={busy === 'cert_pdf'} onUpload={f => uploadFile('cert_pdf', f)} onDelete={deleteFile} />
+          {/* Sản phẩm — mỗi SP 1 khung riêng (ảnh .zip + giấy kiểm định .pdf) */}
+          <div style={card}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#1e293b' }}>📦 Sản phẩm ({(draft.products || []).length})</h3>
+                <p style={{ margin: '2px 0 0', color: '#94a3b8', fontSize: '0.8rem' }}>1 brand nhiều SP — mỗi sản phẩm 1 khung: ảnh (.zip) + giấy kiểm định (.pdf) riêng.</p>
+              </div>
+              <button style={btn(ORANGE)} onClick={addProduct}>➕ Thêm sản phẩm</button>
+            </div>
+            {(draft.products || []).length === 0 && <div style={{ color: '#94a3b8', fontSize: '0.88rem', padding: '8px 0' }}>Chưa có sản phẩm. Bấm "➕ Thêm sản phẩm" để tạo khung đầu tiên.</div>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {(draft.products || []).map((p, idx) => (
+                <div key={p.id} style={{ border: '1.5px solid #ffedd5', borderRadius: 12, padding: 14, background: '#fffdfb' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                    <span style={{ width: 24, height: 24, borderRadius: '50%', background: ORANGE, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.78rem', fontWeight: 800, flex: 'none' }}>{idx + 1}</span>
+                    <input value={p.name || ''} onChange={e => renameProduct(p.id, e.target.value)} onBlur={commitProducts} placeholder="Tên sản phẩm…" style={{ ...inputStyle, flex: 1, fontWeight: 700 }} />
+                    <button style={{ ...btn('#fff', '#ef4444'), border: '1.5px solid #fecaca', padding: '8px 12px', flex: 'none' }} onClick={() => removeProduct(p.id)}>🗑 Xoá SP</button>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 14 }}>
+                    <FileBox title="🖼️ Ảnh sản phẩm (.zip)" hint="Nén ảnh thành file .zip rồi up lên" accept=".zip,application/zip,application/x-zip-compressed"
+                      files={prodFiles(p, 'image_zip')} busy={busy === `${p.id}:image_zip`} onUpload={f => uploadProductFile(p.id, 'image_zip', f)} onDelete={e => deleteProductFile(p.id, e)} />
+                    <FileBox title="📄 Giấy kiểm định (.pdf)" hint="Up file PDF kiểm định" accept=".pdf,application/pdf"
+                      files={prodFiles(p, 'cert_pdf')} busy={busy === `${p.id}:cert_pdf`} onUpload={f => uploadProductFile(p.id, 'cert_pdf', f)} onDelete={e => deleteProductFile(p.id, e)} />
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
