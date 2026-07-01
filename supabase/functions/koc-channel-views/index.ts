@@ -6,7 +6,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const NGUONG = 1500;
-const SO_VIDEO = 7;
+const SO_VIDEO = 7;              // số video tính NGƯỠNG (bỏ ghim)
+const SO_VIDEO_DISPLAY = 10;    // số video trả về để XEM (popup phóng to)
 const CACHE_NGAY = 30;
 
 const cors = {
@@ -70,17 +71,20 @@ Deno.serve(async (req) => {
 
     let row: any;
     if (!vids.length) {
-      row = { username, total_view: 0, video_count: 0, dat: false, videos: [],
+      row = { username, total_view: 0, video_count: 0, dat: false, videos: [], videos_all: [],
         err: 'Không lấy được video (kênh riêng tư / không tồn tại / TikTok chặn tạm)', checked_at: new Date().toISOString() };
     } else {
-      const list = vids
+      const sorted = vids
         .filter((v: any) => !v.is_top)
-        .sort((a: any, b: any) => (b.create_time || 0) - (a.create_time || 0))
-        .slice(0, SO_VIDEO);
+        .sort((a: any, b: any) => (b.create_time || 0) - (a.create_time || 0));
+      const list = sorted.slice(0, SO_VIDEO);          // 7 video tính ngưỡng
+      const disp = sorted.slice(0, SO_VIDEO_DISPLAY);  // ~10 video để xem trong popup
       const total = list.reduce((s: number, v: any) => s + (Number(v.play_count) || 0), 0);
+      const mapV = (v: any) => ({ cover: v.cover, view: Number(v.play_count) || 0, id: v.video_id });
       row = {
         username, total_view: total, video_count: list.length, dat: total >= NGUONG,
-        videos: list.map((v: any) => ({ cover: v.cover, view: Number(v.play_count) || 0, id: v.video_id })),
+        videos: list.map(mapV),
+        videos_all: disp.map(mapV),
         err: null, checked_at: new Date().toISOString(),
       };
     }

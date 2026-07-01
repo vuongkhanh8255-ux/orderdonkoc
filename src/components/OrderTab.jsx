@@ -462,15 +462,16 @@ const OrderTab = ({ currentUser } = {}) => {
 
     // Popup cào view cho 1 kênh trong BẢNG DANH SÁCH đơn (hiện ảnh + view như tool ngoài)
     const [viewPopup, setViewPopup] = useState(null);   // { username, loading, ...data, err }
-    const openViewPopup = async (raw) => {
+    const openViewPopup = async (raw, opts = {}) => {
+        const { big = false, force = false } = opts;
         const u = normKenh(raw);
         if (!u) return;
-        setViewPopup({ username: u, loading: true });
+        setViewPopup({ username: u, loading: true, big });
         try {
-            const { data, error } = await supabase.functions.invoke('koc-channel-views', { body: { username: u } });
-            if (error || !data?.ok) setViewPopup({ username: u, err: 'Không cào được (thử lại)' });
-            else setViewPopup({ username: u, ...data });
-        } catch (e) { setViewPopup({ username: u, err: e.message }); }
+            const { data, error } = await supabase.functions.invoke('koc-channel-views', { body: { username: u, force } });
+            if (error || !data?.ok) setViewPopup({ username: u, big, err: 'Không cào được (thử lại)' });
+            else setViewPopup({ username: u, big, ...data });
+        } catch (e) { setViewPopup({ username: u, big, err: e.message }); }
     };
     // Lấy link mp4 trực tiếp để PHÁT TẠI CHỖ (lách chặn embed video gắn giỏ)
     const openPlay = async (videoId, uname) => {
@@ -850,11 +851,12 @@ const OrderTab = ({ currentUser } = {}) => {
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                                     <b>{chanView.dat ? '✅ ĐẠT' : '🚫 KHÔNG ĐẠT'}</b>
                                                     <span>Tổng view {chanView.video_count} video (bỏ ghim): <b>{Number(chanView.total_view).toLocaleString('vi-VN')}</b> / ngưỡng {Number(chanView.nguong).toLocaleString('vi-VN')}</span>
-                                                    <a href={`https://www.tiktok.com/@${chanView.username}`} target="_blank" rel="noreferrer" style={{ marginLeft: 'auto', color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>Mở TikTok @{chanView.username} ↗</a>
+                                                    <button type="button" onClick={() => openViewPopup(chanView.username, { big: true, force: true })} title="Phóng to xem ~10 clip gần nhất — bấm vào video coi luôn" style={{ marginLeft: 'auto', border: '1px solid #fed7aa', background: '#fff7ed', color: '#ea580c', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontWeight: 800, fontSize: '0.76rem' }}>🔍 Phóng to</button>
+                                                    <a href={`https://www.tiktok.com/@${chanView.username}`} target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>Mở TikTok ↗</a>
                                                     <span onClick={() => checkChannelView(idKenh)} title="Cào lại" style={{ cursor: 'pointer', fontWeight: 700 }}>🔄</span>
                                                 </div>
                                                 {chanView.videos?.length > 0 && (
-                                                    <div style={{ display: 'flex', gap: 5, marginTop: 6, overflowX: 'auto' }}>
+                                                    <div onClick={() => openViewPopup(chanView.username, { big: true, force: true })} title="Bấm để phóng to + xem video" style={{ display: 'flex', gap: 5, marginTop: 6, overflowX: 'auto', cursor: 'pointer' }}>
                                                         {chanView.videos.map((v, i) => (
                                                             <div key={i} title={`${Number(v.view).toLocaleString('vi-VN')} view`} style={{ flexShrink: 0, textAlign: 'center' }}>
                                                                 <img src={v.cover} alt="" style={{ width: 42, height: 56, objectFit: 'cover', borderRadius: 5, border: '1px solid #e2e8f0' }} />
@@ -1159,12 +1161,13 @@ const OrderTab = ({ currentUser } = {}) => {
 
             {viewPopup && (
                 <div onClick={() => setViewPopup(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 20, width: 'min(460px, 92vw)', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+                    <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 20, width: viewPopup.big ? '96vw' : 'min(460px, 92vw)', height: viewPopup.big ? '94vh' : 'auto', maxHeight: viewPopup.big ? '94vh' : '85vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
                             <b style={{ fontSize: '1.05rem', color: '#FF6600' }}>👁️ View kênh @{viewPopup.username}</b>
                             <a href={`https://www.tiktok.com/@${viewPopup.username}`} target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontWeight: 700, textDecoration: 'none', fontSize: '0.85rem' }}>Mở TikTok ↗</a>
-                            <span onClick={() => openViewPopup(viewPopup.username)} title="Cào lại" style={{ cursor: 'pointer', fontWeight: 700 }}>🔄</span>
-                            <button onClick={() => setViewPopup(null)} style={{ marginLeft: 'auto', border: 'none', background: '#f1f5f9', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', fontWeight: 700 }}>Đóng</button>
+                            <span onClick={() => openViewPopup(viewPopup.username, { big: viewPopup.big, force: true })} title="Cào lại" style={{ cursor: 'pointer', fontWeight: 700 }}>🔄</span>
+                            <button onClick={() => setViewPopup(vp => ({ ...vp, big: !vp.big }))} title={viewPopup.big ? 'Thu nhỏ lại' : 'Phóng to cả màn hình'} style={{ marginLeft: 'auto', border: '1px solid #fed7aa', background: '#fff7ed', color: '#ea580c', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', fontWeight: 700 }}>{viewPopup.big ? '⤡ Thu nhỏ' : '⤢ Phóng to'}</button>
+                            <button onClick={() => setViewPopup(null)} style={{ border: 'none', background: '#f1f5f9', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', fontWeight: 700 }}>Đóng</button>
                         </div>
                         {viewPopup.loading ? <div style={{ padding: 30, textAlign: 'center', color: '#64748b' }}>⏳ Đang cào view kênh...</div>
                             : viewPopup.err ? <div style={{ padding: 16, background: '#fef2f2', color: '#b91c1c', borderRadius: 10 }}>🚫 {viewPopup.err} — ID kênh có thể sai / không tồn tại.</div>
@@ -1176,7 +1179,7 @@ const OrderTab = ({ currentUser } = {}) => {
                                     ) : !viewPopup.playUrl ? (
                                         <div style={{ padding: 30, textAlign: 'center', color: '#64748b' }}>⏳ Đang tải video...</div>
                                     ) : (
-                                        <video src={viewPopup.playUrl} controls autoPlay playsInline style={{ width: '100%', maxHeight: '68vh', borderRadius: 10, background: '#000' }} />
+                                        <video src={viewPopup.playUrl} controls autoPlay playsInline style={{ width: '100%', maxHeight: viewPopup.big ? '82vh' : '68vh', borderRadius: 10, background: '#000' }} />
                                     )}
                                 </div>
                             ) : (<>
@@ -1184,9 +1187,9 @@ const OrderTab = ({ currentUser } = {}) => {
                                     {viewPopup.dat ? '✅ ĐẠT' : '🚫 KHÔNG ĐẠT'}
                                     <span style={{ fontWeight: 600 }}>Tổng view {viewPopup.video_count} video (bỏ ghim): <b>{Number(viewPopup.total_view).toLocaleString('vi-VN')}</b> / ngưỡng {Number(viewPopup.nguong || 1500).toLocaleString('vi-VN')}</span>
                                 </div>
-                                {viewPopup.videos?.length > 0 && (
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: 8 }}>
-                                        {viewPopup.videos.map((v, i) => (
+                                {(viewPopup.videos_all?.length ? viewPopup.videos_all : viewPopup.videos)?.length > 0 && (
+                                    <div style={{ display: 'grid', gridTemplateColumns: viewPopup.big ? 'repeat(auto-fill, minmax(150px, 1fr))' : 'repeat(auto-fill, minmax(72px, 1fr))', gap: 8 }}>
+                                        {(viewPopup.videos_all?.length ? viewPopup.videos_all : viewPopup.videos).map((v, i) => (
                                             <div key={i} onClick={() => openPlay(v.id, viewPopup.username)} title="Bấm để xem video ngay tại đây" style={{ textAlign: 'center', cursor: 'pointer', position: 'relative' }}>
                                                 <img src={v.cover} alt="" style={{ width: '100%', aspectRatio: '3/4', objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0' }} />
                                                 <span style={{ position: 'absolute', top: '38%', left: '50%', transform: 'translate(-50%,-50%)', fontSize: '1.4rem', color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.6)', pointerEvents: 'none' }}>▶</span>
