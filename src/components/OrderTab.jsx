@@ -1117,7 +1117,12 @@ const OrderTab = () => {
                         </div>
                         {viewPopup.loading ? <div style={{ padding: 30, textAlign: 'center', color: '#64748b' }}>⏳ Đang cào view kênh...</div>
                             : viewPopup.err ? <div style={{ padding: 16, background: '#fef2f2', color: '#b91c1c', borderRadius: 10 }}>🚫 {viewPopup.err} — ID kênh có thể sai / không tồn tại.</div>
-                            : (<>
+                            : viewPopup.play ? (
+                                <div>
+                                    <button onClick={() => setViewPopup(vp => ({ ...vp, play: null }))} style={{ border: 'none', background: '#f1f5f9', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', fontWeight: 700, marginBottom: 8 }}>← Danh sách video</button>
+                                    <iframe src={`https://www.tiktok.com/embed/v2/${viewPopup.play}`} title="TikTok video" allow="autoplay; encrypted-media; fullscreen" allowFullScreen style={{ width: '100%', height: 640, border: 'none', borderRadius: 10 }} />
+                                </div>
+                            ) : (<>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, marginBottom: 12, fontWeight: 800, flexWrap: 'wrap', ...(viewPopup.dat ? { background: '#f0fdf4', color: '#166534' } : { background: '#fef2f2', color: '#b91c1c' }) }}>
                                     {viewPopup.dat ? '✅ ĐẠT' : '🚫 KHÔNG ĐẠT'}
                                     <span style={{ fontWeight: 600 }}>Tổng view {viewPopup.video_count} video (bỏ ghim): <b>{Number(viewPopup.total_view).toLocaleString('vi-VN')}</b> / ngưỡng {Number(viewPopup.nguong || 1500).toLocaleString('vi-VN')}</span>
@@ -1125,8 +1130,9 @@ const OrderTab = () => {
                                 {viewPopup.videos?.length > 0 && (
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: 8 }}>
                                         {viewPopup.videos.map((v, i) => (
-                                            <div key={i} style={{ textAlign: 'center' }}>
+                                            <div key={i} onClick={() => setViewPopup(vp => ({ ...vp, play: v.id }))} title="Bấm để xem video ngay tại đây" style={{ textAlign: 'center', cursor: 'pointer', position: 'relative' }}>
                                                 <img src={v.cover} alt="" style={{ width: '100%', aspectRatio: '3/4', objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0' }} />
+                                                <span style={{ position: 'absolute', top: '38%', left: '50%', transform: 'translate(-50%,-50%)', fontSize: '1.4rem', color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.6)', pointerEvents: 'none' }}>▶</span>
                                                 <div style={{ fontSize: '0.7rem', color: '#475569', fontWeight: 700 }}>{Number(v.view).toLocaleString('vi-VN')}</div>
                                             </div>
                                         ))}
