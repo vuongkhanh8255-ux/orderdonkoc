@@ -550,6 +550,21 @@ export default function KocPerformanceTab() {
   const [showAssignPanel, setShowAssignPanel] = useState(true);
   const [showPendingTop, setShowPendingTop] = useState(false);
   const [assignShow, setAssignShow] = useState(48);
+  // ── Lịch sử gắn tag (koc_assignment_history): xem đã gắn cho ai, ai gắn, lúc nào ──
+  const [histOpen, setHistOpen] = useState(false);
+  const [histRows, setHistRows] = useState(null);   // null = chưa tải
+  const [histLoading, setHistLoading] = useState(false);
+  const [histAllBrands, setHistAllBrands] = useState(false); // false = chỉ brand đang xem
+  const loadHistory = useCallback(async () => {
+    setHistLoading(true);
+    let qb = supabase.from(HIST_TABLE)
+      .select('koc_id, brand_name, staff_name, action, actor, created_at')
+      .order('created_at', { ascending: false }).limit(300);
+    if (!histAllBrands) qb = qb.eq('brand_name', brand);
+    const { data } = await qb;
+    setHistRows(data || []); setHistLoading(false);
+  }, [brand, histAllBrands]);
+  useEffect(() => { if (histOpen) loadHistory(); }, [histOpen, loadHistory]);
   const reloadAssignments = useCallback(async () => {
     // Load TẤT CẢ assignment (mọi brand) → mỗi KOC biết được gán ở brand hiện tại + brand khác
     const { data } = await supabase.from(ASSIGN_TABLE)
@@ -876,6 +891,65 @@ export default function KocPerformanceTab() {
               ))}
             </div>
           )}
+          {/* ── Lịch sử gắn tag ── */}
+          <div style={{ marginTop: 14, borderTop: '1px dashed #fed7aa', paddingTop: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <button onClick={() => setHistOpen(v => !v)} style={{ background: 'none', border: 'none', color: '#0891b2', fontWeight: 800, fontSize: '0.86rem', cursor: 'pointer', padding: 0 }}>
+                🕘 {histOpen ? '▲ Ẩn lịch sử gắn tag' : '▼ Xem lịch sử gắn tag'}
+              </button>
+              {histOpen && (
+                <label style={{ fontSize: '0.76rem', color: '#64748b', display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={histAllBrands} onChange={e => setHistAllBrands(e.target.checked)} /> Xem tất cả brand (bỏ chọn = chỉ {brand})
+                </label>
+              )}
+            </div>
+            {histOpen && (
+              <div style={{ marginTop: 10 }}>
+                {histLoading && <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Đang tải…</div>}
+                {!histLoading && histRows && (() => {
+                  const assignCnt = histRows.filter(h => h.action === 'assign' || h.action === 'approve').length;
+                  const removeCnt = histRows.filter(h => h.action === 'remove').length;
+                  return (
+                    <>
+                      <div style={{ fontSize: '0.78rem', color: '#334155', marginBottom: 8 }}>
+                        📊 {histRows.length} thao tác gần nhất{histAllBrands ? ' (mọi brand)' : ` (brand ${brand})`} · <b style={{ color: '#16a34a' }}>{assignCnt} lượt gán/duyệt</b> · <b style={{ color: '#dc2626' }}>{removeCnt} lượt gỡ</b>
+                      </div>
+                      {histRows.length === 0
+                        ? <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Chưa có lịch sử.</div>
+                        : (
+                        <div style={{ maxHeight: 360, overflowY: 'auto', border: '1px solid #fed7aa', borderRadius: 10, background: '#fff' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                            <thead>
+                              <tr style={{ position: 'sticky', top: 0, background: '#fff7ed', zIndex: 1 }}>
+                                <th style={{ textAlign: 'left', padding: '8px 10px', color: '#92400e', fontWeight: 700, whiteSpace: 'nowrap' }}>Thời gian</th>
+                                <th style={{ textAlign: 'left', padding: '8px 10px', color: '#92400e', fontWeight: 700 }}>@KOC</th>
+                                {histAllBrands && <th style={{ textAlign: 'left', padding: '8px 10px', color: '#92400e', fontWeight: 700 }}>Brand</th>}
+                                <th style={{ textAlign: 'left', padding: '8px 10px', color: '#92400e', fontWeight: 700 }}>Nhân sự</th>
+                                <th style={{ textAlign: 'left', padding: '8px 10px', color: '#92400e', fontWeight: 700 }}>Hành động</th>
+                                <th style={{ textAlign: 'left', padding: '8px 10px', color: '#92400e', fontWeight: 700 }}>Người thao tác</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {histRows.map((h, i) => (
+                                <tr key={i} style={{ borderTop: '1px solid #f1f5f9' }}>
+                                  <td style={{ padding: '7px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{h.created_at ? new Date(h.created_at).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                                  <td style={{ padding: '7px 10px' }}><a href={`https://www.tiktok.com/@${h.koc_id}`} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontWeight: 700, textDecoration: 'none' }}>@{h.koc_id}</a></td>
+                                  {histAllBrands && <td style={{ padding: '7px 10px', color: '#475569', fontWeight: 600 }}>{h.brand_name}</td>}
+                                  <td style={{ padding: '7px 10px', color: '#0f172a', fontWeight: 600 }}>{h.staff_name || '—'}</td>
+                                  <td style={{ padding: '7px 10px', whiteSpace: 'nowrap' }}>{HIST_LABEL[h.action] || h.action}</td>
+                                  <td style={{ padding: '7px 10px', color: '#64748b' }}>{h.actor || '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
