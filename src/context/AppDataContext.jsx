@@ -586,7 +586,7 @@ export const AppDataProvider = ({ children }) => {
     const ctRelation = hasProductFilter ? 'chitiettonguis!chitiettonguis_dongui_id_fkey_final!inner' : 'chitiettonguis!chitiettonguis_dongui_id_fkey_final';
     const spRelation = hasProductFilter ? 'sanphams!inner' : 'sanphams';
     const buildExportQuery = () => {
-      let query = supabase.from('donguis').select(`id, ngay_gui, loai_ship, trang_thai, koc_ho_ten, koc_id_kenh, koc_sdt, koc_dia_chi, nhansu ( id, ten_nhansu ), ${ctRelation} ( id, so_luong, ${spRelation} ( id, ten_sanpham, gia_tien, brands ( id, ten_brand ) ) )`).order('ngay_gui', { ascending: false }).order('id', { ascending: false });
+      let query = supabase.from('donguis').select(`id, ngay_gui, loai_ship, trang_thai, koc_ho_ten, koc_id_kenh, koc_sdt, koc_dia_chi, nhansu ( id, ten_nhansu ), ${ctRelation} ( id, so_luong, ${spRelation} ( id, ten_sanpham, gia_tien, barcode, brands ( id, ten_brand ) ) )`).order('ngay_gui', { ascending: false }).order('id', { ascending: false });
       if (selIds) { query = query.in('id', selIds); return query; }  // chỉ mấy đơn đã tick
       if (filterIdKenh) query = query.ilike('koc_id_kenh', `%${filterIdKenh.trim()}%`); if (filterSdt) query = query.ilike('koc_sdt', `%${filterSdt.trim()}%`); if (filterNhanSu) query = query.eq('nhansu_id', filterNhanSu);
       if (filterLoaiShip) query = query.eq('loai_ship', filterLoaiShip);
@@ -606,17 +606,30 @@ export const AppDataProvider = ({ children }) => {
       if (chunk.length < EXPORT_PAGE) break;
     }
     if (exportData.length === 0) { alert('Không có đơn nào để xuất Shopee Express.'); setIsLoading(false); return; }
+    // GIÁ TRỊ KHAI BÁO = cost GỐC (AMIS V2) × 5 (Khánh chốt 2/7). Lấy cost theo barcode qua RPC
+    // product_cost_amis; SP thiếu cost thì fallback gia_tien. Cột "Giá tiền" mỗi SP = cost×5,
+    // "Giá trị đơn hàng" = tổng (cost×5×SL) — do buildSpxRows tự cộng từ items.
+    const COST_MULTIPLIER = 5;
+    const normBar = (s) => (s || '').replace(/\s/g, '');
+    const costMap = {};
+    try {
+      const { data: costRows } = await supabase.rpc('product_cost_amis');
+      (costRows || []).forEach(r => { const b = normBar(r.barcode); if (b) costMap[b] = Number(r.cost) || 0; });
+    } catch (_) { /* thiếu cost map → fallback gia_tien */ }
     // ĐÚNG CHUẨN template SPX "Tạo đơn (địa chỉ mới)": mỗi SẢN PHẨM = 1 DÒNG, cùng Mã đơn; dòng đầu có
     // tên/SĐT/địa chỉ + lựa chọn giao hàng, các dòng sau chỉ tên SP + số lượng + giá.
     const orders = exportData.map(d => ({
       ho_ten: d.koc_ho_ten || '',
       sdt: d.koc_sdt || '',
       dia_chi_day_du: d.koc_dia_chi || '',
-      items: (d.chitiettonguis || []).map(ct => ({
-        ten_san_pham: ct.sanphams?.ten_sanpham || '',
-        so_luong: ct.so_luong || 1,
-        gia_tien: ct.sanphams?.gia_tien || 0,
-      })),
+      items: (d.chitiettonguis || []).map(ct => {
+        const cost = costMap[normBar(ct.sanphams?.barcode)] ?? (Number(ct.sanphams?.gia_tien) || 0);
+        return {
+          ten_san_pham: ct.sanphams?.ten_sanpham || '',
+          so_luong: ct.so_luong || 1,
+          gia_tien: Math.round(cost * COST_MULTIPLIER),
+        };
+      }),
     }));
     try {
       buildAndDownloadSpxExcel(orders, { filename: `shopee-express-${orders.length}-don.xlsx` });
