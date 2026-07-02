@@ -834,7 +834,7 @@ export default function KocPerformanceTab() {
       </div>
 
       {/* Filter bar — nằm ngang */}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+      <div style={{ display: 'flex', gap: 10, rowGap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
         {shops.length > 1 && (
           <select value={shopId} onChange={e => setShopId(e.target.value)} style={selectStyle}>
             {shops.map(s => <option key={s.shop_id || s.seller_name} value={s.shop_id || ''}>{s.seller_name}</option>)}
@@ -849,6 +849,35 @@ export default function KocPerformanceTab() {
         <button onClick={() => fetchSales(true)} disabled={loading} style={{ ...selectStyle, background: ACCENT, color: '#fff', border: 'none', opacity: loading ? 0.6 : 1 }}>{loading ? '⏳' : '🔄'} Tải lại</button>
         {fromCache && !loading && <span style={{ fontSize: '0.72rem', color: '#0891b2', fontWeight: 600 }} title="Hiển thị tức thì từ bộ nhớ phiên — bấm Tải lại để cập nhật mới nhất">⚡ tức thì (cache)</span>}
       </div>
+
+      {/* Tìm & GẮN KOC MỚI (chưa từng làm brand) — đưa lên đầu, rộng rãi. Gắn tag TRƯỚC khi KOC lên clip. */}
+      {['admin', 'ecom', 'booking'].includes(currentUser?.role) && (
+        <div style={{ background: '#fff7ed', border: '1.5px solid #fed7aa', borderRadius: 12, padding: '16px 18px', marginBottom: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 6 }}>
+            <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>🔎 Tìm & gắn KOC MỚI</div>
+            <div style={{ fontSize: '0.8rem', color: '#64748b' }}>chưa từng làm cho <b style={{ color: ACCENT }}>{brand}</b></div>
+          </div>
+          <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: 12, lineHeight: 1.5 }}>
+            KOC nhận mẫu, chuẩn bị lên clip — gắn tag TRƯỚC ở đây để clip air sau này được tính cho nhân sự. Nhập <b>đúng @kênh TikTok</b> (dán link kênh cũng được), không cần KOC đã có đơn/video ở brand này.
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <input value={newKocQ} onChange={e => setNewKocQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchNewKoc()}
+              placeholder="@kênh TikTok (vd: heomoi1707) hoặc dán link kênh…" style={{ ...inputStyle, flex: '1 1 340px', minWidth: 260, padding: '11px 14px', fontSize: '0.9rem' }} />
+            <button onClick={searchNewKoc} disabled={newKocSearching}
+              style={{ padding: '11px 26px', borderRadius: 10, border: 'none', background: ACCENT, color: '#fff', fontWeight: 700, fontSize: '0.88rem', cursor: 'pointer', opacity: newKocSearching ? 0.6 : 1 }}>
+              {newKocSearching ? 'Đang tìm…' : '🔎 Tìm'}
+            </button>
+          </div>
+          {newKocError && <div style={{ color: '#dc2626', fontSize: '0.8rem', marginTop: 10 }}>⚠️ {newKocError}</div>}
+          {newKocResults && newKocResults.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+              {newKocResults.map(c => (
+                <NewKocResultCard key={c.username || c.open_id} c={c} brand={brand} staffNames={staffNames} currentUser={currentUser} onAssigned={reloadAssignments} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {sync && (
         <div style={{ fontSize: '0.74rem', color: '#64748b', margin: '0 0 14px' }}>
@@ -1028,31 +1057,6 @@ export default function KocPerformanceTab() {
               <p style={{ margin: '0 0 12px', fontSize: '0.74rem', color: '#64748b' }}>
                 Gán nhân sự quản lý KOC cho brand này. {currentUser?.role === 'admin' ? 'Bạn gán là duyệt luôn 🟢.' : currentUser?.role === 'ecom' ? 'Bạn gửi đề xuất 🟡, admin duyệt sau.' : 'Chỉ admin/ecom thao tác được.'} Chip viền đứt = đã định danh ở brand khác.
               </p>
-              {['admin', 'ecom', 'booking'].includes(currentUser?.role) && (
-                <div style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
-                  <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.86rem', marginBottom: 4 }}>🔎 Tìm & gắn KOC MỚI (chưa từng làm cho {brand})</div>
-                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginBottom: 8 }}>
-                    KOC nhận mẫu, chuẩn bị lên clip — gắn tag TRƯỚC ở đây để clip air sau này được tính cho nhân sự. Nhập <b>đúng @kênh TikTok</b> (dán link kênh cũng được), không cần KOC đã có đơn/video ở brand này.
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <input value={newKocQ} onChange={e => setNewKocQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchNewKoc()}
-                      placeholder="@kênh TikTok (vd: heomoi1707)…" style={{ ...inputStyle, width: 240 }} />
-                    <button onClick={searchNewKoc} disabled={newKocSearching}
-                      style={{ padding: '8px 16px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', opacity: newKocSearching ? 0.6 : 1 }}>
-                      {newKocSearching ? 'Đang tìm…' : 'Tìm'}
-                    </button>
-                  </div>
-                  {newKocError && <div style={{ color: '#dc2626', fontSize: '0.76rem', marginTop: 8 }}>⚠️ {newKocError}</div>}
-                  {newKocResults && newKocResults.length === 0 && !newKocError && <div style={{ color: '#64748b', fontSize: '0.76rem', marginTop: 8 }}>Không tìm thấy KOC nào khớp.</div>}
-                  {newKocResults && newKocResults.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
-                      {newKocResults.map(c => (
-                        <NewKocResultCard key={c.username || c.open_id} c={c} brand={brand} staffNames={staffNames} currentUser={currentUser} onAssigned={reloadAssignments} />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
                 <button onClick={() => { setOnlyUnassigned(v => !v); setAssignShow(48); }}
                   style={{ padding: '6px 14px', borderRadius: 9, border: `1.5px solid ${onlyUnassigned ? ACCENT : '#e5e7eb'}`, background: onlyUnassigned ? '#fff7ed' : '#fff', color: onlyUnassigned ? '#e85518' : '#64748b', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}>
