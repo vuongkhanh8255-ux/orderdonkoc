@@ -606,22 +606,18 @@ export const AppDataProvider = ({ children }) => {
       if (chunk.length < EXPORT_PAGE) break;
     }
     if (exportData.length === 0) { alert('Không có đơn nào để xuất Shopee Express.'); setIsLoading(false); return; }
-    // 1 ĐƠN = 1 DÒNG: gộp mọi sản phẩm vào 1 ô "Tên sản phẩm", ngăn bằng dấu phẩy (không xuống hàng mỗi SP).
-    const orders = exportData.map(d => {
-      const cts = d.chitiettonguis || [];
-      const totalQty = cts.reduce((s, ct) => s + (Number(ct.so_luong) || 0), 0) || 1;
-      const nameJoined = cts.map(ct => {
-        const nm = ct.sanphams?.ten_sanpham || '';
-        const sl = Number(ct.so_luong) || 1;
-        return nm ? (sl > 1 ? `${nm} (SL:${sl})` : nm) : '';
-      }).filter(Boolean).join(', ');
-      return {
-        ho_ten: d.koc_ho_ten || '',
-        sdt: d.koc_sdt || '',
-        dia_chi_day_du: d.koc_dia_chi || '',
-        items: [{ ten_san_pham: nameJoined, so_luong: totalQty, gia_tien: 0 }],
-      };
-    });
+    // ĐÚNG CHUẨN template SPX "Tạo đơn (địa chỉ mới)": mỗi SẢN PHẨM = 1 DÒNG, cùng Mã đơn; dòng đầu có
+    // tên/SĐT/địa chỉ + lựa chọn giao hàng, các dòng sau chỉ tên SP + số lượng + giá.
+    const orders = exportData.map(d => ({
+      ho_ten: d.koc_ho_ten || '',
+      sdt: d.koc_sdt || '',
+      dia_chi_day_du: d.koc_dia_chi || '',
+      items: (d.chitiettonguis || []).map(ct => ({
+        ten_san_pham: ct.sanphams?.ten_sanpham || '',
+        so_luong: ct.so_luong || 1,
+        gia_tien: ct.sanphams?.gia_tien || 0,
+      })),
+    }));
     try {
       buildAndDownloadSpxExcel(orders, { filename: `shopee-express-${orders.length}-don.xlsx` });
     } catch (e) {
