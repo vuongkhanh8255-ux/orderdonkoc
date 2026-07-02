@@ -368,52 +368,38 @@ async function handleKocCreators({ params, supabase, res }) {
   });
 }
 
-// Tìm KOC theo TÊN/@kênh trực tiếp trên TikTok (action=koc_search_creator) — dùng cho Hiệu suất
-// KOC: gắn tag TRƯỚC khi KOC lên clip (KOC chưa từng làm cho brand này thì koc_find/koc_orders
-// không tra ra vì chưa có đơn/video). Tái dùng marketplace_creators/search với {keyword} (đã dùng
-// ổn định cho harvestAvatars) — KHÔNG phải danh sách cào sẵn nên không phụ thuộc koc_marketplace_pool.
-async function handleKocSearchCreator({ params, supabase, res }) {
-  const ck = process.env.TIKTOK_CREATOR_APP_KEY?.trim();
-  const cs = process.env.TIKTOK_CREATOR_APP_SECRET?.trim();
-  if (!ck || !cs) return res.status(200).json({ ok: false, error: 'Chưa cấu hình app TikTok Creator (TIKTOK_CREATOR_APP_KEY/SECRET).' });
-
-  const q = String(params.q || '').trim().replace(/^@/, '');
+// Tìm KOC theo @kênh (action=koc_search_creator) — dùng cho Hiệu suất KOC: gắn tag TRƯỚC khi KOC
+// lên clip (KOC chưa từng làm brand này thì koc_find/koc_orders không tra ra vì chưa có đơn/video).
+// Dùng TIKWM (free, KHÔNG bị bóp tần suất như endpoint marketplace_creators/search của TikTok) —
+// giống cách trang Order cào kênh. Tra CHÍNH XÁC @kênh (unique_id) → xác nhận tồn tại + lấy
+// avatar/nickname/follower để gắn tag chắc chắn (koc_id = username, cần đúng handle).
+const normHandle = (raw) => {
+  const s = String(raw || '').trim();
+  const m = s.match(/tiktok\.com\/@?([\w.\-]+)/i);
+  return (m ? m[1] : s).toLowerCase().replace(/^@/, '').replace(/[/?#].*$/, '').trim();
+};
+async function handleKocSearchCreator({ params, res }) {
+  const q = normHandle(params.q || '');
   if (q.length < 2) return res.status(200).json({ ok: true, creators: [], note: 'Gõ ít nhất 2 ký tự' });
 
-  const { data: conns } = await supabase
-    .from('tiktok_creator_connections')
-    .select('open_id, shop_id, shop_cipher, seller_name, access_token, refresh_token')
-    .not('access_token', 'is', null);
-  if (!conns?.length) return res.status(200).json({ ok: false, error: 'Chưa có shop nào kết nối app Creator.' });
-
-  const want = String(params.seller || 'body').toLowerCase();
-  const conn = conns.find(c => (c.seller_name || '').toLowerCase().includes(want)) || conns[0];
-  const cipher = await resolveShopCipher({ conn, want, supabase });
-  if (!cipher) return res.status(200).json({ ok: false, error: `Không tìm được shop_cipher cho "${conn.seller_name}".` });
-
-  const path = `/affiliate_seller/${AFFILIATE_VERSION}/marketplace_creators/search`;
-  const bodyStr = JSON.stringify({ keyword: q });
-  const doCall = () => {
-    const urlParams = { app_key: ck, timestamp: String(Math.floor(Date.now() / 1000)), page_size: '20', shop_cipher: cipher };
-    urlParams.sign = buildSign(cs, path, urlParams, bodyStr);
-    return ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(urlParams)}`, {
-      method: 'POST',
-      headers: { 'x-tts-access-token': conn.access_token, 'content-type': 'application/json' },
-      body: bodyStr,
-    }, 10000);
-  };
-
-  let raw = await doCall();
-  let j; try { j = JSON.parse(raw); } catch { j = { code: -1, message: 'Parse error' }; }
-  if (j?.code === 105002 && await refreshCreatorToken({ ck, cs, conn, supabase })) {
-    raw = await doCall(); try { j = JSON.parse(raw); } catch { j = { code: -1 }; }
+  // 1) Tra info kênh (nickname/follower). 2) Nếu không có info thì thử user/posts (lấy author) để vẫn xác nhận.
+  const raw = await ttText(`https://www.tikwm.com/api/user/info?unique_id=${encodeURIComponent(q)}`,
+    { headers: { 'User-Agent': 'Mozilla/5.0' } }, 12000);
+  let j; try { j = JSON.parse(raw); } catch { j = { code: -1 }; }
+  const u = j?.data?.user, st = j?.data?.stats;
+  if (j?.code === 0 && u?.uniqueId) {
+    return res.status(200).json({ ok: true, search: q, creators: [{
+      username: (u.uniqueId || q).toLowerCase(),
+      nickname: u.nickname || u.uniqueId || q,
+      avatar: u.avatarThumb || u.avatarMedium || '',
+      followers: Number(st?.followerCount) || 0,
+      videos_total: Number(st?.videoCount) || 0,
+    }] });
   }
-  if (j?.code !== 0) {
-    const rateLimited = j?.code === 36009002;
-    return res.status(200).json({ ok: false, code: j?.code, error: rateLimited ? 'TikTok đang giới hạn tần suất — có thể phải chờ vài phút, đôi lúc lâu hơn (endpoint này TikTok bóp rất chặt). Thử lại sau ít phút nữa.' : (j?.message || `TikTok code ${j?.code}`) });
-  }
-  const creators = (j.data?.creators || []).map(mapCreator);
-  return res.status(200).json({ ok: true, creators, search: q });
+  // tikwm chặn tạm / kênh không tồn tại
+  const rateLimited = /rate|limit|frequen|too many/i.test(String(j?.msg || ''));
+  return res.status(200).json({ ok: true, search: q, creators: [],
+    note: rateLimited ? 'tikwm bận, thử lại sau vài giây' : 'Không tìm thấy kênh @' + q + ' (kiểm tra lại @kênh cho đúng, hoặc kênh riêng tư).' });
 }
 
 // Module 8 — SĂN KOC: cào marketplace_creators/search → lưu dồn vào koc_marketplace_pool.

@@ -575,7 +575,7 @@ export default function KocPerformanceTab() {
       const r = await fetch(`${API}?${qs}`);
       const j = await r.json().catch(() => ({ ok: false }));
       if (!j.ok) { setNewKocError(j.error || 'Không tìm được'); setNewKocResults([]); }
-      else setNewKocResults(j.creators || []);
+      else { setNewKocResults(j.creators || []); if ((j.creators || []).length === 0 && j.note) setNewKocError(j.note); }
     } catch (e) { setNewKocError(e.message); setNewKocResults([]); }
     finally { setNewKocSearching(false); }
   }, [newKocQ, selSeller]);
@@ -1032,11 +1032,11 @@ export default function KocPerformanceTab() {
                 <div style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
                   <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.86rem', marginBottom: 4 }}>🔎 Tìm & gắn KOC MỚI (chưa từng làm cho {brand})</div>
                   <div style={{ fontSize: '0.72rem', color: '#64748b', marginBottom: 8 }}>
-                    KOC nhận mẫu, chuẩn bị lên clip — gắn tag TRƯỚC ở đây để clip air sau này được tính cho nhân sự. Tìm thẳng trên TikTok bằng tên/@kênh (không cần KOC đã có đơn/video ở brand này).
+                    KOC nhận mẫu, chuẩn bị lên clip — gắn tag TRƯỚC ở đây để clip air sau này được tính cho nhân sự. Nhập <b>đúng @kênh TikTok</b> (dán link kênh cũng được), không cần KOC đã có đơn/video ở brand này.
                   </div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <input value={newKocQ} onChange={e => setNewKocQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchNewKoc()}
-                      placeholder="Tên hoặc @kênh KOC…" style={{ ...inputStyle, width: 220 }} />
+                      placeholder="@kênh TikTok (vd: heomoi1707)…" style={{ ...inputStyle, width: 240 }} />
                     <button onClick={searchNewKoc} disabled={newKocSearching}
                       style={{ padding: '8px 16px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', opacity: newKocSearching ? 0.6 : 1 }}>
                       {newKocSearching ? 'Đang tìm…' : 'Tìm'}
