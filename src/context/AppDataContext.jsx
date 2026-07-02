@@ -628,25 +628,24 @@ export const AppDataProvider = ({ children }) => {
       const cost = (b && costMap[b] != null) ? costMap[b] : (Number(sp?.gia_tien) || 0);
       return cost * COST_MULTIPLIER;
     };
-    // 1 ĐƠN = 1 DÒNG (Khánh chốt 2/7): gộp mọi SP vào 1 ô "Tên sản phẩm" ngăn bằng dấu phẩy (không tách
-    // dòng mỗi SP). "Giá tiền" + "Giá trị đơn hàng" = TỔNG giá trị cả đơn (2 cột cùng 1 số).
+    // NHIỀU SP = NHIỀU DÒNG cùng Mã đơn (Khánh chốt 2/7, "y chang thông tin — chỉ đổi sản phẩm + giá
+    // tiền"): mỗi SP 1 item riêng, "Giá tiền" = giá ĐƠN VỊ của SP đó (khác nhau từng dòng). "Giá trị đơn
+    // hàng" (Q) = TỔNG cả đơn, buildSpxRows tự lặp lại số đó ở MỌI dòng (không chỉ dòng đầu).
     // "Tên người nhận" = ID KÊNH + " KOC" (in hoa) — Khánh chốt 2/7.
     const orders = exportData.map(d => {
       const cts = d.chitiettonguis || [];
-      const totalQty = cts.reduce((s, ct) => s + (Number(ct.so_luong) || 0), 0) || 1;
       const totalVal = Math.round(cts.reduce((s, ct) => s + (Number(ct.so_luong) || 1) * priceOf(ct.sanphams), 0));
-      const nameJoined = cts.map(ct => {
-        const nm = ct.sanphams?.ten_sanpham || '';
-        const sl = Number(ct.so_luong) || 1;
-        return nm ? (sl > 1 ? `${nm} (SL:${sl})` : nm) : '';
-      }).filter(Boolean).join(', ');
       const idKenh = (d.koc_id_kenh || '').trim();
       return {
         ho_ten: idKenh ? `${idKenh} KOC` : (d.koc_ho_ten || ''),
         sdt: d.koc_sdt || '',
         dia_chi_day_du: d.koc_dia_chi || '',
-        gia_tri: totalVal, // ghi đè "Giá trị đơn hàng" (gia_tien dưới đã là TỔNG, không nhân lại SL)
-        items: [{ ten_san_pham: nameJoined, so_luong: totalQty, gia_tien: totalVal }],
+        gia_tri: totalVal, // ghi đè "Giá trị đơn hàng" = tổng cả đơn, lặp mọi dòng
+        items: cts.map(ct => ({
+          ten_san_pham: ct.sanphams?.ten_sanpham || '',
+          so_luong: ct.so_luong || 1,
+          gia_tien: Math.round(priceOf(ct.sanphams)), // giá ĐƠN VỊ của riêng SP này
+        })),
       };
     });
     try {

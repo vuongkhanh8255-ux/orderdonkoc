@@ -57,31 +57,33 @@ export function buildSpxRows(orders, { canNang = 0.5 } = {}) {
     const giaTri = (Number(d.gia_tri) > 0)
       ? Number(d.gia_tri)
       : (items.reduce((s, it) => s + (Number(it.so_luong) || 0) * (Number(it.gia_tien) || 0), 0) || 10000);
-    items.forEach((it, j) => {
-      const f = j === 0; // dòng đầu của đơn mới có địa chỉ + các lựa chọn giao hàng
+    // Nhiều SP = nhiều DÒNG, THÔNG TIN LẶP LẠI Y CHANG mỗi dòng (tên/SĐT/địa chỉ/lựa chọn giao hàng/giá trị
+    // đơn hàng) — CHỈ đổi "Tên sản phẩm" + "Giá tiền" theo từng SP (Khánh chốt 2/7, khác chuẩn official
+    // vốn chỉ điền info ở dòng đầu — nhưng đây là cách Khánh muốn dùng nội bộ).
+    items.forEach((it) => {
       rows.push([
         ma,
-        f ? (d.ho_ten || '') : '',
-        f ? (d.sdt || '') : '',
-        f ? (d.tinh || dc.tinh || '') : '',
-        f ? (d.phuong || dc.phuong || '') : '',
-        f ? (d.dia_chi_chi_tiet || d.dia_chi_day_du || '') : '',
+        d.ho_ten || '',
+        d.sdt || '',
+        d.tinh || dc.tinh || '',
+        d.phuong || dc.phuong || '',
+        d.dia_chi_chi_tiet || d.dia_chi_day_du || '',
         '', '',
         it.ten_san_pham || '',
         it.so_luong || 1,
         it.gia_tien || '',
         canNang,
         '', '', '', '',
-        f ? giaTri : '',
-        f ? 'N' : '', // *Giao hàng một phần
-        f ? 'N' : '', // *Cho phép thử hàng
-        f ? 'Y' : '', // *Cho xem hàng, không cho thử
-        f ? 'N' : '', // Thu phí từ chối nhận hàng
+        giaTri,
+        'N', // *Giao hàng một phần
+        'N', // *Cho phép thử hàng
+        'Y', // *Cho xem hàng, không cho thử
+        'N', // Thu phí từ chối nhận hàng
         '',
-        f ? 'N' : '', // *Thu COD — đơn KOC/tặng mẫu mặc định KHÔNG thu COD
+        'N', // *Thu COD — đơn KOC/tặng mẫu mặc định KHÔNG thu COD
         '',
-        f ? 'N' : '', // bưu gửi giá trị cao
-        f ? 'Người gửi trả' : '', // *Hình thức thanh Toán — người gửi trả ship
+        'N', // bưu gửi giá trị cao
+        'Người gửi trả', // *Hình thức thanh Toán — người gửi trả ship
         '', '', '',
       ]);
     });
