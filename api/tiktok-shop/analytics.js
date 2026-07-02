@@ -433,6 +433,21 @@ async function handleKocHunt({ params, supabase, res }) {
   const { data: states } = await supabase.from('koc_hunt_state').select('seller_name, last_run_at, total_seen');
   const stMap = {}; (states || []).forEach(s => { stMap[s.seller_name] = s; });
 
+  // COOLDOWN toàn cục 2h: dù cron-job.org ping dồn dập (mỗi giờ), server tự chặn nếu lần cào GẦN
+  // NHẤT (bất kỳ gian nào) chưa đủ 2 tiếng → nhường quota marketplace_creators/search cho tính năng
+  // tìm-gắn-KOC-mới ở Hiệu suất KOC (Khánh chốt 2/7: KOC nhận mẫu cần tìm ngay, không chờ được).
+  // force=1 (nút "⛏️ Cào thêm" admin bấm tay) → bỏ qua cooldown.
+  if (params.force !== '1') {
+    const lastRun = Object.values(stMap).reduce((max, s) => {
+      const t = s.last_run_at ? new Date(s.last_run_at).getTime() : 0;
+      return t > max ? t : max;
+    }, 0);
+    const COOLDOWN_MS = 2 * 3600 * 1000;
+    if (lastRun && Date.now() - lastRun < COOLDOWN_MS) {
+      return res.status(200).json({ ok: true, skipped: 'cooldown', minutes_left: Math.ceil((COOLDOWN_MS - (Date.now() - lastRun)) / 60000) });
+    }
+  }
+
   // chọn gian để cào: theo param seller, hoặc gian làm đẹp lâu chưa cào nhất (chưa cào bao giờ ưu tiên trước)
   let pool = params.seller
     ? conns.filter(c => (c.seller_name || '').toLowerCase().includes(String(params.seller).toLowerCase()))

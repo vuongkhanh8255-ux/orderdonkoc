@@ -57,7 +57,7 @@ export default function KocHuntTab({ currentUser } = {}) {
   const crawlMore = async () => {
     setCrawling(true); setCrawlMsg('Đang cào thêm...');
     try {
-      const r = await fetch(`${API}?action=koc_hunt&max_pages=2`);
+      const r = await fetch(`${API}?action=koc_hunt&max_pages=2&force=1`);
       const j = await r.json();
       if (!j.ok) setCrawlMsg('⚠️ ' + (j.error || 'lỗi'));
       else if (j.stop_code === 36009002) setCrawlMsg('⏳ TikTok đang bóp tần suất — thử lại sau ~1 phút. (Cron sẽ tự cào dần mỗi ngày)');
