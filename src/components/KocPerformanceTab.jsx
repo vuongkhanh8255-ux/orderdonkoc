@@ -845,8 +845,8 @@ export default function KocPerformanceTab() {
         {fromCache && !loading && <span style={{ fontSize: '0.72rem', color: '#0891b2', fontWeight: 600 }} title="Hiển thị tức thì từ bộ nhớ phiên — bấm Tải lại để cập nhật mới nhất">⚡ tức thì (cache)</span>}
       </div>
 
-      {/* Tìm & GẮN KOC MỚI (chưa từng làm brand) — đưa lên đầu, rộng rãi. Gắn tag TRƯỚC khi KOC lên clip. */}
-      {['admin', 'ecom', 'booking'].includes(currentUser?.role) && (
+      {/* Tìm & GẮN KOC MỚI — CHỈ admin (gán = duyệt) + ecom (chỉ đề xuất). Role khác không thấy/không đụng. */}
+      {['admin', 'ecom'].includes(currentUser?.role) && (
         <div style={{ background: '#fff7ed', border: '1.5px solid #fed7aa', borderRadius: 12, padding: '16px 18px', marginBottom: 18 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 6 }}>
             <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>🔎 Tìm & gắn KOC MỚI</div>
@@ -854,6 +854,7 @@ export default function KocPerformanceTab() {
           </div>
           <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: 12, lineHeight: 1.5 }}>
             KOC nhận mẫu, chuẩn bị lên clip — gắn tag TRƯỚC ở đây để clip air sau này được tính cho nhân sự. Nhập <b>đúng @kênh TikTok</b> (dán link kênh cũng được), không cần KOC đã có đơn/video ở brand này.
+            {currentUser?.role === 'admin' ? ' Bạn gán là duyệt luôn 🟢.' : ' Bạn gửi đề xuất 🟡, admin duyệt sau.'}
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
             <input value={newKocQ} onChange={e => setNewKocQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchNewKoc()}
