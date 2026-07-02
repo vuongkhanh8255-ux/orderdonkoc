@@ -415,43 +415,23 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
   );
 }
 
-// ── Thẻ 1 KOC tìm được trên TikTok (chưa từng làm cho brand) → gán tag ngay, dùng chung
-// bảng koc_brand_assignments/koc_assignment_history với KocAssignCell (cùng luật approved/proposed).
-function NewKocResultCard({ c, brand, staffNames, currentUser, onAssigned }) {
-  const [staff, setStaff] = useState(staffNames[0] || '');
-  const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(false);
-  const isAdmin = currentUser?.role === 'admin';
-  const me = currentUser?.username || '';
-  const assign = async () => {
-    const sn = (staff || '').trim(); if (!sn || !c.username) return;
-    setBusy(true);
-    const nowIso = new Date().toISOString();
-    const record = isAdmin
-      ? { koc_id: c.username, brand_name: brand, staff_name: sn, assigned_at: nowIso, updated_at: nowIso, status: 'approved', approved_by: me, approved_at: nowIso, proposed_by: null, proposed_at: null }
-      : { koc_id: c.username, brand_name: brand, staff_name: sn, assigned_at: nowIso, updated_at: nowIso, status: 'proposed', proposed_by: me, proposed_at: nowIso, approved_by: null, approved_at: null };
-    await supabase.from(ASSIGN_TABLE).upsert(record, { onConflict: 'koc_id,brand_name' });
-    await supabase.from(HIST_TABLE).insert({ koc_id: c.username, brand_name: brand, staff_name: sn, action: isAdmin ? 'assign' : 'propose', actor: me }).then(() => {}, () => {});
-    setBusy(false); setDone(true); onAssigned?.();
-  };
+// ── Thẻ 1 KOC tìm được trên TikTok → dùng LUÔN KocAssignCell (hiện sẵn ai đang gán, bấm vào để
+// gỡ / gán lại / xem lịch sử — y hệt thẻ ở lưới dưới, cùng luật approved/proposed + cooldown).
+function NewKocResultCard({ c, brand, assignMap, staffNames, currentUser, onChanged, allBrands, blacklist }) {
+  const uname = (c.username || '').toLowerCase().replace(/^@/, '');
+  const isBlack = blacklist?.has?.(uname);
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fff', borderRadius: 9, padding: '8px 10px', border: '1px solid #e5e7eb', flexWrap: 'wrap' }}>
-      {c.avatar ? <img src={c.avatar} alt="" style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover' }} /> : <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#f1f5f9' }} />}
-      <div style={{ minWidth: 130 }}>
-        <a href={`https://www.tiktok.com/@${c.username}`} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontWeight: 700, textDecoration: 'none', fontSize: '0.82rem' }}>@{c.username}</a>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fff', borderRadius: 9, padding: '9px 12px', border: isBlack ? '1.5px solid #ef4444' : '1px solid #e5e7eb', flexWrap: 'wrap' }}>
+      {c.avatar ? <img src={c.avatar} alt="" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} /> : <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#f1f5f9' }} />}
+      <div style={{ minWidth: 140 }}>
+        <a href={`https://www.tiktok.com/@${uname}`} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontWeight: 700, textDecoration: 'none', fontSize: '0.84rem' }}>@{uname}</a>
         <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{c.nickname && c.nickname !== c.username ? c.nickname + ' · ' : ''}{fmtNum(c.followers)} follower</div>
       </div>
-      {done ? (
-        <span style={{ marginLeft: 'auto', color: '#16a34a', fontWeight: 700, fontSize: '0.78rem' }}>✓ Đã {isAdmin ? 'gán' : 'gửi đề xuất'}</span>
-      ) : (
-        <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
-          <select value={staff} onChange={e => setStaff(e.target.value)} style={{ padding: '5px 8px', borderRadius: 7, border: '1.5px solid #e5e7eb', fontSize: '0.78rem' }}>
-            {!staffNames.length && <option value="">Chưa có NS</option>}
-            {staffNames.map(n => <option key={n} value={n}>{n}</option>)}
-          </select>
-          <button onClick={assign} disabled={busy || !staff} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: ACCENT, color: '#fff', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer', opacity: busy || !staff ? 0.6 : 1 }}>{isAdmin ? '+ Gán' : 'Đề xuất'}</button>
-        </span>
-      )}
+      <span style={{ marginLeft: 'auto' }}>
+        {isBlack
+          ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 14, fontSize: '0.76rem', fontWeight: 800, color: '#fff', background: '#ef4444' }}>⛔ BLACKLIST — không gán</span>
+          : <KocAssignCell username={uname} brand={brand} assignments={assignMap?.[uname]} staffNames={staffNames} currentUser={currentUser} onChanged={onChanged} allBrands={allBrands} />}
+      </span>
     </div>
   );
 }
@@ -887,7 +867,7 @@ export default function KocPerformanceTab() {
           {newKocResults && newKocResults.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
               {newKocResults.map(c => (
-                <NewKocResultCard key={c.username || c.open_id} c={c} brand={brand} staffNames={staffNames} currentUser={currentUser} onAssigned={reloadAssignments} />
+                <NewKocResultCard key={c.username || c.open_id} c={c} brand={brand} assignMap={assignMap} staffNames={staffNames} currentUser={currentUser} onChanged={() => { refreshAssign(); if (histOpen) loadHistory(); }} allBrands={allBrands} blacklist={blacklist} />
               ))}
             </div>
           )}
