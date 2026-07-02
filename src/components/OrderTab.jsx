@@ -426,7 +426,7 @@ const OrderTab = ({ currentUser } = {}) => {
         filterSanPhams, handleIdKenhBlur, handleSdtBlur,
         clearFilters, handleGetSummary, handleGenerateReport, requestSort, handleEdit,
         handleCancelEdit, handleUpdate, handleSelect, handleSelectAll, handleBulkUpdateStatus,
-        handleExport, handleExportAll, sortedReportRows, totalsRow, totalPages,
+        handleExport, handleExportAll, handleExportSPX, sortedReportRows, totalsRow, totalPages,
         handleDeleteOrder, loadInitialData,
 
         // Dữ liệu Chart
@@ -1149,6 +1149,7 @@ const OrderTab = ({ currentUser } = {}) => {
                     <button onClick={handleBulkUpdateStatus} disabled={selectedOrders.size === 0} className={selectedOrders.size > 0 ? 'btn-warning' : 'btn-disabled'}>📦 Đóng Đơn ({selectedOrders.size})</button>
                     <button onClick={handleBulkDelete} disabled={selectedOrders.size === 0} className={selectedOrders.size > 0 ? 'btn-danger' : 'btn-disabled'}>🗑️ XÓA ({selectedOrders.size})</button>
                     <button onClick={handleExportAll} disabled={isLoading} className="btn-primary" style={{ marginLeft: '10px' }}>{isLoading ? '...' : '📊 Xuất Excel'}</button>
+                    <button onClick={handleExportSPX} disabled={isLoading} title="Xuất file .xlsx đúng mẫu Shopee Express (spx.vn) — theo bộ lọc đang chọn" style={{ marginLeft: '10px', padding: '10px 18px', background: '#ee4d2d', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: isLoading ? 'default' : 'pointer', opacity: isLoading ? 0.6 : 1 }}>{isLoading ? '...' : '🚚 Xuất Shopee Express'}</button>
                 </div>
             </div>
 
