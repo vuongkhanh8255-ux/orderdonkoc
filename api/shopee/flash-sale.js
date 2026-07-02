@@ -884,7 +884,7 @@ function fsBuildItems(rows) {
   }));
 }
 
-async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, maxSlots) {
+async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, maxSlots, deadline) {
   const out = [];
   const slotsRes = await handleTimeSlots(supabase, shopId);
   const sd = slotsRes.ok ? slotsRes.data : null;
@@ -933,6 +933,7 @@ async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, m
 
   let ptr = 0;
   for (const slot of emptySlots) {
+    if (deadline && Date.now() > deadline) { out.push({ shopId, status: 'skip_het_gio' }); break; } // hết ngân sách → dừng, cron sau lấp tiếp
     const slotId = slot.timeslot_id || slot.time_slot_id;
     if (ptr >= pool.length) break; // hết SP riêng → các khung còn lại để TRỐNG (không đủ SP, không tạo khung rỗng)
     let items = pool.slice(ptr, ptr + perSlot);
@@ -982,10 +983,16 @@ async function handleAutoFlashSaleAll(supabase, reqUrl, req) {
     (byShop[String(t.shop_id)] = byShop[String(t.shop_id)] || []).push(t);
   }
 
-  const perShop = await Promise.all(Object.entries(byShop).map(([sid, tmps]) =>
-    runAutoFsForShop(supabase, sid, tmps, maxItems, dryRun, maxSlots).catch((e) => [{ shopId: sid, status: 'shop_error', error: e.message }])
-  ));
-  const results = perShop.flat();
+  // Chạy TUẦN TỰ + ngân sách thời gian (né timeout 60s Vercel). FS idempotent (bỏ khung đã có FS)
+  // → lần cron sau tự lấp tiếp shop bị "skip_het_gio". Trước đây chạy Promise.all tất cả shop → quá 60s → fail.
+  const startTs = Date.now();
+  const deadline = startTs + 48000;
+  const results = [];
+  for (const [sid, tmps] of Object.entries(byShop)) {
+    if (Date.now() > deadline) { results.push({ shopId: sid, status: 'skip_het_gio' }); continue; }
+    try { results.push(...await runAutoFsForShop(supabase, sid, tmps, maxItems, dryRun, maxSlots, deadline)); }
+    catch (e) { results.push({ shopId: sid, status: 'shop_error', error: e.message }); }
+  }
   const summary = {
     shops: Object.keys(byShop).length,
     created: results.filter((r) => r.status === 'ok').length,
