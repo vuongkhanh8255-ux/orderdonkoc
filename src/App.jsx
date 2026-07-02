@@ -428,7 +428,7 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'staff_report' && <BookingStaffReportTab />}
           {currentView === 'order' && <OrderTab currentUser={user} />}
           {currentView === 'contract' && <ContractTab />}
-          {currentView === 'airlinks' && <AirLinksTab />}
+          {currentView === 'airlinks' && <AirLinksTab currentUser={user} />}
           {currentView === 'booking_material' && <BookingMaterialTab />}
           {currentView === 'booking_budget' && <BookingBudgetTab />}
           {currentView === 'expense' && <ExpenseEcomTab />}

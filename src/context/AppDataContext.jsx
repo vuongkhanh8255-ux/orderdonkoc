@@ -1003,11 +1003,12 @@ export const AppDataProvider = ({ children }) => {
     setAirLinks(uniqueLinks);
     setIsLoadingAirLinks(false);
   };
-  const handleDeleteAirLink = async (linkId, linkUrl) => {
-    // 🔒 Xóa link air đã bị khoá trên web — chỉ xóa qua lệnh nội bộ (SQL/code).
-    alert('🔒 Tính năng xóa link air đã bị khoá trên web.\nViệc xóa chỉ thực hiện qua lệnh nội bộ.');
-    return;
-    // eslint-disable-next-line no-unreachable
+  const handleDeleteAirLink = async (linkId, linkUrl, opts = {}) => {
+    // 🔒 Xóa link air khoá trên web cho MỌI người — TRỪ admin (opts.allowAdmin) dùng nút xóa video trùng.
+    if (!opts.allowAdmin) {
+      alert('🔒 Tính năng xóa link air đã bị khoá trên web.\nViệc xóa chỉ thực hiện qua lệnh nội bộ.');
+      return;
+    }
     if (window.confirm(`Bạn có chắc muốn XÓA link này không?\n\n${linkUrl}`)) {
       setIsLoadingAirLinks(true);
       const { error } = await supabase.from('air_links').delete().eq('id', linkId);

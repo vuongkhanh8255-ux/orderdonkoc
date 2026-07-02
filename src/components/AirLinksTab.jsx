@@ -110,7 +110,8 @@ const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent
 
 
 // --- MAIN CONTENT ---
-const AirLinksTab = () => {
+const AirLinksTab = ({ currentUser }) => {
+    const isAdmin = currentUser?.role === 'admin';
     const {
         brands, nhanSus,
         airLinks, isLoadingAirLinks, loadAirLinks,
@@ -1242,8 +1243,12 @@ const AirLinksTab = () => {
                                                         </div>
                                                     </td>
                                                     <td style={{ padding: '10px 14px', textAlign: 'center' }}>
-                                                        {AIR_DELETE_ENABLED && <button
+                                                        {(AIR_DELETE_ENABLED || isAdmin) && <button
                                                             onClick={() => {
+                                                                if (isAdmin) {
+                                                                    handleDeleteAirLink(item.id, item.link_air_koc, { allowAdmin: true });
+                                                                    return;
+                                                                }
                                                                 const allSamePerson = group.every(g => g.nhansu_id && g.nhansu_id === group[0].nhansu_id);
                                                                 if (allSamePerson) {
                                                                     if (window.confirm('Xác nhận xóa bản ghi trùng lặp này?')) {
