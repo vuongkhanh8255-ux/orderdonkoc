@@ -52,7 +52,11 @@ export function buildSpxRows(orders, { canNang = 0.5 } = {}) {
     const ma = i + 1;
     const dc = splitDiaChi(d.dia_chi_day_du || '');
     const items = (d.items && d.items.length) ? d.items : [{ so_luong: 1, ten_san_pham: '' }];
-    const giaTri = items.reduce((s, it) => s + (Number(it.so_luong) || 0) * (Number(it.gia_tien) || 0), 0) || 10000;
+    // d.gia_tri (nếu truyền) GHI ĐÈ giá trị đơn hàng — dùng khi gộp nhiều SP vào 1 dòng (gia_tien đã là TỔNG,
+    // không nhân lại với so_luong). Không truyền thì tự cộng Σ(SL × giá) như cũ.
+    const giaTri = (Number(d.gia_tri) > 0)
+      ? Number(d.gia_tri)
+      : (items.reduce((s, it) => s + (Number(it.so_luong) || 0) * (Number(it.gia_tien) || 0), 0) || 10000);
     items.forEach((it, j) => {
       const f = j === 0; // dòng đầu của đơn mới có địa chỉ + các lựa chọn giao hàng
       rows.push([

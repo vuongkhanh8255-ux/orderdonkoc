@@ -616,21 +616,29 @@ export const AppDataProvider = ({ children }) => {
       const { data: costRows } = await supabase.rpc('product_cost_amis');
       (costRows || []).forEach(r => { const b = normBar(r.barcode); if (b) costMap[b] = Number(r.cost) || 0; });
     } catch (_) { /* thiếu cost map → fallback gia_tien */ }
-    // ĐÚNG CHUẨN template SPX "Tạo đơn (địa chỉ mới)": mỗi SẢN PHẨM = 1 DÒNG, cùng Mã đơn; dòng đầu có
-    // tên/SĐT/địa chỉ + lựa chọn giao hàng, các dòng sau chỉ tên SP + số lượng + giá.
-    const orders = exportData.map(d => ({
-      ho_ten: d.koc_ho_ten || '',
-      sdt: d.koc_sdt || '',
-      dia_chi_day_du: d.koc_dia_chi || '',
-      items: (d.chitiettonguis || []).map(ct => {
+    // 1 ĐƠN = 1 DÒNG (Khánh chốt 2/7): gộp mọi SP vào 1 ô "Tên sản phẩm" ngăn bằng dấu phẩy (không tách
+    // dòng mỗi SP). "Giá tiền" + "Giá trị đơn hàng" = TỔNG cost×5 của cả đơn (2 cột cùng 1 số).
+    // "Tên người nhận" = ID KÊNH (không phải họ tên) — Khánh chốt 2/7.
+    const orders = exportData.map(d => {
+      const cts = d.chitiettonguis || [];
+      const totalQty = cts.reduce((s, ct) => s + (Number(ct.so_luong) || 0), 0) || 1;
+      const totalVal = Math.round(cts.reduce((s, ct) => {
         const cost = costMap[normBar(ct.sanphams?.barcode)] ?? (Number(ct.sanphams?.gia_tien) || 0);
-        return {
-          ten_san_pham: ct.sanphams?.ten_sanpham || '',
-          so_luong: ct.so_luong || 1,
-          gia_tien: Math.round(cost * COST_MULTIPLIER),
-        };
-      }),
-    }));
+        return s + (Number(ct.so_luong) || 1) * cost * COST_MULTIPLIER;
+      }, 0));
+      const nameJoined = cts.map(ct => {
+        const nm = ct.sanphams?.ten_sanpham || '';
+        const sl = Number(ct.so_luong) || 1;
+        return nm ? (sl > 1 ? `${nm} (SL:${sl})` : nm) : '';
+      }).filter(Boolean).join(', ');
+      return {
+        ho_ten: d.koc_id_kenh || d.koc_ho_ten || '',
+        sdt: d.koc_sdt || '',
+        dia_chi_day_du: d.koc_dia_chi || '',
+        gia_tri: totalVal, // ghi đè "Giá trị đơn hàng" (gia_tien dưới đã là TỔNG, không nhân lại SL)
+        items: [{ ten_san_pham: nameJoined, so_luong: totalQty, gia_tien: totalVal }],
+      };
+    });
     try {
       buildAndDownloadSpxExcel(orders, { filename: `shopee-express-${orders.length}-don.xlsx` });
     } catch (e) {
