@@ -606,33 +606,43 @@ export const AppDataProvider = ({ children }) => {
       if (chunk.length < EXPORT_PAGE) break;
     }
     if (exportData.length === 0) { alert('Không có đơn nào để xuất Shopee Express.'); setIsLoading(false); return; }
-    // GIÁ TRỊ KHAI BÁO = cost GỐC (AMIS V2) × 5 (Khánh chốt 2/7). Lấy cost theo barcode qua RPC
-    // product_cost_amis; SP thiếu cost thì fallback gia_tien. Cột "Giá tiền" mỗi SP = cost×5,
-    // "Giá trị đơn hàng" = tổng (cost×5×SL) — do buildSpxRows tự cộng từ items.
+    // GIÁ TRỊ KHAI BÁO (Khánh chốt 2/7): ưu tiên GIÁ BÁN từ File Nhanh (nhanh_products.gia_ban_vat,
+    // map theo barcode — phủ ~98% SP thực dùng, đúng giá bán thật). SP không có trong File Nhanh mới
+    // fallback cost AMIS V2 × 5. "Giá tiền" mỗi SP + "Giá trị đơn hàng" = TỔNG của cả đơn (2 cột cùng số).
     const COST_MULTIPLIER = 5;
     const normBar = (s) => (s || '').replace(/\s/g, '');
-    const costMap = {};
+    const costMap = {};       // barcode -> cost AMIS V2 (fallback)
+    const nhanhPriceMap = {}; // barcode -> giá bán File Nhanh (ưu tiên)
     try {
       const { data: costRows } = await supabase.rpc('product_cost_amis');
       (costRows || []).forEach(r => { const b = normBar(r.barcode); if (b) costMap[b] = Number(r.cost) || 0; });
-    } catch (_) { /* thiếu cost map → fallback gia_tien */ }
+    } catch (_) { /* thiếu cost map AMIS → fallback gia_tien */ }
+    try {
+      const { data: nhanhRows } = await supabase.from('nhanh_products').select('ma_san_pham, gia_ban_vat').gt('gia_ban_vat', 0);
+      (nhanhRows || []).forEach(r => { const b = normBar(r.ma_san_pham); if (b) nhanhPriceMap[b] = Number(r.gia_ban_vat) || 0; });
+    } catch (_) { /* thiếu File Nhanh → fallback cost AMIS */ }
+    // Giá 1 SP: File Nhanh (giá bán thật) > cost AMIS×5 > gia_tien×5 (fallback cuối cùng).
+    const priceOf = (sp) => {
+      const b = normBar(sp?.barcode);
+      if (b && nhanhPriceMap[b] != null) return nhanhPriceMap[b];
+      const cost = (b && costMap[b] != null) ? costMap[b] : (Number(sp?.gia_tien) || 0);
+      return cost * COST_MULTIPLIER;
+    };
     // 1 ĐƠN = 1 DÒNG (Khánh chốt 2/7): gộp mọi SP vào 1 ô "Tên sản phẩm" ngăn bằng dấu phẩy (không tách
-    // dòng mỗi SP). "Giá tiền" + "Giá trị đơn hàng" = TỔNG cost×5 của cả đơn (2 cột cùng 1 số).
-    // "Tên người nhận" = ID KÊNH (không phải họ tên) — Khánh chốt 2/7.
+    // dòng mỗi SP). "Giá tiền" + "Giá trị đơn hàng" = TỔNG giá trị cả đơn (2 cột cùng 1 số).
+    // "Tên người nhận" = ID KÊNH + " KOC" (in hoa) — Khánh chốt 2/7.
     const orders = exportData.map(d => {
       const cts = d.chitiettonguis || [];
       const totalQty = cts.reduce((s, ct) => s + (Number(ct.so_luong) || 0), 0) || 1;
-      const totalVal = Math.round(cts.reduce((s, ct) => {
-        const cost = costMap[normBar(ct.sanphams?.barcode)] ?? (Number(ct.sanphams?.gia_tien) || 0);
-        return s + (Number(ct.so_luong) || 1) * cost * COST_MULTIPLIER;
-      }, 0));
+      const totalVal = Math.round(cts.reduce((s, ct) => s + (Number(ct.so_luong) || 1) * priceOf(ct.sanphams), 0));
       const nameJoined = cts.map(ct => {
         const nm = ct.sanphams?.ten_sanpham || '';
         const sl = Number(ct.so_luong) || 1;
         return nm ? (sl > 1 ? `${nm} (SL:${sl})` : nm) : '';
       }).filter(Boolean).join(', ');
+      const idKenh = (d.koc_id_kenh || '').trim();
       return {
-        ho_ten: d.koc_id_kenh || d.koc_ho_ten || '',
+        ho_ten: idKenh ? `${idKenh} KOC` : (d.koc_ho_ten || ''),
         sdt: d.koc_sdt || '',
         dia_chi_day_du: d.koc_dia_chi || '',
         gia_tri: totalVal, // ghi đè "Giá trị đơn hàng" (gia_tien dưới đã là TỔNG, không nhân lại SL)
