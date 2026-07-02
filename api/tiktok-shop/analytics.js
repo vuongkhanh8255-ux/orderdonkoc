@@ -356,7 +356,7 @@ async function handleKocCreators({ params, supabase, res }) {
   }
   if (j?.code !== 0) {
     const rateLimited = j?.code === 36009002;
-    return res.status(200).json({ ok: false, code: j?.code, error: rateLimited ? 'TikTok đang giới hạn tần suất (quá nhiều request). Thử lại sau ~1 phút.' : (j?.message || `TikTok code ${j?.code}`) });
+    return res.status(200).json({ ok: false, code: j?.code, error: rateLimited ? 'TikTok đang giới hạn tần suất — có thể phải chờ vài phút, đôi lúc lâu hơn (endpoint này TikTok bóp rất chặt). Thử lại sau ít phút nữa.' : (j?.message || `TikTok code ${j?.code}`) });
   }
 
   const d = j.data || {};
@@ -410,7 +410,7 @@ async function handleKocSearchCreator({ params, supabase, res }) {
   }
   if (j?.code !== 0) {
     const rateLimited = j?.code === 36009002;
-    return res.status(200).json({ ok: false, code: j?.code, error: rateLimited ? 'TikTok đang giới hạn tần suất. Thử lại sau ~1 phút.' : (j?.message || `TikTok code ${j?.code}`) });
+    return res.status(200).json({ ok: false, code: j?.code, error: rateLimited ? 'TikTok đang giới hạn tần suất — có thể phải chờ vài phút, đôi lúc lâu hơn (endpoint này TikTok bóp rất chặt). Thử lại sau ít phút nữa.' : (j?.message || `TikTok code ${j?.code}`) });
   }
   const creators = (j.data?.creators || []).map(mapCreator);
   return res.status(200).json({ ok: true, creators, search: q });
