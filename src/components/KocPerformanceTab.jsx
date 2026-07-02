@@ -415,6 +415,47 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
   );
 }
 
+// ── Thẻ 1 KOC tìm được trên TikTok (chưa từng làm cho brand) → gán tag ngay, dùng chung
+// bảng koc_brand_assignments/koc_assignment_history với KocAssignCell (cùng luật approved/proposed).
+function NewKocResultCard({ c, brand, staffNames, currentUser, onAssigned }) {
+  const [staff, setStaff] = useState(staffNames[0] || '');
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const isAdmin = currentUser?.role === 'admin';
+  const me = currentUser?.username || '';
+  const assign = async () => {
+    const sn = (staff || '').trim(); if (!sn || !c.username) return;
+    setBusy(true);
+    const nowIso = new Date().toISOString();
+    const record = isAdmin
+      ? { koc_id: c.username, brand_name: brand, staff_name: sn, assigned_at: nowIso, updated_at: nowIso, status: 'approved', approved_by: me, approved_at: nowIso, proposed_by: null, proposed_at: null }
+      : { koc_id: c.username, brand_name: brand, staff_name: sn, assigned_at: nowIso, updated_at: nowIso, status: 'proposed', proposed_by: me, proposed_at: nowIso, approved_by: null, approved_at: null };
+    await supabase.from(ASSIGN_TABLE).upsert(record, { onConflict: 'koc_id,brand_name' });
+    await supabase.from(HIST_TABLE).insert({ koc_id: c.username, brand_name: brand, staff_name: sn, action: isAdmin ? 'assign' : 'propose', actor: me }).then(() => {}, () => {});
+    setBusy(false); setDone(true); onAssigned?.();
+  };
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fff', borderRadius: 9, padding: '8px 10px', border: '1px solid #e5e7eb', flexWrap: 'wrap' }}>
+      {c.avatar ? <img src={c.avatar} alt="" style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover' }} /> : <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#f1f5f9' }} />}
+      <div style={{ minWidth: 130 }}>
+        <a href={`https://www.tiktok.com/@${c.username}`} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontWeight: 700, textDecoration: 'none', fontSize: '0.82rem' }}>@{c.username}</a>
+        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{c.nickname && c.nickname !== c.username ? c.nickname + ' · ' : ''}{fmtNum(c.followers)} follower</div>
+      </div>
+      {done ? (
+        <span style={{ marginLeft: 'auto', color: '#16a34a', fontWeight: 700, fontSize: '0.78rem' }}>✓ Đã {isAdmin ? 'gán' : 'gửi đề xuất'}</span>
+      ) : (
+        <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+          <select value={staff} onChange={e => setStaff(e.target.value)} style={{ padding: '5px 8px', borderRadius: 7, border: '1.5px solid #e5e7eb', fontSize: '0.78rem' }}>
+            {!staffNames.length && <option value="">Chưa có NS</option>}
+            {staffNames.map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+          <button onClick={assign} disabled={busy || !staff} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: ACCENT, color: '#fff', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer', opacity: busy || !staff ? 0.6 : 1 }}>{isAdmin ? '+ Gán' : 'Đề xuất'}</button>
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function KocPerformanceTab() {
   const [shops, setShops]   = useState([]);
   const [shopId, setShopId] = useState('');
@@ -517,6 +558,27 @@ export default function KocPerformanceTab() {
     setAssignMap(m);
   }, []);
   useEffect(() => { reloadAssignments(); }, [reloadAssignments]);
+
+  // ── Tìm KOC MỚI (chưa từng làm cho brand này → koc_find/koc_orders không tra ra) để gắn
+  // tag TRƯỚC khi họ lên clip. Nếu đợi lên clip rồi mới gắn thì clip air trước đó không được
+  // tính cho nhân sự (Khánh chốt 2/7). Tìm thẳng trên TikTok qua action=koc_search_creator.
+  const [newKocQ, setNewKocQ] = useState('');
+  const [newKocResults, setNewKocResults] = useState(null);
+  const [newKocSearching, setNewKocSearching] = useState(false);
+  const [newKocError, setNewKocError] = useState('');
+  const searchNewKoc = useCallback(async () => {
+    const q = newKocQ.trim();
+    if (q.length < 2) { setNewKocError('Gõ ít nhất 2 ký tự'); return; }
+    setNewKocSearching(true); setNewKocError(''); setNewKocResults(null);
+    try {
+      const qs = new URLSearchParams({ action: 'koc_search_creator', q, seller: selSeller });
+      const r = await fetch(`${API}?${qs}`);
+      const j = await r.json().catch(() => ({ ok: false }));
+      if (!j.ok) { setNewKocError(j.error || 'Không tìm được'); setNewKocResults([]); }
+      else setNewKocResults(j.creators || []);
+    } catch (e) { setNewKocError(e.message); setNewKocResults([]); }
+    finally { setNewKocSearching(false); }
+  }, [newKocQ, selSeller]);
 
   // Phase 3 — cảnh báo 45 ngày 0 video (RPC koc_assignment_warnings)
   const [warnMap, setWarnMap] = useState({});
@@ -966,6 +1028,31 @@ export default function KocPerformanceTab() {
               <p style={{ margin: '0 0 12px', fontSize: '0.74rem', color: '#64748b' }}>
                 Gán nhân sự quản lý KOC cho brand này. {currentUser?.role === 'admin' ? 'Bạn gán là duyệt luôn 🟢.' : currentUser?.role === 'ecom' ? 'Bạn gửi đề xuất 🟡, admin duyệt sau.' : 'Chỉ admin/ecom thao tác được.'} Chip viền đứt = đã định danh ở brand khác.
               </p>
+              {['admin', 'ecom', 'booking'].includes(currentUser?.role) && (
+                <div style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+                  <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.86rem', marginBottom: 4 }}>🔎 Tìm & gắn KOC MỚI (chưa từng làm cho {brand})</div>
+                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginBottom: 8 }}>
+                    KOC nhận mẫu, chuẩn bị lên clip — gắn tag TRƯỚC ở đây để clip air sau này được tính cho nhân sự. Tìm thẳng trên TikTok bằng tên/@kênh (không cần KOC đã có đơn/video ở brand này).
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <input value={newKocQ} onChange={e => setNewKocQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchNewKoc()}
+                      placeholder="Tên hoặc @kênh KOC…" style={{ ...inputStyle, width: 220 }} />
+                    <button onClick={searchNewKoc} disabled={newKocSearching}
+                      style={{ padding: '8px 16px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', opacity: newKocSearching ? 0.6 : 1 }}>
+                      {newKocSearching ? 'Đang tìm…' : 'Tìm'}
+                    </button>
+                  </div>
+                  {newKocError && <div style={{ color: '#dc2626', fontSize: '0.76rem', marginTop: 8 }}>⚠️ {newKocError}</div>}
+                  {newKocResults && newKocResults.length === 0 && !newKocError && <div style={{ color: '#64748b', fontSize: '0.76rem', marginTop: 8 }}>Không tìm thấy KOC nào khớp.</div>}
+                  {newKocResults && newKocResults.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+                      {newKocResults.map(c => (
+                        <NewKocResultCard key={c.username || c.open_id} c={c} brand={brand} staffNames={staffNames} currentUser={currentUser} onAssigned={reloadAssignments} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
                 <button onClick={() => { setOnlyUnassigned(v => !v); setAssignShow(48); }}
                   style={{ padding: '6px 14px', borderRadius: 9, border: `1.5px solid ${onlyUnassigned ? ACCENT : '#e5e7eb'}`, background: onlyUnassigned ? '#fff7ed' : '#fff', color: onlyUnassigned ? '#e85518' : '#64748b', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}>
