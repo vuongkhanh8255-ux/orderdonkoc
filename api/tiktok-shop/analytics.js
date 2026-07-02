@@ -368,6 +368,88 @@ async function handleKocCreators({ params, supabase, res }) {
   });
 }
 
+// Module 8 — SĂN KOC: cào marketplace_creators/search → lưu dồn vào koc_marketplace_pool.
+// Cron ping ?action=koc_hunt mỗi ngày. Cào 1 GIAN/lượt (xoay vòng theo last_run_at) cho hợp
+// timeout Vercel ~10s. Ưu tiên gian làm đẹp/mỹ phẩm. Tiếp trang qua koc_hunt_state.page_token.
+async function handleKocHunt({ params, supabase, res }) {
+  const ck = process.env.TIKTOK_CREATOR_APP_KEY?.trim();
+  const cs = process.env.TIKTOK_CREATOR_APP_SECRET?.trim();
+  if (!ck || !cs) return res.status(200).json({ ok: false, error: 'Chưa cấu hình app Creator' });
+
+  const { data: conns } = await supabase.from('tiktok_creator_connections')
+    .select('open_id, shop_id, shop_cipher, seller_name, access_token, refresh_token')
+    .not('access_token', 'is', null);
+  if (!conns?.length) return res.status(200).json({ ok: false, error: 'Chưa có shop nối app Creator' });
+
+  const BEAUTY = ['body', 'milaganic', 'eherb', 'healm']; // gian làm đẹp/mỹ phẩm → marketplace gợi ý KOC hợp ngành
+  const { data: states } = await supabase.from('koc_hunt_state').select('seller_name, last_run_at, total_seen');
+  const stMap = {}; (states || []).forEach(s => { stMap[s.seller_name] = s; });
+
+  // chọn gian để cào: theo param seller, hoặc gian làm đẹp lâu chưa cào nhất (chưa cào bao giờ ưu tiên trước)
+  let pool = params.seller
+    ? conns.filter(c => (c.seller_name || '').toLowerCase().includes(String(params.seller).toLowerCase()))
+    : conns.filter(c => BEAUTY.some(b => (c.seller_name || '').toLowerCase().includes(b)));
+  if (!pool.length) pool = conns;
+  pool.sort((a, b) => {
+    const ta = stMap[a.seller_name]?.last_run_at ? new Date(stMap[a.seller_name].last_run_at).getTime() : 0;
+    const tb = stMap[b.seller_name]?.last_run_at ? new Date(stMap[b.seller_name].last_run_at).getTime() : 0;
+    return ta - tb; // lâu chưa cào nhất lên đầu
+  });
+  const conn = pool[0];
+
+  const want = (conn.seller_name || '').toLowerCase();
+  const cipher = await resolveShopCipher({ conn, want, supabase });
+  if (!cipher) return res.status(200).json({ ok: false, error: `Không có shop_cipher cho "${conn.seller_name}"` });
+
+  const path = `/affiliate_seller/${AFFILIATE_VERSION}/marketplace_creators/search`;
+  const bodyStr = '{}';
+  const normU = (u) => String(u || '').toLowerCase().replace(/^@/, '').trim();
+  const maxPages = Math.min(Number(params.max_pages) || 2, 4);
+
+  const st = stMap[conn.seller_name];
+  let nextToken = st?.page_token_carry || '';
+  // đọc token trang kế từ DB (cột page_token)
+  const { data: stRow } = await supabase.from('koc_hunt_state').select('page_token, total_seen').eq('seller_name', conn.seller_name).maybeSingle();
+  nextToken = stRow?.page_token || '';
+  let seen = stRow?.total_seen || 0;
+  let saved = 0, pages = 0;
+
+  for (let p = 0; p < maxPages; p++) {
+    const urlParams = { app_key: ck, timestamp: String(Math.floor(Date.now() / 1000)), page_size: '20', shop_cipher: cipher };
+    if (nextToken) urlParams.page_token = nextToken;
+    urlParams.sign = buildSign(cs, path, urlParams, bodyStr);
+    const raw = await ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(urlParams)}`, {
+      method: 'POST', headers: { 'x-tts-access-token': conn.access_token, 'content-type': 'application/json' }, body: bodyStr,
+    }, 12000);
+    let j; try { j = JSON.parse(raw); } catch { j = { code: -1 }; }
+    if (j?.code === 105002 && await refreshCreatorToken({ ck, cs, conn, supabase })) { p--; continue; }
+    if (j?.code !== 0) { // bị bóp/ lỗi → dừng lượt này, giữ token để lần sau chạy tiếp
+      await supabase.from('koc_hunt_state').upsert({ seller_name: conn.seller_name, page_token: nextToken || null, total_seen: seen, last_run_at: new Date().toISOString() }, { onConflict: 'seller_name' });
+      return res.status(200).json({ ok: true, shop: conn.seller_name, pages, saved, stop_code: j?.code, msg: j?.message || 'stopped' });
+    }
+    const d = j.data || {};
+    const rows = (d.creators || []).map(mapCreator).map(c => ({
+      username: normU(c.username), open_id: c.open_id || null, nickname: c.nickname || null, avatar: c.avatar || null,
+      followers: c.followers || 0, avg_views: c.avg_video_views || 0, gmv_tier: c.gmv_tier || null,
+      gmv: c.gmv || 0, video_gmv: c.video_gmv || 0, live_gmv: c.live_gmv || 0, region: c.region || null,
+      categories: c.categories || [], gender: c.gender || null, age_ranges: c.age_ranges || [], updated_at: new Date().toISOString(),
+    })).filter(r => r.username);
+    if (rows.length) {
+      // upsert: KHÔNG đụng cột da_lien_he/ghi_chu/first_seen (đội booking tự cập nhật)
+      await supabase.from('koc_marketplace_pool').upsert(rows, { onConflict: 'username' });
+      saved += rows.length; seen += rows.length;
+    }
+    pages++;
+    nextToken = d.next_page_token || '';
+    if (!nextToken) break; // hết vòng → lần sau quét lại từ đầu (bắt KOC mới xuất hiện)
+    await new Promise(r => setTimeout(r, 1200)); // delay chống rate-limit
+  }
+
+  await supabase.from('koc_hunt_state').upsert({ seller_name: conn.seller_name, page_token: nextToken || null, total_seen: seen, last_run_at: new Date().toISOString() }, { onConflict: 'seller_name' });
+  const { count } = await supabase.from('koc_marketplace_pool').select('*', { count: 'exact', head: true });
+  return res.status(200).json({ ok: true, shop: conn.seller_name, pages, saved, pool_total: count, next: nextToken ? 'tiep' : 'het-vong' });
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // KOC affiliate ORDERS — real per-creator sales for the shop
 //   POST /affiliate_seller/202410/orders/search  (creator_username + price + commission)
@@ -1390,6 +1472,11 @@ export default async function handler(req, res) {
 
   if (action === 'koc_creators') {
     try { return await handleKocCreators({ params, supabase, res }); }
+    catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
+  }
+
+  if (action === 'koc_hunt') {
+    try { return await handleKocHunt({ params, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 
