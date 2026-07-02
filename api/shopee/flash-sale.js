@@ -29,6 +29,17 @@ function makeSign(partnerKey, partnerId, path, ts, accessToken = '', shopId = 0)
   return crypto.createHmac('sha256', partnerKey).update(base).digest('hex');
 }
 
+/* ── fetch có TIMEOUT (né 1 call Shopee treo làm kẹt hàm tới trần 60s Vercel → 504) ── */
+async function fetchWithTimeout(url, opts = {}, ms = 8000) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: ctl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 /* ── Supabase client ────────────────────────────────────────────────────── */
 function getSupabase() {
   const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL)?.trim();
@@ -66,7 +77,7 @@ async function refreshIfNeeded(supabase, tokenRow, app) {
   const sign = makeSign(partnerKey, app.id, path, ts);
   const url = `${HOST}${path}?partner_id=${app.id}&timestamp=${ts}&sign=${sign}`;
 
-  const resp = await fetch(url, {
+  const resp = await fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -112,7 +123,7 @@ async function shopeeGet(partnerKey, partnerId, apiPath, accessToken, shopId, ex
   });
 
   const url = `${HOST}${apiPath}?${params.toString()}`;
-  const resp = await fetch(url);
+  const resp = await fetchWithTimeout(url);
   return resp.json();
 }
 
@@ -130,7 +141,7 @@ async function shopeePost(partnerKey, partnerId, apiPath, accessToken, shopId, b
   });
 
   const url = `${HOST}${apiPath}?${params.toString()}`;
-  const resp = await fetch(url, {
+  const resp = await fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -896,17 +907,22 @@ async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, m
     const lr = await handleList(supabase, shopId);
     const ld = lr.data;
     const fsList = Array.isArray(ld) ? ld : (ld?.flash_sale_list || ld?.flash_sale || []);
+    let delCount = 0;
     for (const f of (fsList || [])) {
       const sid = String(f.timeslot_id || f.time_slot_id);
-      // Khung RỖNG (tạo hụt do trước đây không kiểm failed_items) → xoá để vòng dưới tạo lại + lấp SP.
+      // Khung RỖNG (rác tạo hụt từ code cũ) → xoá để vòng dưới tạo lại + lấp SP.
       // Guard: chỉ xoá khi số SP RÕ RÀNG = 0 (field có mặt); thiếu field → coi như đã có SP (an toàn).
       const hasCount = ('item_count' in f) || ('enabled_item_count' in f);
       const cnt = Number(f.item_count || 0) + Number(f.enabled_item_count || 0);
-      if (hasCount && cnt === 0 && f.flash_sale_id) {
-        try { await handleDelete(supabase, shopId, { flash_sale_id: f.flash_sale_id }); } catch { /* bỏ qua */ }
-      } else {
-        used.add(sid);
+      const isEmpty = hasCount && cnt === 0 && f.flash_sale_id;
+      // XOÁ CÓ GIỚI HẠN: bỏ qua khi dry_run (không đụng thật), tối đa 8 khung/shop/lượt,
+      // dừng khi hết ngân sách thời gian. Trước đây xoá KHÔNG giới hạn → 1 shop nhiều khung rỗng
+      // ăn hết 60s → Vercel giết → 504. Cron sau tự xoá tiếp phần còn lại (FS idempotent).
+      if (isEmpty && !dryRun && delCount < 8 && !(deadline && Date.now() > deadline)) {
+        try { await handleDelete(supabase, shopId, { flash_sale_id: f.flash_sale_id }); delCount++; continue; }
+        catch { /* xoá lỗi → coi như đang bận, để lần cron sau xử */ }
       }
+      used.add(sid); // đã có SP, hoặc khung rỗng chưa xoá lần này → không lấp đè
     }
   } catch { /* list lỗi không chặn */ }
 
@@ -987,7 +1003,7 @@ async function handleAutoFlashSaleAll(supabase, reqUrl, req) {
   // Chạy TUẦN TỰ + ngân sách thời gian (né timeout 60s Vercel). FS idempotent (bỏ khung đã có FS)
   // → lần cron sau tự lấp tiếp shop bị "skip_het_gio". Trước đây chạy Promise.all tất cả shop → quá 60s → fail.
   const startTs = Date.now();
-  const deadline = startTs + 45000;
+  const deadline = startTs + 40000; // 40s: chừa ~20s cho 1 shop đang chạy dở + call cuối (fetch timeout 8s) < trần 60s
   const results = [];
   for (const [sid, tmps] of Object.entries(byShop)) {
     if (Date.now() > deadline) { results.push({ shopId: sid, status: 'skip_het_gio' }); continue; }
