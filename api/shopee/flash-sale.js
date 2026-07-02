@@ -950,6 +950,7 @@ async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, m
     let tries = 0;
     // CHỈ co lại khi Shopee TỪ CHỐI vì vượt trần SẢN PHẨM/FS của shop — bỏ bớt 1 SẢN PHẨM/lần.
     while (!addRes.ok && /exceed_max_item|max number of item/i.test(JSON.stringify(addRes)) && items.length > 1 && tries < 15) {
+      if (deadline && Date.now() > deadline) break; // hết giờ giữa chừng retry → dừng, không để lố timeout
       items = items.slice(0, items.length - 1);
       addRes = await handleAddItems(supabase, shopId, { flash_sale_id: fsId, items });
       tries++;
@@ -986,7 +987,7 @@ async function handleAutoFlashSaleAll(supabase, reqUrl, req) {
   // Chạy TUẦN TỰ + ngân sách thời gian (né timeout 60s Vercel). FS idempotent (bỏ khung đã có FS)
   // → lần cron sau tự lấp tiếp shop bị "skip_het_gio". Trước đây chạy Promise.all tất cả shop → quá 60s → fail.
   const startTs = Date.now();
-  const deadline = startTs + 48000;
+  const deadline = startTs + 45000;
   const results = [];
   for (const [sid, tmps] of Object.entries(byShop)) {
     if (Date.now() > deadline) { results.push({ shopId: sid, status: 'skip_het_gio' }); continue; }
