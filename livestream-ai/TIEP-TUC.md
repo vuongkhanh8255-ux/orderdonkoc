@@ -112,7 +112,7 @@ livestream-ai/
 1. **Điều kiện đẩy OBS lên Shopee:** gian hàng cần **~10.000 follower** mới bật được stream OBS/RTMP từ máy tính (con số cần verify cho Shopee VN). **Phải kiểm tra gian hàng đủ điều kiện chưa** — nếu chưa thì tool xong cũng không đẩy live thật được.
 2. **Luật Shopee:** CHO PHÉP livestream AI nhưng phải **xin duyệt trước + gắn nhãn "AI-generated"**. Đi đường hợp lệ. (Khác TikTok Shop — cấm thẳng AI voice/host, nên bản này CHỈ làm cho Shopee.)
 3. **Đọc comment là phần mong manh nhất:** Shopee VN không có API comment chính thức → phải đọc DOM, Shopee đổi giao diện là có thể gãy. Nên test bằng **tài khoản phụ**, chấp nhận bảo trì.
-4. **Làm video AI (Bước 4):** combo khuyến nghị = Gemini/Claude viết script → Vbee hoặc FPT.AI (giọng Việt, đừng dùng ElevenLabs) → HeyGen chế độ audio-driven → FFmpeg tạo biến thể. ~53-99 USD dựng kho 20-50 clip (làm 1 lần, tái dùng nhiều tháng).
+4. **Làm video AI (Bước 4):** ĐÃ CHỐT KHÁC plan gốc (3/7): ảnh = OpenAI gpt-image-1, video = HeyGen **API Pay-As-You-Go** (không mua gói web). Con số "~53-99 USD dựng kho 20-50 clip" là ước của plan gốc theo đường mua gói + combo Vbee/FPT — đường PAYG dự ước rẻ hơn (~$10-30/20 clip) nhưng **chưa đo thật**; chốt số sau clip đầu tiên. Chi tiết: `QUY-TRINH-VA-KE-HOACH.md` mục 8.
 
 ---
 
