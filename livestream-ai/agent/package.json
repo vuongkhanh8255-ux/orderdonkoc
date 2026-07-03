@@ -1,0 +1,15 @@
+{
+  "name": "shopee-live-ai-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Desktop Agent: nhan comment -> nhan dien cau hoi tieng Viet -> dieu khien OBS phat clip tra loi.",
+  "scripts": {
+    "start": "node src/index.js",
+    "mock": "node src/index.js --mock"
+  },
+  "dependencies": {
+    "obs-websocket-js": "^5.0.6",
+    "ws": "^8.18.0"
+  }
+}

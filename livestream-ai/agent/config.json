@@ -1,0 +1,17 @@
+{
+  "obs": {
+    "url": "ws://127.0.0.1:4455",
+    "password": "DOI_MAT_KHAU_OBS_O_DAY",
+    "idleScene": "IDLE",
+    "answerScene": "ANSWER",
+    "answerSource": "ANSWER_PLAYER"
+  },
+  "bridge": {
+    "port": 8787
+  },
+  "logic": {
+    "cooldownSec": 45,
+    "minConfidence": 1,
+    "maxQueue": 3
+  }
+}

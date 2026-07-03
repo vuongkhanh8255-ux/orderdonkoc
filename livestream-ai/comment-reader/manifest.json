@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Shopee Live Comment Reader (POC)",
+  "version": "0.1.0",
+  "description": "Phase 0 - Doc comment Shopee Live realtime de xac thuc kha thi (go/no-go). Tu do vung chat, khong hardcode selector.",
+  "content_scripts": [
+    {
+      "matches": [
+        "https://live.shopee.vn/*",
+        "https://*.shopee.vn/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "permissions": ["storage"],
+  "host_permissions": ["https://*.shopee.vn/*"]
+}

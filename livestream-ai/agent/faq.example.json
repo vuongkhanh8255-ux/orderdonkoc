@@ -1,0 +1,35 @@
+{
+  "_note": "Map cau hoi -> clip tra loi. Moi intent: keywords (da/khong dau deu duoc, agent tu bo dau), clip (duong dan file mp4 tren may), label de dfor de doc log.",
+  "intents": [
+    {
+      "id": "gia",
+      "label": "Hoi gia",
+      "keywords": ["gia", "bao nhieu", "bn", "nhieu tien", "gia sao", "may xu"],
+      "clip": "D:/live-clips/faq_gia.mp4"
+    },
+    {
+      "id": "ship",
+      "label": "Phi ship / giao hang",
+      "keywords": ["ship", "phi ship", "freeship", "free ship", "giao hang", "bao lau nhan", "may ngay"],
+      "clip": "D:/live-clips/faq_ship.mp4"
+    },
+    {
+      "id": "size",
+      "label": "Size / con hang",
+      "keywords": ["size", "con hang", "con khong", "con ko", "het chua", "co size"],
+      "clip": "D:/live-clips/faq_size.mp4"
+    },
+    {
+      "id": "voucher",
+      "label": "Voucher / khuyen mai",
+      "keywords": ["voucher", "ma giam", "khuyen mai", "giam gia", "code", "ma"],
+      "clip": "D:/live-clips/faq_voucher.mp4"
+    },
+    {
+      "id": "chatlieu",
+      "label": "Chat lieu / thanh phan",
+      "keywords": ["chat lieu", "thanh phan", "vai gi", "co ben khong", "chat the nao"],
+      "clip": "D:/live-clips/faq_chatlieu.mp4"
+    }
+  ]
+}
