@@ -60,6 +60,18 @@ export default function LiveClipFactoryTab() {
   };
   const copyTxt = (t) => { navigator.clipboard && navigator.clipboard.writeText(t || ''); setStatus('📋 Đã copy.'); };
 
+  // ✨ AI viết giúp: yêu cầu thô → gpt-4o-mini viết kịch bản + prompt ảnh, điền vào ô cho user duyệt
+  const suggestAuto = async (r) => {
+    if (!String(r.idea || '').trim()) { setStatus('❌ Gõ yêu cầu thô trước (sản phẩm, giá, ưu đãi, tông giọng…).'); return; }
+    if ((r.script.trim() || r.img_prompt.trim()) && !confirm('Ô kịch bản/prompt đang có nội dung — AI viết mới sẽ THAY THẾ. Tiếp tục?')) return;
+    setBusy(`${r.id}:sug`); setStatus('✨ AI đang viết kịch bản + prompt ảnh... ~5-15s');
+    const j = await callApi('live_suggest', { label: r.label, idea: r.idea });
+    setBusy('');
+    if (!j.ok) { setStatus('❌ ' + (j.error || 'Lỗi AI viết giúp')); return; }
+    setField(r.id, 'script', j.script); setField(r.id, 'img_prompt', j.img_prompt);
+    setStatus('✅ AI viết xong — đọc lại 2 ô, sửa ý nào chưa ưng rồi bấm 💾 Lưu bước này.');
+  };
+
   // Up ảnh SẢN PHẨM THẬT lên kho (bucket live-assets, public) → lưu URL vào product_image_url
   const uploadProductImage = async (r, file) => {
     if (!file) return;
@@ -182,6 +194,16 @@ export default function LiveClipFactoryTab() {
 
             {open && (
               <div style={{ padding: '4px 18px 18px', borderTop: '1px solid #f1f5f9' }}>
+                {/* B0 — AI viết giúp: gõ yêu cầu thô, AI đề xuất kịch bản + prompt ảnh */}
+                <div style={{ marginTop: 14, background: '#faf5ff', border: '1.5px dashed #d8b4fe', borderRadius: 10, padding: '12px 14px' }}>
+                  <label style={{ ...lbl, color: '#7c3aed' }}>✨ Lười gõ? Ghi đại ý — AI viết kịch bản + prompt ảnh cho</label>
+                  <textarea style={{ ...inp, minHeight: 48, resize: 'vertical' }} placeholder='VD: "xịt thơm Bodymiss 99k, mua 2 giảm 50%, freeship, tông vui tươi trẻ trung"'
+                    value={r.idea || ''} onChange={e => setField(r.id, 'idea', e.target.value)} />
+                  <button onClick={() => suggestAuto(r)} disabled={busy === `${r.id}:sug`}
+                    style={{ ...btn('#7c3aed'), marginTop: 6, padding: '6px 14px', fontSize: '0.78rem', opacity: busy === `${r.id}:sug` ? 0.6 : 1 }}>
+                    {busy === `${r.id}:sug` ? '⏳ AI đang viết...' : '✨ AI viết giúp (điền vào ① và ②)'}
+                  </button>
+                </div>
                 {/* B1 kịch bản */}
                 <div style={{ marginTop: 14 }}>
                   <label style={lbl}>① Kịch bản (avatar đọc)</label>
