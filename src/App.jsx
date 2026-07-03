@@ -31,6 +31,7 @@ const GmvRealtimeTab = lazy(() => import('./components/GmvRealtimeTab'));
 const StellaDashboardTab = lazy(() => import('./components/StellaDashboardTab'));
 const CSKHTab = lazy(() => import('./components/CSKHTab'));
 const LivestreamTab = lazy(() => import('./components/LivestreamTab'));
+const LivestreamAiTab = lazy(() => import('./components/LivestreamAiTab'));
 const LandingOrders = lazy(() => import('./components/LandingOrders'));
 const AIChat = lazy(() => import('./components/AIChat'));
 const CampRegistrationTab = lazy(() => import('./components/CampRegistrationTab'));
@@ -470,9 +471,7 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'shopee_database' && (
             <ComingSoonPlaceholder icon="🗄️" title="Database Shopee" description="Đang bảo trì — sẽ cập nhật sau" />
           )}
-          {currentView === 'shopee_live_ai' && (
-            <ComingSoonPlaceholder icon="🤖" title="Live AI" description="Đang bảo trì — sẽ cập nhật sau" />
-          )}
+          {currentView === 'shopee_live_ai' && <LivestreamAiTab />}
           </Suspense>
           </AppErrorBoundary>
 
