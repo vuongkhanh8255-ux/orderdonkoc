@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { ObsController } from './obs.js';
 import { Orchestrator } from './orchestrator.js';
 import { startBridgeServer, startMockSource } from './commentSource.js';
+import { loadFromSupabase } from './faqSource.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -23,6 +24,16 @@ const DRY = args.has('--dry');
 
 function loadJson(file) {
   return JSON.parse(fs.readFileSync(path.join(ROOT, file), 'utf8'));
+}
+
+// Doc Supabase URL + anon key tu .env GOC cua koc-tool (livestream-ai/agent/../../.env) — cung key
+// frontend xai (anon key vốn public). Nho vay agent tu ket noi Supabase, khong can commit key vao repo.
+function readRootEnv() {
+  try {
+    const txt = fs.readFileSync(path.join(ROOT, '..', '..', '.env'), 'utf8');
+    const get = (k) => { const m = txt.match(new RegExp('^' + k + '=(.*)$', 'm')); return m ? m[1].trim().replace(/^["']|["']$/g, '') : ''; };
+    return { url: get('VITE_SUPABASE_URL'), anonKey: get('VITE_SUPABASE_ANON_KEY') };
+  } catch { return {}; }
 }
 
 // OBS gia lap cho che do --dry: tu bao "clip xong" sau 3s de test vong lap
@@ -42,10 +53,31 @@ class DryObs {
 async function main() {
   const config = loadJson('config.json');
 
-  // Uu tien faq.json (ban that), khong co thi dung faq.example.json
-  const faqFile = fs.existsSync(path.join(ROOT, 'faq.json')) ? 'faq.json' : 'faq.example.json';
-  const faq = loadJson(faqFile);
-  console.log(`[Config] Dung ${faqFile} — ${faq.intents.length} intent.`);
+  // Nguon kho cau hoi: UU TIEN Supabase (dashboard Module 4 trong koc-tool) -> sua tren web la agent tu lay.
+  // Khong cau hinh / loi mang -> fallback faq.json (ban that) -> faq.example.json.
+  let faq = null, logic = config.logic;
+  let src = '';
+  const rootEnv = readRootEnv();
+  const sb = {
+    url: (config.supabase && config.supabase.url) || rootEnv.url || '',
+    anonKey: (config.supabase && config.supabase.anonKey) || process.env.SUPABASE_ANON_KEY || rootEnv.anonKey || '',
+  };
+  try {
+    const fromSb = await loadFromSupabase(sb);
+    if (fromSb && fromSb.intents.length) {
+      faq = { intents: fromSb.intents };
+      logic = fromSb.logic;
+      src = 'Supabase (dashboard Module 4)';
+    }
+  } catch (e) {
+    console.warn(`[Config] Khong nap duoc tu Supabase (${e.message}) -> dung file faq.json.`);
+  }
+  if (!faq) {
+    const faqFile = fs.existsSync(path.join(ROOT, 'faq.json')) ? 'faq.json' : 'faq.example.json';
+    faq = loadJson(faqFile);
+    src = faqFile;
+  }
+  console.log(`[Config] Nguon: ${src} — ${faq.intents.length} intent.`);
 
   const obs = DRY ? new DryObs() : new ObsController(config.obs);
   await obs.connect();
@@ -59,7 +91,7 @@ async function main() {
     }
   }
 
-  const orch = new Orchestrator({ obs, intents: faq.intents, logic: config.logic });
+  const orch = new Orchestrator({ obs, intents: faq.intents, logic });
   await orch.start();
 
   const onComment = (c) => orch.onComment(c);

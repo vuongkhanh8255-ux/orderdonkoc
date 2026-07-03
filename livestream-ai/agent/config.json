@@ -9,7 +9,13 @@
   "bridge": {
     "port": 8787
   },
+  "supabase": {
+    "_note": "Nguon kho cau hoi tu dashboard Module 4. De trong -> agent tu doc URL+anon key tu .env goc koc-tool. Chi dien khi chay agent o may KHONG co .env do.",
+    "url": "",
+    "anonKey": ""
+  },
   "logic": {
+    "_note": "Fallback khi khong nap duoc tu Supabase (dung faq.json).",
     "cooldownSec": 45,
     "minConfidence": 1,
     "maxQueue": 3
