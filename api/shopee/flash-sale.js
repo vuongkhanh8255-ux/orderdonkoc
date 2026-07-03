@@ -964,7 +964,8 @@ async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, m
     }
     if (!addRes.ok) {
       try { await handleDelete(supabase, shopId, { flash_sale_id: fsId }); } catch { /* rollback */ }
-      out.push({ shopId, slotId, status: 'add_fail', error: addRes.error || addRes.message });
+      // kèm err_msg thật của Shopee (Product Criteria / delisted / hết kho…) — 'all_items_failed' không nói lên gì
+      out.push({ shopId, slotId, status: 'add_fail', error: [addRes.error, addRes.message].filter(Boolean).join(' — ') });
     } else {
       out.push({ shopId, slotId, status: 'ok', fsId, products: addRes.added ?? items.length, failed: addRes.failed || 0, variants: nModels(items) });
     }
