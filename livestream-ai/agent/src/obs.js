@@ -53,10 +53,12 @@ export class ObsController {
 
   // Phat 1 clip tra loi
   async playAnswer(clipPath) {
-    // Doi file cua answer source
+    // Doi file cua answer source. QUAN TRONG: is_local_file=true de OBS chay che do FILE LOCAL
+    // (neu khong, media source o che do network/URL se bo qua local_file -> khung den).
+    // looping=false de clip phat xong ban su kien MediaInputPlaybackEnded -> agent quay ve IDLE.
     await this.obs.call('SetInputSettings', {
       inputName: this.cfg.answerSource,
-      inputSettings: { local_file: clipPath },
+      inputSettings: { is_local_file: true, local_file: clipPath, looping: false },
       overlay: true
     });
     // Chuyen sang canh answer

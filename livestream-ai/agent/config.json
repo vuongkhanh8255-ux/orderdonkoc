@@ -1,7 +1,7 @@
 {
   "obs": {
     "url": "ws://127.0.0.1:4455",
-    "password": "DOI_MAT_KHAU_OBS_O_DAY",
+    "password": "",
     "idleScene": "IDLE",
     "answerScene": "ANSWER",
     "answerSource": "ANSWER_PLAYER"
