@@ -926,34 +926,25 @@ async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, m
     }
   } catch { /* list lỗi không chặn */ }
 
-  // POOL sản phẩm: gom TẤT CẢ template, DEDUPE theo item_id → mỗi SP chỉ vào 1 khung.
-  // (Shopee KHÔNG cho 1 SP nằm ở nhiều Flash Sale cùng lúc → trước đây dùng chung SP nên khung sau bị
-  //  từ chối hết → rỗng. Giờ mỗi khung 1 BỘ SP RIÊNG → lấp được nhiều khung.)
-  const seenItem = new Set();
-  const rawPool = [];
-  for (const t of templates) {
-    for (const it of fsBuildItems(Array.isArray(t.rows) ? t.rows : [])) {
-      const iid = String(it.item_id);
-      if (!iid || seenItem.has(iid)) continue;
-      seenItem.add(iid); rawPool.push(it);
-    }
-  }
-  const pool = fsShuffle(rawPool); // ngẫu nhiên mỗi lần chạy
-  if (!pool.length) return [{ shopId, status: 'no_items' }];
+  // MỖI KHUNG = TRỌN 1 FILE TEMPLATE (~10 SP), xoay vòng các file (Khánh chốt 3/7: "mỗi khung
+  // nhiều SP luôn chứ ko phải ít"). Shopee CHO 1 SP nằm nhiều khung KHÁC GIỜ (bằng chứng: FS tạo
+  // tay 9/9 SP nhiều khung liền vẫn ok) → không cần chia đều pool như trước. An toàn: SP nào bị
+  // Shopee từ chối thì rớt riêng (failed_items), cả khung fail → rollback xoá khung rỗng sẵn có.
+  const tmplSets = fsShuffle(templates
+    .map((t) => fsBuildItems(Array.isArray(t.rows) ? t.rows : []).slice(0, maxItems))
+    .filter((set) => set.length));
+  if (!tmplSets.length) return [{ shopId, status: 'no_items' }];
   const nModels = (its) => its.reduce((s, it) => s + (it.models?.length || 0), 0);
 
   // Khung TRỐNG cần lấp (chưa có FS), tối đa maxSlots
   const emptySlots = slots.filter((s) => { const id = s.timeslot_id || s.time_slot_id; return id && !used.has(String(id)); }).slice(0, maxSlots);
-  // Chia ĐỀU pool cho các khung trống → mỗi khung 1 bộ SP riêng, tối đa maxItems/khung (lấp được nhiều khung nhất).
-  const perSlot = emptySlots.length ? Math.min(maxItems, Math.max(1, Math.floor(pool.length / emptySlots.length))) : maxItems;
 
-  let ptr = 0;
+  let ti = 0; // con trỏ xoay vòng template
   for (const slot of emptySlots) {
     if (deadline && Date.now() > deadline) { out.push({ shopId, status: 'skip_het_gio' }); break; } // hết ngân sách → dừng, cron sau lấp tiếp
     const slotId = slot.timeslot_id || slot.time_slot_id;
-    if (ptr >= pool.length) break; // hết SP riêng → các khung còn lại để TRỐNG (không đủ SP, không tạo khung rỗng)
-    let items = pool.slice(ptr, ptr + perSlot);
-    ptr += items.length;
+    let items = tmplSets[ti % tmplSets.length];
+    ti++;
 
     if (dryRun) { out.push({ shopId, slotId, status: 'dry_run', products: items.length, variants: nModels(items) }); continue; }
 
