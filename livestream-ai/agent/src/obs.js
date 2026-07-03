@@ -54,6 +54,7 @@ export class ObsController {
         await this.connect();
         console.log('[OBS] Da noi lai thanh cong -> ve IDLE.');
         await this.goIdle().catch(() => {});
+        if (this._onReconnectedCb) this._onReconnectedCb();
       } catch (e) {
         console.warn('[OBS] Noi lai chua duoc (' + e.message + ') — thu tiep sau 5s.');
         this._scheduleReconnect();
@@ -63,6 +64,11 @@ export class ObsController {
 
   onAnswerEnded(fn) {
     this._onAnswerEnd = fn;
+  }
+
+  // Callback khi TU NOI LAI thanh cong (de orchestrator reset trang thai answering bi ket)
+  onReconnected(fn) {
+    this._onReconnectedCb = fn;
   }
 
   // Chuyen ve canh idle (playlist)

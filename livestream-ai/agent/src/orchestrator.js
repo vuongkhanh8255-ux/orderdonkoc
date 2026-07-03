@@ -27,6 +27,8 @@ export class Orchestrator {
 
     // Khi clip tra loi xong: quay ve idle, xu ly hang doi
     this.obs.onAnswerEnded(() => this._onAnswerEnded());
+    // OBS noi lai giua luc dang phat -> su kien "clip xong" da mat, reset ve idle + xu ly hang doi
+    if (typeof this.obs.onReconnected === 'function') this.obs.onReconnected(() => this._onObsReconnected());
   }
 
   async start() {
@@ -69,14 +71,18 @@ export class Orchestrator {
 
   async _play(intent) {
     this.answering = true;
-    this.lastPlayedAt.set(intent.id, Date.now());
     this._armFailsafe();
     try {
       console.log(`▶ PHAT: ${intent.label} -> ${intent.clip}`);
       await this.obs.playAnswer(intent.clip);
+      // Chi tinh cooldown khi PHAT THANH CONG (fail thi nguoi xem hoi lai phai duoc tra loi ngay)
+      this.lastPlayedAt.set(intent.id, Date.now());
+      this._playStartedAt = Date.now();
     } catch (e) {
       console.error('[OBS] Loi phat clip:', e.message);
       clearTimeout(this._fsTimer);
+      // playAnswer co the fail SAU khi da chuyen scene -> phai keo ve IDLE keo ket man hinh answer den
+      try { await this.obs.goIdle(); } catch (e2) {}
       this.answering = false;
       this._next();
     }
@@ -88,17 +94,30 @@ export class Orchestrator {
     this._fsTimer = setTimeout(() => {
       if (this.answering) {
         console.warn(`[Failsafe] Clip qua ${this.failsafeMs / 1000}s chua bao xong -> tu ve IDLE`);
-        this._onAnswerEnded();
+        this._onAnswerEnded(true);
       }
     }, this.failsafeMs);
   }
 
-  async _onAnswerEnded() {
-    // Guard: su kien den muon (sau khi failsafe da xu ly) thi bo qua, khong goIdle/next lan 2
+  async _onAnswerEnded(fromFailsafe = false) {
+    // Guard 1: su kien den muon (sau khi failsafe/reconnect da xu ly) -> bo qua, khong goIdle/next lan 2
     if (!this.answering) return;
+    // Guard 2: su kien "ket thuc" ban ra NGAY khi vua doi file/restart (swap clip cu) -> khong phai
+    // clip nay xong that (clip that ngan nhat cung ~5s), bo qua keo cat clip dang phat.
+    if (!fromFailsafe && Date.now() - (this._playStartedAt || 0) < 2000) return;
     clearTimeout(this._fsTimer);
     console.log('✔ Clip tra loi xong -> ve IDLE');
     try { await this.obs.goIdle(); } catch (e) {}
+    this.answering = false;
+    this._next();
+  }
+
+  // OBS rot ket noi giua clip roi noi lai duoc: su kien PlaybackEnded da mat -> reset ngay,
+  // khong de ket answering toi khi failsafe (3 phut live cam la qua dai).
+  _onObsReconnected() {
+    if (!this.answering) return;
+    console.warn('[OBS] Noi lai giua luc dang phat clip -> coi nhu clip xong, xu ly hang doi.');
+    clearTimeout(this._fsTimer);
     this.answering = false;
     this._next();
   }
