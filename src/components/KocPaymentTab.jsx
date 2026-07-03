@@ -526,10 +526,37 @@ const KocPaymentTab = () => {
 
             <Field label="Link kênh"><input value={form.channel_link} onChange={e => setForm(f => ({ ...f, channel_link: e.target.value }))} placeholder="https://tiktok.com/@..." style={inputStyle} /></Field>
             <div style={{ gridColumn: 'span 3' }}>
-              <Field label="Link air (*) — BẮT BUỘC · mỗi video 1 DÒNG (nhập được NHIỀU link)">
-                <textarea value={form.air_link} rows={2}
-                  onChange={e => { const v = e.target.value; const u = extractUname(v); setForm(f => ({ ...f, air_link: v, channel_link: (f.channel_link && f.channel_link.trim()) ? f.channel_link : (u ? `https://www.tiktok.com/@${u}` : f.channel_link) })); }}
-                  placeholder={"https://tiktok.com/@.../video/...\n(có nhiều video thì dán mỗi link 1 dòng)"} style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.4 }} />
+              <Field label="Link air (*) — mỗi video 1 ô (bấm ➕ để thêm link)">
+                {(() => {
+                  const links = (form.air_link || '').split('\n');
+                  if (!links.length) links.push('');
+                  const setLinks = (arr) => {
+                    const cleaned = arr.length ? arr : [''];
+                    const joined = cleaned.join('\n');
+                    const u = extractUname(joined);
+                    setForm(f => ({ ...f, air_link: joined, channel_link: (f.channel_link && f.channel_link.trim()) ? f.channel_link : (u ? `https://www.tiktok.com/@${u}` : f.channel_link) }));
+                  };
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {links.map((lk, i) => (
+                        <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', minWidth: 16 }}>{i + 1}.</span>
+                          <input value={lk}
+                            onChange={e => {
+                              const val = e.target.value; const arr = [...links];
+                              // Dán nhiều link 1 lúc (≥2 "http") → tự tách thành nhiều ô.
+                              if ((val.match(/https?:\/\//gi) || []).length >= 2) arr.splice(i, 1, ...val.split(/\s+/).filter(Boolean));
+                              else arr[i] = val;
+                              setLinks(arr);
+                            }}
+                            placeholder={`Link video ${i + 1} — https://tiktok.com/@.../video/...`} style={{ ...inputStyle, flex: 1 }} />
+                          {links.length > 1 && <button type="button" onClick={() => setLinks(links.filter((_, k) => k !== i))} title="Xóa ô này" style={{ border: '1px solid #fecaca', background: '#fff', color: '#dc2626', borderRadius: 7, width: 30, height: 30, cursor: 'pointer', fontWeight: 800, flexShrink: 0 }}>✕</button>}
+                        </div>
+                      ))}
+                      <button type="button" onClick={() => setLinks([...links, ''])} style={{ alignSelf: 'flex-start', border: '1px dashed #7c3aed', background: '#faf5ff', color: '#7c3aed', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem' }}>➕ Thêm link video</button>
+                    </div>
+                  );
+                })()}
               </Field>
               {formUnames.length > 0 && <div style={{ fontSize: '0.74rem', color: '#0891b2', marginTop: 4, fontWeight: 700 }}>🆔 ID kênh: {formUnames.map(u => '@' + u).join(', ')}</div>}
               {dupVideos.length > 0 && <div style={{ fontSize: '0.76rem', color: '#dc2626', fontWeight: 700, marginTop: 4, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 7, padding: '5px 9px' }}>⚠️ VIDEO TRÙNG (đã có thanh toán khác): {dupVideos.map(d => `…${d.vid.slice(-6)} ← ${d.who.join(', ')}`).join(' · ')}</div>}
