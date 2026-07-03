@@ -14,7 +14,7 @@ import { useAppData } from '../context/AppDataContext';
 
 const ACCENT = '#ff6a2c';
 const COMPANIES = ['STELLA', 'OPTIMAX'];
-const BRANDS = ['BODYMISS', 'MILAGANICS', 'MOAWMOAWS', 'EHERB VN', 'HEALMI', 'MASUBE', 'REALSTEEL'];
+const BRANDS = ['BODYMISS', 'MILAGANICS', 'MOAWMOAWS', 'EHERB VN', 'EHERB HCM', 'HEALMI', 'MASUBE', 'REALSTEEL'];
 const ACTION_PW = 'STELLA8255$';        // mật khẩu để tick Duyệt / Đã thanh toán (1 lần/phiên)
 const PIT_THRESHOLD = 2_000_000;        // tổng chi 1 người TRONG 1 CÔNG TY / 1 tháng ≥ ngưỡng này → cần PIT (thuế TNCN)
 const personKeyOf = (r) => (r.cccd || r.full_name || r.beneficiary || r.channel_link || '').trim().toLowerCase();
