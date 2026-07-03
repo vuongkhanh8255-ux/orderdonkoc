@@ -45,8 +45,13 @@ Không hiện comment + không WebSocket. Hướng đi tiếp cho phần đọc 
 1. **Test lại ở đúng môi trường HOST** — console livestream trong Seller Center (khi shop mình đang phát) HIỆN comment. Cần verify shop đủ điều kiện đẩy OBS/RTMP (điều kiện follower) rồi test extension ở console đó.
 2. Nếu console cũng khó đọc → nghe WebSocket/API của Seller Center, hoặc OCR, hoặc BocaLive.
 
-### 🔗 CÒN DỞ cho Bước 3: nối agent ĐỌC TỪ SUPABASE.
-Hiện dashboard lưu Supabase + **xuất faq.json** (agent vẫn đọc file). Bước tiếp: cho agent tự fetch `livestream_intents`/`livestream_config` từ Supabase REST (anon key) để khỏi xuất file tay.
+### 🔗 Bước 3 — nối agent ĐỌC TỪ SUPABASE: ✅ XONG (3/7).
+Agent giờ **tự fetch `livestream_intents` + `livestream_config` từ Supabase REST** (ưu tiên Supabase, fallback faq.json → faq.example.json). Anon key tự đọc từ `.env` gốc koc-tool (không commit key). File: `agent/src/faqSource.js` + `index.js`. **Đã test `npm run mock -- --dry`:** log `[Config] Nguon: Supabase — 5 intent` + nhận diện đúng. ⇒ Sửa câu hỏi trên web dashboard → agent tự lấy, khỏi xuất file tay (nút Xuất faq.json vẫn giữ để chạy offline).
+
+### ⏭️ CÒN LẠI (theo thứ tự):
+1. **Đọc comment ở console HOST thật** (Seller Center khi đang live) — go/no-go còn lại. Cần shop đủ điều kiện + đang phát.
+2. **Test OBS thật:** cài OBS → 2 scene IDLE/ANSWER + media source `ANSWER_PLAYER` + clip mp4 → sửa `config.json` (password OBS) → `npm start`. (Bộ não + nạp config đã chạy; chỉ còn nối OBS.)
+3. **Bước 4 — xưởng video AI.**
 
 ### ⭐ VIỆC QUAN TRỌNG NHẤT ĐANG DANG DỞ (go/no-go của cả dự án):
 
