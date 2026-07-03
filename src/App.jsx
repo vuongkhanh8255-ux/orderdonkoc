@@ -33,6 +33,7 @@ const CSKHTab = lazy(() => import('./components/CSKHTab'));
 const LivestreamTab = lazy(() => import('./components/LivestreamTab'));
 const LivestreamAiTab = lazy(() => import('./components/LivestreamAiTab'));
 const LiveClipFactoryTab = lazy(() => import('./components/LiveClipFactoryTab'));
+const LiveStudioTab = lazy(() => import('./components/LiveStudioTab'));
 const LandingOrders = lazy(() => import('./components/LandingOrders'));
 const AIChat = lazy(() => import('./components/AIChat'));
 const CampRegistrationTab = lazy(() => import('./components/CampRegistrationTab'));
@@ -291,6 +292,7 @@ function AppMain({ user, onLogout, allowedViews }) {
                 { view: 'shopee_autoreply',     icon: '💬', name: 'Module 3: Trả lời đánh giá khách hàng tự động' },
                 { view: 'shopee_live_ai',       icon: '🤖', name: 'Module 4: Live AI' },
                 { view: 'shopee_clip_factory',  icon: '🏭', name: 'Module 5: Xưởng Clip' },
+                { view: 'shopee_live_studio',   icon: '🎛️', name: 'Live AI Studio' },
               ]},
               { key: 'tiktok', label: '🎵 TikTok', emoji: '🎵', items: [
                 { view: 'camp_registration', icon: '🎪', name: 'Đăng Kí Camp' },
@@ -475,6 +477,7 @@ function AppMain({ user, onLogout, allowedViews }) {
           )}
           {currentView === 'shopee_live_ai' && <LivestreamAiTab />}
           {currentView === 'shopee_clip_factory' && <LiveClipFactoryTab />}
+          {currentView === 'shopee_live_studio' && <LiveStudioTab />}
           </Suspense>
           </AppErrorBoundary>
 
