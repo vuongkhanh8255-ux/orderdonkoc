@@ -6,13 +6,19 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
 const ACCENT = '#ff6a2c';
+const API = '/api/tiktok-shop/analytics';
 const STATUS = { todo: { t: 'Chưa làm', c: '#94a3b8', bg: '#f1f5f9' }, lam: { t: 'Đang làm', c: '#b45309', bg: '#fffbeb' }, xong: { t: 'Xong ✓', c: '#166534', bg: '#f0fdf4' } };
+const callApi = async (action, payload) => {
+  const r = await fetch(`${API}?action=${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  return r.json().catch(() => ({ ok: false, error: 'Lỗi phản hồi server' }));
+};
 
 export default function LiveClipFactoryTab() {
   const [rows, setRows] = useState([]);   // merge intents + prod
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState(null);
   const [status, setStatus] = useState('');
+  const [busy, setBusy] = useState('');   // `${id}:${step}` khi đang gọi API
 
   const load = async () => {
     setLoading(true);
@@ -26,6 +32,7 @@ export default function LiveClipFactoryTab() {
       keywords: Array.isArray(it.keywords) ? it.keywords : [],
       script: pmap[it.id]?.script || '', img_prompt: pmap[it.id]?.img_prompt || '',
       image_url: pmap[it.id]?.image_url || '', video_url: pmap[it.id]?.video_url || '',
+      video_id: pmap[it.id]?.video_id || '', voice_id: pmap[it.id]?.voice_id || '',
       prod_status: pmap[it.id]?.status || 'todo',
     })));
     setLoading(false);
@@ -45,6 +52,35 @@ export default function LiveClipFactoryTab() {
     setStatus((p1.error || p2.error) ? ('❌ Lỗi lưu: ' + (p1.error?.message || p2.error?.message)) : `✅ Đã lưu "${r.label}".`);
   };
   const copyTxt = (t) => { navigator.clipboard && navigator.clipboard.writeText(t || ''); setStatus('📋 Đã copy.'); };
+
+  // ── TỰ ĐỘNG (Phase 2): OpenAI tạo ảnh, HeyGen tạo video, poll kiểm tra ──
+  const genImageAuto = async (r) => {
+    if (!r.img_prompt.trim()) { setStatus('❌ Cần prompt ảnh trước.'); return; }
+    setBusy(`${r.id}:img`); setStatus('🪄 Đang tạo ảnh (OpenAI)... ~15-40s');
+    const j = await callApi('live_gen_image', { intent_id: r.id, prompt: r.img_prompt });
+    setBusy('');
+    if (!j.ok) { setStatus('❌ ' + (j.error || 'Lỗi tạo ảnh')); return; }
+    setField(r.id, 'image_url', j.image_url); setStatus('✅ Đã tạo ảnh xong.');
+  };
+  const makeVideoAuto = async (r) => {
+    if (!r.image_url) { setStatus('❌ Cần ảnh nhân vật trước (bước ①).'); return; }
+    if (!r.script.trim()) { setStatus('❌ Cần kịch bản trước.'); return; }
+    setBusy(`${r.id}:vid`); setStatus('🎬 Đang gửi HeyGen tạo video...');
+    const j = await callApi('live_make_video', { intent_id: r.id, image_url: r.image_url, script: r.script, voice_id: r.voice_id || undefined });
+    setBusy('');
+    if (!j.ok) { setStatus('❌ ' + (j.error || 'Lỗi tạo video')); return; }
+    setField(r.id, 'video_id', j.video_id); setField(r.id, 'prod_status', 'lam');
+    setStatus('⏳ HeyGen đang render (vài phút). Bấm "Kiểm tra video" sau ~1-3 phút.');
+  };
+  const checkVideoAuto = async (r) => {
+    if (!r.video_id) { setStatus('❌ Chưa có video_id (bấm "Tạo video" trước).'); return; }
+    setBusy(`${r.id}:chk`); setStatus('🔄 Đang kiểm tra HeyGen...');
+    const j = await callApi('live_check_video', { intent_id: r.id, video_id: r.video_id });
+    setBusy('');
+    if (j.status === 'completed' && j.video_url) { setField(r.id, 'video_url', j.video_url); setStatus('✅ Video xong! Tải về máy phát live rồi điền đường dẫn ở ④.'); }
+    else if (j.status === 'failed') setStatus('❌ HeyGen render lỗi: ' + (j.error || ''));
+    else setStatus(`⏳ Đang render (${j.status || 'processing'})... đợi thêm rồi bấm kiểm tra lại.`);
+  };
 
   const card = { background: '#fff', borderRadius: 14, border: '1px solid #eee', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', marginBottom: 14, overflow: 'hidden' };
   const inp = { padding: '9px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.86rem', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' };
@@ -92,7 +128,10 @@ export default function LiveClipFactoryTab() {
                 <div style={{ marginTop: 14 }}>
                   <label style={lbl}>② Prompt tạo ảnh nhân vật (copy sang Gemini/GPT)</label>
                   <textarea style={{ ...inp, minHeight: 60, resize: 'vertical' }} value={r.img_prompt} onChange={e => setField(r.id, 'img_prompt', e.target.value)} />
-                  <button onClick={() => copyTxt(r.img_prompt)} style={{ ...btn('#64748b'), marginTop: 6, padding: '5px 12px', fontSize: '0.75rem' }}>📋 Copy prompt</button>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                    <button onClick={() => copyTxt(r.img_prompt)} style={{ ...btn('#64748b'), padding: '5px 12px', fontSize: '0.75rem' }}>📋 Copy prompt (làm tay)</button>
+                    <button onClick={() => genImageAuto(r)} disabled={busy === `${r.id}:img`} style={{ ...btn('#7c3aed'), padding: '5px 12px', fontSize: '0.75rem', opacity: busy === `${r.id}:img` ? 0.6 : 1 }}>{busy === `${r.id}:img` ? '⏳ đang tạo...' : '🪄 Tạo ảnh tự động (OpenAI)'}</button>
+                  </div>
                 </div>
                 {/* B2b link ảnh */}
                 <div style={{ marginTop: 14, display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
@@ -104,8 +143,14 @@ export default function LiveClipFactoryTab() {
                 </div>
                 {/* B3 video */}
                 <div style={{ marginTop: 14 }}>
-                  <label style={lbl}>③ Link video avatar (HeyGen — dán vào)</label>
-                  <input style={inp} placeholder="https://... (video từ HeyGen)" value={r.video_url} onChange={e => setField(r.id, 'video_url', e.target.value)} />
+                  <label style={lbl}>③ Video avatar (HeyGen)</label>
+                  <input style={inp} placeholder="https://... (dán link, hoặc bấm Tạo video tự động)" value={r.video_url} onChange={e => setField(r.id, 'video_url', e.target.value)} />
+                  <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <button onClick={() => makeVideoAuto(r)} disabled={busy === `${r.id}:vid`} style={{ ...btn('#7c3aed'), padding: '5px 12px', fontSize: '0.75rem', opacity: busy === `${r.id}:vid` ? 0.6 : 1 }}>{busy === `${r.id}:vid` ? '⏳ đang gửi...' : '🎬 Tạo video tự động (HeyGen)'}</button>
+                    <button onClick={() => checkVideoAuto(r)} disabled={busy === `${r.id}:chk`} style={{ ...btn('#0891b2'), padding: '5px 12px', fontSize: '0.75rem', opacity: busy === `${r.id}:chk` ? 0.6 : 1 }}>{busy === `${r.id}:chk` ? '⏳...' : '🔄 Kiểm tra video'}</button>
+                    {r.video_id && <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>id: {r.video_id.slice(0, 10)}…</span>}
+                    {r.video_url && <a href={r.video_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: ACCENT, fontWeight: 700 }}>▶ Xem/tải video</a>}
+                  </div>
                 </div>
                 {/* B4 clip cuoi */}
                 <div style={{ marginTop: 14 }}>

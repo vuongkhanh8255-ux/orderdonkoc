@@ -15,6 +15,8 @@
 
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
+// Module 5 "Xưởng Clip" — tự động OpenAI (ảnh) + HeyGen (video). Ở lib/ ngoài api/ để không tính vào trần 12 function.
+import { handleLiveGenImage, handleLiveMakeVideo, handleLiveCheckVideo, handleLiveVoices } from '../../lib/liveai.js';
 
 const TIKTOK_BASE = 'https://open-api.tiktokglobalshop.com';
 const API_VERSION = '202509';
@@ -1584,6 +1586,11 @@ export default async function handler(req, res) {
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 
+  // ── Module 5 "Xưởng Clip" — OpenAI ảnh + HeyGen video (logic ở lib/liveai.js) ──
+  if (action === 'live_gen_image') { try { return res.status(200).json(await handleLiveGenImage(params)); } catch (err) { return res.status(200).json({ ok: false, error: err.message }); } }
+  if (action === 'live_make_video') { try { return res.status(200).json(await handleLiveMakeVideo(params)); } catch (err) { return res.status(200).json({ ok: false, error: err.message }); } }
+  if (action === 'live_check_video') { try { return res.status(200).json(await handleLiveCheckVideo(params)); } catch (err) { return res.status(200).json({ ok: false, error: err.message }); } }
+  if (action === 'live_voices') { try { return res.status(200).json(await handleLiveVoices(params)); } catch (err) { return res.status(200).json({ ok: false, error: err.message }); } }
 
   if (!startDate || !endDate) {
     return res.status(400).json({ error: 'Missing start_date and/or end_date (format: YYYY-MM-DD)' });
