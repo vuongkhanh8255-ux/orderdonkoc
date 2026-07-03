@@ -16,7 +16,11 @@ const ACCENT = '#ff6a2c';
 const COMPANIES = ['STELLA', 'OPTIMAX'];
 const BRANDS = ['BODYMISS', 'MILAGANICS', 'MOAWMOAWS', 'EHERB VN', 'EHERB HCM', 'HEALMI', 'MASUBE', 'REALSTEEL'];
 const ACTION_PW = 'STELLA8255$';        // mật khẩu để tick Duyệt / Đã thanh toán (1 lần/phiên)
-const PIT_THRESHOLD = 2_000_000;        // tổng chi 1 người TRONG 1 CÔNG TY / 1 tháng ≥ ngưỡng này → cần PIT (thuế TNCN)
+// Ngưỡng PIT (khấu trừ TNCN 10%) theo booking 1 người / 1 CÔNG TY / 1 tháng.
+// Cơ quan thuế đổi TỪ 1/7/2026: booking ≥ 5tr/tháng mới khấu trừ (trước đó ≥ 2tr). Đơn cũ giữ ngưỡng cũ cho đúng lịch sử.
+const PIT_THRESHOLD_OLD = 2_000_000;
+const PIT_THRESHOLD_NEW = 5_000_000;
+const pitThreshold = (ym) => ((ym || '') >= '2026-07' ? PIT_THRESHOLD_NEW : PIT_THRESHOLD_OLD);
 const personKeyOf = (r) => (r.cccd || r.full_name || r.beneficiary || r.channel_link || '').trim().toLowerCase();
 const ymOf = (r) => (r.pay_date || '').slice(0, 7);   // tháng của lần chi (YYYY-MM)
 // PIT tính RIÊNG theo từng người × công ty × tháng (1 KOC book 2 cty thì KHÔNG cộng dồn — cty nào ≥2tr cty đó mới cần PIT)
@@ -399,18 +403,19 @@ const KocPaymentTab = () => {
 
   const sum = useMemo(() => filtered.reduce((a, r) => ({ cast: a.cast + num(r.cast_net), pit: a.pit + num(r.pit), total: a.total + num(r.total) }), { cast: 0, pit: 0, total: 0 }), [filtered]);
 
-  // Rule PIT: gom RIÊNG theo người × CÔNG TY × tháng → công ty nào TỔNG ≥ 2tr/tháng mà CHƯA có PIT thì cảnh báo.
+  // Rule PIT: gom RIÊNG theo người × CÔNG TY × tháng → công ty nào TỔNG đạt ngưỡng (≥5tr từ 1/7/2026, ≥2tr trước đó) mà CHƯA có PIT thì cảnh báo.
   // (1 KOC book cả 2 công ty: KHÔNG cộng dồn — tránh đếm nhầm, chỉ báo đúng công ty vượt ngưỡng.)
   const { pitAlerts, pitFlagKeys } = useMemo(() => {
     const map = new Map();
     for (const r of filtered) {
       const key = pitKeyOf(r); if (!key) continue;
       const [y, m] = ymOf(r).split('-');
-      const e = map.get(key) || { key, name: r.full_name || r.beneficiary || r.channel_link || '—', company: r.company || '—', monthLabel: m ? `T${Number(m)}/${y}` : '', total: 0, pit: 0, count: 0 };
+      const e = map.get(key) || { key, name: r.full_name || r.beneficiary || r.channel_link || '—', company: r.company || '—', ym: ymOf(r), monthLabel: m ? `T${Number(m)}/${y}` : '', total: 0, pit: 0, count: 0 };
       e.total += num(r.total); e.pit += num(r.pit); e.count += 1;
       map.set(key, e);
     }
-    const alerts = [...map.values()].filter(e => e.total >= PIT_THRESHOLD && e.pit === 0).sort((a, b) => b.total - a.total);
+    // Ngưỡng theo tháng của nhóm: từ 1/7/2026 = 5tr, trước đó = 2tr.
+    const alerts = [...map.values()].filter(e => e.total >= pitThreshold(e.ym) && e.pit === 0).sort((a, b) => b.total - a.total);
     return { pitAlerts: alerts, pitFlagKeys: new Set(alerts.map(a => a.key)) };
   }, [filtered]);
 
@@ -611,7 +616,7 @@ const KocPaymentTab = () => {
       {/* Cảnh báo PIT — người có tổng ≥ 2tr trong kỳ mà chưa khấu trừ thuế TNCN */}
       {pitAlerts.length > 0 && (
         <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '12px 16px', marginBottom: 14 }}>
-          <div style={{ fontWeight: 800, color: '#b45309', fontSize: '0.9rem', marginBottom: 8 }}>⚠️ {pitAlerts.length} trường hợp có TỔNG ≥ {fmtMoney(PIT_THRESHOLD)}đ / tháng / công ty nhưng CHƯA có PIT — cần khấu trừ thuế TNCN <span style={{ fontWeight: 600, color: '#92400e' }}>(tính riêng từng công ty, không cộng dồn)</span></div>
+          <div style={{ fontWeight: 800, color: '#b45309', fontSize: '0.9rem', marginBottom: 8 }}>⚠️ {pitAlerts.length} trường hợp booking đạt ngưỡng nhưng CHƯA có PIT — cần khấu trừ thuế TNCN 10% <span style={{ fontWeight: 600, color: '#92400e' }}>(ngưỡng: ≥5tr/tháng từ 1/7/2026, ≥2tr trước đó · tính riêng từng công ty, không cộng dồn)</span></div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {pitAlerts.map(a => (
               <span key={a.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #fde68a', borderRadius: 20, padding: '4px 12px', fontSize: '0.78rem', fontWeight: 700, color: '#92400e' }}>
@@ -740,7 +745,7 @@ const KocPaymentTab = () => {
                     <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.78rem' }}>{r.bank_account || '—'}</td>
                     <td style={td}>{r.bank_name || '—'}</td>
                     <td style={{ ...td, textAlign: 'right' }}>{fmtMoney(r.cast_net)}</td>
-                    <td style={{ ...td, textAlign: 'right', color: pitFlagKeys.has(pitKeyOf(r)) ? '#b45309' : '#94a3b8', fontWeight: pitFlagKeys.has(pitKeyOf(r)) ? 800 : 400 }} title={pitFlagKeys.has(pitKeyOf(r)) ? `Người này chi ≥ 2tr trong tháng tại ${r.company || 'công ty này'} nhưng chưa có PIT — cần khấu trừ thuế TNCN` : ''}>{pitFlagKeys.has(pitKeyOf(r)) ? '⚠️ ' : ''}{fmtMoney(r.pit)}</td>
+                    <td style={{ ...td, textAlign: 'right', color: pitFlagKeys.has(pitKeyOf(r)) ? '#b45309' : '#94a3b8', fontWeight: pitFlagKeys.has(pitKeyOf(r)) ? 800 : 400 }} title={pitFlagKeys.has(pitKeyOf(r)) ? `Người này booking ≥ ${fmtMoney(pitThreshold(ymOf(r)))}đ trong tháng tại ${r.company || 'công ty này'} nhưng chưa có PIT — cần khấu trừ thuế TNCN 10%` : ''}>{pitFlagKeys.has(pitKeyOf(r)) ? '⚠️ ' : ''}{fmtMoney(r.pit)}</td>
                     <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: ACCENT }}>{fmtMoney(r.total)}</td>
                     <td style={{ ...td, textAlign: 'center' }}>{(() => {
                       const imgs = rowImages(r);  // CCCD + tin nhắn + hợp đồng (KHÔNG gồm video)
