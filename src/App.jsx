@@ -32,6 +32,7 @@ const StellaDashboardTab = lazy(() => import('./components/StellaDashboardTab'))
 const CSKHTab = lazy(() => import('./components/CSKHTab'));
 const LivestreamTab = lazy(() => import('./components/LivestreamTab'));
 const LivestreamAiTab = lazy(() => import('./components/LivestreamAiTab'));
+const LiveClipFactoryTab = lazy(() => import('./components/LiveClipFactoryTab'));
 const LandingOrders = lazy(() => import('./components/LandingOrders'));
 const AIChat = lazy(() => import('./components/AIChat'));
 const CampRegistrationTab = lazy(() => import('./components/CampRegistrationTab'));
@@ -289,6 +290,7 @@ function AppMain({ user, onLogout, allowedViews }) {
                 // { view: 'shopee_livestream', icon: '📺', name: 'Livestream' }, // tạm ẩn — chờ setup tài khoản Creator cho Shopee Video/Live
                 { view: 'shopee_autoreply',     icon: '💬', name: 'Module 3: Trả lời đánh giá khách hàng tự động' },
                 { view: 'shopee_live_ai',       icon: '🤖', name: 'Module 4: Live AI' },
+                { view: 'shopee_clip_factory',  icon: '🏭', name: 'Module 5: Xưởng Clip' },
               ]},
               { key: 'tiktok', label: '🎵 TikTok', emoji: '🎵', items: [
                 { view: 'camp_registration', icon: '🎪', name: 'Đăng Kí Camp' },
@@ -472,6 +474,7 @@ function AppMain({ user, onLogout, allowedViews }) {
             <ComingSoonPlaceholder icon="🗄️" title="Database Shopee" description="Đang bảo trì — sẽ cập nhật sau" />
           )}
           {currentView === 'shopee_live_ai' && <LivestreamAiTab />}
+          {currentView === 'shopee_clip_factory' && <LiveClipFactoryTab />}
           </Suspense>
           </AppErrorBoundary>
 
