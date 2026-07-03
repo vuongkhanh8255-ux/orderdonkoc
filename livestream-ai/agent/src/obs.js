@@ -20,26 +20,45 @@ export class ObsController {
     this.obs = new OBSWebSocket();
     this.connected = false;
     this._onAnswerEnd = null;
+    this._wantReconnect = true;   // false khi chu dong disconnect (thoat agent)
+    this._reconnectTimer = null;
+
+    // Dang ky event 1 LAN o constructor (connect co the goi lai nhieu lan khi reconnect,
+    // dang ky trong connect se bi double-handler).
+    this.obs.on('MediaInputPlaybackEnded', (data) => {
+      if (data.inputName === this.cfg.answerSource && this._onAnswerEnd) {
+        this._onAnswerEnd();
+      }
+    });
+    this.obs.on('ConnectionClosed', () => {
+      if (!this.connected) return; // dang trong qua trinh reconnect, khoi spam
+      this.connected = false;
+      console.warn('[OBS] Mat ket noi — se tu noi lai moi 5s (OBS restart giua buoi live van song).');
+      this._scheduleReconnect();
+    });
   }
 
   async connect() {
     const { url, password } = this.cfg;
     await this.obs.connect(url, password || undefined);
     this.connected = true;
-
-    // Khi clip tra loi phat xong -> callback (de orchestrator quay ve idle)
-    this.obs.on('MediaInputPlaybackEnded', (data) => {
-      if (data.inputName === this.cfg.answerSource && this._onAnswerEnd) {
-        this._onAnswerEnd();
-      }
-    });
-
-    this.obs.on('ConnectionClosed', () => {
-      this.connected = false;
-      console.warn('[OBS] Mat ket noi.');
-    });
-
     console.log('[OBS] Da ket noi', url);
+  }
+
+  // Tu noi lai khi rot ket noi giua buoi live (vd OBS bi tat/mo lai)
+  _scheduleReconnect() {
+    if (!this._wantReconnect) return;
+    clearTimeout(this._reconnectTimer);
+    this._reconnectTimer = setTimeout(async () => {
+      try {
+        await this.connect();
+        console.log('[OBS] Da noi lai thanh cong -> ve IDLE.');
+        await this.goIdle().catch(() => {});
+      } catch (e) {
+        console.warn('[OBS] Noi lai chua duoc (' + e.message + ') — thu tiep sau 5s.');
+        this._scheduleReconnect();
+      }
+    }, 5000);
   }
 
   onAnswerEnded(fn) {
@@ -90,6 +109,8 @@ export class ObsController {
   }
 
   async disconnect() {
+    this._wantReconnect = false;
+    clearTimeout(this._reconnectTimer);
     try { await this.obs.disconnect(); } catch (e) {}
   }
 }

@@ -97,6 +97,10 @@ async function main() {
   const onComment = (c) => orch.onComment(c);
 
   if (MOCK) {
+    console.log('\n⚠️ ============================================');
+    console.log('⚠️  CHE DO MOCK — go tay de TEST, KHONG phai che do live!');
+    console.log('⚠️  Ngay live chay:  npm start   (khong co --mock)');
+    console.log('⚠️ ============================================\n');
     startMockSource(onComment);
   } else {
     startBridgeServer(config.bridge.port, onComment);

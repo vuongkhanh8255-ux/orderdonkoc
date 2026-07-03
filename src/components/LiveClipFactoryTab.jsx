@@ -2,7 +2,7 @@
 // Module 5 — Xưởng Clip: dây chuyền sản xuất clip FAQ cho Live AI.
 // Mỗi câu hỏi (intent) đi qua 4 bước: Kịch bản → Ảnh nhân vật → Video avatar → Clip cuối (đường dẫn OBS).
 // Phase 1: chạy chế độ nhập/upload tay (dùng tài khoản web Gemini/GPT/HeyGen). API ráp sau.
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 
 const ACCENT = '#ff6a2c';
@@ -22,6 +22,8 @@ export default function LiveClipFactoryTab() {
   const [openId, setOpenId] = useState(null);
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState('');   // `${id}:${step}` khi đang gọi API
+  const pollRef = useRef({});             // intent_id -> interval tự kiểm tra video
+  useEffect(() => () => { Object.values(pollRef.current).forEach(clearInterval); }, []); // dọn khi rời tab
 
   const load = async () => {
     setLoading(true);
@@ -65,6 +67,33 @@ export default function LiveClipFactoryTab() {
     if (!j.ok) { setStatus('❌ ' + (j.error || 'Lỗi tạo ảnh')); return; }
     setField(r.id, 'image_url', j.image_url); setStatus('✅ Đã tạo ảnh xong.' + (j.warn ? ' ⚠️ ' + j.warn : ''));
   };
+  // Nhận kết quả poll (dùng chung cho tự động + bấm tay)
+  const applyCheckResult = (id, j) => {
+    if (j.status === 'completed' && j.video_url) {
+      clearInterval(pollRef.current[id]); delete pollRef.current[id];
+      setField(id, 'video_url', j.video_url); setField(id, 'prod_status', 'xong');
+      setStatus('✅ Video xong!' + (j.stored ? ' (đã lưu link VĨNH VIỄN vào kho)' : '') + ' Tải về máy phát live rồi điền đường dẫn ở ④.' + (j.warn ? ' ⚠️ ' + j.warn : ''));
+      return true;
+    }
+    if (j.status === 'failed') {
+      clearInterval(pollRef.current[id]); delete pollRef.current[id];
+      setStatus('❌ HeyGen render lỗi: ' + (j.error || ''));
+      return true;
+    }
+    return false;
+  };
+  // Tự kiểm tra mỗi 15s sau khi gửi render (tối đa ~10 phút) — khỏi bấm 🔄 tay
+  const startAutoPoll = (id, video_id) => {
+    clearInterval(pollRef.current[id]);
+    let count = 0;
+    pollRef.current[id] = setInterval(async () => {
+      count++;
+      const j = await callApi('live_check_video', { intent_id: id, video_id });
+      if (applyCheckResult(id, j)) return;
+      if (count >= 40) { clearInterval(pollRef.current[id]); delete pollRef.current[id]; setStatus('⏳ Render lâu bất thường (>10 phút) — bấm "🔄 Kiểm tra video" tay sau nhé.'); }
+    }, 15000);
+  };
+
   const makeVideoAuto = async (r) => {
     if (!r.image_url) { setStatus('❌ Cần ảnh nhân vật trước (bước ①).'); return; }
     if (!r.script.trim()) { setStatus('❌ Cần kịch bản trước.'); return; }
@@ -73,16 +102,15 @@ export default function LiveClipFactoryTab() {
     setBusy('');
     if (!j.ok) { setStatus('❌ ' + (j.error || 'Lỗi tạo video')); return; }
     setField(r.id, 'video_id', j.video_id); if (j.voice_id) setField(r.id, 'voice_id', j.voice_id); setField(r.id, 'prod_status', 'lam');
-    setStatus('⏳ HeyGen đang render (vài phút). Bấm "Kiểm tra video" sau ~1-3 phút.' + (j.warn ? ' ⚠️ ' + j.warn : ''));
+    startAutoPoll(r.id, j.video_id);
+    setStatus('⏳ HeyGen đang render (vài phút) — hệ thống TỰ kiểm tra mỗi 15 giây, xong sẽ báo.' + (j.warn ? ' ⚠️ ' + j.warn : ''));
   };
   const checkVideoAuto = async (r) => {
     if (!r.video_id) { setStatus('❌ Chưa có video_id (bấm "Tạo video" trước).'); return; }
     setBusy(`${r.id}:chk`); setStatus('🔄 Đang kiểm tra HeyGen...');
     const j = await callApi('live_check_video', { intent_id: r.id, video_id: r.video_id });
     setBusy('');
-    if (j.status === 'completed' && j.video_url) { setField(r.id, 'video_url', j.video_url); setField(r.id, 'prod_status', 'xong'); setStatus('✅ Video xong! Tải về máy phát live rồi điền đường dẫn ở ④.'); }
-    else if (j.status === 'failed') setStatus('❌ HeyGen render lỗi: ' + (j.error || ''));
-    else setStatus(`⏳ Đang render (${j.status || 'processing'})... đợi thêm rồi bấm kiểm tra lại.`);
+    if (!applyCheckResult(r.id, j)) setStatus(`⏳ Đang render (${j.status || 'processing'})... đợi thêm rồi bấm kiểm tra lại.`);
   };
 
   const card = { background: '#fff', borderRadius: 14, border: '1px solid #eee', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', marginBottom: 14, overflow: 'hidden' };

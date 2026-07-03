@@ -58,13 +58,12 @@ Hệ thống có **2 nửa**:
 
 - **① Kịch bản:** viết tay hoặc AI. Đã seed sẵn 5 kịch bản mẫu.
 - **② Ảnh:** dùng **OpenAI gpt-image-1** (ChatGPT) — tạo người ảo cầm sản phẩm. Có nút **🪄 Tạo ảnh tự động**.
-- **③ Video:** dùng **HeyGen** — đưa ảnh + kịch bản → người ảo nói giọng Việt, nhép miệng. Có nút **🎬 Tạo video tự động** + **🔄 Kiểm tra**.
-- **④ Clip cuối — làm đúng 3 bước con này** (dễ điền nhầm chỗ):
+- **③ Video:** dùng **HeyGen** — đưa ảnh + kịch bản → người ảo nói giọng Việt, nhép miệng. Bấm **🎬 Tạo video tự động** → hệ thống **TỰ kiểm tra mỗi 15 giây**, xong tự báo (nút **🔄 Kiểm tra** vẫn có để bấm tay). Video xong được **tự tải về kho lưu trữ riêng → link VĨNH VIỄN** (không còn lo link HeyGen chết sau 7 ngày). Ảnh không đổi thì lần gen sau **tái dùng** nhân vật cũ (đỡ tốn quota HeyGen).
+- **④ Clip cuối — 2 bước con:**
   1. Ở **Module 5**: video xong → bấm **▶ Xem/tải video** → tải file mp4, lưu vào thư mục cố định trên **máy phát live**, VD `C:/live-clips/gia.mp4`.
-  2. Mở **Module 4: Live AI** → tìm đúng câu hỏi đó → sửa ô **clip** = `C:/live-clips/gia.mp4` → Lưu.
-  3. Agent tự đọc từ Supabase — **không cần** xuất faq.json lại.
+  2. Điền đường dẫn đó **ngay ô ④ của Module 5** rồi bấm **💾 Lưu bước này** — hệ thống tự đồng bộ sang Module 4 (mở Module 4 sửa ô clip cũng được, cùng 1 chỗ lưu). Agent tự đọc từ Supabase — **không cần** xuất faq.json lại.
 
-> ⚠️ **Link video HeyGen HẾT HẠN sau ~7 ngày.** Render xong phải **tải mp4 về máy NGAY trong tuần**. Nếu link chết: bấm 🔄 Kiểm tra lại để lấy link mới; link mới cũng chết thì phải render lại (tốn phí).
+> ℹ️ Link video ở ô ③ giờ là **link kho riêng (vĩnh viễn)**. Chỉ trường hợp hệ thống báo ⚠️ "dùng link tạm ~7 ngày" (video quá to >45MB hoặc lưu kho lỗi) thì mới phải tải gấp.
 
 ### 4b. Clip IDLE (vòng lặp — thứ người xem nhìn nhiều nhất)
 
@@ -168,7 +167,8 @@ Cần 1 phiên live thật (nhờ điện thoại comment vào). Mở console li
 | OBS chuyển scene ANSWER nhưng **khung ĐEN** | Đường dẫn clip sai / file không tồn tại trên máy đó | Kiểm ô clip ở Module 4 đúng đường dẫn thật (VD `C:/live-clips/gia.mp4`), file có thật. (Code đã tự set `is_local_file` — không phải tick tay nữa) |
 | Agent báo **không nối được OBS** | OBS chưa mở / WebSocket chưa bật / port-password lệch | Mở OBS trước → Tools → WebSocket Server Settings: bật, port 4455, tắt auth (password trong `agent/config.json` để rỗng) |
 | Agent log `Nguon: faq.json` thay vì Supabase | Mất mạng, hoặc máy đó thiếu file `.env` gốc koc-tool | Kiểm mạng; máy mới thì chạy skill setup-may-moi gắn `.env` |
-| Clip phát xong **không quay về IDLE** | Sự kiện kết thúc media không bắn (hiếm) | Ctrl+C chạy lại agent; kiểm source tên đúng `ANSWER_PLAYER` |
+| Clip phát xong **không quay về IDLE** | Sự kiện kết thúc media không bắn (hiếm) | Agent có **failsafe: quá 180s tự về IDLE**. Nếu vẫn kẹt: Ctrl+C chạy lại agent; kiểm source tên đúng `ANSWER_PLAYER` |
+| **OBS tắt/mở lại giữa buổi live** | Mất kết nối agent↔OBS | Agent **tự nối lại mỗi 5s** — chỉ cần mở OBS lên lại là tự phục hồi, không cần chạy lại agent |
 | Nút 🎬/🔄 báo lỗi "insufficient/quota/payment" | Ví OpenAI/HeyGen cạn | Nạp thêm ví bên tương ứng |
 | 🎬 báo "Không tải được ảnh nhân vật (HTTP 4xx)" | Bucket `live-assets` không public / link ảnh chết | Kiểm bucket Supabase Storage `live-assets` đang Public |
 | Xuất hiện lỗi lạ khác | — | Chụp màn hình lỗi (giờ hiện nguyên nhân thật) gửi Claude |
@@ -179,10 +179,10 @@ Cần 1 phiên live thật (nhờ điện thoại comment vào). Mở console li
 
 1. **Điều kiện đẩy OBS lên Shopee:** nghi cần **~10.000 follower** mới bật stream OBS/RTMP → **Bước 0 của kế hoạch là verify cái này**. Chưa đủ thì tool xong cũng không đẩy live thật được.
 2. **Luật Shopee:** CHO PHÉP livestream AI nhưng phải **xin duyệt + gắn nhãn "AI-generated"**. (TikTok thì CẤM → bản này CHỈ làm cho Shopee.)
-3. **Link video HeyGen hết hạn ~7 ngày** → tải mp4 về máy ngay sau khi render (mục 4a bước ④).
+3. ~~Link video HeyGen hết hạn ~7 ngày~~ → **ĐÃ XỬ TRONG CODE (3/7):** hệ thống tự tải mp4 về kho riêng khi render xong → link vĩnh viễn. Chỉ khi báo ⚠️ "link tạm" mới phải tải gấp.
 4. **Đọc comment là phần mong manh nhất:** không có API chính thức → đọc DOM/WebSocket, dễ gãy khi Shopee đổi giao diện. Test bằng **tài khoản phụ**.
 5. **DeepSeek KHÔNG tạo ảnh** (chỉ chữ) — ảnh phải OpenAI/Gemini.
-6. (Tối ưu sau) Mỗi lần 🎬 là upload ảnh thành talking-photo MỚI bên HeyGen — sau này nên tái dùng `talking_photo_id` cũ khi gen lại cùng nhân vật cho đỡ rác/quota.
+6. ~~(Tối ưu sau) tái dùng talking_photo_id~~ → **ĐÃ LÀM (3/7):** ảnh không đổi thì lần gen sau dùng lại nhân vật cũ, không upload mới.
 
 ---
 
@@ -191,8 +191,8 @@ Cần 1 phiên live thật (nhờ điện thoại comment vào). Mở console li
 **Bảng Supabase:**
 - `livestream_intents` (id, label, keywords[jsonb], clip, enabled, sort_order) — kho câu hỏi→clip. **Cột `clip` = đường dẫn file agent phát.**
 - `livestream_config` (cooldown_sec, min_confidence, max_queue) — logic agent.
-- `livestream_clip_prod` (intent_id, script, img_prompt, image_url, video_url, video_id, voice_id, status) — sản xuất clip (Module 5).
-- Storage bucket `live-assets` (**public**) — ảnh gen.
+- `livestream_clip_prod` (intent_id, script, img_prompt, image_url, video_url, video_id, voice_id, status, **talking_photo_id, tp_image_url**) — sản xuất clip (Module 5); 2 cột cuối để tái dùng nhân vật HeyGen.
+- Storage bucket `live-assets` (**public**) — ảnh gen (`img/…png`) + **mp4 lưu vĩnh viễn** (`vid/…mp4`, tự tải về khi HeyGen completed, guard 45MB).
 
 **File chính:**
 - Web: `src/components/LivestreamAiTab.jsx` (M4), `LiveClipFactoryTab.jsx` (M5), `LiveStudioTab.jsx` (Studio).
@@ -204,7 +204,7 @@ Cần 1 phiên live thật (nhờ điện thoại comment vào). Mở console li
 - OpenAI ảnh: `POST api.openai.com/v1/images/generations` (gpt-image-1, trả `b64_json`, không có url) · `/v1/images/edits` (multipart `image[]`, ghép sản phẩm thật, `input_fidelity=high`).
 - HeyGen (auth header `X-Api-Key`): upload `POST upload.heygen.com/v1/talking_photo` (raw bytes) → `data.talking_photo_id`; tạo `POST api.heygen.com/v2/video/generate` (dimension 720x1280 dọc) → `data.video_id`; poll `GET api.heygen.com/v1/video_status.get?video_id=` → `data.video_url` (signed, hết hạn ~7 ngày); giọng `GET /v2/voices` lọc `language==='Vietnamese'`.
 
-**OBS agent:** 2 scene `IDLE`/`ANSWER` + media source `ANSWER_PLAYER` (không Loop); WebSocket bật (tắt auth); `is_local_file:true` bắt buộc khi SetInputSettings để phát file local (không thì khung đen).
+**OBS agent:** 2 scene `IDLE`/`ANSWER` + media source `ANSWER_PLAYER` (không Loop); WebSocket bật (tắt auth); `is_local_file:true` bắt buộc khi SetInputSettings để phát file local (không thì khung đen). **Failsafe:** clip quá `failsafeSec` (mặc định 180s) không báo xong → tự về IDLE. **Auto-reconnect:** rớt kết nối OBS → tự nối lại mỗi 5s, nối được thì về IDLE.
 
 **Chạy agent:** thật = `npm start` · test logic = `npm run mock -- --dry` (không cần OBS) · test với OBS = `node src/index.js --mock`. Agent đọc `.env` gốc koc-tool (`../../.env`) lấy Supabase URL+anon key; không có thì fallback `faq.json`.
 

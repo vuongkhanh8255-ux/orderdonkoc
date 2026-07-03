@@ -16,6 +16,10 @@ export class Orchestrator {
     this.cooldownSec = logic.cooldownSec ?? 45;
     this.minConfidence = logic.minConfidence ?? 1;
     this.maxQueue = logic.maxQueue ?? 3;
+    // FAILSAFE: neu su kien "clip xong" khong bao gio toi (OBS truc trac) thi sau failsafeSec
+    // tu ve IDLE — khong bi ket scene ANSWER ca buoi live. Clip FAQ 10-30s nen 180s la du rong.
+    this.failsafeMs = (logic.failsafeSec ?? 180) * 1000;
+    this._fsTimer = null;
 
     this.answering = false;
     this.queue = [];
@@ -66,18 +70,33 @@ export class Orchestrator {
   async _play(intent) {
     this.answering = true;
     this.lastPlayedAt.set(intent.id, Date.now());
+    this._armFailsafe();
     try {
       console.log(`▶ PHAT: ${intent.label} -> ${intent.clip}`);
       await this.obs.playAnswer(intent.clip);
     } catch (e) {
       console.error('[OBS] Loi phat clip:', e.message);
+      clearTimeout(this._fsTimer);
       this.answering = false;
       this._next();
     }
-    // answering se duoc mo khoa boi su kien MediaInputPlaybackEnded
+    // answering se duoc mo khoa boi su kien MediaInputPlaybackEnded (hoac failsafe)
+  }
+
+  _armFailsafe() {
+    clearTimeout(this._fsTimer);
+    this._fsTimer = setTimeout(() => {
+      if (this.answering) {
+        console.warn(`[Failsafe] Clip qua ${this.failsafeMs / 1000}s chua bao xong -> tu ve IDLE`);
+        this._onAnswerEnded();
+      }
+    }, this.failsafeMs);
   }
 
   async _onAnswerEnded() {
+    // Guard: su kien den muon (sau khi failsafe da xu ly) thi bo qua, khong goIdle/next lan 2
+    if (!this.answering) return;
+    clearTimeout(this._fsTimer);
     console.log('✔ Clip tra loi xong -> ve IDLE');
     try { await this.obs.goIdle(); } catch (e) {}
     this.answering = false;
