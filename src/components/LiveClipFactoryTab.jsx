@@ -1,7 +1,7 @@
 // src/components/LiveClipFactoryTab.jsx
 // Module 5 — Xưởng Clip: dây chuyền sản xuất clip FAQ cho Live AI.
 // Mỗi câu hỏi (intent) đi qua 4 bước: Kịch bản → Ảnh nhân vật → Video avatar → Clip cuối (đường dẫn OBS).
-// Phase 1: chạy chế độ nhập/upload tay (dùng tài khoản web Gemini/GPT/HeyGen). API ráp sau.
+// UI theo khối BƯỚC đánh số + chấm tiến độ ①②③④ trên từng thẻ — nhìn là biết câu nào xong tới đâu.
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 
@@ -15,6 +15,26 @@ const callApi = async (action, payload) => {
     try { return JSON.parse(t); } catch { return { ok: false, error: t.slice(0, 200) || ('HTTP ' + r.status) }; }
   } catch (e) { return { ok: false, error: 'Lỗi mạng: ' + e.message }; }
 };
+
+// ── design system dùng chung trong tab ──
+const inp = { padding: '12px 14px', borderRadius: 10, border: '1.5px solid #e2e8f0', fontSize: '0.95rem', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' };
+const btn = (bg) => ({ padding: '10px 18px', borderRadius: 10, border: 'none', background: bg, color: '#fff', fontWeight: 800, fontSize: '0.88rem', cursor: 'pointer', fontFamily: 'inherit' });
+const hintTxt = { fontSize: '0.8rem', color: '#94a3b8', lineHeight: 1.5 };
+
+// Khối 1 bước: số tròn + tiêu đề to + hướng dẫn 1 dòng + nội dung
+function StepBlock({ n, title, hint, color = ACCENT, children }) {
+  return (
+    <div style={{ marginTop: 14, border: '1.5px solid #f1f5f9', borderLeft: `4px solid ${color}`, borderRadius: 12, padding: '14px 16px', background: '#fff' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ width: 27, height: 27, borderRadius: '50%', background: color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '0.88rem', flex: 'none' }}>{n}</span>
+        <span style={{ fontWeight: 900, fontSize: '1.02rem', color: '#0f172a' }}>{title}</span>
+      </div>
+      {hint && <div style={{ ...hintTxt, margin: '5px 0 10px 37px' }}>{hint}</div>}
+      {!hint && <div style={{ height: 10 }} />}
+      {children}
+    </div>
+  );
+}
 
 export default function LiveClipFactoryTab() {
   const [rows, setRows] = useState([]);   // merge intents + prod
@@ -140,7 +160,7 @@ export default function LiveClipFactoryTab() {
   };
 
   const makeVideoAuto = async (r) => {
-    if (!r.image_url) { setStatus('❌ Cần ảnh nhân vật trước (bước ①).'); return; }
+    if (!r.image_url) { setStatus('❌ Cần ảnh nhân vật trước (bước ②).'); return; }
     if (!r.script.trim()) { setStatus('❌ Cần kịch bản trước.'); return; }
     setBusy(`${r.id}:vid`); setStatus('🎬 Đang gửi HeyGen tạo video...');
     const j = await callApi('live_make_video', { intent_id: r.id, image_url: r.image_url, script: r.script, voice_id: r.voice_id || undefined });
@@ -158,112 +178,143 @@ export default function LiveClipFactoryTab() {
     if (!applyCheckResult(r.id, j, r.label)) setStatus(j.ok === false && j.error ? '❌ ' + j.error : `⏳ Đang render (${j.status || 'processing'})... đợi thêm rồi bấm kiểm tra lại.`);
   };
 
-  const card = { background: '#fff', borderRadius: 14, border: '1px solid #eee', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', marginBottom: 14, overflow: 'hidden' };
-  const inp = { padding: '9px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.86rem', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' };
-  const lbl = { fontSize: '0.76rem', fontWeight: 800, color: ACCENT, marginBottom: 5, display: 'block', textTransform: 'uppercase', letterSpacing: '0.03em' };
-  const btn = (bg) => ({ padding: '7px 14px', borderRadius: 8, border: 'none', background: bg, color: '#fff', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' });
-
+  const card = { background: '#fff', borderRadius: 16, border: '1px solid #eef0f3', boxShadow: '0 2px 8px rgba(15,23,42,0.06)', marginBottom: 14, overflow: 'hidden' };
   const doneCount = rows.filter(r => r.prod_status === 'xong').length;
+  const pct = rows.length ? Math.round(doneCount / rows.length * 100) : 0;
 
   return (
-    <div style={{ padding: 20, maxWidth: 1000, margin: '0 auto', fontFamily: 'Outfit, sans-serif' }}>
-      <h1 className="page-header">🏭 Xưởng Clip — sản xuất video trả lời</h1>
-      <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, padding: '14px 18px', marginBottom: 18, fontSize: '0.86rem', color: '#7c2d12', lineHeight: 1.6 }}>
-        <b>Dây chuyền 4 bước cho mỗi câu hỏi:</b><br />
-        <b>1. Kịch bản</b> (avatar sẽ đọc) → <b>2. Ảnh nhân vật</b> cầm sản phẩm (copy prompt sang Gemini/GPT gen) → <b>3. Video avatar</b> (đưa ảnh + kịch bản qua HeyGen) → <b>4. Clip cuối</b> tải về máy phát live, điền <b>đường dẫn local</b> để OBS phát.<br />
-        <span style={{ color: '#9a3412', fontWeight: 700 }}>⚠️ Ô "Clip cuối" phải là đường dẫn FILE TRÊN MÁY PHÁT LIVE</span> (VD <code>C:/live-clips/gia.mp4</code>) — chính là clip agent phát ở Module 4.
+    <div style={{ padding: '8px 4px 40px', maxWidth: 1100, margin: '0 auto', fontFamily: 'Outfit, sans-serif' }}>
+      {/* Tiêu đề + mô tả to rõ */}
+      <div style={{ marginBottom: 16 }}>
+        <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 900, color: '#1e293b' }}>🏭 Bước 2 — Xưởng Clip</h2>
+        <p style={{ margin: '6px 0 0', color: '#475569', fontSize: '0.98rem', lineHeight: 1.65 }}>
+          Mỗi câu hỏi làm 1 video trả lời, đi qua 4 bước. <b>Cách nhanh nhất:</b> ghi đại ý → bấm ✨ AI viết → up ảnh sản phẩm → 🪄 tạo ảnh → 🎬 tạo video → tải về, điền đường dẫn ở ④.
+        </p>
       </div>
 
-      <div style={{ marginBottom: 12, fontSize: '0.9rem', color: '#475569', fontWeight: 600 }}>
-        Tiến độ: <b style={{ color: ACCENT }}>{doneCount}/{rows.length}</b> clip xong
+      {/* Dải tiến độ tổng */}
+      <div style={{ ...card, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: '1 1 420px', alignItems: 'center' }}>
+          {['① Kịch bản', '② Ảnh nhân vật', '③ Video avatar', '④ Clip cuối'].map((t, i) => (
+            <React.Fragment key={t}>
+              <span style={{ background: '#fff4ec', color: '#c2410c', borderRadius: 20, padding: '6px 14px', fontSize: '0.85rem', fontWeight: 800 }}>{t}</span>
+              {i < 3 && <span style={{ color: '#cbd5e1', fontWeight: 900 }}>→</span>}
+            </React.Fragment>
+          ))}
+        </div>
+        <div style={{ flex: '1 1 220px', minWidth: 200 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 800, color: '#475569', marginBottom: 5 }}>
+            <span>Tiến độ</span><span style={{ color: ACCENT }}>{doneCount}/{rows.length} clip xong</span>
+          </div>
+          <div style={{ height: 10, background: '#f1f5f9', borderRadius: 6, overflow: 'hidden' }}>
+            <div style={{ width: pct + '%', height: '100%', background: `linear-gradient(90deg,#fb923c,${ACCENT})`, borderRadius: 6, transition: 'width .4s' }} />
+          </div>
+        </div>
       </div>
 
-      {loading ? <div style={{ color: '#94a3b8' }}>⏳ Đang tải...</div> : rows.map(r => {
+      {loading ? <div style={{ color: '#94a3b8', padding: 20 }}>⏳ Đang tải...</div> : rows.map(r => {
         const st = STATUS[r.prod_status] || STATUS.todo;
         const open = openId === r.id;
+        // 4 chấm bước: xanh khi bước đó có dữ liệu
+        const dots = [
+          { t: '①', done: !!r.script.trim(), tip: 'Kịch bản' },
+          { t: '②', done: !!r.image_url, tip: 'Ảnh nhân vật' },
+          { t: '③', done: !!r.video_url, tip: 'Video' },
+          { t: '④', done: !!String(r.clip || '').trim(), tip: 'Clip cuối' },
+        ];
         return (
           <div key={r.id} style={card}>
-            <div onClick={() => setOpenId(open ? null : r.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 18px', cursor: 'pointer', background: open ? '#fffaf6' : '#fff' }}>
-              <span style={{ fontSize: '1.1rem' }}>{open ? '▼' : '▶'}</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>{r.label}</div>
-                <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{r.clip ? `🎬 ${r.clip}` : '⚠️ chưa có clip cuối'}</div>
+            <div onClick={() => setOpenId(open ? null : r.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '15px 20px', cursor: 'pointer', background: open ? '#fffaf6' : '#fff', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '1rem', color: '#94a3b8' }}>{open ? '▼' : '▶'}</span>
+              <div style={{ flex: '1 1 200px', minWidth: 160 }}>
+                <div style={{ fontWeight: 900, color: '#0f172a', fontSize: '1.05rem' }}>{r.label}</div>
+                <div style={{ fontSize: '0.74rem', color: '#94a3b8', wordBreak: 'break-all' }}>{r.clip ? `🎬 ${r.clip}` : '⚠️ chưa có đường dẫn clip cuối'}</div>
               </div>
-              <span style={{ background: st.bg, color: st.c, borderRadius: 20, padding: '3px 12px', fontSize: '0.76rem', fontWeight: 800 }}>{st.t}</span>
+              <div style={{ display: 'flex', gap: 5, flex: 'none' }} title="4 bước: xanh = đã có dữ liệu">
+                {dots.map(d => (
+                  <span key={d.t} title={`${d.t} ${d.tip}: ${d.done ? 'đã có ✓' : 'chưa có'}`}
+                    style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.78rem', fontWeight: 900, background: d.done ? '#dcfce7' : '#f1f5f9', color: d.done ? '#166534' : '#cbd5e1', border: `1.5px solid ${d.done ? '#86efac' : '#e2e8f0'}` }}>
+                    {d.t}
+                  </span>
+                ))}
+              </div>
+              <span style={{ background: st.bg, color: st.c, borderRadius: 20, padding: '5px 14px', fontSize: '0.82rem', fontWeight: 800, flex: 'none' }}>{st.t}</span>
             </div>
 
             {open && (
-              <div style={{ padding: '4px 18px 18px', borderTop: '1px solid #f1f5f9' }}>
-                {/* B0 — AI viết giúp: gõ yêu cầu thô, AI đề xuất kịch bản + prompt ảnh */}
-                <div style={{ marginTop: 14, background: '#faf5ff', border: '1.5px dashed #d8b4fe', borderRadius: 10, padding: '12px 14px' }}>
-                  <label style={{ ...lbl, color: '#7c3aed' }}>✨ Lười gõ? Ghi đại ý — AI viết kịch bản + prompt ảnh cho</label>
-                  <textarea style={{ ...inp, minHeight: 48, resize: 'vertical' }} placeholder='VD: "xịt thơm Bodymiss 99k, mua 2 giảm 50%, freeship, tông vui tươi trẻ trung"'
+              <div style={{ padding: '4px 20px 20px', borderTop: '1px solid #f1f5f9', background: '#fcfcfd' }}>
+                {/* ✨ AI viết giúp — con đường nhanh nhất */}
+                <div style={{ marginTop: 14, background: '#faf5ff', border: '1.5px dashed #d8b4fe', borderRadius: 12, padding: '14px 16px' }}>
+                  <div style={{ fontWeight: 900, fontSize: '0.98rem', color: '#7c3aed', marginBottom: 4 }}>✨ Làm nhanh: ghi đại ý — AI viết kịch bản + prompt ảnh cho</div>
+                  <div style={{ ...hintTxt, marginBottom: 8 }}>Ghi sản phẩm + giá + ưu đãi + tông giọng. AI sẽ điền vào ô ① và ② bên dưới, mày đọc lại rồi sửa.</div>
+                  <textarea style={{ ...inp, minHeight: 52, resize: 'vertical' }} placeholder='VD: "xịt thơm Bodymiss 99k, mua 2 giảm 50%, freeship, tông vui tươi trẻ trung"'
                     value={r.idea || ''} onChange={e => setField(r.id, 'idea', e.target.value)} />
                   <button onClick={() => suggestAuto(r)} disabled={busy === `${r.id}:sug`}
-                    style={{ ...btn('#7c3aed'), marginTop: 6, padding: '6px 14px', fontSize: '0.78rem', opacity: busy === `${r.id}:sug` ? 0.6 : 1 }}>
+                    style={{ ...btn('#7c3aed'), marginTop: 8, opacity: busy === `${r.id}:sug` ? 0.6 : 1 }}>
                     {busy === `${r.id}:sug` ? '⏳ AI đang viết...' : '✨ AI viết giúp (điền vào ① và ②)'}
                   </button>
                 </div>
-                {/* B1 kịch bản */}
-                <div style={{ marginTop: 14 }}>
-                  <label style={lbl}>① Kịch bản (avatar đọc)</label>
-                  <textarea style={{ ...inp, minHeight: 70, resize: 'vertical' }} value={r.script} onChange={e => setField(r.id, 'script', e.target.value)} />
-                  <button onClick={() => copyTxt(r.script)} style={{ ...btn('#64748b'), marginTop: 6, padding: '5px 12px', fontSize: '0.75rem' }}>📋 Copy kịch bản</button>
-                </div>
-                {/* B2 prompt ảnh */}
-                <div style={{ marginTop: 14 }}>
-                  <label style={lbl}>② Prompt tạo ảnh nhân vật (copy sang Gemini/GPT)</label>
-                  <textarea style={{ ...inp, minHeight: 60, resize: 'vertical' }} value={r.img_prompt} onChange={e => setField(r.id, 'img_prompt', e.target.value)} />
-                  <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-                    <button onClick={() => copyTxt(r.img_prompt)} style={{ ...btn('#64748b'), padding: '5px 12px', fontSize: '0.75rem' }}>📋 Copy prompt (làm tay)</button>
-                    <button onClick={() => genImageAuto(r)} disabled={busy === `${r.id}:img`} style={{ ...btn('#7c3aed'), padding: '5px 12px', fontSize: '0.75rem', opacity: busy === `${r.id}:img` ? 0.6 : 1 }}>{busy === `${r.id}:img` ? '⏳ đang tạo...' : '🪄 Tạo ảnh tự động (OpenAI)'}</button>
-                  </div>
-                </div>
-                {/* B2a ảnh sản phẩm thật (không bắt buộc) — có thì OpenAI GHÉP đúng SP vào tay nhân vật */}
-                <div style={{ marginTop: 14, display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                  <div style={{ flex: '1 1 320px' }}>
-                    <label style={lbl}>Ảnh sản phẩm thật (không bắt buộc)</label>
-                    <input style={inp} placeholder="https://... (dán link, hoặc bấm Up ảnh)" value={r.product_image_url || ''} onChange={e => setField(r.id, 'product_image_url', e.target.value)} />
-                    <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <label style={{ ...btn('#0891b2'), padding: '5px 12px', fontSize: '0.75rem', display: 'inline-block', cursor: busy === `${r.id}:pimg` ? 'wait' : 'pointer' }}>
+
+                {/* ① Kịch bản */}
+                <StepBlock n="1" title="Kịch bản — avatar đọc nguyên văn" hint="60-120 chữ (~20-40 giây). Viết như đang nói chuyện với người xem.">
+                  <textarea style={{ ...inp, minHeight: 76, resize: 'vertical' }} value={r.script} onChange={e => setField(r.id, 'script', e.target.value)} />
+                  <button onClick={() => copyTxt(r.script)} style={{ ...btn('#64748b'), marginTop: 8, padding: '7px 14px', fontSize: '0.8rem' }}>📋 Copy kịch bản</button>
+                </StepBlock>
+
+                {/* ② Ảnh nhân vật (gồm ảnh SP thật + prompt + kết quả) */}
+                <StepBlock n="2" title="Ảnh nhân vật cầm sản phẩm" hint="Up ảnh sản phẩm thật (nếu có) → mô tả nhân vật → bấm 🪄. Không có key thì copy prompt qua ChatGPT/Gemini gen tay rồi dán link vào.">
+                  {/* 2a ảnh SP thật */}
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 12 }}>
+                    <div style={{ flex: '1 1 300px' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#334155', marginBottom: 6 }}>📦 Ảnh sản phẩm thật <span style={{ fontWeight: 500, color: '#94a3b8' }}>(không bắt buộc — có thì ghép ĐÚNG sản phẩm vào tay nhân vật)</span></div>
+                      <input style={inp} placeholder="https://... (dán link, hoặc bấm Up ảnh)" value={r.product_image_url || ''} onChange={e => setField(r.id, 'product_image_url', e.target.value)} />
+                      <label style={{ ...btn('#0891b2'), padding: '7px 14px', fontSize: '0.8rem', display: 'inline-block', marginTop: 8, cursor: busy === `${r.id}:pimg` ? 'wait' : 'pointer' }}>
                         {busy === `${r.id}:pimg` ? '⏳ đang up...' : '⬆️ Up ảnh sản phẩm'}
                         <input type="file" accept="image/*" disabled={busy === `${r.id}:pimg`} style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) uploadProductImage(r, f); }} />
                       </label>
-                      <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Có ảnh này → 🪄 tạo ảnh sẽ ghép ĐÚNG sản phẩm thật vào tay nhân vật (không vẽ đại).</span>
                     </div>
+                    {r.product_image_url && <img src={r.product_image_url} alt="" style={{ height: 88, borderRadius: 10, border: '1px solid #e5e7eb', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} />}
                   </div>
-                  {r.product_image_url && <img src={r.product_image_url} alt="" style={{ height: 90, borderRadius: 8, border: '1px solid #e5e7eb', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} />}
-                </div>
-                {/* B2b link ảnh */}
-                <div style={{ marginTop: 14, display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                  <div style={{ flex: '1 1 320px' }}>
-                    <label style={lbl}>Link ảnh nhân vật đã gen (dán vào)</label>
-                    <input style={inp} placeholder="https://... (ảnh từ Gemini/GPT)" value={r.image_url} onChange={e => setField(r.id, 'image_url', e.target.value)} />
+                  {/* 2b prompt */}
+                  <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#334155', marginBottom: 6 }}>🎨 Mô tả nhân vật (prompt)</div>
+                  <textarea style={{ ...inp, minHeight: 64, resize: 'vertical' }} value={r.img_prompt} onChange={e => setField(r.id, 'img_prompt', e.target.value)} />
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                    <button onClick={() => genImageAuto(r)} disabled={busy === `${r.id}:img`} style={{ ...btn('#7c3aed'), opacity: busy === `${r.id}:img` ? 0.6 : 1 }}>{busy === `${r.id}:img` ? '⏳ đang tạo ảnh...' : '🪄 Tạo ảnh tự động (OpenAI)'}</button>
+                    <button onClick={() => copyTxt(r.img_prompt)} style={{ ...btn('#64748b'), padding: '10px 14px', fontSize: '0.8rem' }}>📋 Copy prompt (làm tay)</button>
                   </div>
-                  {r.image_url && <img src={r.image_url} alt="" style={{ height: 90, borderRadius: 8, border: '1px solid #e5e7eb', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} />}
-                </div>
-                {/* B3 video */}
-                <div style={{ marginTop: 14 }}>
-                  <label style={lbl}>③ Video avatar (HeyGen)</label>
-                  <input style={inp} placeholder="https://... (dán link, hoặc bấm Tạo video tự động)" value={r.video_url} onChange={e => setField(r.id, 'video_url', e.target.value)} />
-                  <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <button onClick={() => makeVideoAuto(r)} disabled={busy === `${r.id}:vid`} style={{ ...btn('#7c3aed'), padding: '5px 12px', fontSize: '0.75rem', opacity: busy === `${r.id}:vid` ? 0.6 : 1 }}>{busy === `${r.id}:vid` ? '⏳ đang gửi...' : '🎬 Tạo video tự động (HeyGen)'}</button>
-                    <button onClick={() => checkVideoAuto(r)} disabled={busy === `${r.id}:chk`} style={{ ...btn('#0891b2'), padding: '5px 12px', fontSize: '0.75rem', opacity: busy === `${r.id}:chk` ? 0.6 : 1 }}>{busy === `${r.id}:chk` ? '⏳...' : '🔄 Kiểm tra video'}</button>
-                    {r.video_id && <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>id: {r.video_id.slice(0, 10)}…</span>}
-                    {r.video_url && <a href={r.video_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: ACCENT, fontWeight: 700 }}>▶ Xem/tải video</a>}
+                  {/* 2c kết quả ảnh */}
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap', marginTop: 12 }}>
+                    <div style={{ flex: '1 1 300px' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#334155', marginBottom: 6 }}>🖼️ Ảnh nhân vật (kết quả — tự điền khi bấm 🪄, hoặc dán link ảnh gen tay)</div>
+                      <input style={inp} placeholder="https://..." value={r.image_url} onChange={e => setField(r.id, 'image_url', e.target.value)} />
+                    </div>
+                    {r.image_url && <img src={r.image_url} alt="" style={{ height: 88, borderRadius: 10, border: '1px solid #e5e7eb', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} />}
                   </div>
-                </div>
-                {/* B4 clip cuoi */}
-                <div style={{ marginTop: 14 }}>
-                  <label style={lbl}>④ Clip cuối — ĐƯỜNG DẪN FILE trên máy phát live (OBS phát)</label>
-                  <input style={{ ...inp, borderColor: r.clip ? '#86efac' : '#fecaca' }} placeholder="C:/live-clips/gia.mp4" value={r.clip || ''} onChange={e => setField(r.id, 'clip', e.target.value)} />
-                </div>
-                {/* trạng thái + lưu */}
+                </StepBlock>
+
+                {/* ③ Video */}
+                <StepBlock n="3" title="Video avatar nói (HeyGen)" hint="Bấm 🎬 — hệ thống tự kiểm tra mỗi 15 giây, render xong tự báo + lưu link vĩnh viễn vào kho.">
+                  <input style={inp} placeholder="https://... (tự điền khi render xong, hoặc dán link video có sẵn)" value={r.video_url} onChange={e => setField(r.id, 'video_url', e.target.value)} />
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <button onClick={() => makeVideoAuto(r)} disabled={busy === `${r.id}:vid`} style={{ ...btn('#7c3aed'), opacity: busy === `${r.id}:vid` ? 0.6 : 1 }}>{busy === `${r.id}:vid` ? '⏳ đang gửi...' : '🎬 Tạo video tự động (HeyGen)'}</button>
+                    <button onClick={() => checkVideoAuto(r)} disabled={busy === `${r.id}:chk`} style={{ ...btn('#0891b2'), padding: '10px 14px', fontSize: '0.8rem', opacity: busy === `${r.id}:chk` ? 0.6 : 1 }}>{busy === `${r.id}:chk` ? '⏳...' : '🔄 Kiểm tra video'}</button>
+                    {r.video_id && <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>id: {r.video_id.slice(0, 10)}…</span>}
+                    {r.video_url && <a href={r.video_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.88rem', color: ACCENT, fontWeight: 800 }}>▶ Xem / tải video</a>}
+                  </div>
+                </StepBlock>
+
+                {/* ④ Clip cuối */}
+                <StepBlock n="4" title="Clip cuối — đường dẫn file trên MÁY PHÁT LIVE" color={r.clip ? '#16a34a' : '#dc2626'}
+                  hint="Tải video ở ③ về máy chạy OBS, lưu vào thư mục cố định, rồi điền đường dẫn file vào đây. Đây chính là clip máy sẽ phát khi có người hỏi.">
+                  <input style={{ ...inp, borderColor: r.clip ? '#86efac' : '#fecaca', fontWeight: 700 }} placeholder="C:/live-clips/gia.mp4" value={r.clip || ''} onChange={e => setField(r.id, 'clip', e.target.value)} />
+                </StepBlock>
+
+                {/* lưu */}
                 <div style={{ marginTop: 16, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <select value={r.prod_status} onChange={e => setField(r.id, 'prod_status', e.target.value)} style={{ ...inp, width: 'auto', padding: '7px 10px' }}>
+                  <button onClick={() => saveRow(r)} style={{ ...btn(ACCENT), padding: '13px 28px', fontSize: '1rem' }}>💾 Lưu bước này</button>
+                  <select value={r.prod_status} onChange={e => setField(r.id, 'prod_status', e.target.value)} style={{ ...inp, width: 'auto', padding: '10px 12px' }}>
                     <option value="todo">Chưa làm</option><option value="lam">Đang làm</option><option value="xong">Xong ✓</option>
                   </select>
-                  <button onClick={() => saveRow(r)} style={btn(ACCENT)}>💾 Lưu bước này</button>
                 </div>
               </div>
             )}
@@ -271,8 +322,8 @@ export default function LiveClipFactoryTab() {
         );
       })}
 
-      {rows.length === 0 && !loading && <div style={{ color: '#94a3b8' }}>Chưa có câu hỏi nào — vào <b>Module 4: Live AI</b> thêm câu hỏi trước.</div>}
-      {status && <div style={{ position: 'sticky', bottom: 12, marginTop: 16, padding: '10px 16px', borderRadius: 10, fontWeight: 600, fontSize: '0.86rem', background: status.startsWith('❌') ? '#fef2f2' : '#f0fdf4', color: status.startsWith('❌') ? '#dc2626' : '#166534', border: `1px solid ${status.startsWith('❌') ? '#fecaca' : '#bbf7d0'}` }}>{status}</div>}
+      {rows.length === 0 && !loading && <div style={{ color: '#94a3b8', padding: 20, fontSize: '0.95rem' }}>Chưa có câu hỏi nào — qua tab <b>① Kho câu hỏi</b> thêm trước.</div>}
+      {status && <div style={{ position: 'sticky', bottom: 12, marginTop: 16, padding: '12px 18px', borderRadius: 12, fontWeight: 700, fontSize: '0.95rem', background: status.startsWith('❌') ? '#fef2f2' : '#f0fdf4', color: status.startsWith('❌') ? '#dc2626' : '#166534', border: `1.5px solid ${status.startsWith('❌') ? '#fecaca' : '#bbf7d0'}`, boxShadow: '0 6px 20px rgba(15,23,42,0.12)' }}>{status}</div>}
     </div>
   );
 }

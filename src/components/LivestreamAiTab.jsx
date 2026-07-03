@@ -1,6 +1,7 @@
 // src/components/LivestreamAiTab.jsx
 // Module 4 — Live AI: quản lý kho câu hỏi (intent) → clip trả lời cho Desktop Agent OBS.
 // Thay việc sửa faq.json tay: CRUD intent trên Supabase, test nhận diện ngay trên web, xuất faq.json.
+// UI thiết kế theo BƯỚC (A thêm → B danh sách → C test) — chữ to, mỗi khu có hướng dẫn ngay tại chỗ.
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 
@@ -40,12 +41,34 @@ function matchIntent(text, intents, minScore = 1) {
 const ACCENT = '#ff6a2c';
 const slugify = (s) => removeDiacritics(s).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 30) || ('q' + Date.now().toString(36));
 
+// ── design system dùng chung trong tab ──
+const card = { background: '#fff', borderRadius: 16, border: '1px solid #eef0f3', boxShadow: '0 2px 8px rgba(15,23,42,0.06)', marginBottom: 18, overflow: 'hidden' };
+const inp = { padding: '12px 14px', borderRadius: 10, border: '1.5px solid #e2e8f0', fontSize: '0.95rem', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' };
+const lbl = { fontSize: '0.85rem', fontWeight: 800, color: '#334155', marginBottom: 6, display: 'block' };
+const hintTxt = { fontSize: '0.8rem', color: '#94a3b8', marginTop: 5, lineHeight: 1.5 };
+const btn = (bg) => ({ padding: '12px 24px', borderRadius: 10, border: 'none', background: bg, color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: 'inherit' });
+
+// Header khu vực: chữ cái bước + tiêu đề to + hướng dẫn 1 dòng
+function SecHead({ badge, icon, title, hint, right }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px', borderBottom: '1px solid #f1f5f9', background: '#fffdfb', flexWrap: 'wrap' }}>
+      <span style={{ width: 40, height: 40, borderRadius: 12, background: '#fff4ec', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem', flex: 'none' }}>{icon}</span>
+      <div style={{ flex: 1, minWidth: 220 }}>
+        <div style={{ fontWeight: 900, fontSize: '1.12rem', color: '#0f172a' }}>{badge && <span style={{ color: ACCENT, marginRight: 8 }}>{badge}</span>}{title}</div>
+        {hint && <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 2, lineHeight: 1.5 }}>{hint}</div>}
+      </div>
+      {right}
+    </div>
+  );
+}
+
 export default function LivestreamAiTab() {
   const [intents, setIntents] = useState([]);
   const [config, setConfig] = useState({ cooldown_sec: 45, min_confidence: 1, max_queue: 3 });
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('');
   const [testText, setTestText] = useState('');
+  const [showAdv, setShowAdv] = useState(false); // cài đặt nâng cao — gấp lại cho đỡ rối
   // form thêm/sửa
   const empty = { id: '', label: '', keywords: '', clip: '', enabled: true };
   const [form, setForm] = useState(empty);
@@ -107,7 +130,7 @@ export default function LivestreamAiTab() {
     setStatus(error ? '❌ Lỗi lưu cài đặt: ' + error.message : '✅ Đã lưu cài đặt chung.');
   };
 
-  // Xuất faq.json đúng format agent đọc
+  // Xuất faq.json đúng format agent đọc (dự phòng — agent giờ đọc thẳng Supabase)
   const exportFaq = () => {
     const data = {
       _note: 'Xuất từ Live AI dashboard (koc-tool). Đặt file này vào livestream-ai/agent/faq.json.',
@@ -120,98 +143,137 @@ export default function LivestreamAiTab() {
     setStatus('📥 Đã xuất faq.json — đặt vào thư mục agent, chạy lại agent là dùng.');
   };
 
-  const card = { background: '#fff', borderRadius: 16, border: '1px solid #eee', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.08)', padding: 22, marginBottom: 20 };
-  const inp = { padding: '9px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.88rem', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' };
-  const lbl = { fontSize: '0.78rem', fontWeight: 700, color: '#64748b', marginBottom: 4, display: 'block' };
-  const btn = (bg) => ({ padding: '9px 18px', borderRadius: 8, border: 'none', background: bg, color: '#fff', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' });
-  const th = { padding: '10px 12px', textAlign: 'left', borderBottom: '2px solid #eee', color: ACCENT, fontSize: '0.74rem', fontWeight: 700, textTransform: 'uppercase', background: '#f9fafb' };
-  const td = { padding: '10px 12px', borderBottom: '1px solid #f1f5f9', fontSize: '0.85rem', color: '#374151', verticalAlign: 'top' };
-
   return (
-    <div style={{ padding: 20, maxWidth: 1100, margin: '0 auto', fontFamily: 'Outfit, sans-serif' }}>
-      <h1 className="page-header">🤖 Live AI — Kho câu hỏi & clip trả lời</h1>
-      <p style={{ fontSize: '0.88rem', color: '#666', margin: '0 0 18px', lineHeight: 1.6 }}>
-        Quản lý danh sách <b>câu hỏi thường gặp → clip trả lời</b> để Desktop Agent tự phát clip khi có người comment trong livestream Shopee.
-        Sửa ở đây thay cho việc sửa file <code>faq.json</code> tay. Bấm <b>Xuất faq.json</b> rồi đặt vào thư mục <code>agent</code> là agent dùng được ngay.
-      </p>
+    <div style={{ padding: '8px 4px 40px', maxWidth: 1100, margin: '0 auto', fontFamily: 'Outfit, sans-serif' }}>
+      {/* Tiêu đề + hướng dẫn to rõ */}
+      <div style={{ marginBottom: 18 }}>
+        <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 900, color: '#1e293b' }}>📝 Bước 1 — Kho câu hỏi</h2>
+        <p style={{ margin: '6px 0 0', color: '#475569', fontSize: '0.98rem', lineHeight: 1.65 }}>
+          Khai báo <b>các câu người xem hay hỏi khi live</b> (giá? ship? size? voucher?…) + từ khoá để máy nhận diện.
+          Làm xong qua tab <b>② Xưởng Clip</b> để sản xuất video trả lời cho từng câu.
+        </p>
+      </div>
 
-      {/* TEST NHẬN DIỆN */}
+      {/* A — THÊM / SỬA */}
       <div style={card}>
-        <div style={{ fontWeight: 800, color: '#0f172a', marginBottom: 10, fontSize: '1rem' }}>🧪 Test nhận diện câu hỏi</div>
-        <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '0 0 10px' }}>Gõ thử 1 comment như người xem hỏi → xem agent sẽ chọn clip nào (dùng đúng bộ nhận diện thật).</p>
-        <input style={inp} placeholder='VD: "gia bao nhieu shop oi", "ship bao lau z", "con size 39 ko"...' value={testText} onChange={e => setTestText(e.target.value)} />
-        <div style={{ marginTop: 10, fontSize: '0.9rem' }}>
-          {!testText.trim() ? <span style={{ color: '#94a3b8' }}>— Chưa gõ gì —</span>
-            : testResult
-              ? <span style={{ color: '#16a34a', fontWeight: 700 }}>✓ Khớp: <b>{testResult.intent.label}</b> → phát clip <code>{testResult.intent.clip || '(chưa gán clip)'}</code> <span style={{ color: '#94a3b8', fontWeight: 400 }}>(điểm {testResult.score})</span></span>
-              : <span style={{ color: '#dc2626', fontWeight: 700 }}>✗ Không khớp câu nào → agent IM LẶNG (an toàn, không phát nhầm)</span>}
+        <SecHead badge="A" icon={editing ? '✏️' : '➕'} title={editing ? `Sửa câu hỏi "${form.label}"` : 'Thêm câu hỏi mới'}
+          hint="Chỉ cần Tên + Từ khoá là thêm được. Đường dẫn clip có thể để trống — làm video xong bên Xưởng Clip nó tự điền." />
+        <div style={{ padding: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 14, marginBottom: 14 }}>
+            <div>
+              <label style={lbl}>Tên câu hỏi *</label>
+              <input style={inp} placeholder="VD: Hỏi giá" value={form.label} onChange={e => setForm({ ...form, label: e.target.value })} />
+            </div>
+            <div>
+              <label style={lbl}>Mã (để trống sẽ tự tạo)</label>
+              <input style={{ ...inp, background: editing ? '#f1f5f9' : '#fff' }} placeholder="gia" value={form.id} disabled={editing} onChange={e => setForm({ ...form, id: e.target.value })} />
+            </div>
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={lbl}>Từ khoá nhận diện *</label>
+            <textarea style={{ ...inp, minHeight: 58, resize: 'vertical' }} placeholder="gia, bao nhieu, bn, nhieu tien, may xu" value={form.keywords} onChange={e => setForm({ ...form, keywords: e.target.value })} />
+            <div style={hintTxt}>Cách nhau <b>dấu phẩy</b>. Có dấu / không dấu / viết tắt (bn, ko, z…) đều bắt được — hệ thống tự chuẩn hoá. Càng nhiều từ khoá càng bắt trúng.</div>
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={lbl}>Đường dẫn clip trả lời (file .mp4 trên máy phát live)</label>
+            <input style={inp} placeholder="D:/live-clips/faq_gia.mp4 — để trống cũng được, điền sau ở Xưởng Clip" value={form.clip} onChange={e => setForm({ ...form, clip: e.target.value })} />
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <button style={btn(ACCENT)} onClick={saveIntent}>{editing ? '💾 Lưu thay đổi' : '➕ Thêm câu hỏi'}</button>
+            {editing && <button style={btn('#94a3b8')} onClick={() => { setForm(empty); setEditing(false); }}>Huỷ</button>}
+          </div>
         </div>
       </div>
 
-      {/* FORM THÊM / SỬA */}
+      {/* B — DANH SÁCH */}
       <div style={card}>
-        <div style={{ fontWeight: 800, color: '#0f172a', marginBottom: 12, fontSize: '1rem' }}>{editing ? '✏️ Sửa câu hỏi' : '➕ Thêm câu hỏi mới'}</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-          <div><label style={lbl}>Nhãn (tên câu hỏi) *</label><input style={inp} placeholder="VD: Hỏi giá" value={form.label} onChange={e => setForm({ ...form, label: e.target.value })} /></div>
-          <div><label style={lbl}>Mã (slug) — để trống sẽ tự tạo</label><input style={{ ...inp, background: editing ? '#f1f5f9' : '#fff' }} placeholder="gia" value={form.id} disabled={editing} onChange={e => setForm({ ...form, id: e.target.value })} /></div>
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <label style={lbl}>Từ khoá (cách nhau dấu phẩy — có dấu/không dấu đều được, hệ thống tự bỏ dấu)</label>
-          <textarea style={{ ...inp, minHeight: 54, resize: 'vertical' }} placeholder="gia, bao nhieu, bn, nhieu tien, may xu" value={form.keywords} onChange={e => setForm({ ...form, keywords: e.target.value })} />
-        </div>
-        <div style={{ marginBottom: 14 }}>
-          <label style={lbl}>Đường dẫn clip trả lời (.mp4 trên máy phát live — OBS đọc)</label>
-          <input style={inp} placeholder="D:/live-clips/faq_gia.mp4" value={form.clip} onChange={e => setForm({ ...form, clip: e.target.value })} />
-        </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <button style={btn(ACCENT)} onClick={saveIntent}>{editing ? '💾 Lưu thay đổi' : '➕ Thêm'}</button>
-          {editing && <button style={{ ...btn('#94a3b8') }} onClick={() => { setForm(empty); setEditing(false); }}>Huỷ</button>}
+        <SecHead badge="B" icon="📋" title={`Danh sách câu hỏi (${intents.length})`}
+          hint="Tick Bật/Tắt để máy có nhận diện câu đó hay không. Câu nào ⚠️ chưa có clip → qua Xưởng Clip làm."
+          right={<button style={{ ...btn('#16a34a'), padding: '9px 16px', fontSize: '0.85rem' }} onClick={exportFaq} title="Dự phòng — agent giờ đọc thẳng Supabase, không cần file này">📥 Xuất faq.json</button>} />
+        <div style={{ padding: '10px 20px 20px' }}>
+          {loading ? <div style={{ color: '#94a3b8', padding: 20 }}>⏳ Đang tải...</div>
+            : intents.length === 0 ? <div style={{ color: '#94a3b8', padding: 20, fontSize: '0.95rem' }}>Chưa có câu hỏi nào — thêm ở khung A phía trên.</div>
+            : intents.map(it => (
+              <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '14px 16px', marginTop: 10, borderRadius: 12, border: '1.5px solid #f1f5f9', background: it.enabled ? '#fff' : '#f8fafc', opacity: it.enabled ? 1 : 0.6 }}>
+                <label title={it.enabled ? 'Đang BẬT — máy sẽ nhận diện câu này' : 'Đang TẮT'} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flex: 'none' }}>
+                  <input type="checkbox" checked={it.enabled} onChange={() => toggleEnabled(it)} style={{ width: 20, height: 20, accentColor: ACCENT, cursor: 'pointer' }} />
+                </label>
+                <div style={{ flex: '1 1 160px', minWidth: 140 }}>
+                  <div style={{ fontWeight: 800, fontSize: '1rem', color: '#0f172a' }}>{it.label}</div>
+                  <div style={{ fontSize: '0.72rem', color: '#cbd5e1' }}>{it.id}</div>
+                </div>
+                <div style={{ flex: '2 1 260px' }}>
+                  {(it.keywords || []).map((k, i) => <span key={i} style={{ display: 'inline-block', background: '#fff4ec', color: '#c2410c', borderRadius: 7, padding: '3px 10px', margin: '2px 4px 2px 0', fontSize: '0.82rem', fontWeight: 600 }}>{k}</span>)}
+                </div>
+                <div style={{ flex: '1 1 180px', minWidth: 160 }}>
+                  {it.clip
+                    ? <span title={it.clip} style={{ display: 'inline-block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: 8, padding: '4px 10px', fontSize: '0.78rem', fontWeight: 700 }}>🎬 {it.clip}</span>
+                    : <span style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, padding: '4px 10px', fontSize: '0.78rem', fontWeight: 700 }}>⚠️ Chưa có clip — làm ở ② Xưởng Clip</span>}
+                </div>
+                <div style={{ flex: 'none', display: 'flex', gap: 8 }}>
+                  <button onClick={() => editIntent(it)} style={{ ...btn('#3b82f6'), padding: '8px 16px', fontSize: '0.85rem' }}>Sửa</button>
+                  <button onClick={() => delIntent(it)} style={{ ...btn('#ef4444'), padding: '8px 16px', fontSize: '0.85rem' }}>Xoá</button>
+                </div>
+              </div>
+            ))}
         </div>
       </div>
 
-      {/* DANH SÁCH INTENT */}
+      {/* C — TEST NHẬN DIỆN */}
       <div style={card}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-          <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '1rem' }}>📋 Danh sách câu hỏi ({intents.length})</div>
-          <button style={btn('#16a34a')} onClick={exportFaq}>📥 Xuất faq.json cho agent</button>
+        <SecHead badge="C" icon="🧪" title="Gõ thử để test máy nhận diện"
+          hint="Gõ 1 câu như người xem comment → xem máy chọn đúng clip không (dùng đúng bộ nhận diện thật của agent)." />
+        <div style={{ padding: 20 }}>
+          <input style={{ ...inp, fontSize: '1.05rem', padding: '14px 16px' }} placeholder='Gõ thử: "gia bao nhieu shop oi" · "ship bao lau z" · "con size 39 ko"…' value={testText} onChange={e => setTestText(e.target.value)} />
+          <div style={{ marginTop: 12 }}>
+            {!testText.trim()
+              ? <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>— Kết quả hiện ở đây —</div>
+              : testResult
+                ? <div style={{ background: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: 12, padding: '14px 18px', fontSize: '1rem', color: '#166534' }}>
+                    ✅ Máy hiểu là: <b style={{ fontSize: '1.08rem' }}>{testResult.intent.label}</b>
+                    <span style={{ color: '#64748b', fontSize: '0.85rem' }}> (điểm khớp {testResult.score})</span>
+                    <div style={{ fontSize: '0.85rem', color: '#475569', marginTop: 4 }}>→ sẽ phát clip: <code>{testResult.intent.clip || '(chưa gán clip — làm ở Xưởng Clip)'}</code></div>
+                  </div>
+                : <div style={{ background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: 12, padding: '14px 18px', fontSize: '1rem', color: '#dc2626', fontWeight: 700 }}>
+                    ✗ Không khớp câu nào → máy IM LẶNG (an toàn, không phát nhầm).
+                    <div style={{ fontSize: '0.85rem', fontWeight: 400, color: '#9a3412', marginTop: 4 }}>Muốn bắt được câu này → thêm từ khoá tương ứng vào câu hỏi ở khung A.</div>
+                  </div>}
+          </div>
         </div>
-        {loading ? <div style={{ color: '#94a3b8' }}>⏳ Đang tải...</div> : intents.length === 0 ? <div style={{ color: '#94a3b8' }}>Chưa có câu hỏi nào.</div> : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr>
-                <th style={th}>Bật</th><th style={th}>Nhãn</th><th style={th}>Từ khoá</th><th style={th}>Clip</th><th style={{ ...th, textAlign: 'right' }}>Sửa/Xoá</th>
-              </tr></thead>
-              <tbody>
-                {intents.map(it => (
-                  <tr key={it.id} style={{ opacity: it.enabled ? 1 : 0.5 }}>
-                    <td style={td}><input type="checkbox" checked={it.enabled} onChange={() => toggleEnabled(it)} /></td>
-                    <td style={{ ...td, fontWeight: 700, color: '#111' }}>{it.label}<div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 400 }}>{it.id}</div></td>
-                    <td style={td}>{(it.keywords || []).map((k, i) => <span key={i} style={{ display: 'inline-block', background: '#fff4ec', color: '#c2410c', borderRadius: 6, padding: '1px 7px', margin: '2px 3px 2px 0', fontSize: '0.76rem' }}>{k}</span>)}</td>
-                    <td style={{ ...td, fontSize: '0.78rem', color: it.clip ? '#334155' : '#dc2626', wordBreak: 'break-all' }}>{it.clip || '⚠️ chưa gán clip'}</td>
-                    <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      <button onClick={() => editIntent(it)} style={{ ...btn('#3b82f6'), padding: '5px 12px', marginRight: 6 }}>Sửa</button>
-                      <button onClick={() => delIntent(it)} style={{ ...btn('#ef4444'), padding: '5px 12px' }}>Xoá</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      </div>
+
+      {/* Cài đặt nâng cao — gấp lại cho gọn */}
+      <div style={card}>
+        <div onClick={() => setShowAdv(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '15px 20px', cursor: 'pointer' }}>
+          <span style={{ fontSize: '1.1rem' }}>⚙️</span>
+          <span style={{ fontWeight: 800, fontSize: '1rem', color: '#475569', flex: 1 }}>Cài đặt nâng cao (ít khi cần đụng)</span>
+          <span style={{ color: '#94a3b8', fontWeight: 800 }}>{showAdv ? '▲ Thu gọn' : '▼ Mở'}</span>
+        </div>
+        {showAdv && (
+          <div style={{ padding: '0 20px 20px', borderTop: '1px solid #f1f5f9' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 14, margin: '16px 0' }}>
+              <div>
+                <label style={lbl}>Cooldown (giây)</label>
+                <input type="number" style={inp} value={config.cooldown_sec} onChange={e => setConfig({ ...config, cooldown_sec: Number(e.target.value) || 0 })} />
+                <div style={hintTxt}>Không phát lại CÙNG 1 clip trong khoảng này (kẻo 2 người hỏi giá liên tiếp phát 2 lần).</div>
+              </div>
+              <div>
+                <label style={lbl}>Điểm khớp tối thiểu</label>
+                <input type="number" style={inp} value={config.min_confidence} onChange={e => setConfig({ ...config, min_confidence: Number(e.target.value) || 1 })} />
+                <div style={hintTxt}>Càng cao càng khó khớp (ít phát nhầm nhưng dễ bỏ sót). Mặc định 1 là hợp lý.</div>
+              </div>
+              <div>
+                <label style={lbl}>Giới hạn hàng đợi</label>
+                <input type="number" style={inp} value={config.max_queue} onChange={e => setConfig({ ...config, max_queue: Number(e.target.value) || 1 })} />
+                <div style={hintTxt}>Nhiều người hỏi dồn dập → chỉ xếp hàng tối đa chừng này clip.</div>
+              </div>
+            </div>
+            <button style={btn(ACCENT)} onClick={saveConfig}>💾 Lưu cài đặt</button>
           </div>
         )}
       </div>
 
-      {/* CÀI ĐẶT CHUNG */}
-      <div style={card}>
-        <div style={{ fontWeight: 800, color: '#0f172a', marginBottom: 12, fontSize: '1rem' }}>⚙️ Cài đặt chung (logic agent)</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 14 }}>
-          <div><label style={lbl}>Cooldown (giây) — không lặp lại cùng clip</label><input type="number" style={inp} value={config.cooldown_sec} onChange={e => setConfig({ ...config, cooldown_sec: Number(e.target.value) || 0 })} /></div>
-          <div><label style={lbl}>Điểm khớp tối thiểu</label><input type="number" style={inp} value={config.min_confidence} onChange={e => setConfig({ ...config, min_confidence: Number(e.target.value) || 1 })} /></div>
-          <div><label style={lbl}>Giới hạn hàng đợi</label><input type="number" style={inp} value={config.max_queue} onChange={e => setConfig({ ...config, max_queue: Number(e.target.value) || 1 })} /></div>
-        </div>
-        <button style={btn(ACCENT)} onClick={saveConfig}>💾 Lưu cài đặt</button>
-      </div>
-
-      {status && <div style={{ padding: '10px 16px', borderRadius: 10, fontWeight: 600, fontSize: '0.88rem', background: status.startsWith('❌') ? '#fef2f2' : '#f0fdf4', color: status.startsWith('❌') ? '#dc2626' : '#166534', border: `1px solid ${status.startsWith('❌') ? '#fecaca' : '#bbf7d0'}` }}>{status}</div>}
+      {status && <div style={{ position: 'sticky', bottom: 12, padding: '12px 18px', borderRadius: 12, fontWeight: 700, fontSize: '0.95rem', background: status.startsWith('❌') ? '#fef2f2' : '#f0fdf4', color: status.startsWith('❌') ? '#dc2626' : '#166534', border: `1.5px solid ${status.startsWith('❌') ? '#fecaca' : '#bbf7d0'}`, boxShadow: '0 6px 20px rgba(15,23,42,0.12)' }}>{status}</div>}
     </div>
   );
 }
