@@ -36,6 +36,7 @@ export default function LiveClipFactoryTab() {
       ...it,
       keywords: Array.isArray(it.keywords) ? it.keywords : [],
       script: pmap[it.id]?.script || '', img_prompt: pmap[it.id]?.img_prompt || '',
+      product_image_url: pmap[it.id]?.product_image_url || '',
       image_url: pmap[it.id]?.image_url || '', video_url: pmap[it.id]?.video_url || '',
       video_id: pmap[it.id]?.video_id || '', voice_id: pmap[it.id]?.voice_id || '',
       prod_status: pmap[it.id]?.status || 'todo',
@@ -50,6 +51,7 @@ export default function LiveClipFactoryTab() {
     const [p1, p2] = await Promise.all([
       supabase.from('livestream_clip_prod').upsert({
         intent_id: r.id, script: r.script, img_prompt: r.img_prompt, image_url: r.image_url,
+        product_image_url: r.product_image_url || null,
         video_url: r.video_url, status: r.prod_status, updated_at: new Date().toISOString(),
       }, { onConflict: 'intent_id' }),
       supabase.from('livestream_intents').update({ clip: r.clip || '', updated_at: new Date().toISOString() }).eq('id', r.id),
@@ -58,11 +60,29 @@ export default function LiveClipFactoryTab() {
   };
   const copyTxt = (t) => { navigator.clipboard && navigator.clipboard.writeText(t || ''); setStatus('📋 Đã copy.'); };
 
+  // Up ảnh SẢN PHẨM THẬT lên kho (bucket live-assets, public) → lưu URL vào product_image_url
+  const uploadProductImage = async (r, file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setStatus('❌ Hãy chọn file ảnh.'); return; }
+    setBusy(`${r.id}:pimg`); setStatus('⬆️ Đang up ảnh sản phẩm...');
+    try {
+      const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+      const path = `prod/${r.id}_${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from('live-assets').upload(path, file, { upsert: false });
+      if (error) throw error;
+      const { data } = supabase.storage.from('live-assets').getPublicUrl(path);
+      setField(r.id, 'product_image_url', data.publicUrl);
+      await supabase.from('livestream_clip_prod').upsert({ intent_id: r.id, product_image_url: data.publicUrl, updated_at: new Date().toISOString() }, { onConflict: 'intent_id' });
+      setStatus('✅ Đã up ảnh sản phẩm — bấm 🪄 Tạo ảnh là nhân vật cầm ĐÚNG sản phẩm này.');
+    } catch (e) { setStatus('❌ Lỗi up ảnh sản phẩm: ' + e.message); }
+    finally { setBusy(''); }
+  };
+
   // ── TỰ ĐỘNG (Phase 2): OpenAI tạo ảnh, HeyGen tạo video, poll kiểm tra ──
   const genImageAuto = async (r) => {
     if (!r.img_prompt.trim()) { setStatus('❌ Cần prompt ảnh trước.'); return; }
-    setBusy(`${r.id}:img`); setStatus('🪄 Đang tạo ảnh (OpenAI)... ~15-40s');
-    const j = await callApi('live_gen_image', { intent_id: r.id, prompt: r.img_prompt });
+    setBusy(`${r.id}:img`); setStatus('🪄 Đang tạo ảnh (OpenAI)... ~15-40s' + (r.product_image_url ? ' — ghép ảnh sản phẩm thật' : ''));
+    const j = await callApi('live_gen_image', { intent_id: r.id, prompt: r.img_prompt, product_image_url: r.product_image_url || undefined });
     setBusy('');
     if (!j.ok) { setStatus('❌ ' + (j.error || 'Lỗi tạo ảnh')); return; }
     setField(r.id, 'image_url', j.image_url); setStatus('✅ Đã tạo ảnh xong.' + (j.warn ? ' ⚠️ ' + j.warn : ''));
@@ -176,6 +196,21 @@ export default function LiveClipFactoryTab() {
                     <button onClick={() => copyTxt(r.img_prompt)} style={{ ...btn('#64748b'), padding: '5px 12px', fontSize: '0.75rem' }}>📋 Copy prompt (làm tay)</button>
                     <button onClick={() => genImageAuto(r)} disabled={busy === `${r.id}:img`} style={{ ...btn('#7c3aed'), padding: '5px 12px', fontSize: '0.75rem', opacity: busy === `${r.id}:img` ? 0.6 : 1 }}>{busy === `${r.id}:img` ? '⏳ đang tạo...' : '🪄 Tạo ảnh tự động (OpenAI)'}</button>
                   </div>
+                </div>
+                {/* B2a ảnh sản phẩm thật (không bắt buộc) — có thì OpenAI GHÉP đúng SP vào tay nhân vật */}
+                <div style={{ marginTop: 14, display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 320px' }}>
+                    <label style={lbl}>Ảnh sản phẩm thật (không bắt buộc)</label>
+                    <input style={inp} placeholder="https://... (dán link, hoặc bấm Up ảnh)" value={r.product_image_url || ''} onChange={e => setField(r.id, 'product_image_url', e.target.value)} />
+                    <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <label style={{ ...btn('#0891b2'), padding: '5px 12px', fontSize: '0.75rem', display: 'inline-block', cursor: busy === `${r.id}:pimg` ? 'wait' : 'pointer' }}>
+                        {busy === `${r.id}:pimg` ? '⏳ đang up...' : '⬆️ Up ảnh sản phẩm'}
+                        <input type="file" accept="image/*" disabled={busy === `${r.id}:pimg`} style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) uploadProductImage(r, f); }} />
+                      </label>
+                      <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Có ảnh này → 🪄 tạo ảnh sẽ ghép ĐÚNG sản phẩm thật vào tay nhân vật (không vẽ đại).</span>
+                    </div>
+                  </div>
+                  {r.product_image_url && <img src={r.product_image_url} alt="" style={{ height: 90, borderRadius: 8, border: '1px solid #e5e7eb', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} />}
                 </div>
                 {/* B2b link ảnh */}
                 <div style={{ marginTop: 14, display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
