@@ -11,7 +11,7 @@ function removeDiacritics(str) {
 const ABBR = {
   k: 'khong', ko: 'khong', kg: 'khong', hok: 'khong', khong: 'khong',
   bn: 'bao nhieu', bnhieu: 'bao nhieu', sp: 'san pham', shx: 'shop', sh: 'shop',
-  ib: 'inbox', r: 'roi', dc: 'duoc', vs: 'voi', vch: 'voucher', km: 'khuyen mai',
+  ib: 'inbox', r: 'roi', dc: 'duoc', 'đc': 'duoc', vs: 'voi', vch: 'voucher', km: 'khuyen mai',
   m: 'may', j: 'gi', z: 'gi', mn: 'moi nguoi'
 };
 function normalize(text) {
@@ -58,7 +58,7 @@ export default function LivestreamAiTab() {
       supabase.from('livestream_config').select('*').eq('id', 'default').maybeSingle(),
     ]);
     setIntents((it || []).map(r => ({ ...r, keywords: Array.isArray(r.keywords) ? r.keywords : [] })));
-    if (cf) setConfig({ cooldown_sec: cf.cooldown_sec, min_confidence: cf.min_confidence, max_queue: cf.max_queue });
+    if (cf) setConfig({ cooldown_sec: cf.cooldown_sec ?? 45, min_confidence: cf.min_confidence ?? 1, max_queue: cf.max_queue ?? 3 });
     setLoading(false);
   };
   useEffect(() => { load(); }, []);

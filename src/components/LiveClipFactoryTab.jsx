@@ -9,8 +9,11 @@ const ACCENT = '#ff6a2c';
 const API = '/api/tiktok-shop/analytics';
 const STATUS = { todo: { t: 'Chưa làm', c: '#94a3b8', bg: '#f1f5f9' }, lam: { t: 'Đang làm', c: '#b45309', bg: '#fffbeb' }, xong: { t: 'Xong ✓', c: '#166534', bg: '#f0fdf4' } };
 const callApi = async (action, payload) => {
-  const r = await fetch(`${API}?action=${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-  return r.json().catch(() => ({ ok: false, error: 'Lỗi phản hồi server' }));
+  try {
+    const r = await fetch(`${API}?action=${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const t = await r.text();
+    try { return JSON.parse(t); } catch { return { ok: false, error: t.slice(0, 200) || ('HTTP ' + r.status) }; }
+  } catch (e) { return { ok: false, error: 'Lỗi mạng: ' + e.message }; }
 };
 
 export default function LiveClipFactoryTab() {
@@ -60,7 +63,7 @@ export default function LiveClipFactoryTab() {
     const j = await callApi('live_gen_image', { intent_id: r.id, prompt: r.img_prompt });
     setBusy('');
     if (!j.ok) { setStatus('❌ ' + (j.error || 'Lỗi tạo ảnh')); return; }
-    setField(r.id, 'image_url', j.image_url); setStatus('✅ Đã tạo ảnh xong.');
+    setField(r.id, 'image_url', j.image_url); setStatus('✅ Đã tạo ảnh xong.' + (j.warn ? ' ⚠️ ' + j.warn : ''));
   };
   const makeVideoAuto = async (r) => {
     if (!r.image_url) { setStatus('❌ Cần ảnh nhân vật trước (bước ①).'); return; }
@@ -69,15 +72,15 @@ export default function LiveClipFactoryTab() {
     const j = await callApi('live_make_video', { intent_id: r.id, image_url: r.image_url, script: r.script, voice_id: r.voice_id || undefined });
     setBusy('');
     if (!j.ok) { setStatus('❌ ' + (j.error || 'Lỗi tạo video')); return; }
-    setField(r.id, 'video_id', j.video_id); setField(r.id, 'prod_status', 'lam');
-    setStatus('⏳ HeyGen đang render (vài phút). Bấm "Kiểm tra video" sau ~1-3 phút.');
+    setField(r.id, 'video_id', j.video_id); if (j.voice_id) setField(r.id, 'voice_id', j.voice_id); setField(r.id, 'prod_status', 'lam');
+    setStatus('⏳ HeyGen đang render (vài phút). Bấm "Kiểm tra video" sau ~1-3 phút.' + (j.warn ? ' ⚠️ ' + j.warn : ''));
   };
   const checkVideoAuto = async (r) => {
     if (!r.video_id) { setStatus('❌ Chưa có video_id (bấm "Tạo video" trước).'); return; }
     setBusy(`${r.id}:chk`); setStatus('🔄 Đang kiểm tra HeyGen...');
     const j = await callApi('live_check_video', { intent_id: r.id, video_id: r.video_id });
     setBusy('');
-    if (j.status === 'completed' && j.video_url) { setField(r.id, 'video_url', j.video_url); setStatus('✅ Video xong! Tải về máy phát live rồi điền đường dẫn ở ④.'); }
+    if (j.status === 'completed' && j.video_url) { setField(r.id, 'video_url', j.video_url); setField(r.id, 'prod_status', 'xong'); setStatus('✅ Video xong! Tải về máy phát live rồi điền đường dẫn ở ④.'); }
     else if (j.status === 'failed') setStatus('❌ HeyGen render lỗi: ' + (j.error || ''));
     else setStatus(`⏳ Đang render (${j.status || 'processing'})... đợi thêm rồi bấm kiểm tra lại.`);
   };
