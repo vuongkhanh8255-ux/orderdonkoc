@@ -526,10 +526,10 @@ const KocPaymentTab = () => {
 
             <Field label="Link kênh"><input value={form.channel_link} onChange={e => setForm(f => ({ ...f, channel_link: e.target.value }))} placeholder="https://tiktok.com/@..." style={inputStyle} /></Field>
             <div style={{ gridColumn: 'span 3' }}>
-              <Field label="Link air (*) — BẮT BUỘC · CHỈ 1 LINK VIDEO">
-                <input value={form.air_link}
-                  onChange={e => { const v = e.target.value.replace(/[\r\n]+/g, ' ').trim(); const u = extractUname(v); setForm(f => ({ ...f, air_link: v, channel_link: (f.channel_link && f.channel_link.trim()) ? f.channel_link : (u ? `https://www.tiktok.com/@${u}` : f.channel_link) })); }}
-                  placeholder="https://tiktok.com/@.../video/..." style={inputStyle} />
+              <Field label="Link air (*) — BẮT BUỘC · mỗi video 1 DÒNG (nhập được NHIỀU link)">
+                <textarea value={form.air_link} rows={2}
+                  onChange={e => { const v = e.target.value; const u = extractUname(v); setForm(f => ({ ...f, air_link: v, channel_link: (f.channel_link && f.channel_link.trim()) ? f.channel_link : (u ? `https://www.tiktok.com/@${u}` : f.channel_link) })); }}
+                  placeholder={"https://tiktok.com/@.../video/...\n(có nhiều video thì dán mỗi link 1 dòng)"} style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.4 }} />
               </Field>
               {formUnames.length > 0 && <div style={{ fontSize: '0.74rem', color: '#0891b2', marginTop: 4, fontWeight: 700 }}>🆔 ID kênh: {formUnames.map(u => '@' + u).join(', ')}</div>}
               {dupVideos.length > 0 && <div style={{ fontSize: '0.76rem', color: '#dc2626', fontWeight: 700, marginTop: 4, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 7, padding: '5px 9px' }}>⚠️ VIDEO TRÙNG (đã có thanh toán khác): {dupVideos.map(d => `…${d.vid.slice(-6)} ← ${d.who.join(', ')}`).join(' · ')}</div>}
@@ -750,7 +750,7 @@ const KocPaymentTab = () => {
                     <td style={{ ...td, textAlign: 'center' }}>{(() => {
                       const imgs = rowImages(r);  // CCCD + tin nhắn + hợp đồng (KHÔNG gồm video)
                       return <>
-                        {r.air_link ? <a href={r.air_link.split('\n')[0]} target="_blank" rel="noreferrer" title="Link air (video)" style={{ color: '#7c3aed', textDecoration: 'none' }}>🎬</a> : '—'}
+                        {(() => { const av = splitUrls(r.air_link); if (!av.length) return '—'; return av.map((u, k) => <a key={k} href={u} target="_blank" rel="noreferrer" title={`Link air video ${k + 1}`} style={{ color: '#7c3aed', textDecoration: 'none', marginRight: 3 }}>🎬{av.length > 1 ? k + 1 : ''}</a>); })()}
                         {imgs.length > 0 && <button onClick={() => { setLightbox(null); setGallery({ title: r.full_name || r.beneficiary || '', items: imgs }); }} title={`Xem tất cả ${imgs.length} ảnh/file (CCCD + tin nhắn + hợp đồng)`} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#0891b2', marginLeft: 8, fontSize: 'inherit', padding: 0, fontWeight: 700 }}>🖼️ {imgs.length}</button>}
                       </>;
                     })()}</td>
