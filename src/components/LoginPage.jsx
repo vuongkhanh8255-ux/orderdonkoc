@@ -20,8 +20,8 @@ const LoginPage = ({ onLogin }) => {
             // Tìm account match trong danh sách hardcoded
             let candidate = ACCOUNTS.find(a => a.username === uname);
 
-            // Với admin: lấy password động từ Supabase app_security (override hardcoded)
-            if (candidate && candidate.role === 'admin') {
+            // Chỉ account 'admin' gốc lấy password động từ Supabase (khanhpro8255 dùng pass hardcoded riêng)
+            if (candidate && candidate.username === 'admin') {
                 try {
                     const { data, error: dbErr } = await supabase
                         .from('app_security')
@@ -148,7 +148,8 @@ const LoginPage = ({ onLogin }) => {
 
 // ── ACCOUNTS ──────────────────────────────────────────────
 export const ACCOUNTS = [
-    { username: 'admin',      password: 'Admin@SK2025',    role: 'admin',      name: 'Admin Tổng'  },
+    { username: 'admin',        password: 'Admin@SK2025',    role: 'admin',      name: 'Admin Tổng'  },
+    { username: 'khanhpro8255', password: 'Khanhpro@8255',   role: 'admin',      name: 'Khánh Pro'   },
     { username: 'booking',    password: 'Booking@SK2025',  role: 'booking',    name: 'Booking'     },
     { username: 'cs',         password: 'CS@SK2025',       role: 'cs',         name: 'CS'          },
     { username: 'livestream', password: 'Live@SK2025',     role: 'livestream', name: 'Livestream'  },
