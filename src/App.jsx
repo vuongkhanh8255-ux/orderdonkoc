@@ -127,7 +127,9 @@ function App() {
   if (!user && !showLogin) return <PublicLandingPage onGoLogin={() => setShowLogin(true)} />;
   if (!user) return <LoginPage onLogin={handleLogin} />;
 
-  const allowedViews = ROLE_VIEWS[user.role] || [];
+  let allowedViews = ROLE_VIEWS[user.role] || [];
+  // Quản lý link air (airlinks): CHỈ khanhpro8255 thấy — admin + mọi account khác đều ẩn
+  if (user.username !== 'khanhpro8255') allowedViews = allowedViews.filter(v => v !== 'airlinks');
 
   // ── MAIN APP ──
   return <AppMain user={user} onLogout={handleLogout} allowedViews={allowedViews} />;

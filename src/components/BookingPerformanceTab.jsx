@@ -2189,7 +2189,10 @@ ${txtFormat}
 
                     {/* TABLES */}
                     <div style={{ opacity: isLoadingData ? 0.5 : 1, pointerEvents: isLoadingData ? 'none' : 'auto' }}>
-                        <KocIdentityOverview data={kocIdentityRows} brandHeaders={kocIdentityBrandHeaders} formatNumber={formatNumber} staffOptions={nhanSus} currentUser={currentUser} />
+                        {/* Section định danh KOC — CHỈ khanhpro8255 thấy (admin + account khác ẩn) */}
+                        {currentUser?.username === 'khanhpro8255' && (
+                          <KocIdentityOverview data={kocIdentityRows} brandHeaders={kocIdentityBrandHeaders} formatNumber={formatNumber} staffOptions={nhanSus} currentUser={currentUser} />
+                        )}
                         <DataTable title="Performance theo Brand" columns={brandCols} data={brandStats} />
                         <DataTable title="Performance theo KOL/KOC" columns={kocCols} data={kocStats} />
                         <DataTable title="Performance theo Nhân sự" columns={staffCols} data={staffStats} />
