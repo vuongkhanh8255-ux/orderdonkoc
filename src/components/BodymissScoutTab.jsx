@@ -74,7 +74,7 @@ export default function BodymissScoutTab({ currentUser } = {}) {
         <button onClick={load} style={{ marginLeft: 'auto', ...inp, cursor: 'pointer', background: '#fff', fontWeight: 700 }}>🔄 Tải lại</button>
       </div>
       <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: '0 0 14px', maxWidth: 900 }}>
-        Creator đăng video bán hàng cho Body Miss gần đây mà <b>chưa có nhân sự quản lý</b> — lượm KOC ngon về chăm sóc & liên hệ.
+        Creator đăng video bán hàng cho Body Miss gần đây mà <b>chưa có nhân sự quản lý & chưa từng book cast</b> — lượm KOC ngon về chăm sóc & liên hệ.
         Bấm <b>📥 Lượm</b> để tự cào liên hệ (email/SĐT từ bio) rồi đội đi contact. Data từ video đã sync (không tốn quota).
       </p>
 
@@ -134,9 +134,14 @@ export default function BodymissScoutTab({ currentUser } = {}) {
                         </div>
                       ) : <span style={{ color: '#cbd5e1', fontSize: '0.72rem' }}>{r.mark_status ? 'bio ko có' : 'lượm để lấy'}</span>}
                     </td>
-                    <td style={{ ...td, fontSize: '0.75rem', color: '#64748b', maxWidth: 180 }} title={r.top_title || ''}>
-                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.top_title || '—'}</div>
-                      <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>{r.last_post ? new Date(r.last_post).toLocaleDateString('vi-VN') : ''}</div>
+                    <td style={{ ...td, fontSize: '0.75rem', maxWidth: 200 }}>
+                      {r.last_video_id ? (
+                        <a href={`https://www.tiktok.com/@${r.username}/video/${r.last_video_id}`} target="_blank" rel="noreferrer" title={r.top_title || 'Xem video'} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: ACCENT, fontWeight: 700, textDecoration: 'none', maxWidth: 190 }}>
+                          <span style={{ flexShrink: 0 }}>▶️</span>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.top_title || 'Xem video'}</span>
+                        </a>
+                      ) : <span style={{ color: '#cbd5e1' }}>—</span>}
+                      <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>{r.last_post ? new Date(r.last_post).toLocaleDateString('vi-VN') : ''}{r.has_cast ? <span style={{ color: '#7c3aed', fontWeight: 700 }}> · 💸 có cast</span> : ''}</div>
                     </td>
                     <td style={td}>
                       {r.mark_status
