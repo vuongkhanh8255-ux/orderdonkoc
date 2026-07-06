@@ -130,9 +130,9 @@ function App() {
 
   let allowedViews = ROLE_VIEWS[user.role] || [];
   // CHỈ khanhpro8255 thấy — admin + mọi account khác đều ẩn:
-  //   airlinks (Quản lý link air), booking_budget (Tạm đối chiếu), koc_hunt (Module 8: Săn KOC)
+  //   airlinks, booking_budget (Tạm đối chiếu), koc_hunt (Module 8), bodymiss_scout (Săn KOC Body Miss)
   if (user.username !== 'khanhpro8255') {
-    const HIDDEN = ['airlinks', 'booking_budget', 'koc_hunt'];
+    const HIDDEN = ['airlinks', 'booking_budget', 'koc_hunt', 'bodymiss_scout'];
     allowedViews = allowedViews.filter(v => !HIDDEN.includes(v));
   }
 
