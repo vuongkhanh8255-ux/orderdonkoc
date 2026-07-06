@@ -419,6 +419,32 @@ async function handleAffilProbe({ params, supabase, res }) {
   const conn = conns.find(c => (c.seller_name || '').toLowerCase().includes(want)) || conns[0];
   const cipher = await resolveShopCipher({ conn, want, supabase });
 
+  // CHẾ ĐỘ TUỲ CHỈNH (dò schema từng field): ?path=...&method=POST&body={...}&k=kp8255
+  // Chỉ nhận path /affiliate_seller/* + phải có khoá k → không ai mượn server gọi lung tung.
+  if (params.path) {
+    if (params.k !== 'kp8255') return res.status(200).json({ ok: false, error: 'thiếu khoá' });
+    const p = String(params.path);
+    if (!p.startsWith('/affiliate_seller/')) return res.status(200).json({ ok: false, error: 'chỉ cho affiliate_seller' });
+    const m = (params.method || 'GET').toUpperCase();
+    const bodyStr = m === 'POST' ? String(params.body || '{}') : '';
+    const urlParams = { app_key: ck, timestamp: String(Math.floor(Date.now() / 1000)) };
+    if (cipher) urlParams.shop_cipher = cipher;
+    for (const [qk, qv] of Object.entries(params)) {
+      if (['action', 'path', 'method', 'body', 'k', 'seller'].includes(qk)) continue;
+      urlParams[qk] = qv; // query phụ (page_size…) cũng phải vào sign
+    }
+    urlParams.sign = buildSign(cs, p, urlParams, bodyStr);
+    let j;
+    try {
+      j = JSON.parse(await ttText(`${TIKTOK_BASE}${p}?${new URLSearchParams(urlParams)}`, {
+        method: m,
+        headers: { 'x-tts-access-token': conn.access_token, 'content-type': 'application/json' },
+        ...(m === 'POST' ? { body: bodyStr } : {}),
+      }, 12000));
+    } catch (e) { j = { code: -1, message: `fetch: ${e.message}` }; }
+    return res.status(200).json({ ok: true, shop: conn.seller_name, probe: `${m} ${p}`, result: j });
+  }
+
   const PROBES = [
     { m: 'POST', p: '/affiliate_seller/202405/target_collaborations' },
     { m: 'POST', p: '/affiliate_seller/202406/target_collaborations' },
