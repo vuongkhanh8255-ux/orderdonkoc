@@ -445,6 +445,39 @@ const scanBioBatch = async (supabase, limit = 12) => {
   return { scanned, found };
 };
 
+// LỤM KOC từ tab Săn KOC Body Miss (action=koc_scout_grab) — đội bấm 1 KOC → cào info + liên hệ
+// (tikwm bio) vào pool, đánh dấu koc_scout_marks (quan tâm/đã liên hệ/bỏ qua) + ghi chú. KHÔNG cần
+// khoá kp8255 (đội nhân sự dùng). POST {username, status?, note?, by?}.
+async function handleKocScoutGrab({ params, supabase, res }) {
+  const u = String(params.username || '').toLowerCase().replace(/^@/, '').trim();
+  if (u.length < 2) return res.status(200).json({ ok: false, error: 'thiếu username' });
+  const status = ['lum', 'contacted', 'skip'].includes(params.status) ? params.status : 'lum';
+
+  // cào info + liên hệ từ bio (nếu chưa có trong pool)
+  let email = null, sdt = null, followers = null;
+  try {
+    const raw = await ttText(`https://www.tikwm.com/api/user/info?unique_id=${encodeURIComponent(u)}`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' } }, 12000);
+    const j = JSON.parse(raw); const usr = j?.data?.user, st = j?.data?.stats;
+    if (j?.code === 0 && usr?.uniqueId) {
+      const c = parseContact(usr.signature); email = c.email; sdt = c.sdt; followers = Number(st?.followerCount) || 0;
+      await supabase.from('koc_marketplace_pool').upsert({
+        username: String(usr.uniqueId).toLowerCase(), nickname: usr.nickname || usr.uniqueId,
+        avatar: usr.avatarThumb || usr.avatarMedium || '', followers,
+        tiktok_uid: usr.id ? String(usr.id) : null, bio: usr.signature || null,
+        ...(email ? { email } : {}), ...(sdt ? { sdt } : {}),
+        bio_scanned_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      }, { onConflict: 'username' });
+    }
+  } catch { /* tikwm bận → vẫn đánh dấu, liên hệ để null */ }
+
+  await supabase.from('koc_scout_marks').upsert({
+    username: u, status, note: params.note != null ? String(params.note) : undefined,
+    marked_by: params.by ? String(params.by) : null, updated_at: new Date().toISOString(),
+  }, { onConflict: 'username' });
+  return res.status(200).json({ ok: true, username: u, status, email, sdt, followers });
+}
+
 // NẠP KOC THEO CHỈ ĐỊNH (action=koc_import, k=kp8255) — dán danh sách @kênh (lọc từ Kalodata...)
 // → cào info từng kênh qua TIKWM (không bị TikTok bóp như marketplace) → upsert vào pool Module 8
 // (kèm tiktok_uid sẵn để mời). KHÔNG đụng da_lien_he/ghi_chu/moi_*. Tối đa 30 kênh/lượt (né 60s
@@ -1861,6 +1894,11 @@ export default async function handler(req, res) {
 
   if (action === 'koc_import') {
     try { return await handleKocImport({ params, supabase, res }); }
+    catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
+  }
+
+  if (action === 'koc_scout_grab') {
+    try { return await handleKocScoutGrab({ params, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 

@@ -25,6 +25,7 @@ const KocPaymentTab = lazy(() => import('./components/KocPaymentTab'));
 const BookingMaterialTab = lazy(() => import('./components/BookingMaterialTab'));
 const BookingBudgetTab = lazy(() => import('./components/BookingBudgetTab'));
 const KocHuntTab = lazy(() => import('./components/KocHuntTab'));
+const BodymissScoutTab = lazy(() => import('./components/BodymissScoutTab'));
 const DataArchiveTab = lazy(() => import('./components/DataArchiveTab'));
 const NhanhProductsTab = lazy(() => import('./components/NhanhProductsTab'));
 const GmvRealtimeTab = lazy(() => import('./components/GmvRealtimeTab'));
@@ -321,6 +322,7 @@ function AppMain({ user, onLogout, allowedViews }) {
                 { view: 'koc_blacklist',       icon: '🚫', name: 'Module 6: Blacklist KOC' },
                 { view: 'booking_budget',      icon: '💰', name: 'Tạm đối chiếu' },
                 { view: 'koc_hunt',            icon: '🔍', name: 'Module 8: Săn KOC (Marketplace)' },
+                { view: 'bodymiss_scout',      icon: '🎯', name: 'Săn KOC Body Miss' },
               ]},
               { key: 'archive', label: '🗄️ Lưu trữ', emoji: '🗄️', items: [
                 { view: 'data_archive', icon: '🗄️', name: 'Lưu Trữ Data' },
@@ -441,6 +443,7 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'booking_material' && <BookingMaterialTab />}
           {currentView === 'booking_budget' && <BookingBudgetTab />}
           {currentView === 'koc_hunt' && <KocHuntTab currentUser={user} />}
+          {currentView === 'bodymiss_scout' && <BodymissScoutTab currentUser={user} />}
           {currentView === 'expense' && <ExpenseEcomTab />}
           {currentView === 'booking' && <BookingManagerTab />}
           {currentView === 'data_archive' && <DataArchiveTab />}
