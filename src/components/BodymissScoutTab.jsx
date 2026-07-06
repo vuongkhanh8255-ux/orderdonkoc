@@ -21,6 +21,18 @@ export default function BodymissScoutTab({ currentUser } = {}) {
   const [q, setQ] = useState('');
   const [markFilter, setMarkFilter] = useState('all'); // all | chua | lum | contacted | skip
   const [busyU, setBusyU] = useState('');
+  const [play, setPlay] = useState(null); // {id, username, title, url, err} — phát video tại chỗ
+
+  // Phát video ngay trong popup (lách chặn video gắn giỏ) — lấy mp4 trực tiếp qua Edge Function tikwm.
+  const openPlay = async (videoId, uname, title) => {
+    setPlay({ id: videoId, username: uname, title, url: null, err: null });
+    try {
+      const { data, error } = await supabase.functions.invoke('koc-channel-views', { body: { video_id: videoId, vuser: uname } });
+      const link = data?.hdplay || data?.play;
+      if (error || !data?.ok || !link) setPlay(p => p?.id === videoId ? { ...p, err: 'Không tải được video — thử lại hoặc mở TikTok.' } : p);
+      else setPlay(p => p?.id === videoId ? { ...p, url: link } : p);
+    } catch (e) { setPlay(p => p?.id === videoId ? { ...p, err: e.message } : p); }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -134,14 +146,14 @@ export default function BodymissScoutTab({ currentUser } = {}) {
                         </div>
                       ) : <span style={{ color: '#cbd5e1', fontSize: '0.72rem' }}>{r.mark_status ? 'bio ko có' : 'lượm để lấy'}</span>}
                     </td>
-                    <td style={{ ...td, fontSize: '0.75rem', maxWidth: 200 }}>
+                    <td style={{ ...td, fontSize: '0.75rem', maxWidth: 210 }}>
                       {r.last_video_id ? (
-                        <a href={`https://www.tiktok.com/@${r.username}/video/${r.last_video_id}`} target="_blank" rel="noreferrer" title={r.top_title || 'Xem video'} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: ACCENT, fontWeight: 700, textDecoration: 'none', maxWidth: 190 }}>
+                        <button onClick={() => openPlay(r.last_video_id, r.username, r.top_title)} title={r.top_title || 'Bấm xem clip tại chỗ'} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#fff', background: ACCENT, border: 'none', borderRadius: 8, padding: '5px 10px', fontWeight: 700, cursor: 'pointer', maxWidth: 200 }}>
                           <span style={{ flexShrink: 0 }}>▶️</span>
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.top_title || 'Xem video'}</span>
-                        </a>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.top_title || 'Xem clip'}</span>
+                        </button>
                       ) : <span style={{ color: '#cbd5e1' }}>—</span>}
-                      <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>{r.last_post ? new Date(r.last_post).toLocaleDateString('vi-VN') : ''}{r.has_cast ? <span style={{ color: '#7c3aed', fontWeight: 700 }}> · 💸 có cast</span> : ''}</div>
+                      <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: 3 }}>{r.last_post ? new Date(r.last_post).toLocaleDateString('vi-VN') : ''}{r.has_cast ? <span style={{ color: '#7c3aed', fontWeight: 700 }}> · 💸 có cast</span> : ''}</div>
                     </td>
                     <td style={td}>
                       {r.mark_status
@@ -160,6 +172,26 @@ export default function BodymissScoutTab({ currentUser } = {}) {
           </table>
         </div>
       </div>
+
+      {play && (
+        <div onClick={() => setPlay(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.7)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#0f172a', borderRadius: 16, padding: 14, width: 'min(94vw, 380px)', fontFamily: "'Outfit', sans-serif" }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <a href={`https://www.tiktok.com/@${play.username}`} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontWeight: 700, textDecoration: 'none', fontSize: '0.86rem' }}>@{play.username}</a>
+              <a href={`https://www.tiktok.com/@${play.username}/video/${play.id}`} target="_blank" rel="noreferrer" style={{ color: '#94a3b8', fontSize: '0.72rem', textDecoration: 'none' }}>↗ mở TikTok</a>
+              <button onClick={() => setPlay(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#94a3b8', fontSize: '1.3rem', cursor: 'pointer' }}>✕</button>
+            </div>
+            <div style={{ width: '100%', aspectRatio: '9/16', background: '#000', borderRadius: 10, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {play.err
+                ? <div style={{ color: '#fca5a5', fontSize: '0.82rem', textAlign: 'center', padding: 20 }}>⚠️ {play.err}</div>
+                : !play.url
+                ? <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>⏳ Đang tải clip...</div>
+                : <video src={play.url} controls autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }} />}
+            </div>
+            {play.title && <div style={{ color: '#cbd5e1', fontSize: '0.76rem', marginTop: 8, lineHeight: 1.4 }}>{play.title}</div>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
