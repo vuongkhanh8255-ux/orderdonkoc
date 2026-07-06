@@ -404,6 +404,42 @@ async function handleKocSearchCreator({ params, res }) {
     note: rateLimited ? 'tikwm bận, thử lại sau vài giây' : 'Không tìm thấy kênh @' + q + ' (kiểm tra lại @kênh cho đúng, hoặc kênh riêng tư).' });
 }
 
+// NẠP KOC THEO CHỈ ĐỊNH (action=koc_import, k=kp8255) — dán danh sách @kênh (lọc từ Kalodata...)
+// → cào info từng kênh qua TIKWM (không bị TikTok bóp như marketplace) → upsert vào pool Module 8
+// (kèm tiktok_uid sẵn để mời). KHÔNG đụng da_lien_he/ghi_chu/moi_*. Tối đa 30 kênh/lượt (né 60s
+// Vercel) — UI tự chia lô. POST {k, usernames:[...]}.
+async function handleKocImport({ params, supabase, res }) {
+  if (params.k !== 'kp8255') return res.status(200).json({ ok: false, error: 'thiếu khoá' });
+  const normU = (s) => { const t = String(s || '').trim(); const m = t.match(/tiktok\.com\/@?([\w.\-]+)/i); return (m ? m[1] : t).toLowerCase().replace(/^@/, '').replace(/[/?#].*$/, '').trim(); };
+  const usernames = [...new Set((Array.isArray(params.usernames) ? params.usernames : []).map(normU).filter(u => u.length >= 2))].slice(0, 30);
+  if (!usernames.length) return res.status(200).json({ ok: false, error: 'danh sách rỗng' });
+
+  const results = [];
+  for (const u of usernames) {
+    try {
+      const raw = await ttText(`https://www.tikwm.com/api/user/info?unique_id=${encodeURIComponent(u)}`,
+        { headers: { 'User-Agent': 'Mozilla/5.0' } }, 12000);
+      const j = JSON.parse(raw);
+      const usr = j?.data?.user, st = j?.data?.stats;
+      if (j?.code === 0 && usr?.uniqueId) {
+        await supabase.from('koc_marketplace_pool').upsert({
+          username: String(usr.uniqueId).toLowerCase(),
+          nickname: usr.nickname || usr.uniqueId,
+          avatar: usr.avatarThumb || usr.avatarMedium || '',
+          followers: Number(st?.followerCount) || 0,
+          tiktok_uid: usr.id ? String(usr.id) : null,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'username' });
+        results.push({ u, ok: true, followers: Number(st?.followerCount) || 0 });
+      } else {
+        results.push({ u, ok: false, error: 'không tìm thấy kênh (sai @ / riêng tư)' });
+      }
+    } catch (e) { results.push({ u, ok: false, error: e.message }); }
+    await new Promise(r => setTimeout(r, 350)); // giãn nhịp tikwm
+  }
+  return res.status(200).json({ ok: true, done: results.filter(r => r.ok).length, fail: results.filter(r => !r.ok).length, results });
+}
+
 // ── MỜI KOC (chỉ khanhpro8255, khoá k=kp8255) ────────────────────────────────
 // Helper: chọn connection app Creator theo seller + ký + gọi 1 endpoint affiliate_seller.
 const affilCall = async ({ supabase, seller, method, path, bodyObj, extraQuery }) => {
@@ -651,17 +687,23 @@ async function handleKocHunt({ params, supabase, res }) {
   if (!cipher) return res.status(200).json({ ok: false, error: `Không có shop_cipher cho "${conn.seller_name}"` });
 
   const path = `/affiliate_seller/${AFFILIATE_VERSION}/marketplace_creators/search`;
-  const bodyStr = '{}';
+  // XOAY VÒNG TỪ KHOÁ tìm kiếm — body {} chỉ trả đi trả lại cùng nhóm KOC đề xuất → pool đứng
+  // (~165 KOC sau nhiều ngày). Mỗi cửa sổ 2h dùng 1 từ khoá khác → ra nhóm KOC khác → pool phình.
+  const KEYWORDS = ['', 'skincare', 'mỹ phẩm', 'làm đẹp', 'review', 'makeup', 'son môi', 'dưỡng da',
+    'chăm sóc da', 'body', 'nước hoa', 'beauty', 'trị mụn', 'serum', 'mẹ bỉm', 'tóc', 'sữa rửa mặt', 'unbox'];
+  const keyword = params.kw !== undefined ? String(params.kw) : KEYWORDS[Math.floor(Date.now() / (2 * 3600 * 1000)) % KEYWORDS.length];
+  const bodyStr = keyword ? JSON.stringify({ keyword }) : '{}';
   const normU = (u) => String(u || '').toLowerCase().replace(/^@/, '').trim();
-  const maxPages = Math.min(Number(params.max_pages) || 2, 4);
+  const maxPages = Math.min(Number(params.max_pages) || 3, 4);
 
-  const st = stMap[conn.seller_name];
-  let nextToken = st?.page_token_carry || '';
-  // đọc token trang kế từ DB (cột page_token)
+  // token phân trang GẮN VỚI từ khoá (lưu JSON {kw, tk} trong cột page_token) — đổi từ khoá thì reset
   const { data: stRow } = await supabase.from('koc_hunt_state').select('page_token, total_seen').eq('seller_name', conn.seller_name).maybeSingle();
-  nextToken = stRow?.page_token || '';
+  let nextToken = '';
+  try { const tkObj = JSON.parse(stRow?.page_token || ''); if (tkObj?.kw === keyword) nextToken = tkObj.tk || ''; }
+  catch { if (!keyword) nextToken = stRow?.page_token || ''; } // token kiểu cũ chỉ hợp khi không từ khoá
   let seen = stRow?.total_seen || 0;
   let saved = 0, pages = 0;
+  const packToken = (tk) => tk ? JSON.stringify({ kw: keyword, tk }) : null;
 
   for (let p = 0; p < maxPages; p++) {
     const urlParams = { app_key: ck, timestamp: String(Math.floor(Date.now() / 1000)), page_size: '20', shop_cipher: cipher };
@@ -673,8 +715,8 @@ async function handleKocHunt({ params, supabase, res }) {
     let j; try { j = JSON.parse(raw); } catch { j = { code: -1 }; }
     if (j?.code === 105002 && await refreshCreatorToken({ ck, cs, conn, supabase })) { p--; continue; }
     if (j?.code !== 0) { // bị bóp/ lỗi → dừng lượt này, giữ token để lần sau chạy tiếp
-      await supabase.from('koc_hunt_state').upsert({ seller_name: conn.seller_name, page_token: nextToken || null, total_seen: seen, last_run_at: new Date().toISOString() }, { onConflict: 'seller_name' });
-      return res.status(200).json({ ok: true, shop: conn.seller_name, pages, saved, stop_code: j?.code, msg: j?.message || 'stopped' });
+      await supabase.from('koc_hunt_state').upsert({ seller_name: conn.seller_name, page_token: packToken(nextToken), total_seen: seen, last_run_at: new Date().toISOString() }, { onConflict: 'seller_name' });
+      return res.status(200).json({ ok: true, shop: conn.seller_name, kw: keyword || '(đề xuất)', pages, saved, stop_code: j?.code, msg: j?.message || 'stopped' });
     }
     const d = j.data || {};
     const rows = (d.creators || []).map(mapCreator).map(c => ({
@@ -694,9 +736,9 @@ async function handleKocHunt({ params, supabase, res }) {
     await new Promise(r => setTimeout(r, 1200)); // delay chống rate-limit
   }
 
-  await supabase.from('koc_hunt_state').upsert({ seller_name: conn.seller_name, page_token: nextToken || null, total_seen: seen, last_run_at: new Date().toISOString() }, { onConflict: 'seller_name' });
+  await supabase.from('koc_hunt_state').upsert({ seller_name: conn.seller_name, page_token: packToken(nextToken), total_seen: seen, last_run_at: new Date().toISOString() }, { onConflict: 'seller_name' });
   const { count } = await supabase.from('koc_marketplace_pool').select('*', { count: 'exact', head: true });
-  return res.status(200).json({ ok: true, shop: conn.seller_name, pages, saved, pool_total: count, next: nextToken ? 'tiep' : 'het-vong' });
+  return res.status(200).json({ ok: true, shop: conn.seller_name, kw: keyword || '(đề xuất)', pages, saved, pool_total: count, next: nextToken ? 'tiep' : 'het-vong' });
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1731,6 +1773,11 @@ export default async function handler(req, res) {
 
   if (action === 'affil_probe') {
     try { return await handleAffilProbe({ params, supabase, res }); }
+    catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
+  }
+
+  if (action === 'koc_import') {
+    try { return await handleKocImport({ params, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 

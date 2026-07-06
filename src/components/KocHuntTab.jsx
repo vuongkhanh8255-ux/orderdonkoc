@@ -25,6 +25,7 @@ export default function KocHuntTab({ currentUser } = {}) {
   const [crawlMsg, setCrawlMsg] = useState('');
   const [sel, setSel] = useState({});           // username -> true (KOC đã chọn để mời)
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -87,6 +88,7 @@ export default function KocHuntTab({ currentUser } = {}) {
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
           {crawlMsg && <span style={{ fontSize: '0.78rem', color: '#64748b' }}>{crawlMsg}</span>}
           <button onClick={load} style={{ ...inp, cursor: 'pointer', background: '#fff', fontWeight: 700 }}>🔄 Tải lại</button>
+          {canInvite && <button onClick={() => setImportOpen(true)} style={{ ...inp, cursor: 'pointer', background: '#0891b2', color: '#fff', border: 'none', fontWeight: 800 }}>➕ Nạp KOC</button>}
           {isAdmin && <button onClick={crawlMore} disabled={crawling} style={{ ...inp, cursor: 'pointer', background: ACCENT, color: '#fff', border: 'none', fontWeight: 800 }}>{crawling ? '...' : '⛏️ Cào thêm'}</button>}
         </div>
       </div>
@@ -168,6 +170,90 @@ export default function KocHuntTab({ currentUser } = {}) {
       {inviteOpen && canInvite && (
         <InviteModal selRows={selRows} currentUser={currentUser} onClose={() => setInviteOpen(false)} onDone={() => { setInviteOpen(false); clearSel(); load(); }} />
       )}
+      {importOpen && canInvite && (
+        <ImportModal onClose={() => setImportOpen(false)} onDone={() => { setImportOpen(false); load(); }} />
+      )}
+    </div>
+  );
+}
+
+// ── MODAL NẠP KOC THEO CHỈ ĐỊNH (chỉ khanhpro8255): dán danh sách @kênh (lọc từ Kalodata...) ──
+// → server cào info từng kênh qua tikwm → vào pool → tick chọn gửi lời mời hàng loạt.
+function ImportModal({ onClose, onDone }) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState('');
+  const [results, setResults] = useState([]);
+
+  // parse: mỗi dòng 1 @kênh / link kênh; chấp nhận cả dấu phẩy/tab (dán từ Excel/Kalodata)
+  const parsed = useMemo(() => {
+    const items = text.split(/[\n,;\t]+/).map(s => {
+      const t = s.trim(); if (!t) return '';
+      const m = t.match(/tiktok\.com\/@?([\w.\-]+)/i);
+      return (m ? m[1] : t).toLowerCase().replace(/^@/, '').replace(/[/?#].*$/, '').trim();
+    }).filter(u => u.length >= 2 && /^[\w.\-]+$/.test(u));
+    return [...new Set(items)];
+  }, [text]);
+
+  const run = async () => {
+    if (!parsed.length) { alert('Dán danh sách @kênh trước (mỗi dòng 1 kênh)'); return; }
+    setBusy(true); setResults([]);
+    const BATCH = 25;
+    let all = [];
+    for (let i = 0; i < parsed.length; i += BATCH) {
+      const batch = parsed.slice(i, i + BATCH);
+      setProgress(`Đang cào ${Math.min(i + BATCH, parsed.length)}/${parsed.length} kênh...`);
+      try {
+        const r = await fetch(`${API}?action=koc_import&k=kp8255`, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ k: 'kp8255', usernames: batch }),
+        });
+        const j = await r.json();
+        all = all.concat(j.ok ? (j.results || []) : batch.map(u => ({ u, ok: false, error: j.error || 'lỗi server' })));
+      } catch (e) { all = all.concat(batch.map(u => ({ u, ok: false, error: e.message }))); }
+      setResults([...all]);
+    }
+    setProgress('');
+    setBusy(false);
+  };
+
+  const okCount = results.filter(r => r.ok).length;
+  const inp = { padding: '9px 12px', borderRadius: 9, border: '1.5px solid #e2e8f0', fontSize: '0.86rem', color: '#334155', boxSizing: 'border-box', width: '100%' };
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.45)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: 560, maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto', padding: 24, fontFamily: "'Outfit', sans-serif" }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
+          <h3 style={{ margin: 0, fontSize: '1.15rem', color: '#0f172a' }}>➕ Nạp KOC theo chỉ định</h3>
+          <button onClick={onClose} style={{ marginLeft: 'auto', background: 'none', border: 'none', fontSize: '1.3rem', cursor: 'pointer', color: '#94a3b8' }}>✕</button>
+        </div>
+        <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '0 0 10px', lineHeight: 1.5 }}>
+          Dán danh sách <b>@kênh TikTok</b> (lọc sẵn từ Kalodata / Excel) — mỗi dòng 1 kênh, dán link kênh cũng được.
+          Hệ thống tự cào info từng kênh (avatar, follower, ID) rồi đưa vào pool → tick chọn để <b>gửi lời mời hàng loạt</b>.
+        </p>
+        <textarea value={text} onChange={e => setText(e.target.value)} rows={8} disabled={busy}
+          placeholder={'heomoi1707\n@nganbambi99\nhttps://www.tiktok.com/@tieulinhsann\n...'}
+          style={{ ...inp, resize: 'vertical', fontFamily: 'monospace', fontSize: '0.82rem' }} />
+        <div style={{ fontSize: '0.76rem', color: parsed.length ? '#16a34a' : '#94a3b8', fontWeight: 700, marginTop: 6 }}>
+          Nhận diện được {parsed.length} kênh {progress && ` · ${progress}`}
+        </div>
+
+        {results.length > 0 && (
+          <div style={{ marginTop: 10, maxHeight: 180, overflowY: 'auto', background: '#f8fafc', borderRadius: 9, padding: 10, fontSize: '0.78rem' }}>
+            <div style={{ fontWeight: 800, marginBottom: 6, color: okCount === results.length ? '#16a34a' : '#b45309' }}>Đã vào pool: {okCount}/{results.length}</div>
+            {results.filter(r => !r.ok).map((r, i) => <div key={i} style={{ color: '#dc2626' }}>❌ @{r.u} — {r.error}</div>)}
+            {results.filter(r => !r.ok).length === 0 && <div style={{ color: '#16a34a' }}>✅ Tất cả kênh đều vào pool thành công</div>}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+          <button onClick={onClose} style={{ ...inp, width: 'auto', cursor: 'pointer', background: '#fff', fontWeight: 700 }}>Đóng</button>
+          {results.length > 0 && !busy
+            ? <button onClick={onDone} style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none', background: '#16a34a', color: '#fff', fontWeight: 800, cursor: 'pointer' }}>Xong — xem pool ✓</button>
+            : <button onClick={run} disabled={busy || !parsed.length} style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none', background: '#0891b2', color: '#fff', fontWeight: 800, cursor: busy ? 'default' : 'pointer', opacity: busy || !parsed.length ? 0.6 : 1 }}>
+                {busy ? '⏳ Đang cào...' : `Nạp ${parsed.length} kênh vào pool`}
+              </button>}
+        </div>
+      </div>
     </div>
   );
 }
