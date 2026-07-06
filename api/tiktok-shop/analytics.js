@@ -404,6 +404,100 @@ async function handleKocSearchCreator({ params, res }) {
     note: rateLimited ? 'tikwm bận, thử lại sau vài giây' : 'Không tìm thấy kênh @' + q + ' (kiểm tra lại @kênh cho đúng, hoặc kênh riêng tư).' });
 }
 
+// ── MỜI KOC (chỉ khanhpro8255, khoá k=kp8255) ────────────────────────────────
+// Helper: chọn connection app Creator theo seller + ký + gọi 1 endpoint affiliate_seller.
+const affilCall = async ({ supabase, seller, method, path, bodyObj, extraQuery }) => {
+  const ck = process.env.TIKTOK_CREATOR_APP_KEY?.trim();
+  const cs = process.env.TIKTOK_CREATOR_APP_SECRET?.trim();
+  if (!ck || !cs) return { code: -1, message: 'no creator app config' };
+  const { data: conns } = await supabase.from('tiktok_creator_connections')
+    .select('open_id, shop_id, shop_cipher, seller_name, access_token, refresh_token').not('access_token', 'is', null);
+  if (!conns?.length) return { code: -1, message: 'no conn' };
+  const want = String(seller || 'body').toLowerCase();
+  const conn = conns.find(c => (c.seller_name || '').toLowerCase().includes(want)) || conns[0];
+  const cipher = await resolveShopCipher({ conn, want, supabase });
+  const bodyStr = method === 'POST' ? JSON.stringify(bodyObj || {}) : '';
+  const doCall = () => {
+    const urlParams = { app_key: ck, timestamp: String(Math.floor(Date.now() / 1000)), ...(extraQuery || {}) };
+    if (cipher) urlParams.shop_cipher = cipher;
+    urlParams.sign = buildSign(cs, path, urlParams, bodyStr);
+    return ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(urlParams)}`, {
+      method,
+      headers: { 'x-tts-access-token': conn.access_token, 'content-type': 'application/json' },
+      ...(method === 'POST' ? { body: bodyStr } : {}),
+    }, 15000);
+  };
+  let j; try { j = JSON.parse(await doCall()); } catch { j = { code: -1, message: 'fetch/parse error' }; }
+  if (j?.code === 105002 && await refreshCreatorToken({ ck, cs, conn, supabase })) {
+    try { j = JSON.parse(await doCall()); } catch { j = { code: -1, message: 'fetch/parse error' }; }
+  }
+  return { ...j, _seller: conn.seller_name };
+};
+
+// Kiểu 1 — NHẮN TIN 1 KOC: tạo hội thoại (creator_id = open_id từ pool Module 8) rồi gửi tin.
+// POST {k, open_id, username, message, seller}. Thành công → ghi moi_im_at vào pool.
+async function handleKocInviteIm({ params, supabase, res }) {
+  if (params.k !== 'kp8255') return res.status(200).json({ ok: false, error: 'thiếu khoá' });
+  const openId = String(params.open_id || '').trim();
+  const message = String(params.message || '').trim();
+  if (!openId || !message) return res.status(200).json({ ok: false, error: 'thiếu open_id/message' });
+
+  // 1) tạo (hoặc lấy lại) hội thoại với KOC
+  const conv = await affilCall({ supabase, seller: params.seller, method: 'POST',
+    path: '/affiliate_seller/202412/conversations', bodyObj: { creator_id: openId } });
+  const convId = conv?.data?.id || conv?.data?.conversation_id || '';
+  if (conv?.code !== 0 || !convId) {
+    return res.status(200).json({ ok: false, step: 'conversation', code: conv?.code, error: conv?.message || 'không tạo được hội thoại', raw: conv?.data || null });
+  }
+  // 2) gửi tin nhắn text
+  const msg = await affilCall({ supabase, seller: params.seller, method: 'POST',
+    path: `/affiliate_seller/202412/conversations/${convId}/messages`, bodyObj: { msg_type: 'TEXT', content: message } });
+  if (msg?.code !== 0) {
+    return res.status(200).json({ ok: false, step: 'message', code: msg?.code, error: msg?.message || 'gửi tin thất bại', conversation_id: convId });
+  }
+  // 3) ghi dấu đã nhắn vào pool
+  if (params.username) {
+    try { await supabase.from('koc_marketplace_pool').update({ moi_im_at: new Date().toISOString() }).eq('username', String(params.username).toLowerCase()); } catch { /* best-effort */ }
+  }
+  return res.status(200).json({ ok: true, conversation_id: convId, shop: conv._seller });
+}
+
+// Kiểu 2 — TẠO CHIẾN DỊCH MỜI ĐÍCH DANH (target collaboration) cho tối đa 50 KOC/lần.
+// POST {k, seller, name, message, end_time(unix s), commission_pct(1-80), product_ids[], creators:[{open_id,username}], email}
+async function handleKocInviteCollab({ params, supabase, res }) {
+  if (params.k !== 'kp8255') return res.status(200).json({ ok: false, error: 'thiếu khoá' });
+  const name = String(params.name || '').trim();
+  const endTime = String(params.end_time || '').trim();
+  const pct = Number(params.commission_pct);
+  const productIds = Array.isArray(params.product_ids) ? params.product_ids.map(String).filter(Boolean) : [];
+  const creators = Array.isArray(params.creators) ? params.creators.filter(c => c && c.open_id) : [];
+  if (!name || !endTime || !Number.isFinite(pct) || pct < 1 || pct > 80 || !productIds.length || !creators.length) {
+    return res.status(200).json({ ok: false, error: 'thiếu/sai: name, end_time, commission_pct(1-80), product_ids, creators' });
+  }
+  if (creators.length > 50) return res.status(200).json({ ok: false, error: 'tối đa 50 KOC/lần (chia bớt)' });
+
+  const body = {
+    name,
+    ...(params.message ? { message: String(params.message) } : {}),
+    end_time: endTime,
+    products: productIds.map(id => ({ id, target_commission_rate: Math.round(pct * 100) })), // 10% → 1000
+    creator_user_ids: creators.map(c => String(c.open_id)),
+    seller_contact_info: { email: String(params.email || 'khanh.vuong@stellakinetics.com') },
+    free_sample_rule: { has_free_sample: false, is_sample_approval_exempt: false },
+  };
+  const r = await affilCall({ supabase, seller: params.seller, method: 'POST',
+    path: '/affiliate_seller/202405/target_collaborations', bodyObj: body });
+  if (r?.code !== 0) return res.status(200).json({ ok: false, code: r?.code, error: r?.message || 'TikTok từ chối', raw: r?.data || null });
+
+  // ghi dấu đã mời collab vào pool
+  const now = new Date().toISOString();
+  for (const c of creators) {
+    if (!c.username) continue;
+    try { await supabase.from('koc_marketplace_pool').update({ moi_collab_at: now }).eq('username', String(c.username).toLowerCase()); } catch { /* best-effort */ }
+  }
+  return res.status(200).json({ ok: true, shop: r._seller, data: r.data || null, invited: creators.length });
+}
+
 // DÒ QUYỀN API AFFILIATE (action=affil_probe) — gọi thử các endpoint affiliate_seller xem app
 // Creator hiện tại được phép dùng cái nào (mời target collab / open collab / IM nhắn KOC...).
 // POST probe gửi body rỗng → không tạo gì thật (thiếu param thì TikTok trả lỗi param = endpoint
@@ -1604,6 +1698,16 @@ export default async function handler(req, res) {
 
   if (action === 'affil_probe') {
     try { return await handleAffilProbe({ params, supabase, res }); }
+    catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
+  }
+
+  if (action === 'koc_invite_im') {
+    try { return await handleKocInviteIm({ params, supabase, res }); }
+    catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
+  }
+
+  if (action === 'koc_invite_collab') {
+    try { return await handleKocInviteCollab({ params, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 
