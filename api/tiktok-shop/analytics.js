@@ -404,6 +404,51 @@ async function handleKocSearchCreator({ params, res }) {
     note: rateLimited ? 'tikwm bận, thử lại sau vài giây' : 'Không tìm thấy kênh @' + q + ' (kiểm tra lại @kênh cho đúng, hoặc kênh riêng tư).' });
 }
 
+// DÒ QUYỀN API AFFILIATE (action=affil_probe) — gọi thử các endpoint affiliate_seller xem app
+// Creator hiện tại được phép dùng cái nào (mời target collab / open collab / IM nhắn KOC...).
+// POST probe gửi body rỗng → không tạo gì thật (thiếu param thì TikTok trả lỗi param = endpoint
+// SỐNG + CÓ QUYỀN; 'api not found' = sai path; 'no permission' = thiếu scope phải xin thêm).
+async function handleAffilProbe({ params, supabase, res }) {
+  const ck = process.env.TIKTOK_CREATOR_APP_KEY?.trim();
+  const cs = process.env.TIKTOK_CREATOR_APP_SECRET?.trim();
+  if (!ck || !cs) return res.status(200).json({ ok: false, error: 'no creator app config' });
+  const { data: conns } = await supabase.from('tiktok_creator_connections')
+    .select('open_id, shop_id, shop_cipher, seller_name, access_token, refresh_token').not('access_token', 'is', null);
+  if (!conns?.length) return res.status(200).json({ ok: false, error: 'no conn' });
+  const want = String(params.seller || 'body').toLowerCase();
+  const conn = conns.find(c => (c.seller_name || '').toLowerCase().includes(want)) || conns[0];
+  const cipher = await resolveShopCipher({ conn, want, supabase });
+
+  const PROBES = [
+    { m: 'POST', p: '/affiliate_seller/202405/target_collaborations' },
+    { m: 'POST', p: '/affiliate_seller/202406/target_collaborations' },
+    { m: 'GET',  p: '/affiliate_seller/202405/target_collaborations' },
+    { m: 'POST', p: '/affiliate_seller/202405/open_collaborations' },
+    { m: 'GET',  p: '/affiliate_seller/202405/open_collaborations' },
+    { m: 'GET',  p: '/affiliate_seller/202412/conversations' },
+    { m: 'POST', p: '/affiliate_seller/202412/conversations' },
+    { m: 'GET',  p: '/affiliate_seller/202405/conversations' },
+  ];
+  const out = [];
+  for (const pr of PROBES) {
+    const bodyStr = pr.m === 'POST' ? '{}' : '';
+    const urlParams = { app_key: ck, timestamp: String(Math.floor(Date.now() / 1000)) };
+    if (cipher) urlParams.shop_cipher = cipher;
+    urlParams.sign = buildSign(cs, pr.p, urlParams, bodyStr);
+    let j;
+    try {
+      j = JSON.parse(await ttText(`${TIKTOK_BASE}${pr.p}?${new URLSearchParams(urlParams)}`, {
+        method: pr.m,
+        headers: { 'x-tts-access-token': conn.access_token, 'content-type': 'application/json' },
+        ...(pr.m === 'POST' ? { body: bodyStr } : {}),
+      }, 10000));
+    } catch { j = { code: -1, message: 'fetch/parse error' }; }
+    out.push({ probe: `${pr.m} ${pr.p}`, code: j?.code, message: String(j?.message || '').slice(0, 140) });
+    await new Promise(r => setTimeout(r, 400));
+  }
+  return res.status(200).json({ ok: true, shop: conn.seller_name, probes: out });
+}
+
 // Module 8 — SĂN KOC: cào marketplace_creators/search → lưu dồn vào koc_marketplace_pool.
 // Cron ping ?action=koc_hunt mỗi ngày. Cào 1 GIAN/lượt (xoay vòng theo last_run_at) cho hợp
 // timeout Vercel ~10s. Ưu tiên gian làm đẹp/mỹ phẩm. Tiếp trang qua koc_hunt_state.page_token.
@@ -1528,6 +1573,11 @@ export default async function handler(req, res) {
 
   if (action === 'koc_hunt') {
     try { return await handleKocHunt({ params, supabase, res }); }
+    catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
+  }
+
+  if (action === 'affil_probe') {
+    try { return await handleAffilProbe({ params, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 
