@@ -128,8 +128,12 @@ function App() {
   if (!user) return <LoginPage onLogin={handleLogin} />;
 
   let allowedViews = ROLE_VIEWS[user.role] || [];
-  // Quản lý link air (airlinks): CHỈ khanhpro8255 thấy — admin + mọi account khác đều ẩn
-  if (user.username !== 'khanhpro8255') allowedViews = allowedViews.filter(v => v !== 'airlinks');
+  // CHỈ khanhpro8255 thấy — admin + mọi account khác đều ẩn:
+  //   airlinks (Quản lý link air), booking_budget (Tạm đối chiếu), koc_hunt (Module 8: Săn KOC)
+  if (user.username !== 'khanhpro8255') {
+    const HIDDEN = ['airlinks', 'booking_budget', 'koc_hunt'];
+    allowedViews = allowedViews.filter(v => !HIDDEN.includes(v));
+  }
 
   // ── MAIN APP ──
   return <AppMain user={user} onLogout={handleLogout} allowedViews={allowedViews} />;
