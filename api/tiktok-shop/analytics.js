@@ -522,49 +522,74 @@ async function handleKocInviteIm({ params, supabase, res }) {
   return res.status(200).json({ ok: true, conversation_id: convId, shop: conv._seller });
 }
 
-// Kiểu 2 — TẠO CHIẾN DỊCH MỜI ĐÍCH DANH (target collaboration) cho tối đa 50 KOC/lần.
-// POST {k, seller, name, message, end_time(unix s), commission_pct(1-80), product_ids[], creators:[{open_id,username}], email}
+// open_id 54 ký tự của KOC (bản 202508 cần) — pool có sẵn với KOC cào marketplace; KOC nạp tay
+// thì tra qua marketplace_creators/search {keyword: username} (kỹ thuật harvestAvatars, dễ bị bóp).
+const resolveOpenId = async ({ supabase, seller, username }) => {
+  const u = String(username || '').toLowerCase().replace(/^@/, '').trim();
+  if (!u) return null;
+  try {
+    const { data: row } = await supabase.from('koc_marketplace_pool').select('open_id').eq('username', u).maybeSingle();
+    if (row?.open_id) return row.open_id;
+  } catch { /* pool optional */ }
+  const r = await affilCall({ supabase, seller, method: 'POST',
+    path: '/affiliate_seller/202508/marketplace_creators/search', bodyObj: { keyword: u }, extraQuery: { page_size: '12' } });
+  const hit = (r?.data?.creators || []).find(c => String(c.username || '').toLowerCase() === u);
+  const oid = hit?.creator_open_id || null;
+  if (oid) { try { await supabase.from('koc_marketplace_pool').update({ open_id: oid }).eq('username', u); } catch { /* best-effort */ } }
+  return oid;
+};
+
+// Kiểu 2 — TẠO CHIẾN DỊCH MỜI ĐÍCH DANH (target collaboration 202508) cho tối đa 50 KOC/lần.
+// POST {k, seller, name, message, end_time(unix s), commission_pct(1-80), shop_ads_pct(0-80, tuỳ chọn),
+//       product_ids[], creators:[{username}], email}
+// Bản 202508 nhận creator_user_open_ids (mã 54 ký tự) + shop_ads_commission_rate (hoa hồng Quảng cáo/GMV Max).
 async function handleKocInviteCollab({ params, supabase, res }) {
   if (params.k !== 'kp8255') return res.status(200).json({ ok: false, error: 'thiếu khoá' });
   const name = String(params.name || '').trim();
   const endTime = String(params.end_time || '').trim();
   const pct = Number(params.commission_pct);
+  const adsPct = Number(params.shop_ads_pct) || 0; // 0 = không set hoa hồng ads
   const productIds = Array.isArray(params.product_ids) ? params.product_ids.map(String).filter(Boolean) : [];
-  const creators = Array.isArray(params.creators) ? params.creators.filter(c => c && c.open_id) : [];
+  const creators = Array.isArray(params.creators) ? params.creators.filter(c => c && c.username) : [];
   if (!name || !endTime || !Number.isFinite(pct) || pct < 1 || pct > 80 || !productIds.length || !creators.length) {
     return res.status(200).json({ ok: false, error: 'thiếu/sai: name, end_time, commission_pct(1-80), product_ids, creators' });
   }
+  if (adsPct && (adsPct < 1 || adsPct > 80)) return res.status(200).json({ ok: false, error: 'hoa hồng ads phải 1-80 (%) hoặc bỏ trống' });
   if (creators.length > 50) return res.status(200).json({ ok: false, error: 'tối đa 50 KOC/lần (chia bớt)' });
 
-  // Đổi username → ID SỐ (tikwm + cache pool) — API chỉ nhận ID số, không nhận open_id marketplace
-  const uids = []; const failed = [];
+  // Đổi username → open_id 54 ký tự (pool có sẵn / tra marketplace, cache lại)
+  const openIds = []; const failed = [];
   for (const c of creators) {
-    const uid = await resolveTikTokUid(supabase, c.username);
-    if (uid) { uids.push(uid); c._uid = uid; } else failed.push(c.username);
-    await new Promise(r => setTimeout(r, 250)); // giãn nhịp tikwm
+    const oid = await resolveOpenId({ supabase, seller: params.seller, username: c.username });
+    if (oid) { openIds.push(oid); c._oid = oid; } else failed.push(c.username);
+    await new Promise(r => setTimeout(r, 300));
   }
-  if (!uids.length) return res.status(200).json({ ok: false, error: 'Không lấy được ID số của KOC nào (tikwm bận — thử lại)', failed });
+  if (!openIds.length) return res.status(200).json({ ok: false, error: 'Không lấy được open_id của KOC nào (TikTok đang bóp tra cứu — thử lại sau vài phút)', failed });
 
   const body = {
     name,
     ...(params.message ? { message: String(params.message) } : {}),
     end_time: endTime,
-    products: productIds.map(id => ({ id, target_commission_rate: Math.round(pct * 100) })), // 10% → 1000
-    creator_user_ids: uids,
+    products: productIds.map(id => ({
+      id,
+      target_commission_rate: Math.round(pct * 100), // 10% → 1000
+      ...(adsPct ? { shop_ads_commission_rate: Math.round(adsPct * 100) } : {}),
+    })),
+    creator_user_open_ids: openIds,
     seller_contact_info: { email: String(params.email || 'khanh.vuong@stellakinetics.com') },
     free_sample_rule: { has_free_sample: false, is_sample_approval_exempt: false },
   };
   const r = await affilCall({ supabase, seller: params.seller, method: 'POST',
-    path: '/affiliate_seller/202405/target_collaborations', bodyObj: body });
-  if (r?.code !== 0) return res.status(200).json({ ok: false, code: r?.code, error: r?.message || 'TikTok từ chối', raw: r?.data || null });
+    path: '/affiliate_seller/202508/target_collaborations', bodyObj: body });
+  if (r?.code !== 0) return res.status(200).json({ ok: false, code: r?.code, error: r?.message || 'TikTok từ chối', raw: r?.data || null, failed_openid: failed });
 
-  // ghi dấu đã mời collab vào pool (chỉ KOC thật sự vào lời mời — có _uid)
+  // ghi dấu đã mời collab vào pool (chỉ KOC thật sự vào lời mời — có _oid)
   const now = new Date().toISOString();
   for (const c of creators) {
-    if (!c.username || !c._uid) continue;
+    if (!c.username || !c._oid) continue;
     try { await supabase.from('koc_marketplace_pool').update({ moi_collab_at: now }).eq('username', String(c.username).toLowerCase()); } catch { /* best-effort */ }
   }
-  return res.status(200).json({ ok: true, shop: r._seller, data: r.data || null, invited: uids.length, failed_uid: failed });
+  return res.status(200).json({ ok: true, shop: r._seller, data: r.data || null, invited: openIds.length, failed_openid: failed });
 }
 
 // DÒ QUYỀN API AFFILIATE (action=affil_probe) — gọi thử các endpoint affiliate_seller xem app

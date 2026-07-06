@@ -271,6 +271,7 @@ function InviteModal({ selRows, currentUser, onClose, onDone }) {
   const [name, setName] = useState('');
   const [endDate, setEndDate] = useState('');
   const [pct, setPct] = useState('');
+  const [adsPct, setAdsPct] = useState(''); // hoa hồng Shop Ads (GMV Max) — tuỳ chọn
   const [collabMsg, setCollabMsg] = useState('');
   const [email, setEmail] = useState('khanh.vuong@stellakinetics.com');
   const [products, setProducts] = useState([]);
@@ -327,6 +328,7 @@ function InviteModal({ selRows, currentUser, onClose, onDone }) {
     if (!name.trim()) { alert('Nhập tên chiến dịch'); return; }
     if (!endDate) { alert('Chọn ngày kết thúc'); return; }
     if (!(Number(pct) >= 1 && Number(pct) <= 80)) { alert('Hoa hồng phải từ 1 đến 80 (%)'); return; }
+    if (adsPct && !(Number(adsPct) >= 1 && Number(adsPct) <= 80)) { alert('Hoa hồng Ads phải từ 1 đến 80 (%) hoặc bỏ trống'); return; }
     if (!pids.length) { alert('Chọn ít nhất 1 sản phẩm'); return; }
     if (selRows.length > 50) { alert('Tối đa 50 KOC/chiến dịch — bỏ bớt'); return; }
     setBusy(true); setLog([]);
@@ -336,7 +338,8 @@ function InviteModal({ selRows, currentUser, onClose, onDone }) {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           k: 'kp8255', seller: sellerKw, name: name.trim(), message: collabMsg.trim() || undefined,
-          end_time: endUnix, commission_pct: Number(pct), product_ids: pids, email: email.trim(),
+          end_time: endUnix, commission_pct: Number(pct), shop_ads_pct: adsPct ? Number(adsPct) : 0,
+          product_ids: pids, email: email.trim(),
           creators: selRows.map(r => ({ username: r.username })),
         }),
       });
@@ -383,7 +386,8 @@ function InviteModal({ selRows, currentUser, onClose, onDone }) {
             <div><label style={{ fontSize: '0.76rem', fontWeight: 700, color: '#64748b' }}>Tên chiến dịch</label><input value={name} onChange={e => setName(e.target.value)} placeholder="VD: Mời KOC làm đẹp T7" style={inp} /></div>
             <div style={{ display: 'flex', gap: 10 }}>
               <div style={{ flex: 1 }}><label style={{ fontSize: '0.76rem', fontWeight: 700, color: '#64748b' }}>Ngày kết thúc</label><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={inp} /></div>
-              <div style={{ flex: 1 }}><label style={{ fontSize: '0.76rem', fontWeight: 700, color: '#64748b' }}>Hoa hồng %</label><input value={pct} onChange={e => setPct(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" placeholder="1 - 80" style={inp} /></div>
+              <div style={{ flex: 1 }}><label style={{ fontSize: '0.76rem', fontWeight: 700, color: '#64748b' }}>Hoa hồng thường %</label><input value={pct} onChange={e => setPct(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" placeholder="1 - 80" style={inp} /></div>
+              <div style={{ flex: 1 }}><label style={{ fontSize: '0.76rem', fontWeight: 700, color: '#7c3aed' }}>Hoa hồng Ads % <span style={{ fontWeight: 500 }}>(tuỳ chọn)</span></label><input value={adsPct} onChange={e => setAdsPct(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" placeholder="bỏ trống = không" style={inp} title="Hoa hồng Shop Ads (GMV Max) — đơn từ quảng cáo dùng video của KOC sẽ tính theo % này" /></div>
             </div>
             <div>
               <label style={{ fontSize: '0.76rem', fontWeight: 700, color: '#64748b' }}>Sản phẩm ({products.filter(p => prodSel[p.id]).length} chọn) {loadingProd && '⏳'}</label>
