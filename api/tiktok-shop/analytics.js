@@ -583,13 +583,22 @@ async function handleKocInviteCollab({ params, supabase, res }) {
     path: '/affiliate_seller/202508/target_collaborations', bodyObj: body });
   if (r?.code !== 0) return res.status(200).json({ ok: false, code: r?.code, error: r?.message || 'TikTok từ chối', raw: r?.data || null, failed_openid: failed });
 
-  // ghi dấu đã mời collab vào pool (chỉ KOC thật sự vào lời mời — có _oid)
+  // 202508 trả code 0 kèm DANH SÁCH item bị chê — toàn bộ SP/KOC bị chê thì coi là THẤT BẠI
+  const invP = r?.data?.invalid_product_id_list || [];
+  const invC = r?.data?.invalid_open_id_list || [];
+  const okProducts = productIds.filter(id => !invP.includes(String(id)));
+  const okCreators = creators.filter(c => c._oid && !invC.includes(c._oid));
+  if (!okProducts.length || !okCreators.length) {
+    return res.status(200).json({ ok: false, error: !okProducts.length ? 'TikTok từ chối toàn bộ sản phẩm (kiểm tra SP đủ điều kiện affiliate)' : 'TikTok từ chối toàn bộ KOC (đã có collab trùng / không đủ điều kiện)', raw: r.data, failed_openid: failed });
+  }
+
+  // ghi dấu đã mời collab vào pool (chỉ KOC thật sự vào lời mời)
   const now = new Date().toISOString();
-  for (const c of creators) {
-    if (!c.username || !c._oid) continue;
+  for (const c of okCreators) {
     try { await supabase.from('koc_marketplace_pool').update({ moi_collab_at: now }).eq('username', String(c.username).toLowerCase()); } catch { /* best-effort */ }
   }
-  return res.status(200).json({ ok: true, shop: r._seller, data: r.data || null, invited: openIds.length, failed_openid: failed });
+  return res.status(200).json({ ok: true, shop: r._seller, data: r.data || null, invited: okCreators.length,
+    failed_openid: failed, invalid_products: invP, invalid_creators: invC.length });
 }
 
 // DÒ QUYỀN API AFFILIATE (action=affil_probe) — gọi thử các endpoint affiliate_seller xem app
