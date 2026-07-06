@@ -404,6 +404,47 @@ async function handleKocSearchCreator({ params, res }) {
     note: rateLimited ? 'tikwm bận, thử lại sau vài giây' : 'Không tìm thấy kênh @' + q + ' (kiểm tra lại @kênh cho đúng, hoặc kênh riêng tư).' });
 }
 
+// ĐÀO LIÊN HỆ TỪ BIO — TikTok không cho email/SĐT, nhưng KOC hay tự ghi trong bio (signature).
+// tikwm user/info trả signature → móc email + SĐT/Zalo VN bằng regex.
+const parseContact = (bio) => {
+  const s = String(bio || '');
+  const email = (s.match(/[\w.+-]+@[\w-]+\.[\w.]+/) || [null])[0];
+  // SĐT VN: 0/84/+84 + 9-10 số, cho phép chấm/cách giữa số
+  const rawPhone = (s.replace(/[.\s-]/g, '').match(/(?:\+?84|0)(\d{9,10})\b/) || [null])[0];
+  const sdt = rawPhone ? rawPhone.replace(/^\+?84/, '0') : null;
+  return { email, sdt };
+};
+
+// Quét bio 1 mẻ KOC trong pool chưa quét (ưu tiên follower cao) — chạy KÈM mỗi lần cron ping
+// koc_hunt (kể cả khi cào marketplace đang cooldown) → pool tự giàu liên hệ dần, ~1.400 kênh/ngày.
+const scanBioBatch = async (supabase, limit = 12) => {
+  const { data: rows } = await supabase.from('koc_marketplace_pool')
+    .select('username').is('bio_scanned_at', null)
+    .order('followers', { ascending: false }).limit(limit);
+  let scanned = 0, found = 0;
+  for (const r of (rows || [])) {
+    try {
+      const raw = await ttText(`https://www.tikwm.com/api/user/info?unique_id=${encodeURIComponent(r.username)}`,
+        { headers: { 'User-Agent': 'Mozilla/5.0' } }, 10000);
+      const j = JSON.parse(raw);
+      const u = j?.data?.user;
+      const upd = { bio_scanned_at: new Date().toISOString() };
+      if (j?.code === 0 && u) {
+        const { email, sdt } = parseContact(u.signature);
+        upd.bio = u.signature || null;
+        if (email) upd.email = email;
+        if (sdt) upd.sdt = sdt;
+        if (u.id) upd.tiktok_uid = String(u.id);
+        if (email || sdt) found++;
+      }
+      await supabase.from('koc_marketplace_pool').update(upd).eq('username', r.username);
+      scanned++;
+    } catch { /* tikwm bận — kênh này giữ lại lần sau */ }
+    await new Promise(z => setTimeout(z, 350));
+  }
+  return { scanned, found };
+};
+
 // NẠP KOC THEO CHỈ ĐỊNH (action=koc_import, k=kp8255) — dán danh sách @kênh (lọc từ Kalodata...)
 // → cào info từng kênh qua TIKWM (không bị TikTok bóp như marketplace) → upsert vào pool Module 8
 // (kèm tiktok_uid sẵn để mời). KHÔNG đụng da_lien_he/ghi_chu/moi_*. Tối đa 30 kênh/lượt (né 60s
@@ -422,15 +463,19 @@ async function handleKocImport({ params, supabase, res }) {
       const j = JSON.parse(raw);
       const usr = j?.data?.user, st = j?.data?.stats;
       if (j?.code === 0 && usr?.uniqueId) {
+        const { email, sdt } = parseContact(usr.signature);
         await supabase.from('koc_marketplace_pool').upsert({
           username: String(usr.uniqueId).toLowerCase(),
           nickname: usr.nickname || usr.uniqueId,
           avatar: usr.avatarThumb || usr.avatarMedium || '',
           followers: Number(st?.followerCount) || 0,
           tiktok_uid: usr.id ? String(usr.id) : null,
+          bio: usr.signature || null,
+          ...(email ? { email } : {}), ...(sdt ? { sdt } : {}),
+          bio_scanned_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }, { onConflict: 'username' });
-        results.push({ u, ok: true, followers: Number(st?.followerCount) || 0 });
+        results.push({ u, ok: true, followers: Number(st?.followerCount) || 0, email, sdt });
       } else {
         results.push({ u, ok: false, error: 'không tìm thấy kênh (sai @ / riêng tư)' });
       }
@@ -689,18 +734,21 @@ async function handleKocHunt({ params, supabase, res }) {
   const { data: states } = await supabase.from('koc_hunt_state').select('seller_name, last_run_at, total_seen');
   const stMap = {}; (states || []).forEach(s => { stMap[s.seller_name] = s; });
 
-  // COOLDOWN toàn cục 2h: dù cron-job.org ping dồn dập (mỗi giờ), server tự chặn nếu lần cào GẦN
-  // NHẤT (bất kỳ gian nào) chưa đủ 2 tiếng → nhường quota marketplace_creators/search cho tính năng
-  // tìm-gắn-KOC-mới ở Hiệu suất KOC (Khánh chốt 2/7: KOC nhận mẫu cần tìm ngay, không chờ được).
+  // QUÉT BIO đào liên hệ (email/SĐT trong bio) — chạy MỖI lần ping, kể cả khi marketplace cooldown.
+  // tikwm không bị bóp như marketplace → cron 15p × 12 kênh ≈ 1.150 kênh/ngày tự giàu liên hệ.
+  const bioStat = await scanBioBatch(supabase, Number(params.bio_batch) || 12);
+
+  // COOLDOWN 12 phút (Khánh chốt 6/7: cào 15p/lần cho nhiều) — cron-job.org ping 15p/lần là khớp.
+  // Rate-limit marketplace (36009002) tự cắt giữa lượt nếu TikTok bóp; lượt sau cào tiếp.
   // force=1 (nút "⛏️ Cào thêm" admin bấm tay) → bỏ qua cooldown.
   if (params.force !== '1') {
     const lastRun = Object.values(stMap).reduce((max, s) => {
       const t = s.last_run_at ? new Date(s.last_run_at).getTime() : 0;
       return t > max ? t : max;
     }, 0);
-    const COOLDOWN_MS = 2 * 3600 * 1000;
+    const COOLDOWN_MS = 12 * 60 * 1000;
     if (lastRun && Date.now() - lastRun < COOLDOWN_MS) {
-      return res.status(200).json({ ok: true, skipped: 'cooldown', minutes_left: Math.ceil((COOLDOWN_MS - (Date.now() - lastRun)) / 60000) });
+      return res.status(200).json({ ok: true, skipped: 'cooldown', minutes_left: Math.ceil((COOLDOWN_MS - (Date.now() - lastRun)) / 60000), bio: bioStat });
     }
   }
 
@@ -722,22 +770,23 @@ async function handleKocHunt({ params, supabase, res }) {
 
   const path = `/affiliate_seller/${AFFILIATE_VERSION}/marketplace_creators/search`;
   // XOAY VÒNG TỪ KHOÁ tìm kiếm — body {} chỉ trả đi trả lại cùng nhóm KOC đề xuất → pool đứng
-  // (~165 KOC sau nhiều ngày). Mỗi cửa sổ 2h dùng 1 từ khoá khác → ra nhóm KOC khác → pool phình.
+  // (~165 KOC sau nhiều ngày). Mỗi cửa sổ 15 PHÚT 1 từ khoá khác (khớp cron 15p) → nhóm KOC khác nhau.
   const KEYWORDS = ['', 'skincare', 'mỹ phẩm', 'làm đẹp', 'review', 'makeup', 'son môi', 'dưỡng da',
     'chăm sóc da', 'body', 'nước hoa', 'beauty', 'trị mụn', 'serum', 'mẹ bỉm', 'tóc', 'sữa rửa mặt', 'unbox'];
-  const keyword = params.kw !== undefined ? String(params.kw) : KEYWORDS[Math.floor(Date.now() / (2 * 3600 * 1000)) % KEYWORDS.length];
+  const keyword = params.kw !== undefined ? String(params.kw) : KEYWORDS[Math.floor(Date.now() / (15 * 60 * 1000)) % KEYWORDS.length];
   const bodyStr = keyword ? JSON.stringify({ keyword }) : '{}';
   const normU = (u) => String(u || '').toLowerCase().replace(/^@/, '').trim();
   const maxPages = Math.min(Number(params.max_pages) || 3, 4);
 
-  // token phân trang GẮN VỚI từ khoá (lưu JSON {kw, tk} trong cột page_token) — đổi từ khoá thì reset
+  // token phân trang nhớ theo TỪNG từ khoá (cột page_token lưu JSON map {kw: token}) — vòng sau quay
+  // lại từ khoá cũ thì CÀO SÂU TIẾP thay vì lặp trang 1. Token cạn (hết vòng) → xoá khỏi map, quét lại từ đầu.
   const { data: stRow } = await supabase.from('koc_hunt_state').select('page_token, total_seen').eq('seller_name', conn.seller_name).maybeSingle();
-  let nextToken = '';
-  try { const tkObj = JSON.parse(stRow?.page_token || ''); if (tkObj?.kw === keyword) nextToken = tkObj.tk || ''; }
-  catch { if (!keyword) nextToken = stRow?.page_token || ''; } // token kiểu cũ chỉ hợp khi không từ khoá
+  let tkMap = {};
+  try { const parsed = JSON.parse(stRow?.page_token || '{}'); if (parsed && typeof parsed === 'object') tkMap = parsed.kw !== undefined ? { [parsed.kw]: parsed.tk } : parsed; } catch { /* token kiểu cũ → bỏ */ }
+  let nextToken = tkMap[keyword] || '';
   let seen = stRow?.total_seen || 0;
   let saved = 0, pages = 0;
-  const packToken = (tk) => tk ? JSON.stringify({ kw: keyword, tk }) : null;
+  const packToken = (tk) => { if (tk) tkMap[keyword] = tk; else delete tkMap[keyword]; return Object.keys(tkMap).length ? JSON.stringify(tkMap) : null; };
 
   for (let p = 0; p < maxPages; p++) {
     const urlParams = { app_key: ck, timestamp: String(Math.floor(Date.now() / 1000)), page_size: '20', shop_cipher: cipher };
@@ -750,7 +799,7 @@ async function handleKocHunt({ params, supabase, res }) {
     if (j?.code === 105002 && await refreshCreatorToken({ ck, cs, conn, supabase })) { p--; continue; }
     if (j?.code !== 0) { // bị bóp/ lỗi → dừng lượt này, giữ token để lần sau chạy tiếp
       await supabase.from('koc_hunt_state').upsert({ seller_name: conn.seller_name, page_token: packToken(nextToken), total_seen: seen, last_run_at: new Date().toISOString() }, { onConflict: 'seller_name' });
-      return res.status(200).json({ ok: true, shop: conn.seller_name, kw: keyword || '(đề xuất)', pages, saved, stop_code: j?.code, msg: j?.message || 'stopped' });
+      return res.status(200).json({ ok: true, shop: conn.seller_name, kw: keyword || '(đề xuất)', pages, saved, stop_code: j?.code, msg: j?.message || 'stopped', bio: bioStat });
     }
     const d = j.data || {};
     const rows = (d.creators || []).map(mapCreator).map(c => ({
@@ -772,7 +821,7 @@ async function handleKocHunt({ params, supabase, res }) {
 
   await supabase.from('koc_hunt_state').upsert({ seller_name: conn.seller_name, page_token: packToken(nextToken), total_seen: seen, last_run_at: new Date().toISOString() }, { onConflict: 'seller_name' });
   const { count } = await supabase.from('koc_marketplace_pool').select('*', { count: 'exact', head: true });
-  return res.status(200).json({ ok: true, shop: conn.seller_name, kw: keyword || '(đề xuất)', pages, saved, pool_total: count, next: nextToken ? 'tiep' : 'het-vong' });
+  return res.status(200).json({ ok: true, shop: conn.seller_name, kw: keyword || '(đề xuất)', pages, saved, pool_total: count, next: nextToken ? 'tiep' : 'het-vong', bio: bioStat });
 }
 
 // ════════════════════════════════════════════════════════════════════════════

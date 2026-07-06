@@ -136,7 +136,13 @@ export default function KocHuntTab({ currentUser } = {}) {
                       {r.avatar ? <img src={r.avatar} alt="" style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} /> : <div style={{ width: 38, height: 38, borderRadius: '50%', background: '#e2e8f0', flexShrink: 0 }} />}
                       <div style={{ minWidth: 0 }}>
                         <a href={`https://www.tiktok.com/@${r.username}`} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontWeight: 700, textDecoration: 'none', display: 'block' }}>@{r.username}</a>
-                        <div style={{ fontSize: '0.72rem', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>{r.nickname}</div>
+                        <div title={r.bio || ''} style={{ fontSize: '0.72rem', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 170 }}>{r.nickname}</div>
+                        {(r.email || r.sdt) && (
+                          <div style={{ fontSize: '0.7rem', fontWeight: 700, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            {r.email && <span onClick={() => { navigator.clipboard?.writeText(r.email); }} title="Bấm để copy email (đào từ bio)" style={{ color: '#0891b2', cursor: 'pointer' }}>📧 {r.email}</span>}
+                            {r.sdt && <span onClick={() => { navigator.clipboard?.writeText(r.sdt); }} title="Bấm để copy SĐT/Zalo (đào từ bio)" style={{ color: '#16a34a', cursor: 'pointer' }}>📱 {r.sdt}</span>}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </td>
