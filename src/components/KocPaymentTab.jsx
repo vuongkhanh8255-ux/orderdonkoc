@@ -200,7 +200,21 @@ const KocPaymentTab = () => {
     }
     if (miss.length) { alert('⚠️ Phải điền ĐẦY ĐỦ mới lưu được.\nCòn thiếu: ' + miss.join(', ') + '.'); return; }
     const vids = extractVideoIds(form.air_link);
-    if (vids.length > 1) { alert(`⚠️ Mỗi thanh toán CHỈ điền 1 link video (đang có ${vids.length} link).\nMỗi video tách thành 1 phiếu riêng nha.`); return; }
+    // NHIỀU LINK = TỰ TÁCH PHIẾU (Khánh 10/7): 1 lệnh N video → hệ thống tách N phiếu, cast/PIT CHIA ĐỀU
+    // (= chi phí trung bình 1 video). Mỗi phiếu 1 link nên mọi báo cáo cast theo video/brand/nhân sự
+    // (koc_payments-based RPC) tự đúng, không đụng gì thêm. Tiền lẻ do làm tròn dồn vào phiếu đầu.
+    let splitLines = null;
+    if (vids.length > 1) {
+      const lines = (form.air_link || '').split('\n').map(s => s.trim()).filter(Boolean);
+      const vidLines = lines.filter(l => extractVideoIds(l).length >= 1);
+      if (vidLines.length !== vids.length || vidLines.some(l => extractVideoIds(l).length > 1)) {
+        alert('⚠️ Mỗi Ô chỉ dán 1 link video và các link KHÔNG được trùng nhau.\nBấm ➕ thêm ô cho từng video rồi lưu lại.'); return;
+      }
+      const n = vidLines.length, cAll = num(form.cast_net);
+      const each = Math.floor(cAll / n);
+      if (!window.confirm(`📋 Lệnh này có ${n} video.\nHệ thống sẽ TÁCH thành ${n} phiếu — cast chia đều ≈ ${each.toLocaleString('vi-VN')} đ/video (tổng vẫn đúng ${cAll.toLocaleString('vi-VN')} đ, tiền lẻ dồn phiếu đầu).\n\nBấm OK để lưu.`)) return;
+      splitLines = vidLines;
+    }
     const mstDigits = (form.tax_code || '').replace(/\D/g, '');
     const isBiz = mstDigits.length === 10 || mstDigits.length === 13; // MST công ty/HKD: 10 hoặc 13 số
     if (!isBiz && cccdDigits.length !== 12) { alert(`⚠️ Cá nhân: CCCD phải đúng 12 số (đang ${cccdDigits.length} số).\nCông ty/HKD: điền ô "Mã số thuế" 10 hoặc 13 số.`); return; }
@@ -216,7 +230,27 @@ const KocPaymentTab = () => {
       accountant_approved: !!form.accountant_approved, paid: !!form.paid, note: form.note || null,
     };
     try {
-      if (editingId) { const { error } = await supabase.from('koc_payments').update(payload).eq('id', editingId); if (error) throw error; }
+      if (splitLines) {
+        // Tách N phiếu: chia đều cast/PIT, phần lẻ dồn phiếu đầu → tổng khớp 100%. Ghi chú đánh dấu nguồn tách.
+        const n = splitLines.length;
+        const cast = num(form.cast_net), pit = num(form.pit);
+        const castEach = Math.floor(cast / n), pitEach = Math.floor(pit / n);
+        const rowsToSave = splitLines.map((line, i) => {
+          const c = castEach + (i === 0 ? cast - castEach * n : 0);
+          const p = pitEach + (i === 0 ? pit - pitEach * n : 0);
+          return {
+            ...payload, air_link: line, cast_net: c, pit: p, total: c + p,
+            note: [payload.note, `Tách ${i + 1}/${n} từ lệnh ${n} video (cast gốc ${cast.toLocaleString('vi-VN')})`].filter(Boolean).join(' · '),
+          };
+        });
+        if (editingId) {
+          const { error } = await supabase.from('koc_payments').update(rowsToSave[0]).eq('id', editingId); if (error) throw error;
+          const { error: e2 } = await supabase.from('koc_payments').insert(rowsToSave.slice(1)); if (e2) throw e2;
+        } else {
+          const { error } = await supabase.from('koc_payments').insert(rowsToSave); if (error) throw error;
+        }
+      }
+      else if (editingId) { const { error } = await supabase.from('koc_payments').update(payload).eq('id', editingId); if (error) throw error; }
       else { const { error } = await supabase.from('koc_payments').insert(payload); if (error) throw error; }
       cancel(); load();
     } catch (e) {
