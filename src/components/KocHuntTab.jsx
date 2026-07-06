@@ -128,7 +128,7 @@ export default function KocHuntTab({ currentUser } = {}) {
               {!loading && filtered.length === 0 && <tr><td colSpan={canInvite ? 11 : 9} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>Chưa có KOC nào khớp lọc. {poolTotal === 0 ? 'Pool đang trống — chờ cron cào dần (hoặc admin bấm "Cào thêm").' : ''}</td></tr>}
               {!loading && filtered.map(r => (
                 <tr key={r.username} style={{ background: sel[r.username] ? '#fff7ed' : r.da_lien_he ? '#fffdf5' : '#fff' }}>
-                  {canInvite && <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={!!sel[r.username]} onChange={() => toggleSel(r.username)} disabled={!r.open_id} title={r.open_id ? 'Chọn để mời' : 'KOC này chưa có open_id (cào lại để lấy)'} style={{ width: 15, height: 15, accentColor: ACCENT }} /></td>}
+                  {canInvite && <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={!!sel[r.username]} onChange={() => toggleSel(r.username)} title="Chọn để mời" style={{ width: 15, height: 15, accentColor: ACCENT }} /></td>}
                   <td style={td}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                       {r.avatar ? <img src={r.avatar} alt="" style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} /> : <div style={{ width: 38, height: 38, borderRadius: '50%', background: '#e2e8f0', flexShrink: 0 }} />}
@@ -226,7 +226,7 @@ function InviteModal({ selRows, currentUser, onClose, onDone }) {
       try {
         const res = await fetch(`${API}?action=koc_invite_im&k=kp8255`, {
           method: 'POST', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ k: 'kp8255', open_id: r.open_id, username: r.username, message: message.trim(), seller: sellerKw }),
+          body: JSON.stringify({ k: 'kp8255', username: r.username, message: message.trim(), seller: sellerKw }),
         });
         const j = await res.json();
         setLog(prev => [...prev, { u: r.username, ok: j.ok, msg: j.ok ? 'đã gửi' : (j.error || j.code || 'lỗi') }]);
@@ -251,7 +251,7 @@ function InviteModal({ selRows, currentUser, onClose, onDone }) {
         body: JSON.stringify({
           k: 'kp8255', seller: sellerKw, name: name.trim(), message: collabMsg.trim() || undefined,
           end_time: endUnix, commission_pct: Number(pct), product_ids: pids, email: email.trim(),
-          creators: selRows.map(r => ({ open_id: r.open_id, username: r.username })),
+          creators: selRows.map(r => ({ username: r.username })),
         }),
       });
       const j = await res.json();

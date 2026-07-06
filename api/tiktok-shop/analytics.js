@@ -434,17 +434,41 @@ const affilCall = async ({ supabase, seller, method, path, bodyObj, extraQuery }
   return { ...j, _seller: conn.seller_name };
 };
 
-// Kiểu 1 — NHẮN TIN 1 KOC: tạo hội thoại (creator_id = open_id từ pool Module 8) rồi gửi tin.
-// POST {k, open_id, username, message, seller}. Thành công → ghi moi_im_at vào pool.
+// ID SỐ TikTok của KOC — API mời (conversations/target_collaborations) chỉ nhận ID SỐ,
+// KHÔNG nhận creator_open_id 54 ký tự của marketplace (đã test: open_id bị chê "Invalid CreatorId",
+// id số từ tikwm user/info → code 0). Cache vào pool.tiktok_uid cho lần sau.
+const resolveTikTokUid = async (supabase, username) => {
+  const u = String(username || '').toLowerCase().replace(/^@/, '').trim();
+  if (!u) return null;
+  try {
+    const { data: row } = await supabase.from('koc_marketplace_pool').select('tiktok_uid').eq('username', u).maybeSingle();
+    if (row?.tiktok_uid) return row.tiktok_uid;
+  } catch { /* pool optional */ }
+  let uid = null;
+  try {
+    const raw = await ttText(`https://www.tikwm.com/api/user/info?unique_id=${encodeURIComponent(u)}`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' } }, 12000);
+    const j = JSON.parse(raw);
+    if (j?.code === 0 && j?.data?.user?.id) uid = String(j.data.user.id);
+  } catch { /* tikwm bận */ }
+  if (uid) { try { await supabase.from('koc_marketplace_pool').update({ tiktok_uid: uid }).eq('username', u); } catch { /* best-effort */ } }
+  return uid;
+};
+
+// Kiểu 1 — NHẮN TIN 1 KOC: username → ID số (tikwm, cache pool) → tạo hội thoại → gửi tin.
+// POST {k, username, message, seller}. Thành công → ghi moi_im_at vào pool.
 async function handleKocInviteIm({ params, supabase, res }) {
   if (params.k !== 'kp8255') return res.status(200).json({ ok: false, error: 'thiếu khoá' });
-  const openId = String(params.open_id || '').trim();
+  const username = String(params.username || '').trim();
   const message = String(params.message || '').trim();
-  if (!openId || !message) return res.status(200).json({ ok: false, error: 'thiếu open_id/message' });
+  if (!username || !message) return res.status(200).json({ ok: false, error: 'thiếu username/message' });
+
+  const uid = await resolveTikTokUid(supabase, username);
+  if (!uid) return res.status(200).json({ ok: false, step: 'uid', error: `Không lấy được ID số của @${username} (kênh riêng tư/không tồn tại, hoặc tikwm bận — thử lại)` });
 
   // 1) tạo (hoặc lấy lại) hội thoại với KOC
   const conv = await affilCall({ supabase, seller: params.seller, method: 'POST',
-    path: '/affiliate_seller/202412/conversations', bodyObj: { creator_id: openId } });
+    path: '/affiliate_seller/202412/conversations', bodyObj: { creator_id: uid } });
   const convId = conv?.data?.id || conv?.data?.conversation_id || '';
   if (conv?.code !== 0 || !convId) {
     return res.status(200).json({ ok: false, step: 'conversation', code: conv?.code, error: conv?.message || 'không tạo được hội thoại', raw: conv?.data || null });
@@ -476,12 +500,21 @@ async function handleKocInviteCollab({ params, supabase, res }) {
   }
   if (creators.length > 50) return res.status(200).json({ ok: false, error: 'tối đa 50 KOC/lần (chia bớt)' });
 
+  // Đổi username → ID SỐ (tikwm + cache pool) — API chỉ nhận ID số, không nhận open_id marketplace
+  const uids = []; const failed = [];
+  for (const c of creators) {
+    const uid = await resolveTikTokUid(supabase, c.username);
+    if (uid) { uids.push(uid); c._uid = uid; } else failed.push(c.username);
+    await new Promise(r => setTimeout(r, 250)); // giãn nhịp tikwm
+  }
+  if (!uids.length) return res.status(200).json({ ok: false, error: 'Không lấy được ID số của KOC nào (tikwm bận — thử lại)', failed });
+
   const body = {
     name,
     ...(params.message ? { message: String(params.message) } : {}),
     end_time: endTime,
     products: productIds.map(id => ({ id, target_commission_rate: Math.round(pct * 100) })), // 10% → 1000
-    creator_user_ids: creators.map(c => String(c.open_id)),
+    creator_user_ids: uids,
     seller_contact_info: { email: String(params.email || 'khanh.vuong@stellakinetics.com') },
     free_sample_rule: { has_free_sample: false, is_sample_approval_exempt: false },
   };
@@ -489,13 +522,13 @@ async function handleKocInviteCollab({ params, supabase, res }) {
     path: '/affiliate_seller/202405/target_collaborations', bodyObj: body });
   if (r?.code !== 0) return res.status(200).json({ ok: false, code: r?.code, error: r?.message || 'TikTok từ chối', raw: r?.data || null });
 
-  // ghi dấu đã mời collab vào pool
+  // ghi dấu đã mời collab vào pool (chỉ KOC thật sự vào lời mời — có _uid)
   const now = new Date().toISOString();
   for (const c of creators) {
-    if (!c.username) continue;
+    if (!c.username || !c._uid) continue;
     try { await supabase.from('koc_marketplace_pool').update({ moi_collab_at: now }).eq('username', String(c.username).toLowerCase()); } catch { /* best-effort */ }
   }
-  return res.status(200).json({ ok: true, shop: r._seller, data: r.data || null, invited: creators.length });
+  return res.status(200).json({ ok: true, shop: r._seller, data: r.data || null, invited: uids.length, failed_uid: failed });
 }
 
 // DÒ QUYỀN API AFFILIATE (action=affil_probe) — gọi thử các endpoint affiliate_seller xem app
