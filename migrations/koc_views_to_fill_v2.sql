@@ -1,0 +1,5 @@
+-- v2 (7/7): hàng đợi lấp view by-id thêm nguồn "THÁNG HIỆN TẠI cho video pool air/đơn trong 60 ngày".
+-- Lý do: rule view mới đo "view PHÁT SINH tháng T trên toàn pool cá nhân" — video air tháng trước vẫn
+-- sinh view, nhưng queue cũ chỉ đòi dòng view của tháng-air/tháng-có-đơn → tháng hiện tại của video cũ
+-- không ai lấp. Ưu tiên ref_date desc (video mới air trước — view phát sinh lớn nhất).
+-- Định nghĩa đầy đủ: select pg_get_functiondef('public.koc_views_to_fill(text,integer)'::regprocedure);

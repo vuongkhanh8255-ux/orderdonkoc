@@ -1021,7 +1021,9 @@ const syncShopVideosAllMonths = async ({ appKey, appSecret, shop_id, supabase, m
   const months = listMonths(AFF_SYNC_FLOOR_DATE);
   const cur = months[months.length - 1];
   const out = [];
-  out.push(await syncShopVideoMonth({ appKey, appSecret, aconn, shop_id, ym: cur, supabase, maxPages }));
+  // THÁNG HIỆN TẠI quét sâu GẤP ĐÔI tháng cũ — rule view mới đo "view phát sinh tháng này" trên toàn
+  // pool nên độ phủ tháng hiện tại quyết định độ chính xác (sort views DESC: video view lớn vào trước).
+  out.push(await syncShopVideoMonth({ appKey, appSecret, aconn, shop_id, ym: cur, supabase, maxPages: maxPages * 2 }));
   const past = months.slice(0, -1);
   if (past.length) {
     const { data: sms } = await supabase.from('tiktok_video_month_sync').select('ym, done, updated_at').eq('shop_id', shop_id).in('ym', past);
@@ -1373,7 +1375,7 @@ async function handleFillKocViews({ params, appKey, appSecret, supabase, res }) 
     shop_id = sorted[0]?.shop_id || '';
   }
   if (!shop_id) return res.status(200).json({ ok: false, error: 'no shop' });
-  const limit = Math.min(Math.max(Number(params.limit) || 40, 1), 80);
+  const limit = Math.min(Math.max(Number(params.limit) || 60, 1), 80);
   const { data: aconns } = await supabase.from('tiktok_analytics_connections').select('access_token, refresh_token, shop_cipher, shop_id').not('access_token', 'is', null);
   const aconn = (aconns || []).find(c => String(c.shop_id) === String(shop_id));
   if (!aconn) return res.status(200).json({ ok: false, error: 'no analytics conn for shop ' + shop_id });
@@ -1394,7 +1396,10 @@ async function handleFillKocViews({ params, appKey, appSecret, supabase, res }) 
     if (j?.code === 105002 && await refreshAnalyticsToken({ appKey, appSecret, conn: aconn, supabase, table: 'tiktok_analytics_connections' })) {
       raw = await callVid(w.video_id, sd, ed); try { j = JSON.parse(raw); } catch { errs++; continue; }
     }
-    if (j?.code !== 0) { // video xóa/không lấy được → ghi 0 để khỏi lặp mãi
+    if (j?.code !== 0) {
+      // LỖI TẠM (rate-limit 36009002 / internal 36009003) → SKIP, lượt sau cào lại — trước đây ghi 0
+      // VĨNH VIỄN cho tháng đó → view sai không tự lành. Chỉ ghi 0 với lỗi "video chết" thật.
+      if (j?.code === 36009002 || j?.code === 36009003) { errs++; continue; }
       mvRows.push({ id: String(w.video_id), ym: w.ym, shop_id: String(shop_id), views: 0, updated_at: new Date().toISOString() });
       zero++; continue;
     }
