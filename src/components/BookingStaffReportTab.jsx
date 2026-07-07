@@ -321,6 +321,26 @@ function StaffDetailPanel({ r, range, bg }) {
       .then(({ data }) => { if (alive) setCastVids(data || []); }, () => { if (alive) setCastVids([]); });
     return () => { alive = false; };
   }, [r.ten_nhansu, range.start, range.end]);
+  // ── Link air của nhân sự (mấy bạn đã điền ở Quản lý link air) — lọc theo kỳ đang chọn ──
+  const [airLinks, setAirLinks] = useState(null);
+  const [airSearch, setAirSearch] = useState('');
+  const [airPage, setAirPage] = useState(1);
+  useEffect(() => {
+    let alive = true; setAirLinks(null); setAirPage(1);
+    supabase.rpc('staff_air_links', { p_nhansu_id: r.nhansu_id, p_from: range.start, p_to: range.end, p_limit: 3000 })
+      .then(({ data }) => { if (alive) setAirLinks(data || []); }, () => { if (alive) setAirLinks([]); });
+    return () => { alive = false; };
+  }, [r.nhansu_id, range.start, range.end]);
+  const airFiltered = useMemo(() => {
+    const q = airSearch.trim().toLowerCase();
+    if (!q) return airLinks || [];
+    return (airLinks || []).filter(a => (a.id_kenh || '').toLowerCase().includes(q) || (a.id_video || '').includes(q) || (a.san_pham || '').toLowerCase().includes(q) || (a.ten_brand || '').toLowerCase().includes(q));
+  }, [airLinks, airSearch]);
+  const AIR_PER = 20;
+  const airTotalPages = Math.max(1, Math.ceil(airFiltered.length / AIR_PER));
+  const airPageC = Math.min(airPage, airTotalPages);
+  const airPageRows = airFiltered.slice((airPageC - 1) * AIR_PER, airPageC * AIR_PER);
+  useEffect(() => { setAirPage(1); }, [airSearch]);
   const daily = Array.isArray(det?.daily) ? det.daily : [];
   const kocs = Array.isArray(det?.kocs) ? det.kocs : [];
 
@@ -641,6 +661,59 @@ function StaffDetailPanel({ r, range, bg }) {
                 </ResponsiveContainer>
               )}
             </div>
+          </Section>
+
+          {/* ═══ LINK AIR CỦA NHÂN SỰ ═══ (không có cột cast/cms/đã order) */}
+          <Section icon="🔗" title="Link air của nhân sự" hint={airLinks == null ? 'đang tải…' : `${fmt(airFiltered.length)} link · kỳ ${range.start} → ${range.end}`} accent={{ bg: '#eff6ff', fg: '#1d4ed8' }}>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <input value={airSearch} onChange={e => setAirSearch(e.target.value)} placeholder="🔎 Tìm ID kênh / video / SP / brand..." style={{ ...ctrl, flex: '1 1 260px' }} />
+            </div>
+            {airLinks == null ? (
+              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>⏳ Đang tải link air...</div>
+            ) : airFiltered.length === 0 ? (
+              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>Nhân sự này chưa có link air nào trong kỳ đang chọn.</div>
+            ) : (
+              <>
+                <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #f1f5f9' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 820 }}>
+                    <thead>
+                      <tr style={{ background: '#f8fafc' }}>
+                        {['STT', 'LINK AIR', 'ID KÊNH', 'ID VIDEO', 'BRAND', 'SẢN PHẨM', 'NGÀY AIR', 'TRẠNG THÁI'].map((h, i) => (
+                          <th key={i} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: '2px solid #e2e8f0' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {airPageRows.map((a, i) => (
+                        <tr key={a.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#94a3b8' }}>{(airPageC - 1) * AIR_PER + i + 1}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', maxWidth: 210 }}>
+                            {a.link_air_koc ? <a href={a.link_air_koc} target="_blank" rel="noreferrer" style={{ color: '#f97316', fontWeight: 700, textDecoration: 'none', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.link_air_koc}</a> : '—'}
+                          </td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 600, color: '#334155' }}>{a.id_kenh || '—'}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.78rem', color: '#64748b' }}>{a.id_video || '—'}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155' }}>{a.ten_brand || '—'}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.san_pham || ''}>{a.san_pham || '—'}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155', whiteSpace: 'nowrap' }}>{a.ngay_air ? new Date(a.ngay_air).toLocaleDateString('vi-VN') : '—'}</td>
+                          <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: '0.74rem', fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: a.status === 'Đã On-air' ? '#dcfce7' : '#fef9c3', color: a.status === 'Đã On-air' ? '#166534' : '#a16207' }}>
+                              {a.status === 'Đã On-air' ? '🟢 Đã On-air' : '🟡 Chưa air'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {airTotalPages > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 6 }}>
+                    <button onClick={() => setAirPage(p => Math.max(1, p - 1))} disabled={airPageC <= 1} style={{ ...ctrl, cursor: airPageC <= 1 ? 'default' : 'pointer', opacity: airPageC <= 1 ? 0.5 : 1 }}>‹ Trước</button>
+                    <span style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 700 }}>Trang {airPageC}/{airTotalPages}</span>
+                    <button onClick={() => setAirPage(p => Math.min(airTotalPages, p + 1))} disabled={airPageC >= airTotalPages} style={{ ...ctrl, cursor: airPageC >= airTotalPages ? 'default' : 'pointer', opacity: airPageC >= airTotalPages ? 0.5 : 1 }}>Sau ›</button>
+                  </div>
+                )}
+              </>
+            )}
           </Section>
 
         </div>
