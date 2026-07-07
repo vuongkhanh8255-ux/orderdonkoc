@@ -129,11 +129,14 @@ function App() {
   if (!user) return <LoginPage onLogin={handleLogin} />;
 
   let allowedViews = ROLE_VIEWS[user.role] || [];
+  // Ẩn HOÀN TOÀN cho MỌI account (kể cả khanhpro8255): Material bán hàng.
+  const HIDDEN_ALL = ['booking_material'];
+  allowedViews = allowedViews.filter(v => !HIDDEN_ALL.includes(v));
   // CHỈ khanhpro8255 thấy — admin + mọi account khác đều ẩn:
   //   airlinks, booking_budget (Tạm đối chiếu), koc_hunt (Module 8), bodymiss_scout (Săn KOC Body Miss),
-  //   booking_performance (Dashboard booking), booking_material (Material bán hàng)
+  //   booking_performance (Dashboard booking)
   if (user.username !== 'khanhpro8255') {
-    const HIDDEN = ['airlinks', 'booking_budget', 'koc_hunt', 'bodymiss_scout', 'booking_performance', 'booking_material'];
+    const HIDDEN = ['airlinks', 'booking_budget', 'koc_hunt', 'bodymiss_scout', 'booking_performance'];
     allowedViews = allowedViews.filter(v => !HIDDEN.includes(v));
   }
 
