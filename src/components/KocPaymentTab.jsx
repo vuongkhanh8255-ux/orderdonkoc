@@ -465,8 +465,9 @@ const KocPaymentTab = () => {
 
   const exportExcel = (explicit) => {
     // explicit = mảng dòng cụ thể (dùng cho đề xuất ngân sách). Không truyền:
-    // có tick dòng nào → chỉ xuất dòng đã tick; không tick gì → xuất toàn bộ đang lọc.
-    const source = Array.isArray(explicit) ? explicit : (selected.size > 0 ? filtered.filter(r => selected.has(r.id)) : filtered);
+    // có tick dòng nào → xuất dòng đã tick lấy từ TOÀN BỘ rows (KHÔNG lọc theo tháng — kẻo đề xuất
+    //   ngân sách gồm đơn tháng khác bị rớt âm thầm → lệch chứng từ). Không tick gì → xuất theo bộ lọc.
+    const source = Array.isArray(explicit) ? explicit : (selected.size > 0 ? rows.filter(r => selected.has(r.id)) : filtered);
     const data = source.map(r => ({
       'NGÀY': fmtDate(r.pay_date), 'NHÂN SỰ': r.staff || '', 'CÔNG TY': r.company || '', 'BRAND': r.brand || '',
       'LINK KÊNH': r.channel_link || '', 'CAST (NET)': num(r.cast_net), 'PIT': num(r.pit), 'TỔNG': num(r.total),
@@ -605,10 +606,15 @@ const KocPaymentTab = () => {
   // Đơn CŨ HƠN đơn mới nhất được chọn mà bị BỎ (do vượt ngân sách) → cảnh báo để kế toán biết.
   const budgetSkipped = useMemo(() => {
     if (!planReady) return [];
+    if (!budgetPicks.size) return budgetEligible;   // ngân sách quá nhỏ → coi như tất cả bị bỏ
     const pickedDates = budgetEligible.filter(r => budgetPicks.has(r.id)).map(r => r.pay_date || '');
     const newestPicked = pickedDates.sort().slice(-1)[0] || '';
     return budgetEligible.filter(r => !budgetPicks.has(r.id) && (r.pay_date || '') <= newestPicked);
   }, [planReady, budgetEligible, budgetPicks]);
+  // Đơn RẺ NHẤT (để báo khi ngân sách nhỏ hơn cả đơn rẻ nhất → 0 đơn)
+  const cheapestEligible = useMemo(() => budgetEligible.reduce((m, r) => Math.min(m, num(r.cast_net) || Infinity), Infinity), [budgetEligible]);
+  // Đổi ngân sách / cách chia / bộ lọc đơn sau khi đã tính → BẮT tính lại (kẻo tổng lệch số ngân sách hiển thị)
+  useEffect(() => { setPlanReady(false); }, [budgetInput, budgetMode, budgetOnlyApproved]);
 
   // Text đề xuất (giống tin nhắn gửi kế toán): mỗi công ty 1 dòng NET (GỘP).
   const buildProposalText = () => {
@@ -627,8 +633,10 @@ const KocPaymentTab = () => {
   const openBudget = () => { setShowBudget(true); setPlanReady(false); setBudgetPicks(new Set()); };
   const pushPicksToSelection = () => {
     if (!budgetPicks.size) { alert('Chưa có đơn nào được chọn.'); return; }
-    setSelected(new Set(budgetPicks)); setShowBudget(false);
-    alert(`✅ Đã đưa ${budgetPicks.size} đơn vào ô chọn ở bảng.\nGiờ có thể bấm "Xuất Excel (dòng chọn)" hoặc duyệt hàng loạt.`);
+    setSelected(new Set(budgetPicks));
+    setYm('all'); setFPaid(''); setFCompany('');   // hiện mọi tháng để thấy đủ đơn đã chọn ở bảng
+    setShowBudget(false);
+    alert(`✅ Đã đưa ${budgetPicks.size} đơn vào ô chọn ở bảng (đã bỏ lọc tháng để thấy đủ).\nGiờ có thể bấm "Xuất Excel (dòng chọn)" hoặc duyệt hàng loạt.`);
   };
 
   // tháng gần đây cho dropdown
@@ -727,13 +735,13 @@ const KocPaymentTab = () => {
 
       {/* ĐỀ XUẤT THANH TOÁN THEO NGÂN SÁCH — modal cho kế toán */}
       {showBudget && (
-        <div onClick={() => setShowBudget(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '4vh 16px' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '4vh 16px' }}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderTop: '4px solid #0ea5e9', borderRadius: 14, padding: 22, boxShadow: '0 24px 60px rgba(15,23,42,0.35)', width: 'min(900px, 96vw)', margin: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
               <div style={{ fontWeight: 900, color: '#0284c7', fontSize: '1.15rem' }}>🧮 Đề xuất thanh toán theo ngân sách</div>
               <button onClick={() => setShowBudget(false)} style={{ border: 'none', background: '#f1f5f9', color: '#64748b', borderRadius: 8, padding: '5px 12px', fontWeight: 800, cursor: 'pointer' }}>✕</button>
             </div>
-            <p style={{ margin: '0 0 14px', color: '#94a3b8', fontSize: '0.82rem' }}>Nhập ngân sách → hệ thống ưu tiên đơn <b>cũ nhất trước</b> (chờ lâu nhất) trong nhóm <b>chưa TT + hồ sơ đầy đủ</b>, đo theo tiền NET chuyển KOC.</p>
+            <p style={{ margin: '0 0 14px', color: '#94a3b8', fontSize: '0.82rem' }}>Nhập ngân sách → hệ thống ưu tiên đơn <b>cũ nhất trước</b> (chờ lâu nhất) trong nhóm <b>chưa TT + hồ sơ đầy đủ</b>, đo theo tiền NET chuyển KOC. Đơn nào vượt ngân sách còn lại thì tạm bỏ để trả được nhiều đơn hơn (xem cảnh báo) — tick tay chỉnh lại được.</p>
 
             {/* Bảng điều khiển */}
             <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 14, marginBottom: 14 }}>
@@ -757,9 +765,15 @@ const KocPaymentTab = () => {
             </div>
             <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: 12 }}>Đơn đủ điều kiện hiện có: <b style={{ color: '#0f172a' }}>{budgetEligible.length}</b> đơn (chưa TT + hồ sơ đầy đủ{budgetOnlyApproved ? ' + đã duyệt' : ''}).</div>
 
+            {planReady && budgetSummary.count === 0 && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 16px', color: '#b91c1c', fontWeight: 800, fontSize: '0.86rem', marginBottom: 12 }}>
+                ⚠️ Ngân sách quá nhỏ — không đơn nào vừa. Đơn rẻ nhất đang là <b>{fmtMoney(cheapestEligible === Infinity ? 0 : cheapestEligible)} đ</b>. Tăng ngân sách rồi bấm Tính lại, hoặc tick tay bên dưới.
+              </div>
+            )}
             {planReady && (
               <>
                 {/* Tổng kết theo công ty + tổng chung */}
+                {budgetSummary.count > 0 && (
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
                   {Object.entries(budgetSummary.by).sort((a, b) => b[1].net - a[1].net).map(([co, g]) => (
                     <div key={co} style={{ flex: '1 1 200px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '10px 14px', borderLeft: '4px solid #0ea5e9' }}>
@@ -771,9 +785,11 @@ const KocPaymentTab = () => {
                   <div style={{ flex: '1 1 200px', background: '#ecfeff', border: '1px solid #a5f3fc', borderRadius: 12, padding: '10px 14px', borderLeft: '4px solid #0891b2' }}>
                     <div style={{ fontSize: '0.7rem', color: '#0891b2', fontWeight: 800, textTransform: 'uppercase' }}>TỔNG ĐỀ XUẤT</div>
                     <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#0e7490' }}>{fmtMoney(budgetSummary.net)} đ</div>
-                    <div style={{ fontSize: '0.78rem', color: '#0891b2', fontWeight: 700 }}>gộp: {fmtMoney(budgetSummary.gross)} đ · {budgetSummary.count} đơn · còn dư {fmtMoney(Math.max(0, num(budgetInput) - budgetSummary.net))} đ</div>
+                    <div style={{ fontSize: '0.78rem', color: '#0891b2', fontWeight: 700 }}>gộp (đã gồm PIT): {fmtMoney(budgetSummary.gross)} đ · {budgetSummary.count} đơn · còn dư {fmtMoney(Math.max(0, num(budgetInput) - budgetSummary.net))} đ</div>
+                    {budgetSummary.gross > num(budgetInput) && <div style={{ fontSize: '0.72rem', color: '#b45309', fontWeight: 800, marginTop: 3 }}>⚠️ Tiền GỘP (gồm PIT) {fmtMoney(budgetSummary.gross)} đ vượt ngân sách NET đã nhập — chuẩn bị thêm ~{fmtMoney(budgetSummary.gross - num(budgetInput))} đ cho PIT.</div>}
                   </div>
                 </div>
+                )}
 
                 {budgetSkipped.length > 0 && (
                   <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '9px 13px', marginBottom: 12, fontSize: '0.8rem', color: '#b45309', fontWeight: 700 }}>
