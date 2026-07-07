@@ -147,7 +147,8 @@ function App() {
 function AppMain({ user, onLogout, allowedViews }) {
   const defaultView = allowedViews[0] || 'dashboard';
   const [currentView, setCurrentView]   = useState(defaultView);
-  const [openGroups, setOpenGroups]     = useState({ shopee: true, tiktok: true, ecom: true, crm: true, cskh: true, livestream: true, booking: true, archive: true, camp: true, tools: true });
+  // Mặc định ĐÓNG HẾT các nhóm menu cho gọn (Khánh 10/7) — bấm tên nhóm mới bung mục con.
+  const [openGroups, setOpenGroups]     = useState({});
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarHovered,   setSidebarHovered]   = useState(false);
   const [pwModalOpen, setPwModalOpen]   = useState(false);
