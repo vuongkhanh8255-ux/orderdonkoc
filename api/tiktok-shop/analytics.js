@@ -1470,15 +1470,27 @@ async function handleKocOrders({ params, supabase, res }) {
   // → timeout. Phạm vi HẸP (7/30 ngày, tháng) → chạy SONG SONG (Promise.all): 58s ↓ ~max(1 RPC).
   const spanDays = (start && end) ? (new Date(end) - new Date(start)) / 86400000 : 9999;
   const wide = !start || spanDays > 60;
+  // PostgREST CẮT 1000 dòng/lượt → RPC trả >1000 KOC bị mất đuôi (vd eHerb VN 1.121 KOC có view
+  // → 121 KOC hiện view=0 hên xui, bug @ananittt 7/7). Đọc THEO TRANG tới hết cho các RPC dạng danh sách.
+  const rpcAll = async (fn, args) => {
+    const PAGE = 1000; let out = [];
+    for (let i = 0; i < 30; i++) { // trần 30k dòng — dư cho mọi shop
+      const { data, error: e } = await supabase.rpc(fn, args).range(i * PAGE, (i + 1) * PAGE - 1);
+      if (e) return { data: out.length ? out : null, error: e };
+      out = out.concat(data || []);
+      if (!data || data.length < PAGE) break;
+    }
+    return { data: out, error: null };
+  };
   const R = {
     stats:      () => supabase.rpc('koc_order_stats',        { p_shop_id: shopId, p_start: start, p_end: end }),
     totRows:    () => supabase.rpc('koc_order_totals',       { p_shop_id: shopId, p_start: start, p_end: end }),
-    viewRows:   () => supabase.rpc('koc_video_views',        { p_shop_id: shopId, p_start: start, p_end: end }),
+    viewRows:   () => rpcAll('koc_video_views',              { p_shop_id: shopId, p_start: start, p_end: end }),
     viewTotal:  () => supabase.rpc('koc_video_views_total',  { p_shop_id: shopId, p_start: start, p_end: end }),
-    castRows:   () => supabase.rpc('koc_cast_by_creator',    { p_shop_id: shopId, p_start: castAll ? null : start, p_end: castAll ? null : end }),
-    sampleRows: () => supabase.rpc('koc_sample_cost',        { p_start: castAll ? null : start, p_end: castAll ? null : end, p_brand: brandArg }),
+    castRows:   () => rpcAll('koc_cast_by_creator',          { p_shop_id: shopId, p_start: castAll ? null : start, p_end: castAll ? null : end }),
+    sampleRows: () => rpcAll('koc_sample_cost',              { p_start: castAll ? null : start, p_end: castAll ? null : end, p_brand: brandArg }),
     extraTot:   () => supabase.rpc('koc_perf_extra_totals',  { p_shop_id: shopId, p_start: start, p_end: end, p_cast_start: castAll ? null : start, p_cast_end: castAll ? null : end, p_brand: brandArg }),
-    gmvByContent: () => supabase.rpc('koc_gmv_by_content',   { p_shop_id: shopId, p_start: start, p_end: end }),
+    gmvByContent: () => rpcAll('koc_gmv_by_content',         { p_shop_id: shopId, p_start: start, p_end: end }),
   };
   let stats, error, totRows, viewRows, viewTotal, castRows, sampleRows, extraTot, gmvByContent;
   if (wide) {
