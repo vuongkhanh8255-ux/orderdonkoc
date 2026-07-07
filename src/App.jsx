@@ -130,9 +130,10 @@ function App() {
 
   let allowedViews = ROLE_VIEWS[user.role] || [];
   // CHỈ khanhpro8255 thấy — admin + mọi account khác đều ẩn:
-  //   airlinks, booking_budget (Tạm đối chiếu), koc_hunt (Module 8), bodymiss_scout (Săn KOC Body Miss)
+  //   airlinks, booking_budget (Tạm đối chiếu), koc_hunt (Module 8), bodymiss_scout (Săn KOC Body Miss),
+  //   booking_performance (Dashboard booking), booking_material (Material bán hàng)
   if (user.username !== 'khanhpro8255') {
-    const HIDDEN = ['airlinks', 'booking_budget', 'koc_hunt', 'bodymiss_scout'];
+    const HIDDEN = ['airlinks', 'booking_budget', 'koc_hunt', 'bodymiss_scout', 'booking_performance', 'booking_material'];
     allowedViews = allowedViews.filter(v => !HIDDEN.includes(v));
   }
 
@@ -317,11 +318,11 @@ function AppMain({ user, onLogout, allowedViews }) {
                 { view: 'order',               icon: '🛒', name: 'Module 1: Order đơn hàng' },
                 { view: 'contract',            icon: '📝', name: 'Module 2: Hợp đồng tự động' },
                 { view: 'koc_payment',         icon: '💸', name: 'Module 3: Thanh toán KOC' },
-                { view: 'booking_material',    icon: '🎁', name: 'Module 4: Material bán hàng' },
-                { view: 'airlinks',            icon: '🔗', name: 'Module 5: Quản lý link air' },
-                { view: 'koc_blacklist',       icon: '🚫', name: 'Module 6: Blacklist KOC' },
+                { view: 'koc_blacklist',       icon: '🚫', name: 'Module 4: Blacklist KOC' },
+                { view: 'booking_material',    icon: '🎁', name: 'Material bán hàng' },
+                { view: 'airlinks',            icon: '🔗', name: 'Quản lý link air' },
                 { view: 'booking_budget',      icon: '💰', name: 'Tạm đối chiếu' },
-                { view: 'koc_hunt',            icon: '🔍', name: 'Module 8: Săn KOC (Marketplace)' },
+                { view: 'koc_hunt',            icon: '🔍', name: 'Săn KOC (Marketplace)' },
                 { view: 'bodymiss_scout',      icon: '🎯', name: 'Săn KOC Body Miss' },
               ]},
               { key: 'archive', label: '🗄️ Lưu trữ', emoji: '🗄️', items: [

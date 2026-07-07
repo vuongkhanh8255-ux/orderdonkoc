@@ -796,7 +796,7 @@ const OrderTab = ({ currentUser } = {}) => {
                 <h1 className="page-header">QUẢN LÝ ĐƠN HÀNG KOC</h1>
             </div>
 
-            <KocContactWarnings />
+            {currentUser?.username === 'khanhpro8255' && <KocContactWarnings />}
 
             {isAdmin && (
                 <div className="mirinda-card" style={{ padding: '16px 20px', marginBottom: '1.5rem', border: '2px solid #bfdbfe', background: '#f8fbff' }}>
