@@ -36,11 +36,17 @@ export default function BodymissScoutTab({ currentUser } = {}) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.rpc('bodymiss_scout', {
-      p_days: days, p_only_unmanaged: onlyUnmanaged, p_only_new: onlyNew,
-      p_min_views: Number(minView) || 0, p_limit: 1000,
-    });
-    setRows(data || []);
+    // đọc theo trang — Supabase cắt 1000 dòng/lượt (28 ngày đã ~853 creator, sẽ vượt)
+    let all = [];
+    for (let pg = 0; pg < 10; pg++) {
+      const { data } = await supabase.rpc('bodymiss_scout', {
+        p_days: days, p_only_unmanaged: onlyUnmanaged, p_only_new: onlyNew,
+        p_min_views: Number(minView) || 0, p_limit: 1000, p_offset: pg * 1000,
+      });
+      all = all.concat(data || []);
+      if (!data || data.length < 1000) break;
+    }
+    setRows(all);
     setLoading(false);
   }, [days, onlyUnmanaged, onlyNew, minView]);
   useEffect(() => { load(); }, [load]);

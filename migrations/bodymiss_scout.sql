@@ -15,7 +15,7 @@ end $$;
 drop function if exists public.bodymiss_scout(integer,boolean,boolean,bigint,integer);
 create function public.bodymiss_scout(
   p_days int default 7, p_only_unmanaged boolean default true, p_only_new boolean default false,
-  p_min_views bigint default 0, p_limit int default 500)
+  p_min_views bigint default 0, p_limit int default 500, p_offset int default 0)
  returns table(username text, n_videos int, total_views bigint, total_gmv numeric, total_orders bigint,
    last_post date, first_post date, is_new_creator boolean, da_quan_ly boolean, staff_name text,
    in_pool boolean, avatar text, followers bigint, email text, sdt text, top_title text,
@@ -53,5 +53,5 @@ as $function$
   where r.total_views >= p_min_views and not exists (select 1 from bl where bl.uname=r.uname)
     and (not p_only_unmanaged or (a.uname is null and c.uname is null))
     and (not p_only_new or f.first_post >= current_date - p_days)
-  order by r.total_views desc nulls last limit p_limit;
+  order by r.total_views desc nulls last limit p_limit offset greatest(p_offset,0);
 $function$;

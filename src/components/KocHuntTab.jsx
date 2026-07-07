@@ -29,8 +29,14 @@ export default function KocHuntTab({ currentUser } = {}) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.rpc('koc_hunt_list', { p_only_new: onlyNew, p_limit: 1000, p_offset: 0 });
-    setRows(data || []);
+    // đọc theo trang — Supabase cắt 1000 dòng/lượt, pool đang phình nhanh (cào 15p + nạp tay)
+    let all = [];
+    for (let pg = 0; pg < 20; pg++) {
+      const { data } = await supabase.rpc('koc_hunt_list', { p_only_new: onlyNew, p_limit: 1000, p_offset: pg * 1000 });
+      all = all.concat(data || []);
+      if (!data || data.length < 1000) break;
+    }
+    setRows(all);
     const { count } = await supabase.from('koc_marketplace_pool').select('*', { count: 'exact', head: true });
     setPoolTotal(count || 0);
     setLoading(false);

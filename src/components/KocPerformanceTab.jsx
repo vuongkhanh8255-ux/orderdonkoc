@@ -546,9 +546,16 @@ export default function KocPerformanceTab() {
   }, [brand, histAllBrands]);
   useEffect(() => { if (histOpen) loadHistory(); }, [histOpen, loadHistory]);
   const reloadAssignments = useCallback(async () => {
-    // Load TẤT CẢ assignment (mọi brand) → mỗi KOC biết được gán ở brand hiện tại + brand khác
-    const { data } = await supabase.from(ASSIGN_TABLE)
-      .select('koc_id, brand_name, staff_name, status, proposed_by, proposed_at, approved_by, approved_at, assigned_at');
+    // Load TẤT CẢ assignment (mọi brand) → mỗi KOC biết được gán ở brand hiện tại + brand khác.
+    // Đọc theo trang (Supabase cắt 1000 dòng/lượt — đã 679 dòng, vượt là thẻ định danh "mất" ngẫu nhiên).
+    let data = [];
+    for (let pg = 0; pg < 10; pg++) {
+      const { data: chunk } = await supabase.from(ASSIGN_TABLE)
+        .select('koc_id, brand_name, staff_name, status, proposed_by, proposed_at, approved_by, approved_at, assigned_at')
+        .range(pg * 1000, (pg + 1) * 1000 - 1);
+      data = data.concat(chunk || []);
+      if (!chunk || chunk.length < 1000) break;
+    }
     const m = {}; (data || []).forEach(a => { const k = (a.koc_id || '').toLowerCase(); (m[k] = m[k] || []).push(a); });
     setAssignMap(m);
   }, []);
@@ -605,9 +612,15 @@ export default function KocPerformanceTab() {
   const [blacklist, setBlacklist] = useState(() => new Set());
   const [onlyUnassigned, setOnlyUnassigned] = useState(false);
   useEffect(() => {
-    supabase.from('koc_blacklist').select('id_kenh').then(({ data }) => {
-      setBlacklist(new Set((data || []).map(r => (r.id_kenh || '').toLowerCase().replace(/^@/, ''))));
-    }, () => {});
+    (async () => { // blacklist 888 kênh, sắp vượt trần 1000 dòng/lượt của Supabase → đọc theo trang
+      let all = [];
+      for (let pg = 0; pg < 10; pg++) {
+        const { data } = await supabase.from('koc_blacklist').select('id_kenh').range(pg * 1000, (pg + 1) * 1000 - 1);
+        all = all.concat(data || []);
+        if (!data || data.length < 1000) break;
+      }
+      setBlacklist(new Set(all.map(r => (r.id_kenh || '').toLowerCase().replace(/^@/, ''))));
+    })().catch(() => {});
   }, []);
   // Cast GẦN NHẤT mỗi KOC (đối chiếu file Thanh toán KOC) → thẻ định danh tô cam + ghi giá cast
   const [castMap, setCastMap] = useState({});

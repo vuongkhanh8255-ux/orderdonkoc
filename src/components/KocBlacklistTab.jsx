@@ -27,12 +27,16 @@ const KocBlacklistTab = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('koc_blacklist')
-        .select('id_kenh, created_at')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      setChannels(data || []);
+      // Đọc theo trang — Supabase cắt 1000 dòng/lượt, blacklist đã 888 kênh sắp vượt
+      let all = [];
+      for (let pg = 0; pg < 10; pg++) {
+        const { data, error } = await supabase.from('koc_blacklist').select('id_kenh, created_at')
+          .order('created_at', { ascending: false }).range(pg * 1000, (pg + 1) * 1000 - 1);
+        if (error) throw error;
+        all = all.concat(data || []);
+        if (!data || data.length < 1000) break;
+      }
+      setChannels(all);
       // Đối chiếu air_links: nhân sự nào đã từng air kênh blacklist này (kèm số video)
       try {
         const { data: aired } = await supabase.rpc('blacklist_aired_staff');

@@ -436,12 +436,19 @@ const OrderTab = ({ currentUser } = {}) => {
     // Blacklist
     const [blacklistChannels, setBlacklistChannels] = useState([]);
     const [blacklistLoaded, setBlacklistLoaded] = useState(false);
+    // Blacklist là chốt CHẶN TẠO ĐƠN — đọc theo trang (Supabase cắt 1000 dòng/lượt, blacklist đã 888 kênh)
+    const fetchBlacklistAll = async () => {
+        let all = [];
+        for (let pg = 0; pg < 10; pg++) {
+            const { data } = await supabase.from('koc_blacklist').select('id_kenh').range(pg * 1000, (pg + 1) * 1000 - 1);
+            all = all.concat(data || []);
+            if (!data || data.length < 1000) break;
+        }
+        return all.map(r => r.id_kenh);
+    };
     useEffect(() => {
-        supabase.from('koc_blacklist').select('id_kenh').then(({ data, error }) => {
-            if (error) { console.error('Blacklist load failed:', error); }
-            setBlacklistChannels(data ? data.map(r => r.id_kenh) : []);
-            setBlacklistLoaded(true);
-        });
+        fetchBlacklistAll().then(list => { setBlacklistChannels(list); setBlacklistLoaded(true); },
+            (error) => { console.error('Blacklist load failed:', error); setBlacklistLoaded(true); });
     }, []);
 
     // ── CHẶN ORDER KÊNH YẾU: cào view 7 video mới (bỏ video ghim), < 1500 → không cho tạo đơn ──
@@ -508,8 +515,15 @@ const OrderTab = ({ currentUser } = {}) => {
     // #3: Kênh + brand đã có người gắn tag (approved) ở Hiệu suất KOC → không ai gửi brand đó cho kênh đó nữa.
     const [assignments, setAssignments] = useState([]); // {koc_id, brand_name, staff_name}
     useEffect(() => {
-        supabase.from('koc_brand_assignments').select('koc_id, brand_name, staff_name').eq('status', 'approved')
-            .then(({ data }) => setAssignments(data || []));
+        (async () => { // đọc theo trang (Supabase cắt 1000 dòng/lượt — assignments đang tăng dần)
+            let all = [];
+            for (let pg = 0; pg < 10; pg++) {
+                const { data } = await supabase.from('koc_brand_assignments').select('koc_id, brand_name, staff_name').eq('status', 'approved').range(pg * 1000, (pg + 1) * 1000 - 1);
+                all = all.concat(data || []);
+                if (!data || data.length < 1000) break;
+            }
+            setAssignments(all);
+        })().catch(() => {});
     }, []);
 
     // State cục bộ
@@ -688,10 +702,7 @@ const OrderTab = ({ currentUser } = {}) => {
         // Blacklist check — nếu chưa load được thì block lại, reload rồi thử
         if (!blacklistLoaded) {
             alert('⏳ Đang tải danh sách blacklist, vui lòng thử lại sau giây lát.');
-            supabase.from('koc_blacklist').select('id_kenh').then(({ data }) => {
-                setBlacklistChannels(data ? data.map(r => r.id_kenh) : []);
-                setBlacklistLoaded(true);
-            });
+            fetchBlacklistAll().then(list => { setBlacklistChannels(list); setBlacklistLoaded(true); }, () => {});
             return;
         }
         const normK = (k) => String(k || '').trim().replace(/^@/, '').toLowerCase();

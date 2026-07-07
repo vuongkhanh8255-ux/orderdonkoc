@@ -159,8 +159,14 @@ const AirLinksTab = ({ currentUser }) => {
     useEffect(() => {
         const loadKocOrders = async () => {
             try {
-                const { data } = await supabase.from('donguis').select('koc_id_kenh').not('koc_id_kenh', 'is', null);
-                if (data) setKocOrderSet(new Set(data.map(r => (r.koc_id_kenh || '').trim()).filter(Boolean)));
+                // donguis >11k dòng — Supabase cắt 1000/lượt → đọc theo trang, không thì cột "ĐÃ ORDER?" sai
+                let all = [];
+                for (let pg = 0; pg < 40; pg++) {
+                    const { data } = await supabase.from('donguis').select('koc_id_kenh').not('koc_id_kenh', 'is', null).range(pg * 1000, (pg + 1) * 1000 - 1);
+                    all = all.concat(data || []);
+                    if (!data || data.length < 1000) break;
+                }
+                setKocOrderSet(new Set(all.map(r => (r.koc_id_kenh || '').trim()).filter(Boolean)));
             } catch (e) { console.error('Failed to load koc orders:', e); }
         };
         loadKocOrders();
@@ -169,8 +175,14 @@ const AirLinksTab = ({ currentUser }) => {
     useEffect(() => {
         const loadBlacklist = async () => {
             try {
-                const { data } = await supabase.from('koc_blacklist').select('id_kenh').order('created_at', { ascending: true });
-                if (data) setBlacklistChannels(data.map(r => r.id_kenh));
+                // blacklist đã 888 kênh, sắp vượt trần 1000 → đọc theo trang cho bền
+                let all = [];
+                for (let pg = 0; pg < 10; pg++) {
+                    const { data } = await supabase.from('koc_blacklist').select('id_kenh').order('created_at', { ascending: true }).range(pg * 1000, (pg + 1) * 1000 - 1);
+                    all = all.concat(data || []);
+                    if (!data || data.length < 1000) break;
+                }
+                setBlacklistChannels(all.map(r => r.id_kenh));
             } catch (e) { console.error('Failed to load blacklist:', e); }
         };
         loadBlacklist();

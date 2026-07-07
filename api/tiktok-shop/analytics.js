@@ -94,6 +94,28 @@ const ttText = async (url, opts = {}, ms = 12000) => {
   catch (e) { clearTimeout(tid); return JSON.stringify({ code: -1, message: `Fetch error: ${e.message}` }); }
 };
 
+// ── Chống trần 1000 dòng của PostgREST (bug view=0 hên xui 7/7) ──────────────
+// RPC set-returning: đọc theo trang .range() tới hết (cap trang để không lặp vô hạn).
+const rpcAll = async (supabase, fn, args, maxPages = 30) => {
+  const PAGE = 1000; let out = [];
+  for (let i = 0; i < maxPages; i++) {
+    const { data, error } = await supabase.rpc(fn, args).range(i * PAGE, (i + 1) * PAGE - 1);
+    if (error) return { data: out.length ? out : null, error };
+    out = out.concat(data || []);
+    if (!data || data.length < PAGE) break;
+  }
+  return { data: out, error: null };
+};
+// .in('id', ids) với ids dài: chia lô 500 (né URL quá dài + né luôn trần 1000 dòng kết quả).
+const inChunks = async (ids, makeQuery, size = 500) => {
+  const out = [];
+  for (let i = 0; i < ids.length; i += size) {
+    const { data } = await makeQuery(ids.slice(i, i + size));
+    if (data && data.length) out.push(...data);
+  }
+  return out;
+};
+
 const refreshAnalyticsToken = async ({ appKey, appSecret, conn, supabase, table }) => {
   if (!conn.refresh_token) return false;
   const u = new URL(`${TIKTOK_AUTH_BASE}/api/v2/token/refresh`);
@@ -1471,26 +1493,16 @@ async function handleKocOrders({ params, supabase, res }) {
   const spanDays = (start && end) ? (new Date(end) - new Date(start)) / 86400000 : 9999;
   const wide = !start || spanDays > 60;
   // PostgREST CẮT 1000 dòng/lượt → RPC trả >1000 KOC bị mất đuôi (vd eHerb VN 1.121 KOC có view
-  // → 121 KOC hiện view=0 hên xui, bug @ananittt 7/7). Đọc THEO TRANG tới hết cho các RPC dạng danh sách.
-  const rpcAll = async (fn, args) => {
-    const PAGE = 1000; let out = [];
-    for (let i = 0; i < 30; i++) { // trần 30k dòng — dư cho mọi shop
-      const { data, error: e } = await supabase.rpc(fn, args).range(i * PAGE, (i + 1) * PAGE - 1);
-      if (e) return { data: out.length ? out : null, error: e };
-      out = out.concat(data || []);
-      if (!data || data.length < PAGE) break;
-    }
-    return { data: out, error: null };
-  };
+  // → 121 KOC hiện view=0 hên xui, bug @ananittt 7/7). rpcAll (helper chung) đọc theo trang tới hết.
   const R = {
     stats:      () => supabase.rpc('koc_order_stats',        { p_shop_id: shopId, p_start: start, p_end: end }),
     totRows:    () => supabase.rpc('koc_order_totals',       { p_shop_id: shopId, p_start: start, p_end: end }),
-    viewRows:   () => rpcAll('koc_video_views',              { p_shop_id: shopId, p_start: start, p_end: end }),
+    viewRows:   () => rpcAll(supabase, 'koc_video_views',    { p_shop_id: shopId, p_start: start, p_end: end }),
     viewTotal:  () => supabase.rpc('koc_video_views_total',  { p_shop_id: shopId, p_start: start, p_end: end }),
-    castRows:   () => rpcAll('koc_cast_by_creator',          { p_shop_id: shopId, p_start: castAll ? null : start, p_end: castAll ? null : end }),
-    sampleRows: () => rpcAll('koc_sample_cost',              { p_start: castAll ? null : start, p_end: castAll ? null : end, p_brand: brandArg }),
+    castRows:   () => rpcAll(supabase, 'koc_cast_by_creator', { p_shop_id: shopId, p_start: castAll ? null : start, p_end: castAll ? null : end }),
+    sampleRows: () => rpcAll(supabase, 'koc_sample_cost',    { p_start: castAll ? null : start, p_end: castAll ? null : end, p_brand: brandArg }),
     extraTot:   () => supabase.rpc('koc_perf_extra_totals',  { p_shop_id: shopId, p_start: start, p_end: end, p_cast_start: castAll ? null : start, p_cast_end: castAll ? null : end, p_brand: brandArg }),
-    gmvByContent: () => rpcAll('koc_gmv_by_content',         { p_shop_id: shopId, p_start: start, p_end: end }),
+    gmvByContent: () => rpcAll(supabase, 'koc_gmv_by_content', { p_shop_id: shopId, p_start: start, p_end: end }),
   };
   let stats, error, totRows, viewRows, viewTotal, castRows, sampleRows, extraTot, gmvByContent;
   if (wide) {
@@ -1655,7 +1667,7 @@ async function handleKocVideos({ params, appKey, appSecret, supabase, res }) {
   const start = params.start_date || AFF_SYNC_FLOOR_DATE;
   const end = params.end_date || null;
 
-  const { data: rows, error } = await supabase.rpc('koc_video_breakdown', { p_shop_id: shopId, p_start: start, p_end: end, p_creator: creator });
+  const { data: rows, error } = await rpcAll(supabase, 'koc_video_breakdown', { p_shop_id: shopId, p_start: start, p_end: end, p_creator: creator }, 10);
   if (error) return res.status(200).json({ ok: false, error: error.message });
 
   let videos = (rows || []).map(r => ({
@@ -1669,8 +1681,14 @@ async function handleKocVideos({ params, appKey, appSecret, supabase, res }) {
   // (Trước đây lọc post_date theo kỳ → KOC không đăng video trong kỳ thì danh sách thiếu so với VIDEO TỔNG.)
   try {
     const cn = norm(creator).replace(/^@/, '');
-    const { data: tvids } = await supabase.from('tiktok_shop_videos').select('id, post_date, video_post_time, product_id')
-      .eq('shop_id', shopId).or(`username.ilike.${cn},username.ilike.@${cn}`).limit(2000);
+    // đọc theo trang — creator "khủng" có tới 7.141 video/shop, .limit(2000) vẫn bị server cắt 1000
+    let tvids = [];
+    for (let pg = 0; pg < 10; pg++) {
+      const { data: chunk } = await supabase.from('tiktok_shop_videos').select('id, post_date, video_post_time, product_id')
+        .eq('shop_id', shopId).or(`username.ilike.${cn},username.ilike.@${cn}`).range(pg * 1000, (pg + 1) * 1000 - 1);
+      tvids = tvids.concat(chunk || []);
+      if (!chunk || chunk.length < 1000) break;
+    }
     const have = new Set(videos.map(v => v.content_id));
     for (const tv of (tvids || [])) {
       const id = String(tv.id);
@@ -1717,13 +1735,13 @@ async function handleKocVideos({ params, appKey, appSecret, supabase, res }) {
     })();
     const ids = videos.map(v => v.content_id).filter(Boolean);
     if (ids.length) {
-      // Metadata (tiêu đề, ngày đăng) từ API video sync
-      const { data: vrows } = await supabase.from('tiktok_shop_videos').select('id, views, video_post_time, title').in('id', ids);
+      // Metadata (tiêu đề, ngày đăng) — chia lô 500 (ids có thể >1000 → .in() nổ URL + bị cắt 1000)
+      const vrows = await inChunks(ids, (part) => supabase.from('tiktok_shop_videos').select('id, views, video_post_time, title').in('id', part));
       const meta = {}; (vrows || []).forEach(r => { meta[r.id] = r; });
 
       // VIEW: ưu tiên data IMPORT (tiktok_performance — đầy đủ theo tháng). Tổng = cộng các tháng đã import.
       let selM = null, selY = null; if (ymSel) { const [y, m] = ymSel.split('-').map(Number); selY = y; selM = m; }
-      const { data: perf } = await supabase.from('tiktok_performance').select('video_id, month, year, views, air_date').in('video_id', ids);
+      const perf = await inChunks(ids, (part) => supabase.from('tiktok_performance').select('video_id, month, year, views, air_date').in('video_id', part));
       const totById = {}, monthById = {}, airById = {};
       (perf || []).forEach(r => {
         totById[r.video_id] = (totById[r.video_id] || 0) + (Number(r.views) || 0);
@@ -1733,7 +1751,7 @@ async function handleKocVideos({ params, appKey, appSecret, supabase, res }) {
       // Fallback view tháng từ API monthly (nếu video chưa có trong import)
       let monFallback = {};
       if (ymSel) {
-        const { data: mrows } = await supabase.from('tiktok_video_monthly_views').select('id, views').eq('ym', ymSel).in('id', ids);
+        const mrows = await inChunks(ids, (part) => supabase.from('tiktok_video_monthly_views').select('id, views').eq('ym', ymSel).in('id', part));
         (mrows || []).forEach(r => { monFallback[r.id] = Number(r.views) || 0; });
       }
       videos = videos.map(v => {

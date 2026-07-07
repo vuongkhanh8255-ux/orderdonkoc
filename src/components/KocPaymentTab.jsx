@@ -122,21 +122,35 @@ const KocPaymentTab = () => {
   const [budgetPicks, setBudgetPicks] = useState(() => new Set());// id các đơn được chọn trong đề xuất (chỉnh tay được)
   const [planReady, setPlanReady] = useState(false);             // đã bấm "Tính đề xuất" chưa
 
+  // Supabase CẮT 1000 dòng/lượt (kể cả .limit(5000)!) — koc_payments đã 1.496 lệnh → phải đọc theo trang,
+  // không thì Module 3 âm thầm THIẾU các lệnh cũ (bug phát hiện 7/7 cùng đợt view=0).
+  const fetchAllPayments = async (cols) => {
+    let out = [];
+    for (let pg = 0; pg < 30; pg++) {
+      const { data, error } = await supabase.from('koc_payments').select(cols)
+        .order('pay_date', { ascending: false }).order('created_at', { ascending: false })
+        .range(pg * 1000, (pg + 1) * 1000 - 1);
+      if (error) throw error;
+      out = out.concat(data || []);
+      if (!data || data.length < 1000) break;
+    }
+    return out;
+  };
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
       // Tải TẤT CẢ các tháng 1 lần (lọc tháng làm phía client) → search tìm được mọi tháng + đổi tháng tức thì.
-      const { data, error } = await supabase.from('koc_payments').select('*').order('pay_date', { ascending: false }).order('created_at', { ascending: false }).limit(5000);
-      if (error) throw error;
+      const data = await fetchAllPayments('*');
       setRows(data || []);
     } catch (e) { console.error('load payments failed', e); alert('Không tải được dữ liệu: ' + (e.message || e)); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  // Map TẤT CẢ video id -> đơn (cảnh báo trùng, kể cả khác tháng). Nhẹ (~1.4k đơn). Reload sau mỗi load.
+  // Map TẤT CẢ video id -> đơn (cảnh báo trùng, kể cả khác tháng). Reload sau mỗi load.
   const loadVidMap = useCallback(async () => {
-    const { data } = await supabase.from('koc_payments').select('id, air_link, channel_link, full_name, beneficiary, staff, pay_date, cast_net, brand');
+    const data = await fetchAllPayments('id, air_link, channel_link, full_name, beneficiary, staff, pay_date, cast_net, brand').catch(() => []);
     const m = {};
     (data || []).forEach(r => {
       const name = r.full_name || r.beneficiary || r.staff || '?';
