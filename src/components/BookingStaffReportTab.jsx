@@ -322,25 +322,24 @@ function StaffDetailPanel({ r, range, bg }) {
     return () => { alive = false; };
   }, [r.ten_nhansu, range.start, range.end]);
   // ── Link air của nhân sự (mấy bạn đã điền ở Quản lý link air) — HIỆN FULL từ trước tới giờ, KHÔNG theo kỳ ──
-  const [airLinks, setAirLinks] = useState(null);
+  // Phân trang + tìm kiếm PHÍA SERVER (né trần 1000 rows của Supabase; NS có thể có vài chục nghìn link)
+  const [airRows, setAirRows] = useState(null);   // rows trang hiện tại (null = đang tải)
+  const [airTotal, setAirTotal] = useState(0);
   const [airSearch, setAirSearch] = useState('');
+  const [airQ, setAirQ] = useState('');            // từ khoá đã debounce
   const [airPage, setAirPage] = useState(1);
-  useEffect(() => {
-    let alive = true; setAirLinks(null); setAirPage(1);
-    supabase.rpc('staff_air_links', { p_nhansu_id: r.nhansu_id, p_from: null, p_to: null, p_limit: 100000 })
-      .then(({ data }) => { if (alive) setAirLinks(data || []); }, () => { if (alive) setAirLinks([]); });
-    return () => { alive = false; };
-  }, [r.nhansu_id]);
-  const airFiltered = useMemo(() => {
-    const q = airSearch.trim().toLowerCase();
-    if (!q) return airLinks || [];
-    return (airLinks || []).filter(a => (a.id_kenh || '').toLowerCase().includes(q) || (a.id_video || '').includes(q) || (a.san_pham || '').toLowerCase().includes(q) || (a.ten_brand || '').toLowerCase().includes(q));
-  }, [airLinks, airSearch]);
   const AIR_PER = 20;
-  const airTotalPages = Math.max(1, Math.ceil(airFiltered.length / AIR_PER));
+  useEffect(() => { const t = setTimeout(() => { setAirQ(airSearch.trim()); setAirPage(1); }, 400); return () => clearTimeout(t); }, [airSearch]);
+  useEffect(() => { setAirPage(1); }, [r.nhansu_id]);
+  useEffect(() => {
+    let alive = true; setAirRows(null);
+    supabase.rpc('staff_air_links', { p_nhansu_id: r.nhansu_id, p_search: airQ || null, p_limit: AIR_PER, p_offset: (airPage - 1) * AIR_PER })
+      .then(({ data }) => { if (!alive) return; setAirRows(data || []); setAirTotal(data && data.length ? Number(data[0].total) : 0); },
+            () => { if (alive) { setAirRows([]); setAirTotal(0); } });
+    return () => { alive = false; };
+  }, [r.nhansu_id, airQ, airPage]);
+  const airTotalPages = Math.max(1, Math.ceil(airTotal / AIR_PER));
   const airPageC = Math.min(airPage, airTotalPages);
-  const airPageRows = airFiltered.slice((airPageC - 1) * AIR_PER, airPageC * AIR_PER);
-  useEffect(() => { setAirPage(1); }, [airSearch]);
   const daily = Array.isArray(det?.daily) ? det.daily : [];
   const kocs = Array.isArray(det?.kocs) ? det.kocs : [];
 
@@ -669,14 +668,14 @@ function StaffDetailPanel({ r, range, bg }) {
           </Section>
 
           {/* ═══ LINK AIR CỦA NHÂN SỰ ═══ (không có cột cast/cms/đã order) */}
-          <Section icon="🔗" title="Link air của nhân sự" hint={airLinks == null ? 'đang tải…' : `${fmt(airFiltered.length)} link · toàn bộ từ trước tới nay`} accent={{ bg: '#eff6ff', fg: '#1d4ed8' }}>
+          <Section icon="🔗" title="Link air của nhân sự" hint={airRows == null ? 'đang tải…' : `${fmt(airTotal)} link${airQ ? ' (khớp tìm kiếm)' : ' · toàn bộ từ trước tới nay'}`} accent={{ bg: '#eff6ff', fg: '#1d4ed8' }}>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              <input value={airSearch} onChange={e => setAirSearch(e.target.value)} placeholder="🔎 Tìm ID kênh / video / SP / brand..." style={{ ...ctrl, flex: '1 1 260px' }} />
+              <input value={airSearch} onChange={e => setAirSearch(e.target.value)} placeholder="🔎 Tìm ID kênh / video / SP / brand... (tìm trong TẤT CẢ link)" style={{ ...ctrl, flex: '1 1 260px' }} />
             </div>
-            {airLinks == null ? (
+            {airRows == null ? (
               <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>⏳ Đang tải link air...</div>
-            ) : airFiltered.length === 0 ? (
-              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>Nhân sự này chưa có link air nào.</div>
+            ) : airTotal === 0 ? (
+              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>{airQ ? 'Không tìm thấy link khớp.' : 'Nhân sự này chưa có link air nào.'}</div>
             ) : (
               <>
                 <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #f1f5f9' }}>
@@ -689,7 +688,7 @@ function StaffDetailPanel({ r, range, bg }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {airPageRows.map((a, i) => (
+                      {(airRows || []).map((a, i) => (
                         <tr key={a.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                           <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#94a3b8' }}>{(airPageC - 1) * AIR_PER + i + 1}</td>
                           <td style={{ padding: '9px 12px', fontSize: '0.82rem', maxWidth: 210 }}>
