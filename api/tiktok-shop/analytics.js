@@ -790,8 +790,9 @@ async function handleKocHunt({ params, supabase, res }) {
   const stMap = {}; (states || []).forEach(s => { stMap[s.seller_name] = s; });
 
   // QUÉT BIO đào liên hệ (email/SĐT trong bio) — chạy MỖI lần ping, kể cả khi marketplace cooldown.
-  // tikwm không bị bóp như marketplace → cron 15p × 12 kênh ≈ 1.150 kênh/ngày tự giàu liên hệ.
-  const bioStat = await scanBioBatch(supabase, Number(params.bio_batch) || 12);
+  // batch 7 để TỔNG lượt chạy (bio + cào marketplace) < 30s — cron-job.org cắt request ở 30s (báo
+  // Failed timeout dù server vẫn chạy xong). 7 kênh × 96 lượt/ngày vẫn ~670 kênh/ngày.
+  const bioStat = await scanBioBatch(supabase, Number(params.bio_batch) || 7);
 
   // COOLDOWN 12 phút (Khánh chốt 6/7: cào 15p/lần cho nhiều) — cron-job.org ping 15p/lần là khớp.
   // Rate-limit marketplace (36009002) tự cắt giữa lượt nếu TikTok bóp; lượt sau cào tiếp.
