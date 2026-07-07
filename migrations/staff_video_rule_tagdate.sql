@@ -6,7 +6,12 @@
 --   Headline = ĐK1 ∪ ĐK2 (khử trùng theo content_id/id_video).
 --
 -- 2 RPC đã cập nhật (định nghĩa đầy đủ nằm trong DB, xem pg_get_functiondef):
---   1) staff_booking_report(p_from,p_to): aff_videos/aff_views = ĐK1 (KOC gán post-tag) ∪ ĐK2 (air_links).
+-- VIEW (bổ sung 7/7): aff_views = view PHÁT SINH trong kỳ trên TOÀN BỘ pool video (KOC gán post-tag
+--   mọi ngày + tất cả air_links mọi ngày), KHÔNG giới hạn "video air trong kỳ". Video count (aff_videos)
+--   vẫn theo kỳ (video air trong tháng). tiktok_video_monthly_views.views = view PHÁT SINH trong tháng (delta).
+--
+--   1) staff_booking_report(p_from,p_to): aff_videos = ĐK1(post-tag)∪ĐK2(air_links) air trong kỳ;
+--      aff_views = sum monthly_views(kỳ) trên distinct pool (vu_all, KHÔNG lọc post_eff theo kỳ).
 --      - sa thêm tag_date = coalesce(approved_at,assigned_at)::date
 --      - vu_asg_ok: video KOC gán, lọc post_eff >= tag_date
 --      - vu_air: air_links (nhansu_id, id_video, ngay_air)
