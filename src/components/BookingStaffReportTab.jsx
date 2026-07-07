@@ -483,6 +483,10 @@ function StaffDetailPanel({ r, range, bg }) {
               <Mini icon="👁️" label="View" val={fmtView(r.aff_views)} color="#0891b2" />
               <Mini icon="💰" label="GMV" val={fmtVnd(r.aff_gmv) + 'đ'} color="#16a34a" />
             </div>
+            {/* Giải thích cách tính video: KOC quản lý (từ ngày gắn tag) + link air tự thêm */}
+            <div style={{ fontSize: '0.76rem', color: '#475569', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 9, padding: '9px 12px', lineHeight: 1.5 }}>
+              📎 <b>{fmt(r.aff_videos)}</b> video = <b style={{ color: '#7c3aed' }}>{fmt(Math.max(0, num(r.aff_videos) - num(det?.air_videos)))}</b> từ KOC quản lý <span style={{ color: '#94a3b8' }}>(chỉ tính video air TỪ ngày gắn tag trở đi)</span>{num(det?.air_videos) > 0 && <> + <b style={{ color: '#1d4ed8' }}>{fmt(det.air_videos)}</b> từ link air tự thêm <span style={{ color: '#94a3b8' }}>({fmtView(det.air_views)} view)</span></>}.
+            </div>
 
             {/* Video / View theo ngày (bar) */}
             <div>

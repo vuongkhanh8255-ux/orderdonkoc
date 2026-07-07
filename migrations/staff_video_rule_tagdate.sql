@@ -1,0 +1,24 @@
+-- RULE tính VIDEO + VIEW cho nhân sự booking (Khánh chốt 7/7/2026):
+--   ĐK1: KOC gán cho NS → chỉ tính video air TỪ ngày gắn tag trở đi
+--        (mốc = coalesce(approved_at, assigned_at) trong koc_brand_assignments, status='approved').
+--        Video air TRƯỚC ngày gắn KHÔNG tính cho NS đó.
+--   ĐK2: video NS tự thêm ở Quản lý link air (air_links.nhansu_id = NS) → tính hết.
+--   Headline = ĐK1 ∪ ĐK2 (khử trùng theo content_id/id_video).
+--
+-- 2 RPC đã cập nhật (định nghĩa đầy đủ nằm trong DB, xem pg_get_functiondef):
+--   1) staff_booking_report(p_from,p_to): aff_videos/aff_views = ĐK1 (KOC gán post-tag) ∪ ĐK2 (air_links).
+--      - sa thêm tag_date = coalesce(approved_at,assigned_at)::date
+--      - vu_asg_ok: video KOC gán, lọc post_eff >= tag_date
+--      - vu_air: air_links (nhansu_id, id_video, ngay_air)
+--      - vu_all = union 2, đếm distinct content_id trong kỳ; view = sum tiktok_video_monthly_views.
+--   2) staff_booking_detail(p_nhansu_id,p_from,p_to):
+--      - Bảng Top KOC = KOC QUẢN LÝ (asg ∪ cast_p), video theo ĐK1 (vu_ok post-tag) → bảng KHÔNG nở.
+--      - Biểu đồ ngày (daily) = ĐK1 ∪ ĐK2 (vf_day) khớp headline.
+--      - JSON trả thêm air_videos/air_views = phần ĐK2 (link air) trong kỳ KHÔNG trùng KOC quản lý,
+--        để UI hiện dòng "X video KOC quản lý + Y video link air = headline".
+--
+-- Kiểm chứng (Tú Trần T6/2026): 67 (KOC quản lý post-tag) + 116 (link air) = 183 = aff_videos headline. ✓
+--
+-- Để lấy định nghĩa hiện tại chạy trên DB:
+--   select pg_get_functiondef('public.staff_booking_report(date,date)'::regprocedure);
+--   select pg_get_functiondef('public.staff_booking_detail(uuid,date,date)'::regprocedure);
