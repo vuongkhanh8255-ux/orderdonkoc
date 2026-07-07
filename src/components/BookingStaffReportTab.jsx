@@ -321,16 +321,16 @@ function StaffDetailPanel({ r, range, bg }) {
       .then(({ data }) => { if (alive) setCastVids(data || []); }, () => { if (alive) setCastVids([]); });
     return () => { alive = false; };
   }, [r.ten_nhansu, range.start, range.end]);
-  // ── Link air của nhân sự (mấy bạn đã điền ở Quản lý link air) — lọc theo kỳ đang chọn ──
+  // ── Link air của nhân sự (mấy bạn đã điền ở Quản lý link air) — HIỆN FULL từ trước tới giờ, KHÔNG theo kỳ ──
   const [airLinks, setAirLinks] = useState(null);
   const [airSearch, setAirSearch] = useState('');
   const [airPage, setAirPage] = useState(1);
   useEffect(() => {
     let alive = true; setAirLinks(null); setAirPage(1);
-    supabase.rpc('staff_air_links', { p_nhansu_id: r.nhansu_id, p_from: range.start, p_to: range.end, p_limit: 3000 })
+    supabase.rpc('staff_air_links', { p_nhansu_id: r.nhansu_id, p_from: null, p_to: null, p_limit: 100000 })
       .then(({ data }) => { if (alive) setAirLinks(data || []); }, () => { if (alive) setAirLinks([]); });
     return () => { alive = false; };
-  }, [r.nhansu_id, range.start, range.end]);
+  }, [r.nhansu_id]);
   const airFiltered = useMemo(() => {
     const q = airSearch.trim().toLowerCase();
     if (!q) return airLinks || [];
@@ -664,14 +664,14 @@ function StaffDetailPanel({ r, range, bg }) {
           </Section>
 
           {/* ═══ LINK AIR CỦA NHÂN SỰ ═══ (không có cột cast/cms/đã order) */}
-          <Section icon="🔗" title="Link air của nhân sự" hint={airLinks == null ? 'đang tải…' : `${fmt(airFiltered.length)} link · kỳ ${range.start} → ${range.end}`} accent={{ bg: '#eff6ff', fg: '#1d4ed8' }}>
+          <Section icon="🔗" title="Link air của nhân sự" hint={airLinks == null ? 'đang tải…' : `${fmt(airFiltered.length)} link · toàn bộ từ trước tới nay`} accent={{ bg: '#eff6ff', fg: '#1d4ed8' }}>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
               <input value={airSearch} onChange={e => setAirSearch(e.target.value)} placeholder="🔎 Tìm ID kênh / video / SP / brand..." style={{ ...ctrl, flex: '1 1 260px' }} />
             </div>
             {airLinks == null ? (
               <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>⏳ Đang tải link air...</div>
             ) : airFiltered.length === 0 ? (
-              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>Nhân sự này chưa có link air nào trong kỳ đang chọn.</div>
+              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>Nhân sự này chưa có link air nào.</div>
             ) : (
               <>
                 <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #f1f5f9' }}>
