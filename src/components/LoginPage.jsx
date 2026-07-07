@@ -161,6 +161,7 @@ export const ACCOUNTS = [
     { username: 'dan',        password: 'Dan@SK2025',      role: 'ecom',       name: 'Đan'         },
     { username: 'hieu',       password: 'Hieu@SK2025',     role: 'ecom',       name: 'Hiếu'        },
     { username: 'tamnhu',     password: 'TamNhu@SK2025',   role: 'ecom',       name: 'Tâm Như'     },
+    { username: 'khanh',      password: 'Khanh@SK2025',    role: 'ecom',       name: 'Khánh'       },
     // ── ABM team (chỉ xem các dashboard/chỉ số được chỉ định) ──
     { username: 'abm',        password: 'ABM@SK2025',      role: 'abm',        name: 'Team ABM'    },
     { username: 'minhthu',    password: 'MinhThu@SK2025',  role: 'assistant',  name: 'Minh Thư'    },
