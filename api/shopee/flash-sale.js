@@ -639,6 +639,83 @@ async function handleProductModels(supabase, shopId, params) {
   return { ok: true, data: { ...result.response, item_name } };
 }
 
+/** 3b. SOI GIÁ FS: giá trong template vs giá bán HIỆN TẠI của shop → SP nào giảm chưa đủ sẽ bị
+    Shopee từ chối "Product Criteria". Read-only. ?min_discount=N (% tối thiểu coi là đủ, mặc định 10). */
+async function handleFsPriceAudit(supabase, shopId, params) {
+  const minDiscount = Math.max(0, Number(params.min_discount) || 10);
+  // 1) Gom giá FS từ MỌI template của shop
+  const { data: tmpls } = await supabase.from('flash_sale_templates').select('name, rows').eq('shop_id', String(shopId));
+  if (!tmpls || !tmpls.length) return { ok: false, error: 'no_template', message: 'Shop chưa có template FS nào.' };
+  const fsMap = new Map();  // `${item}_${model}` -> { item_id, model_id, fs_price(min), templates:Set }
+  const itemSet = new Set();
+  for (const t of tmpls) {
+    for (const r of (Array.isArray(t.rows) ? t.rows : [])) {
+      const item = String(r.item_id || ''); if (!item) continue;
+      const model = (String(r.model_id) === '0' || !r.model_id) ? '0' : String(r.model_id);
+      const price = Number(r.price) || 0; if (!price) continue;
+      const key = `${item}_${model}`;
+      const ex = fsMap.get(key);
+      if (!ex) fsMap.set(key, { item_id: item, model_id: model, fs_price: price, templates: new Set([t.name]) });
+      else { ex.fs_price = Math.min(ex.fs_price, price); ex.templates.add(t.name); }
+      itemSet.add(item);
+    }
+  }
+  const items = [...itemSet];
+
+  // 2) Giá bán HIỆN TẠI từng item (get_model_list) — có deadline + chạy song song nhẹ
+  const creds = await getCredentials(supabase, shopId, 'dashboard');
+  const deadline = Date.now() + 48000;
+  const priceMap = new Map();  // `${item}_${model}` -> { current, original, stock, name }
+  const nameMap = new Map();
+  let scanned = 0, apiErr = 0;
+  const CONC = 4;
+  for (let i = 0; i < items.length; i += CONC) {
+    if (Date.now() > deadline) break;
+    await Promise.all(items.slice(i, i + CONC).map(async (item) => {
+      const r = await shopeeGet(creds.partnerKey, creds.partnerId, '/api/v2/product/get_model_list', creds.accessToken, creds.shopId, { item_id: item });
+      scanned++;
+      if (r.error) { apiErr++; return; }
+      for (const m of (r.response?.model || [])) {
+        const pi = (m.price_info && m.price_info[0]) || {};
+        const mk = (m.model_id === 0 || !m.model_id) ? '0' : String(m.model_id);
+        priceMap.set(`${item}_${mk}`, {
+          current: Number(pi.current_price) || 0,
+          original: Number(pi.original_price) || 0,
+          stock: Number(m.stock_info_v2?.summary_info?.total_available_stock) || 0,
+          name: m.model_name || '',
+        });
+      }
+    }));
+  }
+  // Tên SP (1 lượt batch)
+  try {
+    const info = await shopeeGet(creds.partnerKey, creds.partnerId, '/api/v2/product/get_item_base_info', creds.accessToken, creds.shopId, { item_id_list: items.slice(0, 50).join(',') });
+    for (const it of (info.response?.item_list || [])) nameMap.set(String(it.item_id), it.item_name || '');
+  } catch { /* tên optional */ }
+
+  // 3) So sánh + gợi ý giá
+  const floor1k = (v) => Math.floor(v / 1000) * 1000;
+  const rows = [];
+  for (const [key, f] of fsMap) {
+    const p = priceMap.get(key);
+    const base = { item_id: f.item_id, model_id: f.model_id, item_name: nameMap.get(f.item_id) || '', templates: [...f.templates], fs_price: f.fs_price };
+    if (!p || !p.current) { rows.push({ ...base, model_name: p?.name || '', current: null, original: null, stock: p?.stock ?? null, discount_pct: null, status: 'khong_thay', suggest_price: null }); continue; }
+    const disc = (p.current - f.fs_price) / p.current * 100;
+    let status = 'ok';
+    if (f.fs_price >= p.current) status = 'fs_cao_hon';      // FS ≥ giá bán → chắc chắn bị chặn
+    else if (disc < minDiscount) status = 'mong';            // giảm chưa đủ sâu
+    rows.push({ ...base, model_name: p.name, current: p.current, original: p.original, stock: p.stock, discount_pct: Math.round(disc * 10) / 10, status, suggest_price: floor1k(p.current * (1 - minDiscount / 100)) });
+  }
+  const order = { fs_cao_hon: 0, mong: 1, khong_thay: 2, ok: 3 };
+  rows.sort((a, b) => (order[a.status] - order[b.status]) || ((a.discount_pct ?? 999) - (b.discount_pct ?? 999)));
+  const cnt = (s) => rows.filter(r => r.status === s).length;
+  return { ok: true, data: {
+    shop_id: String(shopId), min_discount: minDiscount, rows,
+    summary: { total: rows.length, fs_cao_hon: cnt('fs_cao_hon'), mong: cnt('mong'), khong_thay: cnt('khong_thay'), ok: cnt('ok'),
+      items_scanned: scanned, items_total: items.length, api_err: apiErr, incomplete: scanned < items.length },
+  } };
+}
+
 /** 4. Create a Flash Sale */
 async function handleCreate(supabase, shopId, body) {
   const { time_slot_id } = body || {};
@@ -1067,6 +1144,9 @@ export default async function handler(req, res) {
         break;
       case 'product_models':
         result = await handleProductModels(supabase, shopId, params);
+        break;
+      case 'fs_price_audit':
+        result = await handleFsPriceAudit(supabase, shopId, params);
         break;
       case 'create':
         if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST required for create' });
