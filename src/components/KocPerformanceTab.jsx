@@ -527,6 +527,7 @@ export default function KocPerformanceTab() {
   const brand = useMemo(() => brandOfShop(selSeller), [selSeller]);
   const allBrands = useMemo(() => [...new Set((shops || []).map(s => brandOfShop(s.seller_name)))].filter(b => b && b !== '—'), [shops]);
   const [assignMap, setAssignMap] = useState({});
+  const [proposedRows, setProposedRows] = useState([]);   // nguồn độc lập cho chuông "đề xuất chờ duyệt"
   const [showAssignPanel, setShowAssignPanel] = useState(true);
   const [showPendingTop, setShowPendingTop] = useState(false);
   const [assignShow, setAssignShow] = useState(48);
@@ -552,12 +553,21 @@ export default function KocPerformanceTab() {
     for (let pg = 0; pg < 10; pg++) {
       const { data: chunk } = await supabase.from(ASSIGN_TABLE)
         .select('koc_id, brand_name, staff_name, status, proposed_by, proposed_at, approved_by, approved_at, assigned_at')
+        // BẮT BUỘC có ORDER BY ổn định: .range() không kèm order → phân trang KHÔNG ổn định,
+        // >1000 dòng bị sót/nhân đôi ngẫu nhiên (đề xuất proposed từng biến mất khỏi chuông báo).
+        .order('koc_id', { ascending: true }).order('brand_name', { ascending: true })
         .range(pg * 1000, (pg + 1) * 1000 - 1);
       data = data.concat(chunk || []);
       if (!chunk || chunk.length < 1000) break;
     }
     const m = {}; (data || []).forEach(a => { const k = (a.koc_id || '').toLowerCase(); (m[k] = m[k] || []).push(a); });
     setAssignMap(m);
+    // Nguồn ĐỘC LẬP cho chuông "đề xuất chờ duyệt": query THẲNG status='proposed' (tập rất nhỏ,
+    // luôn đủ, không dính bẫy 1000 dòng) → chuông không bao giờ sót đề xuất dù assignMap lớn.
+    const { data: prop } = await supabase.from(ASSIGN_TABLE)
+      .select('koc_id, brand_name, staff_name, proposed_by, proposed_at, approved_at, assigned_at')
+      .eq('status', 'proposed');
+    setProposedRows((prop || []).map(a => ({ koc: (a.koc_id || '').toLowerCase(), status: 'proposed', ...a })));
   }, []);
   useEffect(() => { reloadAssignments(); }, [reloadAssignments]);
 
@@ -637,19 +647,16 @@ export default function KocPerformanceTab() {
     [overdueWarns, castMap]
   );
   // ── Admin chờ duyệt: đề xuất GÁN (ecom) + đề xuất GỠ (hệ thống: blacklist / 45 ngày) ──
+  // Dùng nguồn proposedRows (query thẳng status='proposed') — KHÔNG lọc từ assignMap (dính bẫy 1000 dòng).
   const pendingProposals = useMemo(() => {
     if (currentUser?.role !== 'admin') return [];
-    const out = [];
-    for (const [koc, arr] of Object.entries(assignMap)) for (const a of (arr || [])) if (a.brand_name === brand && a.status === 'proposed') out.push({ koc, ...a });
-    return out;
-  }, [assignMap, brand, currentUser]);
-  // ── TẤT CẢ đề xuất GÁN chờ duyệt (MỌI brand) → bảng thông báo đầu trang cho admin ──
+    return proposedRows.filter(a => a.brand_name === brand);
+  }, [proposedRows, brand, currentUser]);
+  // ── TẤT CẢ đề xuất GÁN chờ duyệt (MỌI brand) → chuông thông báo đầu trang cho admin ──
   const allPendingProposals = useMemo(() => {
     if (currentUser?.role !== 'admin') return [];
-    const out = [];
-    for (const [koc, arr] of Object.entries(assignMap)) for (const a of (arr || [])) if (a.status === 'proposed') out.push({ koc, ...a });
-    return out.sort((x, y) => new Date(y.proposed_at || 0) - new Date(x.proposed_at || 0));
-  }, [assignMap, currentUser]);
+    return [...proposedRows].sort((x, y) => new Date(y.proposed_at || 0) - new Date(x.proposed_at || 0));
+  }, [proposedRows, currentUser]);
   // KOC vào blacklist → TỰ ĐỘNG gỡ hết định danh (mọi brand), khỏi cần bấm "Duyệt gỡ" thủ công.
   const purgedRef = useRef(false);
   useEffect(() => {
@@ -807,7 +814,7 @@ export default function KocPerformanceTab() {
         {/* 🔔 Nút chuông thông báo — đề xuất gắn KOC chờ duyệt (chỉ admin) */}
         {currentUser?.role === 'admin' && (
           <div style={{ position: 'relative', flexShrink: 0 }}>
-            <button onClick={() => setShowPendingTop(v => !v)} title="Đề xuất gắn KOC chờ duyệt"
+            <button onClick={() => { setShowPendingTop(v => !v); reloadAssignments(); }} title="Đề xuất gắn KOC chờ duyệt (bấm để tải mới)"
               style={{ position: 'relative', width: 46, height: 46, borderRadius: 12, border: `1px solid ${allPendingProposals.length > 0 ? '#fcd34d' : '#e5e7eb'}`, background: allPendingProposals.length > 0 ? '#fffbeb' : '#fff', cursor: 'pointer', fontSize: '1.35rem', lineHeight: 1, boxShadow: '0 1px 3px rgba(15,23,42,0.06)' }}>
               🔔
               {allPendingProposals.length > 0 && (
