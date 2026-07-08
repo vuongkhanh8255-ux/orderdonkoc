@@ -642,7 +642,9 @@ async function handleProductModels(supabase, shopId, params) {
 /** 3b. SOI GIÁ FS: giá trong template vs giá bán HIỆN TẠI của shop → SP nào giảm chưa đủ sẽ bị
     Shopee từ chối "Product Criteria". Read-only. ?min_discount=N (% tối thiểu coi là đủ, mặc định 10). */
 async function handleFsPriceAudit(supabase, shopId, params) {
-  const minDiscount = Math.max(0, Number(params.min_discount) || 10);
+  // Cho phép min_discount = 0 (chỉ soi FS≥giá bán); rỗng/không hợp lệ → mặc định 10.
+  const mdRaw = params.min_discount;
+  const minDiscount = Math.max(0, (mdRaw === '' || mdRaw == null || isNaN(Number(mdRaw))) ? 10 : Number(mdRaw));
   // 1) Gom giá FS từ MỌI template của shop
   const { data: tmpls } = await supabase.from('flash_sale_templates').select('name, rows').eq('shop_id', String(shopId));
   if (!tmpls || !tmpls.length) return { ok: false, error: 'no_template', message: 'Shop chưa có template FS nào.' };
@@ -664,54 +666,67 @@ async function handleFsPriceAudit(supabase, shopId, params) {
 
   // 2) Giá bán HIỆN TẠI từng item (get_model_list) — có deadline + chạy song song nhẹ
   const creds = await getCredentials(supabase, shopId, 'dashboard');
-  const deadline = Date.now() + 48000;
+  const deadline = Date.now() + 40000;   // chừa slack cho batch 8s + tên 8s dưới trần 60s Vercel
   const priceMap = new Map();  // `${item}_${model}` -> { current, original, stock, name }
   const nameMap = new Map();
+  const scannedItems = new Set();  // item_id ĐÃ tải được model (để phân biệt "biến thể lệch" vs "lỗi tải")
   let scanned = 0, apiErr = 0;
   const CONC = 4;
   for (let i = 0; i < items.length; i += CONC) {
     if (Date.now() > deadline) break;
     await Promise.all(items.slice(i, i + CONC).map(async (item) => {
-      const r = await shopeeGet(creds.partnerKey, creds.partnerId, '/api/v2/product/get_model_list', creds.accessToken, creds.shopId, { item_id: item });
-      scanned++;
-      if (r.error) { apiErr++; return; }
-      for (const m of (r.response?.model || [])) {
-        const pi = (m.price_info && m.price_info[0]) || {};
-        const mk = (m.model_id === 0 || !m.model_id) ? '0' : String(m.model_id);
-        priceMap.set(`${item}_${mk}`, {
-          current: Number(pi.current_price) || 0,
-          original: Number(pi.original_price) || 0,
-          stock: Number(m.stock_info_v2?.summary_info?.total_available_stock) || 0,
-          name: m.model_name || '',
-        });
-      }
+      // 1 call lỗi (timeout/HTML/mạng) CHỈ hỏng item đó → apiErr, KHÔNG được ném làm sập cả báo cáo.
+      try {
+        const r = await shopeeGet(creds.partnerKey, creds.partnerId, '/api/v2/product/get_model_list', creds.accessToken, creds.shopId, { item_id: item });
+        scanned++;
+        if (r.error) { apiErr++; return; }
+        scannedItems.add(item);
+        for (const m of (r.response?.model || [])) {
+          const pi = (m.price_info && m.price_info[0]) || {};
+          const mk = (m.model_id === 0 || !m.model_id) ? '0' : String(m.model_id);
+          priceMap.set(`${item}_${mk}`, {
+            current: Number(pi.current_price) || 0,
+            original: Number(pi.original_price) || 0,
+            stock: Number(m.stock_info_v2?.summary_info?.total_available_stock) || 0,
+            name: m.model_name || '',
+          });
+        }
+      } catch { scanned++; apiErr++; }
     }));
   }
-  // Tên SP (1 lượt batch)
-  try {
-    const info = await shopeeGet(creds.partnerKey, creds.partnerId, '/api/v2/product/get_item_base_info', creds.accessToken, creds.shopId, { item_id_list: items.slice(0, 50).join(',') });
-    for (const it of (info.response?.item_list || [])) nameMap.set(String(it.item_id), it.item_name || '');
-  } catch { /* tên optional */ }
+  // Tên SP — batch theo lô 50 (Shopee giới hạn 50 item/lần), bỏ qua nếu sắp hết giờ (tên là phụ)
+  for (let i = 0; i < items.length && Date.now() < deadline + 6000; i += 50) {
+    try {
+      const info = await shopeeGet(creds.partnerKey, creds.partnerId, '/api/v2/product/get_item_base_info', creds.accessToken, creds.shopId, { item_id_list: items.slice(i, i + 50).join(',') });
+      for (const it of (info.response?.item_list || [])) nameMap.set(String(it.item_id), it.item_name || '');
+    } catch { /* tên optional */ }
+  }
 
   // 3) So sánh + gợi ý giá
-  const floor1k = (v) => Math.floor(v / 1000) * 1000;
+  const floor1k = (v) => Math.max(1000, Math.floor(v / 1000) * 1000);
   const rows = [];
   for (const [key, f] of fsMap) {
     const p = priceMap.get(key);
     const base = { item_id: f.item_id, model_id: f.model_id, item_name: nameMap.get(f.item_id) || '', templates: [...f.templates], fs_price: f.fs_price };
-    if (!p || !p.current) { rows.push({ ...base, model_name: p?.name || '', current: null, original: null, stock: p?.stock ?? null, discount_pct: null, status: 'khong_thay', suggest_price: null }); continue; }
+    if (!p || !p.current) {
+      // Phân biệt: item ĐÃ tải model nhưng KHÔNG có model_id này = biến thể template lệch (chọn lại SP);
+      //   item chưa tải được (hết giờ/lỗi API) = không thấy giá.
+      const st = scannedItems.has(f.item_id) ? 'variant_lech' : 'khong_thay';
+      rows.push({ ...base, model_name: p?.name || '', current: null, original: null, stock: p?.stock ?? null, discount_pct: null, status: st, suggest_price: null });
+      continue;
+    }
     const disc = (p.current - f.fs_price) / p.current * 100;
     let status = 'ok';
     if (f.fs_price >= p.current) status = 'fs_cao_hon';      // FS ≥ giá bán → chắc chắn bị chặn
     else if (disc < minDiscount) status = 'mong';            // giảm chưa đủ sâu
     rows.push({ ...base, model_name: p.name, current: p.current, original: p.original, stock: p.stock, discount_pct: Math.round(disc * 10) / 10, status, suggest_price: floor1k(p.current * (1 - minDiscount / 100)) });
   }
-  const order = { fs_cao_hon: 0, mong: 1, khong_thay: 2, ok: 3 };
+  const order = { fs_cao_hon: 0, mong: 1, variant_lech: 2, khong_thay: 3, ok: 4 };
   rows.sort((a, b) => (order[a.status] - order[b.status]) || ((a.discount_pct ?? 999) - (b.discount_pct ?? 999)));
   const cnt = (s) => rows.filter(r => r.status === s).length;
   return { ok: true, data: {
     shop_id: String(shopId), min_discount: minDiscount, rows,
-    summary: { total: rows.length, fs_cao_hon: cnt('fs_cao_hon'), mong: cnt('mong'), khong_thay: cnt('khong_thay'), ok: cnt('ok'),
+    summary: { total: rows.length, fs_cao_hon: cnt('fs_cao_hon'), mong: cnt('mong'), variant_lech: cnt('variant_lech'), khong_thay: cnt('khong_thay'), ok: cnt('ok'),
       items_scanned: scanned, items_total: items.length, api_err: apiErr, incomplete: scanned < items.length },
   } };
 }

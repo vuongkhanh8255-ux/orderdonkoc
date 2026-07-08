@@ -275,6 +275,7 @@ export default function FlashSaleTab() {
     setStep(0);
     setSelectedSlots([]); setSelectedProducts([]); setProductConfigs({}); setCreatedFsId(null);
     setError(''); setSuccess('');
+    setAuditData(null); setAuditErr('');   // xoá soi giá của shop cũ (kẻo hiện data shop cũ dưới tên shop mới)
     loadFlashSales();
   }, [selectedShopId, loadFlashSales]);
 
@@ -832,13 +833,15 @@ export default function FlashSaleTab() {
       {/* SOI GIÁ FS — SP nào giảm chưa đủ sẽ bị Shopee từ chối "Product Criteria" */}
       {step === 0 && (() => {
         const STAT = {
-          fs_cao_hon: { l: '❌ FS ≥ giá bán', c: '#dc2626', bg: '#fef2f2' },
-          mong:       { l: '⚠️ Giảm mỏng',   c: '#c2410c', bg: '#fff7ed' },
-          khong_thay: { l: '❔ Ko thấy giá',  c: '#64748b', bg: '#f1f5f9' },
-          ok:         { l: '✅ Đủ',           c: '#16a34a', bg: '#f0fdf4' },
+          fs_cao_hon:   { l: '❌ FS ≥ giá bán', c: '#dc2626', bg: '#fef2f2' },
+          mong:         { l: '⚠️ Giảm mỏng',   c: '#c2410c', bg: '#fff7ed' },
+          variant_lech: { l: '🔀 Biến thể lệch', c: '#7c3aed', bg: '#faf5ff' },
+          khong_thay:   { l: '❔ Ko thấy giá',  c: '#64748b', bg: '#f1f5f9' },
+          ok:           { l: '✅ Đủ',           c: '#16a34a', bg: '#f0fdf4' },
         };
+        const BAD = new Set(['fs_cao_hon', 'mong', 'variant_lech']);
         const rows = auditData?.rows || [];
-        const shown = auditOnlyBad ? rows.filter(r => r.status === 'fs_cao_hon' || r.status === 'mong') : rows;
+        const shown = auditOnlyBad ? rows.filter(r => BAD.has(r.status)) : rows;
         const s = auditData?.summary;
         return (
           <div style={{ ...CARD, marginBottom: 16, padding: '14px 20px' }}>
@@ -870,7 +873,7 @@ export default function FlashSaleTab() {
                 {auditErr && <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#b91c1c', fontWeight: 700, fontSize: '0.82rem', marginBottom: 10 }}>⚠️ {auditErr}</div>}
                 {s && (
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-                    {[['total', 'Tổng', '#0f172a', '#f8fafc'], ['fs_cao_hon', STAT.fs_cao_hon.l, STAT.fs_cao_hon.c, STAT.fs_cao_hon.bg], ['mong', STAT.mong.l, STAT.mong.c, STAT.mong.bg], ['khong_thay', STAT.khong_thay.l, STAT.khong_thay.c, STAT.khong_thay.bg], ['ok', STAT.ok.l, STAT.ok.c, STAT.ok.bg]].map(([k, l, c, bg]) => (
+                    {[['total', 'Tổng', '#0f172a', '#f8fafc'], ['fs_cao_hon', STAT.fs_cao_hon.l, STAT.fs_cao_hon.c, STAT.fs_cao_hon.bg], ['mong', STAT.mong.l, STAT.mong.c, STAT.mong.bg], ['variant_lech', STAT.variant_lech.l, STAT.variant_lech.c, STAT.variant_lech.bg], ['khong_thay', STAT.khong_thay.l, STAT.khong_thay.c, STAT.khong_thay.bg], ['ok', STAT.ok.l, STAT.ok.c, STAT.ok.bg]].filter(([k]) => k !== 'variant_lech' || s.variant_lech > 0).map(([k, l, c, bg]) => (
                       <div key={k} style={{ padding: '6px 12px', borderRadius: 8, background: bg, border: `1px solid ${c}22` }}>
                         <span style={{ fontSize: '0.72rem', color: c, fontWeight: 700 }}>{l}: </span>
                         <b style={{ fontSize: '0.9rem', color: c }}>{s[k]}</b>
