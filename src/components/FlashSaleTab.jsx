@@ -209,6 +209,23 @@ export default function FlashSaleTab() {
   const [shops, setShops] = useState([]);
   const [selectedShopId, setSelectedShopId] = useState(DEFAULT_SHOP_ID);
 
+  // ── Soi giá FS (template vs giá bán hiện tại) ──
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditData, setAuditData] = useState(null);   // { rows, summary, min_discount }
+  const [auditErr, setAuditErr] = useState('');
+  const [auditMinDisc, setAuditMinDisc] = useState(10);
+  const [auditOnlyBad, setAuditOnlyBad] = useState(true);
+  const runPriceAudit = useCallback(async () => {
+    setAuditLoading(true); setAuditErr(''); setAuditData(null);
+    try {
+      const res = await apiCall('fs_price_audit', { min_discount: String(auditMinDisc) });
+      if (res.ok) setAuditData(res.data);
+      else setAuditErr(res.message || res.error || 'Lỗi soi giá');
+    } catch (e) { setAuditErr(e.message); }
+    setAuditLoading(false);
+  }, [auditMinDisc]);
+
   // ── Load Flash Sale list ────────────────────────────────────────────────
   const loadFlashSales = useCallback(async () => {
     setLoading(true);
@@ -811,6 +828,95 @@ export default function FlashSaleTab() {
           })}
         </div>
       )}
+
+      {/* SOI GIÁ FS — SP nào giảm chưa đủ sẽ bị Shopee từ chối "Product Criteria" */}
+      {step === 0 && (() => {
+        const STAT = {
+          fs_cao_hon: { l: '❌ FS ≥ giá bán', c: '#dc2626', bg: '#fef2f2' },
+          mong:       { l: '⚠️ Giảm mỏng',   c: '#c2410c', bg: '#fff7ed' },
+          khong_thay: { l: '❔ Ko thấy giá',  c: '#64748b', bg: '#f1f5f9' },
+          ok:         { l: '✅ Đủ',           c: '#16a34a', bg: '#f0fdf4' },
+        };
+        const rows = auditData?.rows || [];
+        const shown = auditOnlyBad ? rows.filter(r => r.status === 'fs_cao_hon' || r.status === 'mong') : rows;
+        const s = auditData?.summary;
+        return (
+          <div style={{ ...CARD, marginBottom: 16, padding: '14px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <button onClick={() => setAuditOpen(o => !o)} style={{ ...BTN_SECONDARY, fontWeight: 800 }}>
+                {auditOpen ? '▼' : '►'} 🔎 Soi giá FS (SP nào giảm chưa đủ → bị Shopee chặn)
+              </button>
+              {auditOpen && (
+                <>
+                  <span style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 700 }}>Cần giảm tối thiểu</span>
+                  <input type="number" value={auditMinDisc} onChange={e => setAuditMinDisc(e.target.value)} min={0} max={90}
+                    style={{ width: 64, padding: '6px 8px', borderRadius: 8, border: '1px solid #e5e7eb', fontWeight: 700, fontSize: '0.85rem' }} />
+                  <span style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 700 }}>%</span>
+                  <button onClick={runPriceAudit} disabled={auditLoading} style={{ ...BTN_PRIMARY, opacity: auditLoading ? 0.6 : 1 }}>
+                    {auditLoading ? '⏳ Đang soi…' : '🔎 Soi ngay'}
+                  </button>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.8rem', fontWeight: 700, color: '#475569', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={auditOnlyBad} onChange={e => setAuditOnlyBad(e.target.checked)} /> Chỉ hiện SP lỗi
+                  </label>
+                </>
+              )}
+            </div>
+
+            {auditOpen && (
+              <div style={{ marginTop: 12 }}>
+                <p style={{ margin: '0 0 10px', fontSize: '0.78rem', color: '#94a3b8' }}>
+                  So giá FS trong template với giá bán HIỆN TẠI của shop. SP giảm chưa đủ % là nguyên nhân "Tạo thất bại — Product Criteria". Sửa: nạp lại template với <b>giá gợi ý</b> (hoặc thấp hơn).
+                </p>
+                {auditErr && <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#b91c1c', fontWeight: 700, fontSize: '0.82rem', marginBottom: 10 }}>⚠️ {auditErr}</div>}
+                {s && (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                    {[['total', 'Tổng', '#0f172a', '#f8fafc'], ['fs_cao_hon', STAT.fs_cao_hon.l, STAT.fs_cao_hon.c, STAT.fs_cao_hon.bg], ['mong', STAT.mong.l, STAT.mong.c, STAT.mong.bg], ['khong_thay', STAT.khong_thay.l, STAT.khong_thay.c, STAT.khong_thay.bg], ['ok', STAT.ok.l, STAT.ok.c, STAT.ok.bg]].map(([k, l, c, bg]) => (
+                      <div key={k} style={{ padding: '6px 12px', borderRadius: 8, background: bg, border: `1px solid ${c}22` }}>
+                        <span style={{ fontSize: '0.72rem', color: c, fontWeight: 700 }}>{l}: </span>
+                        <b style={{ fontSize: '0.9rem', color: c }}>{s[k]}</b>
+                      </div>
+                    ))}
+                    {s.incomplete && <div style={{ padding: '6px 12px', borderRadius: 8, background: '#fffbeb', border: '1px solid #fde68a', fontSize: '0.72rem', color: '#b45309', fontWeight: 700 }}>⚠️ Soi được {s.items_scanned}/{s.items_total} SP (hết giờ) — soi lại để đủ</div>}
+                  </div>
+                )}
+                {s && (
+                  <div style={{ overflowX: 'auto', border: '1px solid #f1f5f9', borderRadius: 10 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                      <thead>
+                        <tr style={{ background: '#f8fafc' }}>
+                          {['Sản phẩm', 'Template', 'Giá FS', 'Giá bán h.tại', 'Giảm', 'Trạng thái', 'Giá gợi ý'].map(h => (
+                            <th key={h} style={{ padding: '8px 10px', textAlign: h === 'Sản phẩm' || h === 'Template' ? 'left' : 'right', fontSize: '0.7rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {shown.length === 0 && <tr><td colSpan={7} style={{ padding: 24, textAlign: 'center', color: '#9ca3af' }}>{auditOnlyBad ? 'Không có SP lỗi 🎉 (bỏ tick "Chỉ hiện SP lỗi" để xem tất cả)' : 'Chưa có dữ liệu — bấm "Soi ngay".'}</td></tr>}
+                        {shown.map((r, i) => {
+                          const st = STAT[r.status] || STAT.ok;
+                          return (
+                            <tr key={i} style={{ borderTop: '1px solid #f1f5f9', background: st.bg }}>
+                              <td style={{ padding: '7px 10px', maxWidth: 260 }}>
+                                <div style={{ fontWeight: 700, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.item_name || r.item_id}{r.model_name ? ` · ${r.model_name}` : ''}</div>
+                                <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>item {r.item_id}{r.model_id !== '0' ? ` / model ${r.model_id}` : ''}</div>
+                              </td>
+                              <td style={{ padding: '7px 10px', fontSize: '0.72rem', color: '#64748b' }}>{(r.templates || []).join(', ')}</td>
+                              <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>{fmtVnd(r.fs_price)}</td>
+                              <td style={{ padding: '7px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>{r.current == null ? '—' : fmtVnd(r.current)}</td>
+                              <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 800, color: st.c }}>{r.discount_pct == null ? '—' : `${r.discount_pct}%`}</td>
+                              <td style={{ padding: '7px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}><span style={{ color: st.c, fontWeight: 700, fontSize: '0.74rem' }}>{st.l}</span></td>
+                              <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 800, color: (r.status === 'fs_cao_hon' || r.status === 'mong') ? '#0284c7' : '#94a3b8', whiteSpace: 'nowrap' }}>{r.suggest_price ? fmtVnd(r.suggest_price) : '—'}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Stepper */}
       {step > 0 && step < 5 && (
