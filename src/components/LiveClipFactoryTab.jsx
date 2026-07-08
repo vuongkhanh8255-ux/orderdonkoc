@@ -110,6 +110,24 @@ export default function LiveClipFactoryTab() {
     finally { setBusy(''); }
   };
 
+  // Up ẢNH NHÂN VẬT có sẵn (làm tay, không cần AI) → live-assets (public) → điền image_url, HeyGen dùng luôn.
+  const uploadCharImage = async (r, file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setStatus('❌ Hãy chọn file ảnh.'); return; }
+    setBusy(`${r.id}:cimg`); setStatus('⬆️ Đang up ảnh nhân vật...');
+    try {
+      const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+      const path = `char/${r.id}_${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from('live-assets').upload(path, file, { upsert: false });
+      if (error) throw error;
+      const { data } = supabase.storage.from('live-assets').getPublicUrl(path);
+      setField(r.id, 'image_url', data.publicUrl);
+      await supabase.from('livestream_clip_prod').upsert({ intent_id: r.id, image_url: data.publicUrl, updated_at: new Date().toISOString() }, { onConflict: 'intent_id' });
+      setStatus('✅ Đã up ảnh nhân vật — qua bước ③ bấm 🎬 tạo video là được (không cần OpenAI).');
+    } catch (e) { setStatus('❌ Lỗi up ảnh nhân vật: ' + e.message); }
+    finally { setBusy(''); }
+  };
+
   // ── TỰ ĐỘNG (Phase 2): OpenAI tạo ảnh, HeyGen tạo video, poll kiểm tra ──
   const genImageAuto = async (r) => {
     if (!r.img_prompt.trim()) { setStatus('❌ Cần prompt ảnh trước.'); return; }
@@ -285,8 +303,14 @@ export default function LiveClipFactoryTab() {
                   {/* 2c kết quả ảnh */}
                   <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap', marginTop: 12 }}>
                     <div style={{ flex: '1 1 300px' }}>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#334155', marginBottom: 6 }}>🖼️ Ảnh nhân vật (kết quả — tự điền khi bấm 🪄, hoặc dán link ảnh gen tay)</div>
-                      <input style={inp} placeholder="https://..." value={r.image_url} onChange={e => setField(r.id, 'image_url', e.target.value)} />
+                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#334155', marginBottom: 6 }}>🖼️ Ảnh nhân vật (dùng cho video) — bấm 🪄 (AI), hoặc dán link, hoặc <b>Up ảnh có sẵn</b></div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <input style={{ ...inp, flex: 1 }} placeholder="https://... (dán link ảnh)" value={r.image_url} onChange={e => setField(r.id, 'image_url', e.target.value)} />
+                        <label style={{ ...btn('#0891b2'), padding: '10px 14px', fontSize: '0.8rem', cursor: busy === `${r.id}:cimg` ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: busy === `${r.id}:cimg` ? 0.6 : 1 }}>
+                          {busy === `${r.id}:cimg` ? '⏳...' : '⬆️ Up ảnh'}
+                          <input type="file" accept="image/*" disabled={busy === `${r.id}:cimg`} style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) uploadCharImage(r, f); }} />
+                        </label>
+                      </div>
                     </div>
                     {r.image_url && <img src={r.image_url} alt="" style={{ height: 88, borderRadius: 10, border: '1px solid #e5e7eb', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} />}
                   </div>
