@@ -462,7 +462,7 @@ const OrderTab = ({ currentUser } = {}) => {
         try {
             const { data, error } = await supabase.functions.invoke('koc-channel-views', { body: { username: u } });
             if (error || !data?.ok) { setChanView({ username: u, err: 'Không kiểm tra được view (thử lại sau)' }); return; }
-            setChanView({ username: u, total_view: data.total_view, video_count: data.video_count, dat: data.dat, videos: data.videos || [], err: data.err, busy: data.busy, nguong: data.nguong || 1500 });
+            setChanView({ username: u, total_view: data.total_view, video_count: data.video_count, dat: data.dat, videos: data.videos || [], err: data.err, busy: data.busy, by_follower: data.by_follower, follower_count: data.follower_count, nguong: data.nguong || 1500 });
         } catch (e) { setChanView({ username: u, err: e.message }); }
     };
     useEffect(() => { setChanView(null); }, [idKenh]);  // đổi ID kênh → xoá kết quả cũ
@@ -868,7 +868,9 @@ const OrderTab = ({ currentUser } = {}) => {
                                             <>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                                     <b>{chanView.dat ? '✅ ĐẠT' : '🚫 KHÔNG ĐẠT'}</b>
-                                                    <span>Tổng view {chanView.video_count} video (bỏ ghim): <b>{Number(chanView.total_view).toLocaleString('vi-VN')}</b> / ngưỡng {Number(chanView.nguong).toLocaleString('vi-VN')}</span>
+                                                    {chanView.by_follower
+                                                        ? <span>Kênh có <b>{Number(chanView.follower_count).toLocaleString('vi-VN')}</b> follower — kênh xịn (tikwm tạm chưa cào được view từng clip nên tính theo follower)</span>
+                                                        : <span>Tổng view {chanView.video_count} video (bỏ ghim): <b>{Number(chanView.total_view).toLocaleString('vi-VN')}</b> / ngưỡng {Number(chanView.nguong).toLocaleString('vi-VN')}</span>}
                                                     <button type="button" onClick={() => openViewPopup(chanView.username, { big: true, force: true })} title="Phóng to xem ~10 clip gần nhất — bấm vào video coi luôn" style={{ marginLeft: 'auto', border: '1px solid #fed7aa', background: '#fff7ed', color: '#ea580c', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontWeight: 800, fontSize: '0.76rem' }}>🔍 Phóng to</button>
                                                     <a href={`https://www.tiktok.com/@${chanView.username}`} target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>Mở TikTok ↗</a>
                                                     <span onClick={() => checkChannelView(idKenh)} title="Cào lại" style={{ cursor: 'pointer', fontWeight: 700 }}>🔄</span>

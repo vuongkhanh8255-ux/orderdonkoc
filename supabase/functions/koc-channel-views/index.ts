@@ -9,6 +9,7 @@ const NGUONG = 1500;
 const SO_VIDEO = 7;              // số video tính NGƯỠNG (bỏ ghim)
 const SO_VIDEO_DISPLAY = 10;    // số video trả về để XEM (popup phóng to)
 const CACHE_NGAY = 30;
+const FOLLOWER_DAT = 2000;      // cào posts fail nhưng follower >= mức này -> coi như ĐẠT (kênh thật, xịn)
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -22,6 +23,25 @@ function normUser(raw: string): string {
   const s = (raw || '').trim();
   const m = s.match(/tiktok\.com\/@?([\w.\-]+)/i);
   return (m ? m[1] : s).toLowerCase().replace(/^@/, '').replace(/[\/?#].*$/, '').trim();
+}
+
+// Lấy thông tin kênh (follower...) — dùng làm CỨU CÁNH khi /user/posts cào không nổi.
+// Endpoint này ỔN ĐỊNH hơn nhiều so với /user/posts.
+async function tikwmUserInfo(username: string): Promise<{ exists: boolean; follower: number }> {
+  for (let i = 0; i < 3; i++) {
+    try {
+      const r = await fetch(`https://www.tikwm.com/api/user/info?unique_id=${encodeURIComponent(username)}`,
+        { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      const j = await r.json();
+      if (j?.code === 0) {
+        const s = j?.data?.stats || {};
+        const follower = Number(s.followerCount ?? j?.data?.user?.followerCount ?? 0) || 0;
+        return { exists: true, follower };
+      }
+    } catch (_) { /* thử lại */ }
+    if (i < 2) await new Promise((res) => setTimeout(res, 800));
+  }
+  return { exists: false, follower: 0 };
 }
 
 async function tikwmPlay(link: string) {
@@ -78,12 +98,35 @@ Deno.serve(async (req) => {
     }
 
     let row: any;
+    let shouldCache = true;   // chỉ cache kết quả CHẮC CHẮN; ca "bận không rõ" -> khỏi cache để lần sau cào lại
     if (!vids.length) {
-      // Phân biệt: tikwm bận (busy=true, cho qua tạm khỏi chặn) vs kênh thật sự không có video.
-      row = { username, total_view: 0, video_count: 0, dat: false, videos: [], videos_all: [], busy: serverBusy,
-        err: serverBusy
-          ? 'Dịch vụ cào view đang bận (tikwm lỗi tạm) — thử lại sau vài giây hoặc bấm cào lại.'
-          : 'Không lấy được video (kênh riêng tư / không tồn tại / TikTok chặn tạm)', checked_at: new Date().toISOString() };
+      // Cào posts KHÔNG NỔI. Nếu do tikwm bận -> soi user/info lấy FOLLOWER làm cứu cánh.
+      // Kênh nhiều follower (>= FOLLOWER_DAT) chắc chắn là kênh thật/xịn -> coi như ĐẠT,
+      // khỏi chặn oan (vd hoangson71gym 48k follower nhưng tikwm cào posts fail 100%).
+      let follower = 0, existed = false;
+      if (serverBusy) {
+        const info = await tikwmUserInfo(username);
+        follower = info.follower; existed = info.exists;
+      }
+      if (serverBusy && existed && follower >= FOLLOWER_DAT) {
+        row = { username, total_view: 0, video_count: 0, dat: true, videos: [], videos_all: [],
+          busy: false, follower_count: follower, by_follower: true, err: null, checked_at: new Date().toISOString() };
+        shouldCache = true;   // kênh thật + nhiều follower -> cache bình thường
+      } else if (serverBusy) {
+        // Tikwm bận + không đủ tín hiệu follower -> KHÔNG chặn cứng (cho nhân sự tự quyết), khỏi cache.
+        row = { username, total_view: 0, video_count: 0, dat: false, videos: [], videos_all: [],
+          busy: true, follower_count: follower, by_follower: false,
+          err: existed
+            ? `Tikwm cào view không nổi kênh này lúc này (kênh có thật, ${follower.toLocaleString('vi-VN')} follower) — vẫn có thể tạo đơn.`
+            : 'Dịch vụ cào view đang bận (tikwm lỗi tạm) — thử lại sau vài giây hoặc bấm cào lại.',
+          checked_at: new Date().toISOString() };
+        shouldCache = false;
+      } else {
+        // Tikwm trả code:0 nhưng KHÔNG có video -> kênh riêng tư / mới tạo / xoá hết clip.
+        row = { username, total_view: 0, video_count: 0, dat: false, videos: [], videos_all: [],
+          busy: false, follower_count: 0, by_follower: false,
+          err: 'Không lấy được video (kênh riêng tư / không tồn tại / TikTok chặn tạm)', checked_at: new Date().toISOString() };
+      }
     } else {
       const sorted = vids
         .filter((v: any) => !v.is_top)
@@ -100,8 +143,9 @@ Deno.serve(async (req) => {
       };
     }
 
-    // KHÔNG cache khi tikwm bận (kẻo giữ lỗi tạm 30 ngày) — chỉ lưu kết quả CHẮC CHẮN.
-    if (!serverBusy) await supa.from('koc_channel_views').upsert(row, { onConflict: 'username' });
+    // Chỉ cache kết quả CHẮC CHẮN (có video / follower cứu cánh / kênh trống thật).
+    // Ca "tikwm bận không rõ" -> shouldCache=false để lần sau cào lại tươi.
+    if (shouldCache) await supa.from('koc_channel_views').upsert(row, { onConflict: 'username' });
     return json({ ok: true, cached: false, nguong: NGUONG, ...row });
   } catch (e) {
     return json({ ok: false, error: String((e as Error)?.message || e) }, 500);
