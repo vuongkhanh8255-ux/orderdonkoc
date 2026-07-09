@@ -61,18 +61,29 @@ Deno.serve(async (req) => {
       }
     }
 
+    // tikwm /user/posts CHẬP CHỜN: ~4-5 lần mới được 1 lần (trả code:-1 "Server error!" xen kẽ).
+    // Gọi 1 lần → đa số rớt → chặn đơn oan. RETRY tới 8 lần (giãn 1.2s) tới khi code:0.
     let vids: any[] = [];
-    try {
-      const r = await fetch(`https://www.tikwm.com/api/user/posts?unique_id=${encodeURIComponent(username)}&count=15`,
-        { headers: { 'User-Agent': 'Mozilla/5.0' } });
-      const j = await r.json();
-      vids = j?.data?.videos || [];
-    } catch (_) { /* mạng lỗi -> 0 video */ }
+    let serverBusy = false; // tikwm lỗi tạm (khác với kênh không tồn tại thật)
+    for (let attempt = 0; attempt < 8; attempt++) {
+      try {
+        const r = await fetch(`https://www.tikwm.com/api/user/posts?unique_id=${encodeURIComponent(username)}&count=15`,
+          { headers: { 'User-Agent': 'Mozilla/5.0' } });
+        const j = await r.json();
+        if (j?.code === 0) { vids = j?.data?.videos || []; serverBusy = false; break; }
+        // code != 0 → tikwm bận/lỗi tạm → thử lại
+        serverBusy = true;
+      } catch (_) { serverBusy = true; }
+      if (attempt < 7) await new Promise((res) => setTimeout(res, 1200));
+    }
 
     let row: any;
     if (!vids.length) {
-      row = { username, total_view: 0, video_count: 0, dat: false, videos: [], videos_all: [],
-        err: 'Không lấy được video (kênh riêng tư / không tồn tại / TikTok chặn tạm)', checked_at: new Date().toISOString() };
+      // Phân biệt: tikwm bận (busy=true, cho qua tạm khỏi chặn) vs kênh thật sự không có video.
+      row = { username, total_view: 0, video_count: 0, dat: false, videos: [], videos_all: [], busy: serverBusy,
+        err: serverBusy
+          ? 'Dịch vụ cào view đang bận (tikwm lỗi tạm) — thử lại sau vài giây hoặc bấm cào lại.'
+          : 'Không lấy được video (kênh riêng tư / không tồn tại / TikTok chặn tạm)', checked_at: new Date().toISOString() };
     } else {
       const sorted = vids
         .filter((v: any) => !v.is_top)
@@ -89,7 +100,8 @@ Deno.serve(async (req) => {
       };
     }
 
-    await supa.from('koc_channel_views').upsert(row, { onConflict: 'username' });
+    // KHÔNG cache khi tikwm bận (kẻo giữ lỗi tạm 30 ngày) — chỉ lưu kết quả CHẮC CHẮN.
+    if (!serverBusy) await supa.from('koc_channel_views').upsert(row, { onConflict: 'username' });
     return json({ ok: true, cached: false, nguong: NGUONG, ...row });
   } catch (e) {
     return json({ ok: false, error: String((e as Error)?.message || e) }, 500);

@@ -462,7 +462,7 @@ const OrderTab = ({ currentUser } = {}) => {
         try {
             const { data, error } = await supabase.functions.invoke('koc-channel-views', { body: { username: u } });
             if (error || !data?.ok) { setChanView({ username: u, err: 'Không kiểm tra được view (thử lại sau)' }); return; }
-            setChanView({ username: u, total_view: data.total_view, video_count: data.video_count, dat: data.dat, videos: data.videos || [], err: data.err, nguong: data.nguong || 1500 });
+            setChanView({ username: u, total_view: data.total_view, video_count: data.video_count, dat: data.dat, videos: data.videos || [], err: data.err, busy: data.busy, nguong: data.nguong || 1500 });
         } catch (e) { setChanView({ username: u, err: e.message }); }
     };
     useEffect(() => { setChanView(null); }, [idKenh]);  // đổi ID kênh → xoá kết quả cũ
@@ -690,12 +690,19 @@ const OrderTab = ({ currentUser } = {}) => {
                 return;
             }
             if (!chanView.dat) {
-                if (chanView.err) {
+                if (chanView.busy) {
+                    // Dịch vụ cào (tikwm) BẬN/không cào nổi kênh này → KHÔNG chặn cứng (kênh vẫn có thật).
+                    // Cho phép tạo đơn nếu nhân sự xác nhận, để 1 kênh tikwm cào không nổi không kẹt đơn mãi.
+                    const ok = window.confirm(`⚠️ Dịch vụ cào view đang bận — chưa kiểm tra được view kênh @${chanView.username} lúc này (KHÔNG phải lỗi ID kênh).\n\n• Bấm OK = VẪN TẠO ĐƠN (bỏ qua kiểm tra view lần này)\n• Bấm Cancel = lát bấm 🔄 cào lại rồi tạo`);
+                    if (!ok) return;
+                    // OK → cho qua, tạo đơn bình thường
+                } else if (chanView.err) {
                     alert(`🚫 Kênh @${chanView.username}: ${chanView.err}\n→ ID kênh sai / không tìm thấy nên KHÔNG gửi được.\nKiểm tra lại ID kênh, hoặc bấm 🔄 cào lại. Nếu chắc ID đúng mà vẫn lỗi → báo admin.`);
+                    return;
                 } else {
                     alert(`🚫 Kênh @${chanView.username} — tổng view ${chanView.video_count} video (bỏ ghim) = ${Number(chanView.total_view).toLocaleString('vi-VN')} < ${Number(chanView.nguong).toLocaleString('vi-VN')}.\nKênh chưa đủ view → KHÔNG gửi được.`);
+                    return;
                 }
-                return;
             }
         }
 
@@ -856,8 +863,8 @@ const OrderTab = ({ currentUser } = {}) => {
                                     <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, fontSize: '0.8rem', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', fontWeight: 700 }}>⭐ KOC ưu tiên — được tạo đơn dù không đủ view (bỏ qua check).</div>
                                 )}
                                 {VIEW_GATE_ON && chanView && (
-                                    <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, fontSize: '0.8rem', border: '1px solid', ...(chanView.loading ? { background: '#f8fafc', borderColor: '#e2e8f0', color: '#64748b' } : (chanView.err || !chanView.dat) ? { background: '#fef2f2', borderColor: '#fecaca', color: '#b91c1c' } : { background: '#f0fdf4', borderColor: '#bbf7d0', color: '#166534' }) }}>
-                                        {chanView.loading ? '⏳ Đang cào view kênh...' : chanView.err ? <span>🚫 {chanView.err} — <b>ID kênh sai/không tìm thấy → KHÔNG gửi được.</b> Kiểm tra lại ID hoặc <span onClick={() => checkChannelView(idKenh)} style={{ cursor: 'pointer', textDecoration: 'underline', fontWeight: 700 }}>🔄 cào lại</span>.</span> : (
+                                    <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, fontSize: '0.8rem', border: '1px solid', ...(chanView.loading ? { background: '#f8fafc', borderColor: '#e2e8f0', color: '#64748b' } : chanView.busy ? { background: '#fffbeb', borderColor: '#fde68a', color: '#b45309' } : (chanView.err || !chanView.dat) ? { background: '#fef2f2', borderColor: '#fecaca', color: '#b91c1c' } : { background: '#f0fdf4', borderColor: '#bbf7d0', color: '#166534' }) }}>
+                                        {chanView.loading ? '⏳ Đang cào view kênh...' : chanView.busy ? <span>⚠️ Dịch vụ cào view đang bận (cào không nổi kênh này lúc này, KHÔNG phải lỗi ID). Bấm <span onClick={() => checkChannelView(idKenh)} style={{ cursor: 'pointer', textDecoration: 'underline', fontWeight: 700 }}>🔄 cào lại</span> — hoặc vẫn có thể bấm Tạo đơn (sẽ hỏi xác nhận).</span> : chanView.err ? <span>🚫 {chanView.err} — <b>ID kênh sai/không tìm thấy → KHÔNG gửi được.</b> Kiểm tra lại ID hoặc <span onClick={() => checkChannelView(idKenh)} style={{ cursor: 'pointer', textDecoration: 'underline', fontWeight: 700 }}>🔄 cào lại</span>.</span> : (
                                             <>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                                     <b>{chanView.dat ? '✅ ĐẠT' : '🚫 KHÔNG ĐẠT'}</b>
