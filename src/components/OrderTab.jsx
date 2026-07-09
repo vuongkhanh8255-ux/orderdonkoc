@@ -1191,14 +1191,17 @@ const OrderTab = ({ currentUser } = {}) => {
                             <button onClick={() => setViewPopup(null)} style={{ border: 'none', background: '#f1f5f9', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', fontWeight: 700 }}>Đóng</button>
                         </div>
                         {viewPopup.loading ? <div style={{ padding: 30, textAlign: 'center', color: '#64748b' }}>⏳ Đang cào view kênh...</div>
+                            : viewPopup.busy ? <div style={{ padding: 16, background: '#fffbeb', color: '#b45309', borderRadius: 10, fontWeight: 600 }}>⚠️ {viewPopup.err}<br /><span style={{ fontSize: '0.82rem' }}>Bấm 🔄 cào lại ở trên, hoặc mở TikTok để coi trực tiếp.</span></div>
                             : viewPopup.err ? <div style={{ padding: 16, background: '#fef2f2', color: '#b91c1c', borderRadius: 10 }}>🚫 {viewPopup.err} — ID kênh có thể sai / không tồn tại.</div>
                             : (<>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, marginBottom: 12, fontWeight: 800, flexWrap: 'wrap', ...(viewPopup.dat ? { background: '#f0fdf4', color: '#166534' } : { background: '#fef2f2', color: '#b91c1c' }) }}>
                                     {viewPopup.dat ? '✅ ĐẠT' : '🚫 KHÔNG ĐẠT'}
-                                    <span style={{ fontWeight: 600 }}>Tổng view {viewPopup.video_count} video (bỏ ghim): <b>{Number(viewPopup.total_view).toLocaleString('vi-VN')}</b> / ngưỡng {Number(viewPopup.nguong || 1500).toLocaleString('vi-VN')}</span>
-                                    <span style={{ fontWeight: 600, color: '#64748b' }}>· bấm clip nào coi clip đó ngay tại chỗ</span>
+                                    {viewPopup.by_follower
+                                        ? <span style={{ fontWeight: 600 }}>Kênh có <b>{Number(viewPopup.follower_count).toLocaleString('vi-VN')}</b> follower — kênh xịn (tikwm tạm chưa cào được view/clip từng cái)</span>
+                                        : <><span style={{ fontWeight: 600 }}>Tổng view {viewPopup.video_count} video (bỏ ghim): <b>{Number(viewPopup.total_view).toLocaleString('vi-VN')}</b> / ngưỡng {Number(viewPopup.nguong || 1500).toLocaleString('vi-VN')}</span>
+                                        <span style={{ fontWeight: 600, color: '#64748b' }}>· bấm clip nào coi clip đó ngay tại chỗ</span></>}
                                 </div>
-                                {(viewPopup.videos_all?.length ? viewPopup.videos_all : viewPopup.videos)?.length > 0 && (
+                                {(viewPopup.videos_all?.length ? viewPopup.videos_all : viewPopup.videos)?.length > 0 ? (
                                     <div style={{ display: 'grid', gridTemplateColumns: viewPopup.big ? 'repeat(auto-fill, minmax(230px, 1fr))' : 'repeat(auto-fill, minmax(100px, 1fr))', gap: 10 }}>
                                         {(viewPopup.videos_all?.length ? viewPopup.videos_all : viewPopup.videos).map((v, i) => {
                                             const playing = String(viewPopup.play) === String(v.id);
@@ -1223,6 +1226,10 @@ const OrderTab = ({ currentUser } = {}) => {
                                                 </div>
                                             );
                                         })}
+                                    </div>
+                                ) : (
+                                    <div style={{ padding: 20, textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>
+                                        Tạm chưa lấy được clip để xem tại chỗ (tikwm chập chờn). Bấm <b>🔄</b> ở trên để cào lại, hoặc <a href={`https://www.tiktok.com/@${viewPopup.username}`} target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontWeight: 700 }}>Mở TikTok ↗</a> để coi.
                                     </div>
                                 )}
                             </>)}

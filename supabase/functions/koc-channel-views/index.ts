@@ -25,23 +25,40 @@ function normUser(raw: string): string {
   return (m ? m[1] : s).toLowerCase().replace(/^@/, '').replace(/[\/?#].*$/, '').trim();
 }
 
+// fetch có GIỚI HẠN THỜI GIAN: tikwm khi lỗi trả chậm ~3s, cắt sớm để đỡ treo popup.
+async function fetchT(url: string, ms = 2500): Promise<Response> {
+  const ctl = new AbortController();
+  const id = setTimeout(() => ctl.abort(), ms);
+  try {
+    return await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: ctl.signal });
+  } finally { clearTimeout(id); }
+}
+
 // Lấy thông tin kênh (follower...) — dùng làm CỨU CÁNH khi /user/posts cào không nổi.
 // Endpoint này ỔN ĐỊNH hơn nhiều so với /user/posts.
 async function tikwmUserInfo(username: string): Promise<{ exists: boolean; follower: number }> {
-  for (let i = 0; i < 3; i++) {
+  // Endpoint này ỔN ĐỊNH — thử tối đa 2 lần TUẦN TỰ (nhẹ tay, tránh bị tikwm rate-limit).
+  for (let i = 0; i < 2; i++) {
     try {
-      const r = await fetch(`https://www.tikwm.com/api/user/info?unique_id=${encodeURIComponent(username)}`,
-        { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      const r = await fetchT(`https://www.tikwm.com/api/user/info?unique_id=${encodeURIComponent(username)}`);
       const j = await r.json();
       if (j?.code === 0) {
         const s = j?.data?.stats || {};
-        const follower = Number(s.followerCount ?? j?.data?.user?.followerCount ?? 0) || 0;
-        return { exists: true, follower };
+        return { exists: true, follower: Number(s.followerCount ?? j?.data?.user?.followerCount ?? 0) || 0 };
       }
-    } catch (_) { /* thử lại */ }
-    if (i < 2) await new Promise((res) => setTimeout(res, 800));
+    } catch (_) { /* lỗi */ }
   }
   return { exists: false, follower: 0 };
+}
+
+// 1 lần gọi /user/posts. Trả mảng video nếu code:0 (kể cả [] khi kênh trống), null nếu tikwm lỗi.
+async function onePostsFetch(username: string): Promise<any[] | null> {
+  try {
+    const r = await fetchT(`https://www.tikwm.com/api/user/posts?unique_id=${encodeURIComponent(username)}&count=15`);
+    const j = await r.json();
+    if (j?.code === 0) return j?.data?.videos || [];
+  } catch (_) { /* lỗi mạng */ }
+  return null;
 }
 
 async function tikwmPlay(link: string) {
@@ -81,33 +98,25 @@ Deno.serve(async (req) => {
       }
     }
 
-    // tikwm /user/posts CHẬP CHỜN: ~4-5 lần mới được 1 lần (trả code:-1 "Server error!" xen kẽ).
-    // Gọi 1 lần → đa số rớt → chặn đơn oan. RETRY tới 8 lần (giãn 1.2s) tới khi code:0.
+    // Chạy SONG SONG: cào posts (view thật, 3 lần vì tikwm chập chờn ~1/3) + cào follower (cứu cánh) CÙNG LÚC.
+    // Xong sớm cái nào xài cái đó -> ~2-3s. posts được -> tính view thật; posts fail -> đã có follower sẵn.
+    const postsP = Promise.all([onePostsFetch(username), onePostsFetch(username), onePostsFetch(username)])
+      .then((batch) => batch.find((b) => b !== null));   // undefined nếu cả 3 fail
+    const infoP = tikwmUserInfo(username);
+    const [postsHit, info] = await Promise.all([postsP, infoP]);
+
     let vids: any[] = [];
-    let serverBusy = false; // tikwm lỗi tạm (khác với kênh không tồn tại thật)
-    for (let attempt = 0; attempt < 8; attempt++) {
-      try {
-        const r = await fetch(`https://www.tikwm.com/api/user/posts?unique_id=${encodeURIComponent(username)}&count=15`,
-          { headers: { 'User-Agent': 'Mozilla/5.0' } });
-        const j = await r.json();
-        if (j?.code === 0) { vids = j?.data?.videos || []; serverBusy = false; break; }
-        // code != 0 → tikwm bận/lỗi tạm → thử lại
-        serverBusy = true;
-      } catch (_) { serverBusy = true; }
-      if (attempt < 7) await new Promise((res) => setTimeout(res, 1200));
-    }
+    let serverBusy = true; // tikwm lỗi tạm (khác với kênh không tồn tại thật)
+    if (postsHit !== undefined) { vids = postsHit as any[]; serverBusy = false; }  // [] (kênh trống) cũng tính là "được"
 
     let row: any;
     let shouldCache = true;   // chỉ cache kết quả CHẮC CHẮN; ca "bận không rõ" -> khỏi cache để lần sau cào lại
     if (!vids.length) {
-      // Cào posts KHÔNG NỔI. Nếu do tikwm bận -> soi user/info lấy FOLLOWER làm cứu cánh.
+      // Cào posts KHÔNG NỔI. Dùng FOLLOWER (đã cào song song sẵn) làm cứu cánh.
       // Kênh nhiều follower (>= FOLLOWER_DAT) chắc chắn là kênh thật/xịn -> coi như ĐẠT,
       // khỏi chặn oan (vd hoangson71gym 48k follower nhưng tikwm cào posts fail 100%).
-      let follower = 0, existed = false;
-      if (serverBusy) {
-        const info = await tikwmUserInfo(username);
-        follower = info.follower; existed = info.exists;
-      }
+      const follower = serverBusy ? info.follower : 0;
+      const existed = serverBusy ? info.exists : false;
       if (serverBusy && existed && follower >= FOLLOWER_DAT) {
         row = { username, total_view: 0, video_count: 0, dat: true, videos: [], videos_all: [],
           busy: false, follower_count: follower, by_follower: true, err: null, checked_at: new Date().toISOString() };
