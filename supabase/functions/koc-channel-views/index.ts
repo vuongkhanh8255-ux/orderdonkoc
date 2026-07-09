@@ -11,6 +11,10 @@ const SO_VIDEO_DISPLAY = 10;    // số video trả về để XEM (popup phóng
 const CACHE_NGAY = 30;
 const FOLLOWER_DAT = 2000;      // cào posts fail nhưng follower >= mức này -> coi như ĐẠT (kênh thật, xịn)
 
+// NGUỒN CÀO TRẢ PHÍ (TikHub) — ỔN ĐỊNH hơn tikwm nhiều. Chỉ bật khi có key trong env TIKHUB_KEY.
+// Chưa có key -> tự động dùng tikwm free như cũ (an toàn, không sập).
+const TIKHUB_KEY = Deno.env.get('TIKHUB_KEY') || '';
+
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -26,12 +30,44 @@ function normUser(raw: string): string {
 }
 
 // fetch có GIỚI HẠN THỜI GIAN: tikwm khi lỗi trả chậm ~3s, cắt sớm để đỡ treo popup.
-async function fetchT(url: string, ms = 2500): Promise<Response> {
+async function fetchT(url: string, ms = 2500, extraHeaders: Record<string, string> = {}): Promise<Response> {
   const ctl = new AbortController();
   const id = setTimeout(() => ctl.abort(), ms);
   try {
-    return await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: ctl.signal });
+    return await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', ...extraHeaders }, signal: ctl.signal });
   } finally { clearTimeout(id); }
+}
+
+// Chuẩn hoá 1 video từ nhiều dạng response (TikHub app v3 aweme_list / web itemList / tikwm) về chung field tikwm.
+function normVid(a: any): any | null {
+  if (!a) return null;
+  const play = a?.statistics?.play_count ?? a?.stats?.playCount ?? a?.play_count ?? a?.playCount ?? 0;
+  const id = a?.aweme_id ?? a?.id ?? a?.video_id ?? '';
+  const cover = a?.video?.cover?.url_list?.[0] ?? a?.video?.origin_cover?.url_list?.[0] ?? a?.video?.cover
+    ?? a?.origin_cover?.url_list?.[0] ?? a?.cover ?? '';
+  const ct = a?.create_time ?? a?.createTime ?? 0;
+  const top = a?.is_top ?? a?.isTop ?? 0;
+  if (!id) return null;
+  return { play_count: Number(play) || 0, cover, video_id: String(id), create_time: Number(ct) || 0, is_top: top };
+}
+
+// CÀO TRẢ PHÍ TikHub — 1 phát ra video theo username. Trả {ok, videos} (đã chuẩn hoá field tikwm).
+// ok=false -> rớt về tikwm free. Lỗi/hết tiền không tính phí bên TikHub.
+async function tikhubPosts(username: string, debug = false): Promise<{ ok: boolean; videos: any[] }> {
+  try {
+    const r = await fetchT(
+      `https://api.tikhub.io/api/v1/tiktok/app/v3/fetch_user_post_videos_v3?unique_id=${encodeURIComponent(username)}&count=15`,
+      8000, { Authorization: `Bearer ${TIKHUB_KEY}`, 'Accept': 'application/json' });
+    const j = await r.json();
+    const code = j?.code;
+    if (code !== 200 && code !== 0) { if (debug) console.log('tikhub code', code, j?.detail || j?.message || ''); return { ok: false, videos: [] }; }
+    const data = j?.data ?? j;
+    const arr = data?.aweme_list || data?.videos || data?.itemList || data?.data?.aweme_list || [];
+    if (debug) console.log('tikhub ok, top keys', Object.keys(data || {}).slice(0, 12), 'n=', Array.isArray(arr) ? arr.length : 'notarr', 'item0keys', Object.keys((Array.isArray(arr) ? arr[0] : {}) || {}).slice(0, 15));
+    if (!Array.isArray(arr)) return { ok: false, videos: [] };
+    const videos = arr.map(normVid).filter((v: any) => v);
+    return { ok: true, videos };
+  } catch (e) { if (debug) console.log('tikhub err', String(e)); return { ok: false, videos: [] }; }
 }
 
 // Lấy thông tin kênh (follower...) — dùng làm CỨU CÁNH khi /user/posts cào không nổi.
@@ -98,16 +134,26 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Chạy SONG SONG: cào posts (view thật, 3 lần vì tikwm chập chờn ~1/3) + cào follower (cứu cánh) CÙNG LÚC.
-    // Xong sớm cái nào xài cái đó -> ~2-3s. posts được -> tính view thật; posts fail -> đã có follower sẵn.
-    const postsP = Promise.all([onePostsFetch(username), onePostsFetch(username), onePostsFetch(username)])
-      .then((batch) => batch.find((b) => b !== null));   // undefined nếu cả 3 fail
-    const infoP = tikwmUserInfo(username);
-    const [postsHit, info] = await Promise.all([postsP, infoP]);
-
+    const debug = url.searchParams.get('debug') === '1' || body.debug === true;
     let vids: any[] = [];
-    let serverBusy = true; // tikwm lỗi tạm (khác với kênh không tồn tại thật)
-    if (postsHit !== undefined) { vids = postsHit as any[]; serverBusy = false; }  // [] (kênh trống) cũng tính là "được"
+    let serverBusy = true; // chưa cào được (khác với kênh không tồn tại thật)
+    let info = { exists: false, follower: 0 };
+
+    // 1) ƯU TIÊN nguồn TRẢ PHÍ TikHub nếu đã cắm key (ổn định, 1 phát ra video).
+    if (TIKHUB_KEY) {
+      const th = await tikhubPosts(username, debug);
+      if (th.ok) { vids = th.videos; serverBusy = false; }
+    }
+
+    // 2) Chưa có key / TikHub lỗi -> tikwm FREE (cào posts 3 lần song song + cào follower cứu cánh CÙNG LÚC).
+    if (serverBusy) {
+      const postsP = Promise.all([onePostsFetch(username), onePostsFetch(username), onePostsFetch(username)])
+        .then((batch) => batch.find((b) => b !== null));   // undefined nếu cả 3 fail
+      const infoP = tikwmUserInfo(username);
+      const [postsHit, tinfo] = await Promise.all([postsP, infoP]);
+      info = tinfo;
+      if (postsHit !== undefined) { vids = postsHit as any[]; serverBusy = false; }  // [] (kênh trống) cũng tính là "được"
+    }
 
     let row: any;
     let shouldCache = true;   // chỉ cache kết quả CHẮC CHẮN; ca "bận không rõ" -> khỏi cache để lần sau cào lại
