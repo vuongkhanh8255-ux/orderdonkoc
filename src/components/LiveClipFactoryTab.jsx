@@ -128,6 +128,27 @@ export default function LiveClipFactoryTab() {
     finally { setBusy(''); }
   };
 
+  // Up VIDEO mp4 làm từ Dreamina (Seedance/OmniHuman) → live-assets → điền video_url (lưu kho xem lại được)
+  const uploadVideoFile = async (r, file) => {
+    if (!file) return;
+    if (!file.type.startsWith('video/')) { setStatus('❌ Hãy chọn file video (mp4).'); return; }
+    if (file.size > 45 * 1024 * 1024) { setStatus('❌ Video >45MB — nén nhỏ lại rồi up.'); return; }
+    setBusy(`${r.id}:vup`); setStatus('⬆️ Đang up video...');
+    try {
+      const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
+      const path = `vid/manual_${r.id}_${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from('live-assets').upload(path, file, { upsert: false, contentType: file.type });
+      if (error) throw error;
+      const { data } = supabase.storage.from('live-assets').getPublicUrl(path);
+      setField(r.id, 'video_url', data.publicUrl); setField(r.id, 'prod_status', 'xong');
+      await supabase.from('livestream_clip_prod').upsert({ intent_id: r.id, video_url: data.publicUrl, status: 'xong', updated_at: new Date().toISOString() }, { onConflict: 'intent_id' });
+      setStatus('✅ Đã up video vào kho — giờ tải về máy phát live rồi điền đường dẫn ở ④.');
+    } catch (e) { setStatus('❌ Lỗi up video: ' + e.message); }
+    finally { setBusy(''); }
+  };
+  // Action prompt chung để dán vào Dreamina (OmniHuman) cùng kịch bản
+  const DREAMINA_ACTION = 'talks directly to camera with natural hand gestures, friendly smile, picks up the product bottle and points at its label while speaking';
+
   // ── TỰ ĐỘNG (Phase 2): OpenAI tạo ảnh, HeyGen tạo video, poll kiểm tra ──
   const genImageAuto = async (r) => {
     if (!r.img_prompt.trim()) { setStatus('❌ Cần prompt ảnh trước.'); return; }
@@ -206,7 +227,7 @@ export default function LiveClipFactoryTab() {
       <div style={{ marginBottom: 16 }}>
         <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 900, color: '#1e293b' }}>🏭 Bước 2 — Xưởng Clip</h2>
         <p style={{ margin: '6px 0 0', color: '#475569', fontSize: '0.98rem', lineHeight: 1.65 }}>
-          Mỗi câu hỏi làm 1 video trả lời, đi qua 4 bước. <b>Cách nhanh nhất:</b> ghi đại ý → bấm ✨ AI viết → up ảnh sản phẩm → 🪄 tạo ảnh → 🎬 tạo video → tải về, điền đường dẫn ở ④.
+          Mỗi câu hỏi làm 1 video trả lời, đi qua 4 bước. <b>Cách làm:</b> ghi đại ý → bấm ✨ AI viết → 🪄 tạo ảnh → 📋 lấy prompt <b>tự đi gen clip</b> (Dreamina/Seedance) → dán/Up clip vô ③ → điền đường dẫn ở ④.
         </p>
       </div>
 
@@ -316,15 +337,20 @@ export default function LiveClipFactoryTab() {
                   </div>
                 </StepBlock>
 
-                {/* ③ Video */}
-                <StepBlock n="3" title="Video avatar nói (HeyGen)" hint="Bấm 🎬 — hệ thống tự kiểm tra mỗi 15 giây, render xong tự báo + lưu link vĩnh viễn vào kho.">
-                  <input style={inp} placeholder="https://... (tự điền khi render xong, hoặc dán link video có sẵn)" value={r.video_url} onChange={e => setField(r.id, 'video_url', e.target.value)} />
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <button onClick={() => makeVideoAuto(r)} disabled={busy === `${r.id}:vid`} style={{ ...btn('#7c3aed'), opacity: busy === `${r.id}:vid` ? 0.6 : 1 }}>{busy === `${r.id}:vid` ? '⏳ đang gửi...' : '🎬 Tạo video tự động (HeyGen)'}</button>
-                    <button onClick={() => checkVideoAuto(r)} disabled={busy === `${r.id}:chk`} style={{ ...btn('#0891b2'), padding: '10px 14px', fontSize: '0.8rem', opacity: busy === `${r.id}:chk` ? 0.6 : 1 }}>{busy === `${r.id}:chk` ? '⏳...' : '🔄 Kiểm tra video'}</button>
-                    {r.video_id && <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>id: {r.video_id.slice(0, 10)}…</span>}
-                    {r.video_url && <a href={r.video_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.88rem', color: ACCENT, fontWeight: 800 }}>▶ Xem / tải video</a>}
+                {/* ③ Video — GỌN: lấy prompt → tự đi gen (Dreamina/Seedance) → dán/up clip vô. Không còn HeyGen trên UI. */}
+                <StepBlock n="3" title="Video — lấy prompt đi gen, xong dán clip vào" hint="Bấm 📋 lấy prompt (kịch bản + cử động) → qua Dreamina/Seedance up ảnh ② + dán prompt → gen xong tải mp4 → Up hoặc dán link vào đây.">
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <button onClick={() => copyTxt(`${r.script || ''}\n\nAction (cử động): ${DREAMINA_ACTION}`)} style={{ ...btn('#7c3aed') }}>📋 Lấy prompt làm video</button>
+                    <a href="https://dreamina.capcut.com" target="_blank" rel="noreferrer" style={{ ...btn('#0ea5e9'), padding: '10px 14px', fontSize: '0.8rem', textDecoration: 'none', display: 'inline-block' }}>🌐 Mở Dreamina</a>
                   </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input style={{ ...inp, flex: 1 }} placeholder="https://... (dán link clip, hoặc bấm Up video)" value={r.video_url} onChange={e => setField(r.id, 'video_url', e.target.value)} />
+                    <label style={{ ...btn('#16a34a'), padding: '10px 14px', fontSize: '0.8rem', cursor: busy === `${r.id}:vup` ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: busy === `${r.id}:vup` ? 0.6 : 1 }}>
+                      {busy === `${r.id}:vup` ? '⏳...' : '⬆️ Up video (mp4)'}
+                      <input type="file" accept="video/mp4,video/*" disabled={busy === `${r.id}:vup`} style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) uploadVideoFile(r, f); }} />
+                    </label>
+                  </div>
+                  {r.video_url && <div style={{ marginTop: 8 }}><a href={r.video_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.88rem', color: ACCENT, fontWeight: 800 }}>▶ Xem / tải video</a></div>}
                 </StepBlock>
 
                 {/* ④ Clip cuối */}
