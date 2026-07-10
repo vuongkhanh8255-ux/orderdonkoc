@@ -72,7 +72,7 @@ Ngoài clip trả lời, cần **video phát vòng lặp khi không ai hỏi** (
 - Đặt vào OBS: scene **IDLE** → Add **Media Source** → chọn file → **tick Loop** (khác ANSWER_PLAYER là KHÔNG loop).
 - Nên có 2-3 clip idle xoay vòng cho đỡ nhàm.
 
-**Chọn công cụ (đã chốt):** ảnh = **OpenAI (ChatGPT)**, video = **HeyGen** (đi đường **API Pay-As-You-Go**, KHÔNG mua gói web $29). Điều khiển build thẳng vào koc-tool, **KHÔNG dùng n8n** (n8n không giảm phí API).
+**Chọn công cụ (CẬP NHẬT 10/7):** ảnh = **OpenAI (ChatGPT)** (tự động trong web như cũ) · video = **Dreamina/CapCut (Seedance + OmniHuman)** — Khánh làm TAY trên dreamina.capcut.com (up ảnh + dán kịch bản từ `Desktop/ANH-SAN-PHAM/KICH-BAN-SEEDANCE.txt` → tải mp4 → điền ô clip). Lý do đổi: OmniHuman nhép miệng + TAY CỬ ĐỘNG (HeyGen chỉ nhép miệng, tay đứng im, lại vướng trần 3 avatar phải xoá tay). **HeyGen giữ làm DỰ PHÒNG** (key + nút 🎬 vẫn hoạt động — cần render tự động hàng loạt thì dùng lại). Hệ thống nhận mp4 từ MỌI nguồn nên không sửa code gì. KHÔNG dùng n8n.
 
 ---
 
