@@ -148,6 +148,24 @@ const KocPaymentTab = () => {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  // NGÀY AIR THẬT của video (post_date) lấy từ tiktok_shop_videos — khớp video_id bóc từ link air.
+  // Dùng để ƯU TIÊN đề xuất TT cho KOC nào air SỚM NHẤT (chờ lâu nhất), thay vì ngày NHẬP đơn.
+  const [airDateMap, setAirDateMap] = useState({});   // { video_id: 'YYYY-MM-DD' }
+  useEffect(() => {
+    const ids = [...new Set(rows.flatMap(r => extractVideoIds(r.air_link)))];
+    if (!ids.length) { setAirDateMap({}); return; }
+    let alive = true;
+    (async () => {
+      const m = {};
+      for (let i = 0; i < ids.length; i += 300) {   // .in() chia lô 300, né trần 1000 dòng của Supabase
+        const { data } = await supabase.from('tiktok_shop_videos').select('id, post_date').in('id', ids.slice(i, i + 300));
+        (data || []).forEach(v => { if (v.post_date) m[v.id] = v.post_date; });
+      }
+      if (alive) setAirDateMap(m);
+    })();
+    return () => { alive = false; };
+  }, [rows]);
+
   // Map TẤT CẢ video id -> đơn (cảnh báo trùng, kể cả khác tháng). Reload sau mỗi load.
   const loadVidMap = useCallback(async () => {
     const data = await fetchAllPayments('id, air_link, channel_link, full_name, beneficiary, staff, pay_date, cast_net, brand').catch(() => []);
@@ -555,12 +573,21 @@ const KocPaymentTab = () => {
   };
 
   // ══════════ ĐỀ XUẤT THANH TOÁN THEO NGÂN SÁCH ══════════
-  // Ưu tiên đơn CŨ NHẤT trước (chờ lâu nhất = gần hạn "7 ngày cuối bắt buộc TT" nhất).
-  const byUrgency = (a, b) => (a.pay_date || '').localeCompare(b.pay_date || '') || String(a.created_at || '').localeCompare(String(b.created_at || ''));
+  // NGÀY AIR của đơn: sớm nhất trong các video (post_date) → air_date_manual (điền tay) → created_at (dự phòng khi chưa có).
+  const airDateOf = useCallback((r) => {
+    const ds = extractVideoIds(r.air_link).map(v => airDateMap[v]).filter(Boolean);
+    if (ds.length) return ds.slice().sort()[0].slice(0, 10);         // video air SỚM NHẤT của đơn
+    if (r.air_date_manual) return String(r.air_date_manual).slice(0, 10);
+    return String(r.created_at || r.pay_date || '').slice(0, 10);
+  }, [airDateMap]);
+  // Ưu tiên KOC có video AIR SỚM NHẤT trước (chờ lâu nhất). Hoà thì theo ngày nhập đơn.
+  const byUrgency = useCallback((a, b) =>
+    airDateOf(a).localeCompare(airDateOf(b)) || String(a.created_at || '').localeCompare(String(b.created_at || '')),
+    [airDateOf]);
   // Đơn ĐỦ ĐIỀU KIỆN đề xuất: CHƯA thanh toán + hồ sơ ĐẦY ĐỦ (+ đã kế toán duyệt nếu bật). Lấy TOÀN BỘ (mọi tháng).
   const budgetEligible = useMemo(
     () => rows.filter(r => !r.paid && missingFields(r).length === 0 && (!budgetOnlyApproved || r.accountant_approved)).sort(byUrgency),
-    [rows, budgetOnlyApproved]
+    [rows, budgetOnlyApproved, byUrgency]
   );
   // Gom 1 tập id thành nhóm theo công ty + tổng NET (cast) & GỘP (cast+pit)
   const summarizePicks = useCallback((idSet) => {
@@ -575,7 +602,7 @@ const KocPaymentTab = () => {
     });
     Object.values(by).forEach(g => g.rows.sort(byUrgency));
     return { by, net, gross, count };
-  }, [budgetEligible]);
+  }, [budgetEligible, byUrgency]);
 
   // Tính đề xuất: nhồi đơn cũ-nhất-trước trong hạn ngân sách (đo theo NET = tiền chuyển KOC).
   const computePlan = () => {
@@ -621,10 +648,10 @@ const KocPaymentTab = () => {
   const budgetSkipped = useMemo(() => {
     if (!planReady) return [];
     if (!budgetPicks.size) return budgetEligible;   // ngân sách quá nhỏ → coi như tất cả bị bỏ
-    const pickedDates = budgetEligible.filter(r => budgetPicks.has(r.id)).map(r => r.pay_date || '');
-    const newestPicked = pickedDates.sort().slice(-1)[0] || '';
-    return budgetEligible.filter(r => !budgetPicks.has(r.id) && (r.pay_date || '') <= newestPicked);
-  }, [planReady, budgetEligible, budgetPicks]);
+    const pickedDates = budgetEligible.filter(r => budgetPicks.has(r.id)).map(airDateOf);
+    const newestPicked = pickedDates.sort().slice(-1)[0] || '';   // ngày air TRỄ NHẤT trong nhóm đã chọn
+    return budgetEligible.filter(r => !budgetPicks.has(r.id) && airDateOf(r) <= newestPicked);
+  }, [planReady, budgetEligible, budgetPicks, airDateOf]);
   // Đơn RẺ NHẤT (để báo khi ngân sách nhỏ hơn cả đơn rẻ nhất → 0 đơn)
   const cheapestEligible = useMemo(() => budgetEligible.reduce((m, r) => Math.min(m, num(r.cast_net) || Infinity), Infinity), [budgetEligible]);
   // Đổi ngân sách / cách chia / bộ lọc đơn sau khi đã tính → BẮT tính lại (kẻo tổng lệch số ngân sách hiển thị)
@@ -993,8 +1020,6 @@ const KocPaymentTab = () => {
       {selected.size > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '10px 16px', marginBottom: 14 }}>
           <span style={{ fontWeight: 800, color: '#1d4ed8', fontSize: '0.86rem' }}>Đã chọn {selected.size} dòng:</span>
-          <button onClick={() => bulkSet('accountant_approved', true)} style={bulkBtn('#16a34a')}>✓ Duyệt</button>
-          <button onClick={() => bulkSet('accountant_approved', false)} style={bulkBtn('#94a3b8')}>Bỏ duyệt</button>
           <button onClick={() => bulkSet('paid', true)} style={bulkBtn('#ea580c')}>💰 Đã TT</button>
           <button onClick={() => bulkSet('paid', false)} style={bulkBtn('#94a3b8')}>Bỏ TT</button>
           <button onClick={clearSel} style={{ padding: '6px 14px', background: '#fff', color: '#64748b', border: '1px solid #cbd5e1', borderRadius: 8, fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', marginLeft: 'auto' }}>Bỏ chọn</button>
@@ -1011,14 +1036,14 @@ const KocPaymentTab = () => {
                 <th style={th}>Ngày</th><th style={th}>Nhân sự</th><th style={th}>Cty</th><th style={th}>Brand</th><th style={th}>ID kênh</th>
                 <th style={th}>Họ tên</th><th style={th}>CCCD</th><th style={th}>MST</th><th style={th}>Số TK</th><th style={th}>Ngân hàng</th>
                 <th style={{ ...th, textAlign: 'right' }}>Cast</th><th style={{ ...th, textAlign: 'right' }}>PIT</th><th style={{ ...th, textAlign: 'right' }}>Tổng</th>
-                <th style={{ ...th, textAlign: 'center' }}>Link</th><th style={{ ...th, textAlign: 'center' }}>Duyệt</th><th style={{ ...th, textAlign: 'center' }}>Đã TT</th><th style={{ ...th, textAlign: 'center' }}>⚙️</th>
+                <th style={{ ...th, textAlign: 'center' }}>Link</th><th style={{ ...th, textAlign: 'center' }}>Đã TT</th><th style={{ ...th, textAlign: 'center' }}>⚙️</th>
               </tr>
             </thead>
             <tbody>
-              {loading ? (<tr><td colSpan={18} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải…</td></tr>)
-                : filtered.length === 0 ? (<tr><td colSpan={18} style={{ ...td, textAlign: 'center', padding: 36, color: '#9ca3af' }}>Chưa có thanh toán nào. Bấm “➕ Thêm thanh toán”.</td></tr>)
+              {loading ? (<tr><td colSpan={17} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải…</td></tr>)
+                : filtered.length === 0 ? (<tr><td colSpan={17} style={{ ...td, textAlign: 'center', padding: 36, color: '#9ca3af' }}>Chưa có thanh toán nào. Bấm “➕ Thêm thanh toán”.</td></tr>)
                 : pageRows.map((r, i) => (
-                  <tr key={r.id} style={{ background: (missingFields(r).length && !r.paid) ? '#fff1f2' : (missingFields(r).length && r.paid) ? '#fffbeb' : selected.has(r.id) ? '#eff6ff' : r.paid ? '#fff7ed' : r.accountant_approved ? '#f0fdf4' : (i % 2 ? '#fcfcfd' : '#fff'), boxShadow: (missingFields(r).length && !r.paid) ? 'inset 4px 0 0 #ef4444' : (missingFields(r).length && r.paid) ? 'inset 4px 0 0 #f59e0b' : 'none' }}>
+                  <tr key={r.id} style={{ background: (missingFields(r).length && !r.paid) ? '#fff1f2' : (missingFields(r).length && r.paid) ? '#fffbeb' : selected.has(r.id) ? '#eff6ff' : r.paid ? '#fff7ed' : (i % 2 ? '#fcfcfd' : '#fff'), boxShadow: (missingFields(r).length && !r.paid) ? 'inset 4px 0 0 #ef4444' : (missingFields(r).length && r.paid) ? 'inset 4px 0 0 #f59e0b' : 'none' }}>
                     <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSel(r.id)} style={{ width: 15, height: 15, cursor: 'pointer' }} /></td>
                     <td style={td}>{fmtDate(r.pay_date)}</td>
                     <td style={td}>{r.staff || '—'}</td>
@@ -1040,7 +1065,6 @@ const KocPaymentTab = () => {
                         {imgs.length > 0 && <button onClick={() => { setLightbox(null); setGallery({ title: r.full_name || r.beneficiary || '', items: imgs }); }} title={`Xem tất cả ${imgs.length} ảnh/file (CCCD + tin nhắn + hợp đồng)`} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#0891b2', marginLeft: 8, fontSize: 'inherit', padding: 0, fontWeight: 700 }}>🖼️ {imgs.length}</button>}
                       </>;
                     })()}</td>
-                    <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={!!r.accountant_approved} onChange={() => toggleApproved(r)} style={{ width: 17, height: 17, accentColor: '#16a34a', cursor: 'pointer' }} /></td>
                     <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={!!r.paid} onChange={() => togglePaid(r)} title="Đã thanh toán (cần mật khẩu)" style={{ width: 17, height: 17, accentColor: '#ea580c', cursor: 'pointer' }} /></td>
                     <td style={{ ...td, textAlign: 'center', whiteSpace: 'nowrap' }}>
                       {r.paid && !brandWarnMap[r.id]
