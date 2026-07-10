@@ -307,7 +307,7 @@ export const AppDataProvider = ({ children }) => {
       setSanPhams([]);
       setFilterSanPhams([]); return;
     }
-    const { data: sanPhamsData, error } = await supabase.from('sanphams').select(`id, ten_sanpham, barcode, gia_tien, brand_id`).eq('brand_id', brandId);
+    const { data: sanPhamsData, error } = await supabase.from('sanphams').select(`id, ten_sanpham, barcode, gia_tien, brand_id`).eq('brand_id', brandId).not('an', 'is', true);
     if (error) {
       console.error("Lỗi tải sản phẩm theo Brand:", error.message);
     }
@@ -1213,7 +1213,7 @@ export const AppDataProvider = ({ children }) => {
   useEffect(() => {
     const fetchFilterProducts = async () => {
       if (!filterBrand) { setFilterSanPhams([]); return; }
-      const { data } = await supabase.from('sanphams').select('id, ten_sanpham, brand_id').eq('brand_id', filterBrand);
+      const { data } = await supabase.from('sanphams').select('id, ten_sanpham, brand_id').eq('brand_id', filterBrand).not('an', 'is', true);
       setFilterSanPhams(data || []);
     };
     fetchFilterProducts();
