@@ -604,14 +604,15 @@ const KocPaymentTab = () => {
     return { by, net, gross, count };
   }, [budgetEligible, byUrgency]);
 
-  // Tính đề xuất: nhồi đơn cũ-nhất-trước trong hạn ngân sách (đo theo NET = tiền chuyển KOC).
+  // Tính đề xuất: trả TUẦN TỰ theo NGÀY AIR sớm nhất trước; gặp đơn đầu tiên KHÔNG đủ tiền thì DỪNG
+  // (chừa tiền dư, KHÔNG nhảy qua đơn nhỏ air sau) — để đơn air sớm luôn được ưu tiên, không bị hoãn hoài.
   const computePlan = () => {
     const budget = num(budgetInput);
     if (budget <= 0) { alert('Nhập số tiền ngân sách trước nha (ô "Ngân sách").'); return; }
     if (!budgetEligible.length) { alert('Không có đơn nào ĐỦ ĐIỀU KIỆN (chưa TT + hồ sơ đầy đủ) để đề xuất.'); return; }
     const picks = new Set();
     if (budgetMode === 'split') {
-      // Chia đôi: mỗi công ty một nửa ngân sách, nhồi cũ-nhất-trước; ai không xài hết thì DỒN qua bên kia.
+      // Chia đôi: mỗi công ty một nửa ngân sách, trả air-sớm-trước, gặp đơn không đủ nửa NS thì DỪNG công ty đó.
       const half = Math.floor(budget / 2);
       const perCo = {};
       const cos = [...new Set(budgetEligible.map(r => (r.company || '—').trim() || '—'))];
@@ -619,23 +620,26 @@ const KocPaymentTab = () => {
         let used = 0;
         for (const r of budgetEligible.filter(x => ((x.company || '—').trim() || '—') === co)) {
           const c = num(r.cast_net);
-          if (used + c <= half) { picks.add(r.id); used += c; }
+          if (used + c > half) break;   // đơn air sớm kế tiếp vượt nửa ngân sách → DỪNG cty này (chừa dư)
+          picks.add(r.id); used += c;
         }
         perCo[co] = used;
       });
-      // Pass 2 — dồn ngân sách còn dư (do 1 bên xài không hết) cho các đơn cũ nhất chưa lấy, bất kể công ty.
+      // Pass 2 — dồn ngân sách còn dư cho ĐƠN AIR SỚM NHẤT chưa lấy; gặp đơn không đủ thì DỪNG.
       let usedTotal = Object.values(perCo).reduce((a, b) => a + b, 0);
       for (const r of budgetEligible) {
         if (picks.has(r.id)) continue;
         const c = num(r.cast_net);
-        if (usedTotal + c <= budget) { picks.add(r.id); usedTotal += c; }
+        if (usedTotal + c > budget) break;   // đơn air sớm nhất chưa lấy vượt NS còn lại → DỪNG
+        picks.add(r.id); usedTotal += c;
       }
     } else {
-      // Ưu tiên chung: 1 hàng đợi cũ-nhất-trước, không phân biệt công ty.
+      // Ưu tiên chung: 1 hàng đợi air-sớm-trước, không phân biệt công ty; gặp đơn không đủ thì DỪNG.
       let used = 0;
       for (const r of budgetEligible) {
         const c = num(r.cast_net);
-        if (used + c <= budget) { picks.add(r.id); used += c; }
+        if (used + c > budget) break;   // đơn air sớm kế tiếp không đủ tiền → DỪNG (chừa dư)
+        picks.add(r.id); used += c;
       }
     }
     setBudgetPicks(picks);
