@@ -152,7 +152,8 @@ const KocPaymentTab = () => {
   // Dùng để ƯU TIÊN đề xuất TT cho KOC nào air SỚM NHẤT (chờ lâu nhất), thay vì ngày NHẬP đơn.
   const [airDateMap, setAirDateMap] = useState({});   // { video_id: 'YYYY-MM-DD' }
   useEffect(() => {
-    const ids = [...new Set(rows.flatMap(r => extractVideoIds(r.air_link)))];
+    // Chỉ cần ngày air của đơn CHƯA thanh toán (đó là tập dùng để đề xuất) → tải nhanh, gọn.
+    const ids = [...new Set(rows.filter(r => !r.paid).flatMap(r => extractVideoIds(r.air_link)))];
     if (!ids.length) { setAirDateMap({}); return; }
     let alive = true;
     (async () => {
