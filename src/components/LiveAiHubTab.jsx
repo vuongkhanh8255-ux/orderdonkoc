@@ -84,7 +84,7 @@ function FlowHome({ go }) {
     },
     {
       n: 2, icon: '🏭', title: 'Sản xuất clip trả lời', state: st2, tab: 'factory',
-      desc: 'Mỗi câu hỏi làm 1 clip: ghi đại ý → ✨ AI viết kịch bản + prompt → up ảnh sản phẩm thật → 🪄 tạo ảnh → 🎬 tạo video.',
+      desc: 'Mỗi câu 1 clip: ✨ AI viết lời thoại + prompt → Seedance quay HÌNH SẢN PHẨM (không mặt) → CapCut lồng giọng Việt → up clip.',
       progress: stat ? `${s.nClipDone}/${s.total} clip đã render xong` : '…',
       cta: 'Vào Xưởng Clip',
     },

@@ -89,7 +89,7 @@ export default function LiveClipFactoryTab() {
     setBusy('');
     if (!j.ok) { setStatus('❌ ' + (j.error || 'Lỗi AI viết giúp')); return; }
     setField(r.id, 'script', j.script); setField(r.id, 'img_prompt', j.img_prompt);
-    setStatus('✅ AI viết xong — đọc lại 2 ô, sửa ý nào chưa ưng rồi bấm 💾 Lưu bước này.');
+    setStatus('✅ AI viết xong — ① lời thoại + ② prompt Seedance. Đọc lại, sửa rồi 💾 Lưu.');
   };
 
   // Up ảnh SẢN PHẨM THẬT lên kho (bucket live-assets, public) → lưu URL vào product_image_url
@@ -227,14 +227,14 @@ export default function LiveClipFactoryTab() {
       <div style={{ marginBottom: 16 }}>
         <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 900, color: '#1e293b' }}>🏭 Bước 2 — Xưởng Clip</h2>
         <p style={{ margin: '6px 0 0', color: '#475569', fontSize: '0.98rem', lineHeight: 1.65 }}>
-          Mỗi câu hỏi làm 1 video trả lời, đi qua 4 bước. <b>Cách làm:</b> ghi đại ý → bấm ✨ AI viết → 🪄 tạo ảnh → 📋 lấy prompt <b>tự đi gen clip</b> (Dreamina/Seedance) → dán/Up clip vô ③ → điền đường dẫn ở ④.
+          Mỗi câu 1 clip. <b>Quy trình MỚI (né lỗi chặn mặt của Seedance):</b> ✨ AI viết lời thoại + prompt → Seedance quay <b>HÌNH SẢN PHẨM</b> (không có người) → CapCut <b>lồng giọng Việt</b> đọc lời thoại → Up clip vô ③ → điền đường dẫn ④.
         </p>
       </div>
 
       {/* Dải tiến độ tổng */}
       <div style={{ ...card, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: '1 1 420px', alignItems: 'center' }}>
-          {['① Kịch bản', '② Ảnh nhân vật', '③ Video avatar', '④ Clip cuối'].map((t, i) => (
+          {['① Lời thoại', '② Prompt sản phẩm', '③ Video (Seedance+CapCut)', '④ Clip cuối'].map((t, i) => (
             <React.Fragment key={t}>
               <span style={{ background: '#fff4ec', color: '#c2410c', borderRadius: 20, padding: '6px 14px', fontSize: '0.85rem', fontWeight: 800 }}>{t}</span>
               {i < 3 && <span style={{ color: '#cbd5e1', fontWeight: 900 }}>→</span>}
@@ -256,8 +256,8 @@ export default function LiveClipFactoryTab() {
         const open = openId === r.id;
         // 4 chấm bước: xanh khi bước đó có dữ liệu
         const dots = [
-          { t: '①', done: !!r.script.trim(), tip: 'Kịch bản' },
-          { t: '②', done: !!r.image_url, tip: 'Ảnh nhân vật' },
+          { t: '①', done: !!r.script.trim(), tip: 'Lời thoại' },
+          { t: '②', done: !!(r.img_prompt || '').trim(), tip: 'Prompt Seedance' },
           { t: '③', done: !!r.video_url, tip: 'Video' },
           { t: '④', done: !!String(r.clip || '').trim(), tip: 'Clip cuối' },
         ];
@@ -282,11 +282,11 @@ export default function LiveClipFactoryTab() {
 
             {open && (
               <div style={{ padding: '4px 20px 20px', borderTop: '1px solid #f1f5f9', background: '#fcfcfd' }}>
-                {/* ✨ AI viết giúp — con đường nhanh nhất */}
+                {/* ✨ AI viết giúp — lời thoại + prompt video sản phẩm */}
                 <div style={{ marginTop: 14, background: '#faf5ff', border: '1.5px dashed #d8b4fe', borderRadius: 12, padding: '14px 16px' }}>
-                  <div style={{ fontWeight: 900, fontSize: '0.98rem', color: '#7c3aed', marginBottom: 4 }}>✨ Làm nhanh: ghi đại ý — AI viết kịch bản + prompt ảnh cho</div>
-                  <div style={{ ...hintTxt, marginBottom: 8 }}>Ghi sản phẩm + giá + ưu đãi + tông giọng. AI sẽ điền vào ô ① và ② bên dưới, mày đọc lại rồi sửa.</div>
-                  <textarea style={{ ...inp, minHeight: 52, resize: 'vertical' }} placeholder='VD: "xịt thơm Bodymiss 99k, mua 2 giảm 50%, freeship, tông vui tươi trẻ trung"'
+                  <div style={{ fontWeight: 900, fontSize: '0.98rem', color: '#7c3aed', marginBottom: 4 }}>✨ Làm nhanh: ghi đại ý — AI viết LỜI THOẠI + PROMPT video sản phẩm</div>
+                  <div style={{ ...hintTxt, marginBottom: 8 }}>Ghi sản phẩm + giá + ưu đãi + tông giọng. AI điền vào ô ① (lời thoại đọc) và ② (prompt Seedance), mày đọc lại rồi sửa.</div>
+                  <textarea style={{ ...inp, minHeight: 52, resize: 'vertical' }} placeholder='VD: "bộ chăm sóc da Milaganics thiên nhiên, đang ưu đãi phiên live, tông vui tươi"'
                     value={r.idea || ''} onChange={e => setField(r.id, 'idea', e.target.value)} />
                   <button onClick={() => suggestAuto(r)} disabled={busy === `${r.id}:sug`}
                     style={{ ...btn('#7c3aed'), marginTop: 8, opacity: busy === `${r.id}:sug` ? 0.6 : 1 }}>
@@ -294,57 +294,27 @@ export default function LiveClipFactoryTab() {
                   </button>
                 </div>
 
-                {/* ① Kịch bản */}
-                <StepBlock n="1" title="Kịch bản — avatar đọc nguyên văn" hint="60-120 chữ (~20-40 giây). Viết như đang nói chuyện với người xem.">
+                {/* ① Lời thoại (voice-over) */}
+                <StepBlock n="1" title="Lời thoại (voice-over) — CapCut sẽ đọc" hint="Đoạn quảng cáo ~15 giây. Đây là TIẾNG lồng lên video (clip chỉ có sản phẩm nên không cần nhép miệng).">
                   <textarea style={{ ...inp, minHeight: 76, resize: 'vertical' }} value={r.script} onChange={e => setField(r.id, 'script', e.target.value)} />
-                  <button onClick={() => copyTxt(r.script)} style={{ ...btn('#64748b'), marginTop: 8, padding: '7px 14px', fontSize: '0.8rem' }}>📋 Copy kịch bản</button>
+                  <button onClick={() => copyTxt(r.script)} style={{ ...btn('#64748b'), marginTop: 8, padding: '7px 14px', fontSize: '0.8rem' }}>📋 Copy lời thoại</button>
                 </StepBlock>
 
-                {/* ② Ảnh nhân vật (gồm ảnh SP thật + prompt + kết quả) */}
-                <StepBlock n="2" title="Ảnh nhân vật cầm sản phẩm" hint="Up ảnh sản phẩm thật (nếu có) → mô tả nhân vật → bấm 🪄. Không có key thì copy prompt qua ChatGPT/Gemini gen tay rồi dán link vào.">
-                  {/* 2a ảnh SP thật */}
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 12 }}>
-                    <div style={{ flex: '1 1 300px' }}>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#334155', marginBottom: 6 }}>📦 Ảnh sản phẩm thật <span style={{ fontWeight: 500, color: '#94a3b8' }}>(không bắt buộc — có thì ghép ĐÚNG sản phẩm vào tay nhân vật)</span></div>
-                      <input style={inp} placeholder="https://... (dán link, hoặc bấm Up ảnh)" value={r.product_image_url || ''} onChange={e => setField(r.id, 'product_image_url', e.target.value)} />
-                      <label style={{ ...btn('#0891b2'), padding: '7px 14px', fontSize: '0.8rem', display: 'inline-block', marginTop: 8, cursor: busy === `${r.id}:pimg` ? 'wait' : 'pointer' }}>
-                        {busy === `${r.id}:pimg` ? '⏳ đang up...' : '⬆️ Up ảnh sản phẩm'}
-                        <input type="file" accept="image/*" disabled={busy === `${r.id}:pimg`} style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) uploadProductImage(r, f); }} />
-                      </label>
-                    </div>
-                    {r.product_image_url && <img src={r.product_image_url} alt="" style={{ height: 88, borderRadius: 10, border: '1px solid #e5e7eb', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} />}
+                {/* ② Prompt video sản phẩm (Seedance — không mặt) */}
+                <StepBlock n="2" title="Prompt video sản phẩm (Seedance — KHÔNG để mặt người)" hint="Seedance quay HÌNH SẢN PHẨM chuyển động. Tuyệt đối không để ảnh có mặt người kẻo bị chặn deepfake. Dán prompt này + ảnh sản phẩm vào Seedance.">
+                  <textarea style={{ ...inp, minHeight: 76, resize: 'vertical' }} value={r.img_prompt} onChange={e => setField(r.id, 'img_prompt', e.target.value)} placeholder="Prompt tiếng Anh tả cảnh quay sản phẩm (camera, ánh sáng, không người). Bấm ✨ để AI viết." />
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <button onClick={() => copyTxt(r.img_prompt)} style={{ ...btn('#7c3aed') }}>📋 Copy prompt</button>
+                    <a href="https://dreamina.capcut.com" target="_blank" rel="noreferrer" style={{ ...btn('#0ea5e9'), padding: '10px 14px', fontSize: '0.8rem', textDecoration: 'none', display: 'inline-block' }}>🌐 Mở Dreamina/Seedance</a>
                   </div>
-                  {/* 2b prompt */}
-                  <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#334155', marginBottom: 6 }}>🎨 Mô tả nhân vật (prompt)</div>
-                  <textarea style={{ ...inp, minHeight: 64, resize: 'vertical' }} value={r.img_prompt} onChange={e => setField(r.id, 'img_prompt', e.target.value)} />
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                    <button onClick={() => genImageAuto(r)} disabled={busy === `${r.id}:img`} style={{ ...btn('#7c3aed'), opacity: busy === `${r.id}:img` ? 0.6 : 1 }}>{busy === `${r.id}:img` ? '⏳ đang tạo ảnh...' : '🪄 Tạo ảnh tự động (OpenAI)'}</button>
-                    <button onClick={() => copyTxt(r.img_prompt)} style={{ ...btn('#64748b'), padding: '10px 14px', fontSize: '0.8rem' }}>📋 Copy prompt (làm tay)</button>
-                  </div>
-                  {/* 2c kết quả ảnh */}
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap', marginTop: 12 }}>
-                    <div style={{ flex: '1 1 300px' }}>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#334155', marginBottom: 6 }}>🖼️ Ảnh nhân vật (dùng cho video) — bấm 🪄 (AI), hoặc dán link, hoặc <b>Up ảnh có sẵn</b></div>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <input style={{ ...inp, flex: 1 }} placeholder="https://... (dán link ảnh)" value={r.image_url} onChange={e => setField(r.id, 'image_url', e.target.value)} />
-                        <label style={{ ...btn('#0891b2'), padding: '10px 14px', fontSize: '0.8rem', cursor: busy === `${r.id}:cimg` ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: busy === `${r.id}:cimg` ? 0.6 : 1 }}>
-                          {busy === `${r.id}:cimg` ? '⏳...' : '⬆️ Up ảnh'}
-                          <input type="file" accept="image/*" disabled={busy === `${r.id}:cimg`} style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) uploadCharImage(r, f); }} />
-                        </label>
-                      </div>
-                    </div>
-                    {r.image_url && <img src={r.image_url} alt="" style={{ height: 88, borderRadius: 10, border: '1px solid #e5e7eb', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} />}
-                  </div>
+                  <div style={{ ...hintTxt, marginTop: 8 }}>📦 Ảnh sản phẩm để bỏ vào Seedance: lấy ở tab <b>🎨 Ảnh người mẫu</b> (đã up sẵn theo brand) — tải về rồi kéo vào.</div>
                 </StepBlock>
 
-                {/* ③ Video — GỌN: lấy prompt → tự đi gen (Dreamina/Seedance) → dán/up clip vô. Không còn HeyGen trên UI. */}
-                <StepBlock n="3" title="Video — lấy prompt đi gen, xong dán clip vào" hint="Bấm 📋 lấy prompt (kịch bản + cử động) → qua Dreamina/Seedance up ảnh ② + dán prompt → gen xong tải mp4 → Up hoặc dán link vào đây.">
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <button onClick={() => copyTxt(`${r.script || ''}\n\nAction (cử động): ${DREAMINA_ACTION}`)} style={{ ...btn('#7c3aed') }}>📋 Lấy prompt làm video</button>
-                    <a href="https://dreamina.capcut.com" target="_blank" rel="noreferrer" style={{ ...btn('#0ea5e9'), padding: '10px 14px', fontSize: '0.8rem', textDecoration: 'none', display: 'inline-block' }}>🌐 Mở Dreamina</a>
-                  </div>
+                {/* ③ Video — Seedance xong → CapCut lồng tiếng → up vào */}
+                <StepBlock n="3" title="Video — Seedance xong, CapCut lồng giọng, rồi up vào đây"
+                  hint="1) Seedance gen xong → tải mp4. 2) Mở CapCut → Text-to-speech dán LỜI THOẠI ở ① + chọn giọng nữ Việt → xuất. 3) Up file cuối vào đây.">
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <input style={{ ...inp, flex: 1 }} placeholder="https://... (dán link clip, hoặc bấm Up video)" value={r.video_url} onChange={e => setField(r.id, 'video_url', e.target.value)} />
+                    <input style={{ ...inp, flex: 1 }} placeholder="https://... (dán link, hoặc bấm Up video)" value={r.video_url} onChange={e => setField(r.id, 'video_url', e.target.value)} />
                     <label style={{ ...btn('#16a34a'), padding: '10px 14px', fontSize: '0.8rem', cursor: busy === `${r.id}:vup` ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: busy === `${r.id}:vup` ? 0.6 : 1 }}>
                       {busy === `${r.id}:vup` ? '⏳...' : '⬆️ Up video (mp4)'}
                       <input type="file" accept="video/mp4,video/*" disabled={busy === `${r.id}:vup`} style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) uploadVideoFile(r, f); }} />
