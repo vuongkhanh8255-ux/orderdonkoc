@@ -106,6 +106,34 @@ export default function LiveModelShotTab() {
   };
   const copyPrompt = () => { navigator.clipboard?.writeText(cur?.prompt || ''); setStatus('📋 Đã copy prompt — dán vào ChatGPT/Dreamina nếu làm tay.'); };
 
+  // ── FORM làm prompt video: 5 ô (mô tả / nội dung / lời thoại / góc quay / hành động người) ──
+  const setVf = (k, v) => patch(cur.brand, { vform: { ...(cur.vform || {}), [k]: v } });
+  const saveVf = () => persist({ vform: cur.vform || {} });
+  const copyTxt = (t, msg) => { navigator.clipboard?.writeText(t || ''); setStatus(msg || '📋 Đã copy.'); };
+  // Ghép prompt Seedance từ form (client-side, tiếng Việt) — dùng khi điền tay, khỏi cần AI
+  const buildPrompt = () => {
+    const f = cur.vform || {};
+    const p = [f.mo_ta, f.goc_quay && ('Góc quay: ' + f.goc_quay), f.hanh_dong && ('Hành động: ' + f.hanh_dong),
+      'Giữ sản phẩm giống hệt ảnh tham chiếu, chân thực, chuyển động mượt, camera cố định.'].filter(Boolean).join('. ');
+    persist({ prompt: p }); copyTxt(p, '📋 Đã ghép + copy prompt từ form. Muốn bản tiếng Anh xịn hơn thì bấm ✨ AI.');
+  };
+  // AI tự viết cả 5 ô + prompt tiếng Anh từ ý ở ô Nội dung/Mô tả
+  const suggestForm = async () => {
+    if (!cur) return;
+    const idea = String(cur.vform?.noi_dung || '').trim() || String(cur.vform?.mo_ta || '').trim();
+    if (!idea) { setStatus('❌ Ghi vài ý vào ô "Nội dung" (hoặc Mô tả) rồi bấm ✨.'); return; }
+    setBusy('sug'); setStatus('✨ AI đang viết 5 ô + prompt... ~5-15s');
+    const j = await callApi('live_suggest', { label: cur.brand, idea });
+    setBusy('');
+    if (!j.ok) { setStatus('❌ ' + (j.error || 'Lỗi AI')); return; }
+    const f = j.form || {};
+    await persist({
+      vform: { mo_ta: f.mo_ta || cur.vform?.mo_ta || '', noi_dung: f.noi_dung || idea, loi_thoai: j.script || '', goc_quay: f.goc_quay || '', hanh_dong: f.hanh_dong || '' },
+      prompt: j.img_prompt || cur.prompt,
+    });
+    setStatus('✅ AI viết xong 5 ô + prompt tiếng Anh. Đọc lại → Copy prompt + Copy lời thoại đem lên Seedance/CapCut.');
+  };
+
   if (loading) return <div style={{ padding: 30, color: '#94a3b8' }}>⏳ Đang tải...</div>;
 
   return (
@@ -155,9 +183,42 @@ export default function LiveModelShotTab() {
             </div>
           </div>
 
-          {/* Bước 2 — prompt + nút gen */}
+          {/* Bước 2 — FORM làm prompt video (5 ô) */}
           <div style={card}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', background: '#fffdfb', fontWeight: 900, fontSize: '1.1rem', color: '#0f172a' }}><span style={{ color: ACCENT }}>②</span> Tạo ảnh người mẫu</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', borderBottom: '1px solid #f1f5f9', background: '#fffdfb', flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 900, fontSize: '1.1rem', color: '#0f172a' }}><span style={{ color: ACCENT }}>②</span> Form làm prompt video (điền hoặc bấm ✨ AI)</span>
+              <button onClick={suggestForm} disabled={busy === 'sug'} style={{ ...btn('#7c3aed'), padding: '9px 16px', marginLeft: 'auto', opacity: busy === 'sug' ? 0.6 : 1 }}>{busy === 'sug' ? '⏳ AI đang viết...' : '✨ AI viết giúp 5 ô'}</button>
+            </div>
+            <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {[
+                { k: 'mo_ta', label: '1️⃣ Mô tả', ph: 'Bối cảnh + sản phẩm. VD: bộ chăm sóc da Milaganics thiên nhiên bày trên bàn gỗ, studio livestream sáng.', rows: 2 },
+                { k: 'noi_dung', label: '2️⃣ Nội dung (điểm bán / ưu đãi)', ph: 'Ghi ý vào đây rồi bấm ✨. VD: ưu đãi phiên live, mua bộ giảm giá, freeship, thành phần thiên nhiên.', rows: 2 },
+                { k: 'loi_thoai', label: '3️⃣ Lời thoại (voice-over — CapCut sẽ đọc)', ph: 'Đoạn host nói ~15 giây', rows: 3 },
+                { k: 'goc_quay', label: '4️⃣ Góc quay', ph: 'VD: camera cố định, trung cảnh, không di chuyển', rows: 1 },
+                { k: 'hanh_dong', label: '5️⃣ Hành động người', ph: 'VD: host nữ cầm từng sản phẩm đưa lên gần camera khoe nhãn rồi hạ xuống, mỉm cười thân thiện', rows: 2 },
+              ].map(fld => (
+                <div key={fld.k}>
+                  <label style={{ fontSize: '0.85rem', fontWeight: 800, color: '#334155', display: 'block', marginBottom: 5 }}>{fld.label}</label>
+                  <textarea rows={fld.rows} style={{ ...inp, resize: 'vertical' }} placeholder={fld.ph}
+                    value={(cur.vform || {})[fld.k] || ''} onChange={e => setVf(fld.k, e.target.value)} onBlur={saveVf} />
+                </div>
+              ))}
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 12 }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 800, color: '#334155', display: 'block', marginBottom: 5 }}>🎬 Prompt Seedance (ghép từ ô 1 + 4 + 5, có người cầm sản phẩm)</label>
+                <textarea rows={3} style={{ ...inp, resize: 'vertical' }} value={cur.prompt || ''} onChange={e => patch(cur.brand, { prompt: e.target.value })} onBlur={() => persist({ prompt: cur.prompt })} />
+                <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                  <button onClick={buildPrompt} style={{ ...btn('#0ea5e9'), padding: '9px 14px', fontSize: '0.82rem' }}>🔧 Ghép prompt từ form</button>
+                  <button onClick={() => copyTxt(cur.prompt, '📋 Copy prompt Seedance — dán vào Dreamina + kéo ảnh sản phẩm.')} style={{ ...btn('#7c3aed'), padding: '9px 14px', fontSize: '0.82rem' }}>📋 Copy prompt Seedance</button>
+                  <button onClick={() => copyTxt((cur.vform || {}).loi_thoai, '📋 Copy lời thoại — dán vào CapCut Text-to-speech giọng Việt.')} style={{ ...btn('#16a34a'), padding: '9px 14px', fontSize: '0.82rem' }}>📋 Copy lời thoại</button>
+                  <a href="https://dreamina.capcut.com" target="_blank" rel="noreferrer" style={{ ...btn('#334155'), padding: '9px 14px', fontSize: '0.82rem', textDecoration: 'none', display: 'inline-block' }}>🌐 Mở Dreamina</a>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bước 3 (tuỳ chọn) — tạo ảnh bìa bằng OpenAI (Seedance chặn mặt nên ảnh này chủ yếu làm bìa) */}
+          <div style={card}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', background: '#fffdfb', fontWeight: 900, fontSize: '1.1rem', color: '#0f172a' }}><span style={{ color: '#94a3b8' }}>③</span> (Tuỳ chọn) Tạo ảnh bìa người mẫu <span style={{ fontWeight: 500, fontSize: '0.82rem', color: '#94a3b8' }}>— dùng làm thumbnail; Seedance quay video thì dùng Form ② ở trên</span></div>
             <div style={{ padding: 18 }}>
               <label style={{ fontSize: '0.85rem', fontWeight: 800, color: '#334155', display: 'block', marginBottom: 6 }}>Mô tả (prompt) — có mẫu sẵn, sửa nếu muốn</label>
               <textarea style={{ ...inp, minHeight: 90, resize: 'vertical' }} value={cur.prompt || ''} onChange={e => patch(cur.brand, { prompt: e.target.value })} onBlur={() => persist({ prompt: cur.prompt })} />
