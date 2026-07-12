@@ -8,10 +8,12 @@ import { supabase } from '../supabaseClient';
 const LivestreamAiTab = lazy(() => import('./LivestreamAiTab'));
 const LiveClipFactoryTab = lazy(() => import('./LiveClipFactoryTab'));
 const LiveStudioTab = lazy(() => import('./LiveStudioTab'));
+const LiveModelShotTab = lazy(() => import('./LiveModelShotTab'));
 
 const ORANGE = '#ff6a2c';
 const TABS = [
   { key: 'home',    icon: '🏠', name: 'Quy trình' },
+  { key: 'model',   icon: '🎨', name: 'Ảnh người mẫu' },
   { key: 'faq',     icon: '📝', name: '① Kho câu hỏi' },
   { key: 'factory', icon: '🏭', name: '② Xưởng Clip' },
   { key: 'studio',  icon: '🎛️', name: '③ Studio' },
@@ -36,6 +38,7 @@ export default function LiveAiHubTab({ initial = 'home' }) {
       </div>
       <Suspense fallback={<div style={{ padding: 30, color: '#94a3b8' }}>⏳ Đang tải…</div>}>
         {tab === 'home' && <FlowHome go={setTab} />}
+        {tab === 'model' && <LiveModelShotTab />}
         {tab === 'faq' && <LivestreamAiTab />}
         {tab === 'factory' && <LiveClipFactoryTab />}
         {tab === 'studio' && <LiveStudioTab />}
