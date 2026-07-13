@@ -604,11 +604,12 @@ export default function KocPerformanceTab() {
   // Nạp lại cảnh báo mỗi khi số liệu shop tải xong → warnMap luôn khớp DB mới nhất (chống hiện cảnh báo cũ)
   useEffect(() => { if (data) reloadWarnings(); }, [data, reloadWarnings]);
   const refreshAssign = useCallback(() => { reloadAssignments(); reloadWarnings(); }, [reloadAssignments, reloadWarnings]);
-  // ĐỀ XUẤT GỠ = quá 45 ngày kể từ CLIP AIR GẦN NHẤT (sau ngày gắn tag). "air là gia hạn" — mỗi lần air
-  // đẩy hạn ra thêm 45 ngày. Chưa air clip mới nào -> đếm 45 ngày TỪ ngày gắn tag (cho thời gian khởi động).
-  // days_since_air từ RPC koc_assignment_warnings. Bất kể gắn tag lâu hay mới — chỉ nhìn air gần nhất + 45.
+  // ĐỀ XUẤT GỠ theo HẠN limit_days (RPC koc_assignment_warnings):
+  //  · TAG ORDER (KOC chưa air clip nào) -> hạn 30 ngày kể từ gắn tag.
+  //  · Tag thường (KOC đã có clip) -> hạn 45 ngày kể từ AIR GẦN NHẤT (air là gia hạn, bất kể ngày gắn tag).
+  // days_since_air = số ngày kể từ air gần nhất (hoặc từ ngày gắn tag nếu chưa air).
   const overdueWarns = useMemo(() => Object.values(warnMap)
-    .filter(w => (w.days_since_air ?? w.days_since ?? 0) >= 45)
+    .filter(w => (w.days_since_air ?? w.days_since ?? 0) >= (w.limit_days ?? 45))
     .sort((a, b) => (b.days_since_air ?? b.days_since ?? 0) - (a.days_since_air ?? a.days_since ?? 0)), [warnMap]);
   const removeAssign = async (kocId) => {
     if (!confirm(`Loại định danh @${kocId} khỏi brand ${brand}? (quá 45 ngày kể từ clip air gần nhất)`)) return;
@@ -869,12 +870,14 @@ export default function KocPerformanceTab() {
       {/* Tìm & GẮN KOC MỚI — CHỈ admin (gán = duyệt) + ecom (chỉ đề xuất). Role khác không thấy/không đụng. */}
       {['admin', 'ecom'].includes(currentUser?.role) && (
         <div style={{ background: '#fff7ed', border: '1.5px solid #fed7aa', borderRadius: 12, padding: '16px 18px', marginBottom: 18 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 6 }}>
             <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>🔎 Tìm & gắn KOC MỚI</div>
+            <span style={{ background: '#7c3aed', color: '#fff', fontWeight: 800, fontSize: '0.72rem', padding: '3px 11px', borderRadius: 999, letterSpacing: '0.3px' }}>🏷️ TAG ORDER · hạn 30 ngày</span>
             <div style={{ fontSize: '0.8rem', color: '#64748b' }}>chưa từng làm cho <b style={{ color: ACCENT }}>{brand}</b></div>
           </div>
           <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: 12, lineHeight: 1.5 }}>
-            KOC nhận mẫu, chuẩn bị lên clip — gắn tag TRƯỚC ở đây để clip air sau này được tính cho nhân sự. Nhập <b>đúng @kênh TikTok</b> (dán link kênh cũng được), không cần KOC đã có đơn/video ở brand này.
+            KOC đã <b>nhận order / mẫu</b> nhưng <b>chưa air clip nào</b> (nên không có trong lưới, phải tìm tay) — gắn tag ở đây để clip air sau này được tính cho nhân sự. Nhập <b>đúng @kênh TikTok</b> (dán link kênh cũng được).
+            <br /><b style={{ color: '#7c3aed' }}>⏱️ Tag order có hạn 30 NGÀY phải lên clip</b> (khác 45 ngày của KOC đã có clip) — quá hạn mà chưa air sẽ vào danh sách đề xuất gỡ.
             {currentUser?.role === 'admin' ? ' Bạn gán là duyệt luôn 🟢.' : ' Bạn gửi đề xuất 🟡, admin duyệt sau.'}
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1176,8 +1179,8 @@ export default function KocPerformanceTab() {
                           <div key={'od-' + w.koc_id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.78rem', background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #fee2e2', flexWrap: 'wrap' }}>
                             <a href={`https://www.tiktok.com/@${w.koc_id}`} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontWeight: 700, textDecoration: 'none' }}>@{w.koc_id}</a>
                             <span style={{ color: '#64748b' }}>NS: <b>{w.staff_name}</b> · {w.last_air
-                              ? <>air gần nhất <b>{new Date(w.last_air).toLocaleDateString('vi-VN')}</b> ({w.days_since_air ?? w.days_since} ngày trước)</>
-                              : <>chưa air clip nào · gán {w.days_since_air ?? w.days_since} ngày</>}</span>
+                              ? <>air gần nhất <b>{new Date(w.last_air).toLocaleDateString('vi-VN')}</b> ({w.days_since_air ?? w.days_since} ngày trước · hạn 45)</>
+                              : <><b style={{ color: '#7c3aed' }}>🏷️ tag order</b> · chưa air · gán {w.days_since_air ?? w.days_since} ngày (hạn 30)</>}</span>
                             {currentUser?.role === 'admin'
                               ? <button onClick={() => removeAssign(w.koc_id)} style={{ marginLeft: 'auto', padding: '5px 14px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>Duyệt gỡ</button>
                               : <span style={{ marginLeft: 'auto', color: '#64748b', fontWeight: 600, fontSize: '0.72rem' }}>⏳ chờ admin gỡ</span>}
@@ -1217,11 +1220,11 @@ export default function KocPerformanceTab() {
                         if (cast) return null; // KOC đã book cast → không cảnh báo gỡ
                         const w = warnMap[uname];
                         if (!w) return null;
-                        // days_since_air = số ngày kể từ CLIP AIR GẦN NHẤT (sau tag), hoặc từ ngày gắn tag nếu chưa air.
                         const dsa = w.days_since_air ?? w.days_since ?? 0;
-                        const cause = w.last_air ? 'kể từ air gần nhất' : '· chưa air clip nào';
-                        if (dsa >= 45) return <div style={{ marginTop: 7, fontSize: '0.7rem', fontWeight: 700, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '4px 8px' }}>⚠️ {dsa} ngày {cause} — đề xuất gỡ</div>;
-                        if (dsa >= 38) return <div style={{ marginTop: 7, fontSize: '0.7rem', fontWeight: 700, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '4px 8px' }}>⏳ sắp hết hạn — còn {45 - dsa} ngày ({cause})</div>;
+                        const lim = w.limit_days ?? 45;                    // 30 = tag order (chưa air) · 45 = tag thường
+                        const cause = w.last_air ? 'kể từ air gần nhất' : '· tag order chưa air';
+                        if (dsa >= lim) return <div style={{ marginTop: 7, fontSize: '0.7rem', fontWeight: 700, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '4px 8px' }}>⚠️ {dsa}/{lim} ngày {cause} — đề xuất gỡ</div>;
+                        if (dsa >= lim - 7) return <div style={{ marginTop: 7, fontSize: '0.7rem', fontWeight: 700, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '4px 8px' }}>⏳ sắp hết hạn — còn {lim - dsa} ngày ({cause})</div>;
                         return null;
                       })()}
                     </div>
