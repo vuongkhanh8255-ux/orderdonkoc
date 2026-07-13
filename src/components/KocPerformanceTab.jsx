@@ -643,10 +643,34 @@ export default function KocPerformanceTab() {
       setCastMap(m);
     }, () => {});
   }, []);
-  // Bỏ KOC ĐÃ BOOK CAST khỏi đề xuất gỡ: có cast = engagement thật (đã trả tiền book), dù chưa lên video.
+  // ── ƯU TIÊN KOC: quản lý sàn bấm "Ưu tiên" -> gia hạn 10 ngày kể từ lúc bấm (KOC rời list gỡ 10 ngày). ──
+  const PRIO_DAYS = 10;
+  const [prioMap, setPrioMap] = useState({});   // { koc_id(lower): prioritized_at ISO }
+  const loadPrio = useCallback(async () => {
+    if (!brand) { setPrioMap({}); return; }
+    const { data } = await supabase.from('koc_tag_priority').select('koc_id, prioritized_at').eq('brand_name', brand);
+    const m = {}; (data || []).forEach(r => { const u = (r.koc_id || '').toLowerCase().replace(/^@/, ''); if (u) m[u] = r.prioritized_at; });
+    setPrioMap(m);
+  }, [brand]);
+  useEffect(() => { loadPrio(); }, [loadPrio]);
+  const prioLeft = useCallback((kocId) => {   // số ngày ưu tiên còn lại (0 = không/đã hết)
+    const at = prioMap[(kocId || '').toLowerCase().replace(/^@/, '')];
+    if (!at) return 0;
+    const left = PRIO_DAYS - Math.floor((Date.now() - new Date(at).getTime()) / 86400000);
+    return left > 0 ? left : 0;
+  }, [prioMap]);
+  const requestPriority = async (kocId) => {
+    if (!confirm(`⭐ Xin ưu tiên @${kocId}? Gia hạn thêm ${PRIO_DAYS} ngày kể từ bây giờ (KOC rời danh sách đề xuất gỡ ${PRIO_DAYS} ngày).`)) return;
+    const { error } = await supabase.from('koc_tag_priority').upsert(
+      { koc_id: kocId, brand_name: brand, prioritized_at: new Date().toISOString(), prioritized_by: currentUser?.username || '' },
+      { onConflict: 'koc_id,brand_name' });
+    if (error) { alert('Lỗi xin ưu tiên: ' + error.message); return; }
+    loadPrio();
+  };
+  // Bỏ khỏi đề xuất gỡ: KOC đã book cast (đã trả tiền) HOẶC đang trong hạn ưu tiên (quản lý sàn xin thêm 10 ngày).
   const overdueWarnsCast = useMemo(
-    () => overdueWarns.filter(w => !castMap[(w.koc_id || '').toLowerCase().replace(/^@/, '')]),
-    [overdueWarns, castMap]
+    () => overdueWarns.filter(w => !castMap[(w.koc_id || '').toLowerCase().replace(/^@/, '')] && prioLeft(w.koc_id) === 0),
+    [overdueWarns, castMap, prioLeft]
   );
   // ── Admin chờ duyệt: đề xuất GÁN (ecom) + đề xuất GỠ (hệ thống: blacklist / 45 ngày) ──
   // Dùng nguồn proposedRows (query thẳng status='proposed') — KHÔNG lọc từ assignMap (dính bẫy 1000 dòng).
@@ -1181,9 +1205,12 @@ export default function KocPerformanceTab() {
                             <span style={{ color: '#64748b' }}>NS: <b>{w.staff_name}</b> · {w.last_air
                               ? <>air gần nhất <b>{new Date(w.last_air).toLocaleDateString('vi-VN')}</b> ({w.days_since_air ?? w.days_since} ngày trước · hạn 45)</>
                               : <><b style={{ color: '#7c3aed' }}>🏷️ tag order</b> · chưa air · gán {w.days_since_air ?? w.days_since} ngày (hạn 30)</>}</span>
-                            {currentUser?.role === 'admin'
-                              ? <button onClick={() => removeAssign(w.koc_id)} style={{ marginLeft: 'auto', padding: '5px 14px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>Duyệt gỡ</button>
-                              : <span style={{ marginLeft: 'auto', color: '#64748b', fontWeight: 600, fontSize: '0.72rem' }}>⏳ chờ admin gỡ</span>}
+                            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <button onClick={() => requestPriority(w.koc_id)} title={`Xin ưu tiên — gia hạn thêm ${PRIO_DAYS} ngày`} style={{ padding: '5px 12px', borderRadius: 7, border: '1px solid #ddd6fe', background: '#f5f3ff', color: '#7c3aed', fontWeight: 800, fontSize: '0.76rem', cursor: 'pointer' }}>⭐ Ưu tiên (+{PRIO_DAYS}n)</button>
+                              {currentUser?.role === 'admin'
+                                ? <button onClick={() => removeAssign(w.koc_id)} style={{ padding: '5px 14px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>Duyệt gỡ</button>
+                                : <span style={{ color: '#64748b', fontWeight: 600, fontSize: '0.72rem' }}>⏳ chờ admin gỡ</span>}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -1222,6 +1249,9 @@ export default function KocPerformanceTab() {
                         if (!w) return null;
                         const dsa = w.days_since_air ?? w.days_since ?? 0;
                         const lim = w.limit_days ?? 45;                    // 30 = tag order (chưa air) · 45 = tag thường
+                        if (dsa < lim - 7 && prioLeft(uname) === 0) return null;   // chưa gần hạn + không ưu tiên → khỏi hiện
+                        const pl = prioLeft(uname);
+                        if (pl > 0) return <div style={{ marginTop: 7, fontSize: '0.7rem', fontWeight: 700, color: '#6d28d9', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 8, padding: '4px 8px' }}>⭐ Ưu tiên — còn {pl} ngày gia hạn</div>;
                         const cause = w.last_air ? 'kể từ air gần nhất' : '· tag order chưa air';
                         if (dsa >= lim) return <div style={{ marginTop: 7, fontSize: '0.7rem', fontWeight: 700, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '4px 8px' }}>⚠️ {dsa}/{lim} ngày {cause} — đề xuất gỡ</div>;
                         if (dsa >= lim - 7) return <div style={{ marginTop: 7, fontSize: '0.7rem', fontWeight: 700, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '4px 8px' }}>⏳ sắp hết hạn — còn {lim - dsa} ngày ({cause})</div>;
