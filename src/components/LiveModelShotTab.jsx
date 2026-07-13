@@ -210,7 +210,7 @@ export default function LiveModelShotTab() {
                   <button onClick={buildPrompt} style={{ ...btn('#0ea5e9'), padding: '9px 14px', fontSize: '0.82rem' }}>🔧 Ghép prompt từ form</button>
                   <button onClick={() => copyTxt(cur.prompt, '📋 Copy prompt Seedance — dán vào Dreamina + kéo ảnh sản phẩm.')} style={{ ...btn('#7c3aed'), padding: '9px 14px', fontSize: '0.82rem' }}>📋 Copy prompt Seedance</button>
                   <button onClick={() => copyTxt((cur.vform || {}).loi_thoai, '📋 Copy lời thoại — dán vào CapCut Text-to-speech giọng Việt.')} style={{ ...btn('#16a34a'), padding: '9px 14px', fontSize: '0.82rem' }}>📋 Copy lời thoại</button>
-                  <a href="https://dreamina.capcut.com" target="_blank" rel="noreferrer" style={{ ...btn('#334155'), padding: '9px 14px', fontSize: '0.82rem', textDecoration: 'none', display: 'inline-block' }}>🌐 Mở Dreamina</a>
+                  <a href="https://ads.tiktok.com/creative/creativestudio/create" target="_blank" rel="noreferrer" style={{ ...btn('#334155'), padding: '9px 14px', fontSize: '0.82rem', textDecoration: 'none', display: 'inline-block' }}>🌐 Mở TikTok Studio</a>
                 </div>
               </div>
             </div>

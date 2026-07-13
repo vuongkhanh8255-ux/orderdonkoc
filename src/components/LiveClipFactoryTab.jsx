@@ -305,7 +305,7 @@ export default function LiveClipFactoryTab() {
                   <textarea style={{ ...inp, minHeight: 76, resize: 'vertical' }} value={r.img_prompt} onChange={e => setField(r.id, 'img_prompt', e.target.value)} placeholder="Prompt tiếng Anh tả cảnh quay sản phẩm (camera, ánh sáng, không người). Bấm ✨ để AI viết." />
                   <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                     <button onClick={() => copyTxt(r.img_prompt)} style={{ ...btn('#7c3aed') }}>📋 Copy prompt</button>
-                    <a href="https://dreamina.capcut.com" target="_blank" rel="noreferrer" style={{ ...btn('#0ea5e9'), padding: '10px 14px', fontSize: '0.8rem', textDecoration: 'none', display: 'inline-block' }}>🌐 Mở Dreamina/Seedance</a>
+                    <a href="https://ads.tiktok.com/creative/creativestudio/create" target="_blank" rel="noreferrer" style={{ ...btn('#0ea5e9'), padding: '10px 14px', fontSize: '0.8rem', textDecoration: 'none', display: 'inline-block' }}>🌐 Mở TikTok Studio</a>
                   </div>
                   <div style={{ ...hintTxt, marginTop: 8 }}>📦 Ảnh sản phẩm để bỏ vào Seedance: lấy ở tab <b>🎨 Ảnh người mẫu</b> (đã up sẵn theo brand) — tải về rồi kéo vào.</div>
                 </StepBlock>
