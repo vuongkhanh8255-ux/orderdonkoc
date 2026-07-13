@@ -110,6 +110,13 @@ export default function LiveModelShotTab() {
   const setVf = (k, v) => patch(cur.brand, { vform: { ...(cur.vform || {}), [k]: v } });
   const saveVf = () => persist({ vform: cur.vform || {} });
   const copyTxt = (t, msg) => { navigator.clipboard?.writeText(t || ''); setStatus(msg || '📋 Đã copy.'); };
+  // ALL-IN-1: prompt HÌNH + LỜI THOẠI tiếng Việt (Seedance/TikTok "Reference to video" lip-sync khớp miệng luôn) → dán 1 lần.
+  const copyFullPrompt = () => {
+    const loi = String(cur?.vform?.loi_thoai || '').trim();
+    if (!loi) { setStatus('❌ Chưa có lời thoại (ô 3️⃣) — điền hoặc bấm ✨ AI viết trước.'); return; }
+    const full = `${cur.prompt || ''}\n\nThe host speaks these exact words in Vietnamese with accurate lip-sync (natural mouth movement, no lag): "${loi}"`;
+    copyTxt(full, '📋 Đã copy prompt ĐỦ (hình + thoại khớp miệng) — dán 1 lần vào Seedance/TikTok Studio + kéo ảnh sản phẩm là xong.');
+  };
   // Ghép prompt Seedance từ form (client-side, tiếng Việt) — dùng khi điền tay, khỏi cần AI
   const buildPrompt = () => {
     const f = cur.vform || {};
@@ -141,7 +148,7 @@ export default function LiveModelShotTab() {
       <div style={{ marginBottom: 16 }}>
         <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 900, color: '#1e293b' }}>🎨 Ảnh người mẫu cầm sản phẩm</h2>
         <p style={{ margin: '6px 0 0', color: '#475569', fontSize: '0.98rem', lineHeight: 1.65 }}>
-          Mỗi brand up 1 mớ ảnh sản phẩm thật → bấm <b>1 nút</b> ra ảnh người mẫu ảo cầm + trưng bày cả bộ → tải về đem lên <b>Seedance</b> làm video (thêm giọng + lời thoại).
+          Mỗi brand up 1 mớ ảnh sản phẩm thật → điền form → bấm <b>📋 Copy prompt + thoại (all-in-1)</b> → qua <b>TikTok Studio (Seedance)</b> kéo ảnh SP + dán 1 lần → ra clip người mẫu cầm SP <b>nói khớp miệng</b> luôn (khỏi CapCut).
         </p>
       </div>
 
@@ -193,7 +200,7 @@ export default function LiveModelShotTab() {
               {[
                 { k: 'mo_ta', label: '1️⃣ Mô tả', ph: 'Bối cảnh + sản phẩm. VD: bộ chăm sóc da Milaganics thiên nhiên bày trên bàn gỗ, studio livestream sáng.', rows: 2 },
                 { k: 'noi_dung', label: '2️⃣ Nội dung (điểm bán / ưu đãi)', ph: 'Ghi ý vào đây rồi bấm ✨. VD: ưu đãi phiên live, mua bộ giảm giá, freeship, thành phần thiên nhiên.', rows: 2 },
-                { k: 'loi_thoai', label: '3️⃣ Lời thoại (voice-over — CapCut sẽ đọc)', ph: 'Đoạn host nói ~15 giây', rows: 3 },
+                { k: 'loi_thoai', label: '3️⃣ Lời thoại (nhân vật sẽ NÓI — khớp miệng)', ph: 'Đoạn host nói ~15 giây', rows: 3 },
                 { k: 'goc_quay', label: '4️⃣ Góc quay', ph: 'VD: camera cố định, trung cảnh, không di chuyển', rows: 1 },
                 { k: 'hanh_dong', label: '5️⃣ Hành động người', ph: 'VD: host nữ cầm từng sản phẩm đưa lên gần camera khoe nhãn rồi hạ xuống, mỉm cười thân thiện', rows: 2 },
               ].map(fld => (
@@ -204,13 +211,15 @@ export default function LiveModelShotTab() {
                 </div>
               ))}
               <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 12 }}>
-                <label style={{ fontSize: '0.85rem', fontWeight: 800, color: '#334155', display: 'block', marginBottom: 5 }}>🎬 Prompt Seedance (ghép từ ô 1 + 4 + 5, có người cầm sản phẩm)</label>
+                <label style={{ fontSize: '0.85rem', fontWeight: 800, color: '#334155', display: 'block', marginBottom: 5 }}>🎬 Prompt HÌNH (tiếng Anh, tả người cầm SP) — nút "all-in-1" tự kèm lời thoại ở ô 3️⃣</label>
                 <textarea rows={3} style={{ ...inp, resize: 'vertical' }} value={cur.prompt || ''} onChange={e => patch(cur.brand, { prompt: e.target.value })} onBlur={() => persist({ prompt: cur.prompt })} />
-                <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-                  <button onClick={buildPrompt} style={{ ...btn('#0ea5e9'), padding: '9px 14px', fontSize: '0.82rem' }}>🔧 Ghép prompt từ form</button>
-                  <button onClick={() => copyTxt(cur.prompt, '📋 Copy prompt Seedance — dán vào Dreamina + kéo ảnh sản phẩm.')} style={{ ...btn('#7c3aed'), padding: '9px 14px', fontSize: '0.82rem' }}>📋 Copy prompt Seedance</button>
-                  <button onClick={() => copyTxt((cur.vform || {}).loi_thoai, '📋 Copy lời thoại — dán vào CapCut Text-to-speech giọng Việt.')} style={{ ...btn('#16a34a'), padding: '9px 14px', fontSize: '0.82rem' }}>📋 Copy lời thoại</button>
-                  <a href="https://ads.tiktok.com/creative/creativestudio/create" target="_blank" rel="noreferrer" style={{ ...btn('#334155'), padding: '9px 14px', fontSize: '0.82rem', textDecoration: 'none', display: 'inline-block' }}>🌐 Mở TikTok Studio</a>
+                <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <button onClick={copyFullPrompt} style={{ ...btn('#16a34a'), padding: '11px 18px', fontSize: '0.9rem' }}>📋 Copy prompt + thoại (all-in-1)</button>
+                  <a href="https://ads.tiktok.com/creative/creativestudio/create" target="_blank" rel="noreferrer" style={{ ...btn('#334155'), padding: '11px 16px', fontSize: '0.85rem', textDecoration: 'none', display: 'inline-block' }}>🌐 Mở TikTok Studio</a>
+                  <span style={{ width: '100%', height: 0 }} />
+                  <span style={{ fontSize: '0.76rem', color: '#94a3b8' }}>Phụ:</span>
+                  <button onClick={buildPrompt} style={{ ...btn('#f1f5f9'), color: '#475569', padding: '7px 12px', fontSize: '0.78rem' }}>🔧 Ghép prompt từ form</button>
+                  <button onClick={() => copyTxt(cur.prompt, '📋 Copy riêng prompt hình (không thoại).')} style={{ ...btn('#f1f5f9'), color: '#475569', padding: '7px 12px', fontSize: '0.78rem' }}>📋 Copy riêng prompt hình</button>
                 </div>
               </div>
             </div>
