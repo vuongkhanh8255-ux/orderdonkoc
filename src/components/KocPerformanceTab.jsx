@@ -604,13 +604,14 @@ export default function KocPerformanceTab() {
   // Nạp lại cảnh báo mỗi khi số liệu shop tải xong → warnMap luôn khớp DB mới nhất (chống hiện cảnh báo cũ)
   useEffect(() => { if (data) reloadWarnings(); }, [data, reloadWarnings]);
   const refreshAssign = useCallback(() => { reloadAssignments(); reloadWarnings(); }, [reloadAssignments, reloadWarnings]);
-  // video_count từ RPC koc_assignment_warnings = số clip ĐĂNG SAU ngày gán (nguồn chuẩn koc_video_unit:
-  // gộp đơn affiliate VIDEO + bảng video). 0 = chưa đăng clip MỚI nào kể từ khi gán -> cảnh báo, dù video CŨ vẫn còn view/bán.
+  // ĐỀ XUẤT GỠ = quá 45 ngày kể từ CLIP AIR GẦN NHẤT (sau ngày gắn tag). "air là gia hạn" — mỗi lần air
+  // đẩy hạn ra thêm 45 ngày. Chưa air clip mới nào -> đếm 45 ngày TỪ ngày gắn tag (cho thời gian khởi động).
+  // days_since_air từ RPC koc_assignment_warnings. Bất kể gắn tag lâu hay mới — chỉ nhìn air gần nhất + 45.
   const overdueWarns = useMemo(() => Object.values(warnMap)
-    .filter(w => (w.video_count || 0) === 0 && w.days_since >= 45)
-    .sort((a, b) => b.days_since - a.days_since), [warnMap]);
+    .filter(w => (w.days_since_air ?? w.days_since ?? 0) >= 45)
+    .sort((a, b) => (b.days_since_air ?? b.days_since ?? 0) - (a.days_since_air ?? a.days_since ?? 0)), [warnMap]);
   const removeAssign = async (kocId) => {
-    if (!confirm(`Loại định danh @${kocId} khỏi brand ${brand}? (gán ≥45 ngày mà chưa lên video)`)) return;
+    if (!confirm(`Loại định danh @${kocId} khỏi brand ${brand}? (quá 45 ngày kể từ clip air gần nhất)`)) return;
     // Gỡ qua RPC server (chắc ăn + ghi lịch sử) thay vì delete client (bundle cũ từng xoá hụt)
     const { data, error } = await supabase.rpc('koc_remove_assignment', { p_koc: kocId, p_brand: brand, p_actor: currentUser?.username || 'admin' });
     if (error) { alert('Lỗi gỡ định danh: ' + error.message); return; }
@@ -1174,7 +1175,9 @@ export default function KocPerformanceTab() {
                         {overdueWarnsCast.map(w => (
                           <div key={'od-' + w.koc_id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.78rem', background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #fee2e2', flexWrap: 'wrap' }}>
                             <a href={`https://www.tiktok.com/@${w.koc_id}`} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontWeight: 700, textDecoration: 'none' }}>@{w.koc_id}</a>
-                            <span style={{ color: '#64748b' }}>NS: <b>{w.staff_name}</b> · gán từ <b>{w.since_date ? new Date(w.since_date).toLocaleDateString('vi-VN') : '—'}</b> ({w.days_since} ngày) · 0 video</span>
+                            <span style={{ color: '#64748b' }}>NS: <b>{w.staff_name}</b> · {w.last_air
+                              ? <>air gần nhất <b>{new Date(w.last_air).toLocaleDateString('vi-VN')}</b> ({w.days_since_air ?? w.days_since} ngày trước)</>
+                              : <>chưa air clip nào · gán {w.days_since_air ?? w.days_since} ngày</>}</span>
                             {currentUser?.role === 'admin'
                               ? <button onClick={() => removeAssign(w.koc_id)} style={{ marginLeft: 'auto', padding: '5px 14px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>Duyệt gỡ</button>
                               : <span style={{ marginLeft: 'auto', color: '#64748b', fontWeight: 600, fontSize: '0.72rem' }}>⏳ chờ admin gỡ</span>}
@@ -1213,10 +1216,12 @@ export default function KocPerformanceTab() {
                       {(() => {
                         if (cast) return null; // KOC đã book cast → không cảnh báo gỡ
                         const w = warnMap[uname];
-                        // video_count = clip ĐĂNG SAU ngày gán (không tính video cũ còn view/bán) -> >0 nghĩa là đã có clip mới
-                        if (!w || (w.video_count || 0) > 0) return null;
-                        if (w.days_since >= 45) return <div style={{ marginTop: 7, fontSize: '0.7rem', fontWeight: 700, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '4px 8px' }}>⚠️ {w.days_since} ngày · 0 video — cần xử lý</div>;
-                        if (w.days_since >= 38) return <div style={{ marginTop: 7, fontSize: '0.7rem', fontWeight: 700, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '4px 8px' }}>⏳ sắp hết hạn — còn {45 - w.days_since} ngày, 0 video</div>;
+                        if (!w) return null;
+                        // days_since_air = số ngày kể từ CLIP AIR GẦN NHẤT (sau tag), hoặc từ ngày gắn tag nếu chưa air.
+                        const dsa = w.days_since_air ?? w.days_since ?? 0;
+                        const cause = w.last_air ? 'kể từ air gần nhất' : '· chưa air clip nào';
+                        if (dsa >= 45) return <div style={{ marginTop: 7, fontSize: '0.7rem', fontWeight: 700, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '4px 8px' }}>⚠️ {dsa} ngày {cause} — đề xuất gỡ</div>;
+                        if (dsa >= 38) return <div style={{ marginTop: 7, fontSize: '0.7rem', fontWeight: 700, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '4px 8px' }}>⏳ sắp hết hạn — còn {45 - dsa} ngày ({cause})</div>;
                         return null;
                       })()}
                     </div>
