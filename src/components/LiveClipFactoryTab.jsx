@@ -56,6 +56,7 @@ export default function LiveClipFactoryTab() {
       ...it,
       keywords: Array.isArray(it.keywords) ? it.keywords : [],
       script: pmap[it.id]?.script || '', img_prompt: pmap[it.id]?.img_prompt || '',
+      vform: pmap[it.id]?.vform || {},
       product_image_url: pmap[it.id]?.product_image_url || '',
       image_url: pmap[it.id]?.image_url || '', video_url: pmap[it.id]?.video_url || '',
       video_id: pmap[it.id]?.video_id || '', voice_id: pmap[it.id]?.voice_id || '',
@@ -71,6 +72,7 @@ export default function LiveClipFactoryTab() {
     const [p1, p2] = await Promise.all([
       supabase.from('livestream_clip_prod').upsert({
         intent_id: r.id, script: r.script, img_prompt: r.img_prompt, image_url: r.image_url,
+        vform: r.vform || {},
         product_image_url: r.product_image_url || null,
         video_url: r.video_url, status: r.prod_status, updated_at: new Date().toISOString(),
       }, { onConflict: 'intent_id' }),
@@ -88,8 +90,19 @@ export default function LiveClipFactoryTab() {
     const j = await callApi('live_suggest', { label: r.label, idea: r.idea });
     setBusy('');
     if (!j.ok) { setStatus('❌ ' + (j.error || 'Lỗi AI viết giúp')); return; }
+    const f = j.form || {};
     setField(r.id, 'script', j.script); setField(r.id, 'img_prompt', j.img_prompt);
-    setStatus('✅ AI viết xong — ① lời thoại + ② prompt Seedance. Đọc lại, sửa rồi 💾 Lưu.');
+    setField(r.id, 'vform', { mo_ta: f.mo_ta || '', noi_dung: f.noi_dung || r.idea || '', goc_quay: f.goc_quay || '', hanh_dong: f.hanh_dong || '' });
+    setStatus('✅ AI viết xong — 5 ô + prompt. Đọc lại, sửa rồi 📋 Copy prompt + thoại (all-in-1).');
+  };
+  // set 1 ô trong form 5-ô
+  const setVf = (id, k, v) => setRows(rs => rs.map(x => x.id === id ? { ...x, vform: { ...(x.vform || {}), [k]: v } } : x));
+  // ALL-IN-1: prompt HÌNH + lời thoại (Seedance/TikTok "Reference to video" lip-sync khớp miệng) → dán 1 lần
+  const copyFullPrompt = (r) => {
+    const loi = String(r.script || '').trim();
+    if (!loi) { setStatus('❌ Chưa có lời thoại (ô 3️⃣) — bấm ✨ AI hoặc điền trước.'); return; }
+    const full = `${r.img_prompt || ''}\n\nThe host speaks these exact words in Vietnamese with accurate lip-sync (natural mouth movement, no lag): "${loi}"`;
+    copyTxt(full); setStatus('📋 Đã copy prompt ĐỦ (hình + thoại khớp miệng) — dán 1 lần vào Seedance/TikTok Studio + kéo ảnh SP.');
   };
 
   // Up ảnh SẢN PHẨM THẬT lên kho (bucket live-assets, public) → lưu URL vào product_image_url
@@ -227,14 +240,14 @@ export default function LiveClipFactoryTab() {
       <div style={{ marginBottom: 16 }}>
         <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 900, color: '#1e293b' }}>🏭 Bước 2 — Xưởng Clip</h2>
         <p style={{ margin: '6px 0 0', color: '#475569', fontSize: '0.98rem', lineHeight: 1.65 }}>
-          Mỗi câu 1 clip. <b>Quy trình MỚI (né lỗi chặn mặt của Seedance):</b> ✨ AI viết lời thoại + prompt → Seedance quay <b>HÌNH SẢN PHẨM</b> (không có người) → CapCut <b>lồng giọng Việt</b> đọc lời thoại → Up clip vô ③ → điền đường dẫn ④.
+          Mỗi câu 1 clip. <b>Quy trình:</b> ✨ AI viết 5 ô + prompt → 📋 <b>Copy prompt + thoại (all-in-1)</b> → qua <b>TikTok Studio (Seedance)</b> kéo ảnh SP + dán 1 lần → ra clip <b>nói khớp miệng</b> (khỏi CapCut) → Up mp4 vô ③ → điền đường dẫn ④.
         </p>
       </div>
 
       {/* Dải tiến độ tổng */}
       <div style={{ ...card, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: '1 1 420px', alignItems: 'center' }}>
-          {['① Lời thoại', '② Prompt sản phẩm', '③ Video (Seedance+CapCut)', '④ Clip cuối'].map((t, i) => (
+          {['① Lời thoại', '② Prompt', '③ Video (Seedance)', '④ Clip cuối'].map((t, i) => (
             <React.Fragment key={t}>
               <span style={{ background: '#fff4ec', color: '#c2410c', borderRadius: 20, padding: '6px 14px', fontSize: '0.85rem', fontWeight: 800 }}>{t}</span>
               {i < 3 && <span style={{ color: '#cbd5e1', fontWeight: 900 }}>→</span>}
@@ -284,35 +297,46 @@ export default function LiveClipFactoryTab() {
               <div style={{ padding: '4px 20px 20px', borderTop: '1px solid #f1f5f9', background: '#fcfcfd' }}>
                 {/* ✨ AI viết giúp — lời thoại + prompt video sản phẩm */}
                 <div style={{ marginTop: 14, background: '#faf5ff', border: '1.5px dashed #d8b4fe', borderRadius: 12, padding: '14px 16px' }}>
-                  <div style={{ fontWeight: 900, fontSize: '0.98rem', color: '#7c3aed', marginBottom: 4 }}>✨ Làm nhanh: ghi đại ý — AI viết LỜI THOẠI + PROMPT video sản phẩm</div>
-                  <div style={{ ...hintTxt, marginBottom: 8 }}>Ghi sản phẩm + giá + ưu đãi + tông giọng. AI điền vào ô ① (lời thoại đọc) và ② (prompt Seedance), mày đọc lại rồi sửa.</div>
-                  <textarea style={{ ...inp, minHeight: 52, resize: 'vertical' }} placeholder='VD: "bộ chăm sóc da Milaganics thiên nhiên, đang ưu đãi phiên live, tông vui tươi"'
+                  <div style={{ fontWeight: 900, fontSize: '0.98rem', color: '#7c3aed', marginBottom: 4 }}>✨ Làm nhanh: ghi đại ý — AI viết 5 ô + prompt</div>
+                  <div style={{ ...hintTxt, marginBottom: 8 }}>Ghi sản phẩm + giá + ưu đãi + tông giọng. AI điền cả 5 ô (mô tả, nội dung, lời thoại, góc quay, hành động) + prompt hình, mày đọc lại rồi sửa.</div>
+                  <textarea style={{ ...inp, minHeight: 52, resize: 'vertical' }} placeholder='VD: "hỏi giá — bảo giá ở giỏ hàng, mua 2 giảm 50%, tông vui tươi"'
                     value={r.idea || ''} onChange={e => setField(r.id, 'idea', e.target.value)} />
                   <button onClick={() => suggestAuto(r)} disabled={busy === `${r.id}:sug`}
                     style={{ ...btn('#7c3aed'), marginTop: 8, opacity: busy === `${r.id}:sug` ? 0.6 : 1 }}>
-                    {busy === `${r.id}:sug` ? '⏳ AI đang viết...' : '✨ AI viết giúp (điền vào ① và ②)'}
+                    {busy === `${r.id}:sug` ? '⏳ AI đang viết...' : '✨ AI viết giúp (điền 5 ô + prompt)'}
                   </button>
                 </div>
 
-                {/* ① Lời thoại (voice-over) */}
-                <StepBlock n="1" title="Lời thoại (voice-over) — CapCut sẽ đọc" hint="Đoạn quảng cáo ~15 giây. Đây là TIẾNG lồng lên video (clip chỉ có sản phẩm nên không cần nhép miệng).">
-                  <textarea style={{ ...inp, minHeight: 76, resize: 'vertical' }} value={r.script} onChange={e => setField(r.id, 'script', e.target.value)} />
-                  <button onClick={() => copyTxt(r.script)} style={{ ...btn('#64748b'), marginTop: 8, padding: '7px 14px', fontSize: '0.8rem' }}>📋 Copy lời thoại</button>
-                </StepBlock>
-
-                {/* ② Prompt video sản phẩm (Seedance — không mặt) */}
-                <StepBlock n="2" title="Prompt video sản phẩm (Seedance — KHÔNG để mặt người)" hint="Seedance quay HÌNH SẢN PHẨM chuyển động. Tuyệt đối không để ảnh có mặt người kẻo bị chặn deepfake. Dán prompt này + ảnh sản phẩm vào Seedance.">
-                  <textarea style={{ ...inp, minHeight: 76, resize: 'vertical' }} value={r.img_prompt} onChange={e => setField(r.id, 'img_prompt', e.target.value)} placeholder="Prompt tiếng Anh tả cảnh quay sản phẩm (camera, ánh sáng, không người). Bấm ✨ để AI viết." />
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <button onClick={() => copyTxt(r.img_prompt)} style={{ ...btn('#7c3aed') }}>📋 Copy prompt</button>
-                    <a href="https://ads.tiktok.com/creative/creativestudio/create" target="_blank" rel="noreferrer" style={{ ...btn('#0ea5e9'), padding: '10px 14px', fontSize: '0.8rem', textDecoration: 'none', display: 'inline-block' }}>🌐 Mở TikTok Studio</a>
+                {/* ②Form 5 ô — Y CHANG tab Ảnh người mẫu */}
+                <div style={{ marginTop: 14, border: '1.5px solid #f1f5f9', borderLeft: `4px solid ${ACCENT}`, borderRadius: 12, padding: '14px 16px', background: '#fff', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {[
+                    { k: 'mo_ta', label: '1️⃣ Mô tả', ph: 'Bối cảnh + sản phẩm. VD: chai xịt Bodymiss studio livestream sáng.', rows: 2 },
+                    { k: 'noi_dung', label: '2️⃣ Nội dung (điểm bán / ưu đãi)', ph: 'VD: giá đang ở giỏ hàng, mua 2 giảm 50%, freeship.', rows: 2 },
+                    { k: '__script', label: '3️⃣ Lời thoại (nhân vật sẽ NÓI — khớp miệng)', ph: 'Đoạn host nói ~15 giây', rows: 3 },
+                    { k: 'goc_quay', label: '4️⃣ Góc quay', ph: 'VD: camera cố định, trung cảnh, không di chuyển', rows: 1 },
+                    { k: 'hanh_dong', label: '5️⃣ Hành động người', ph: 'VD: cầm sản phẩm đưa lên khoe nhãn, mỉm cười thân thiện', rows: 2 },
+                  ].map(fld => (
+                    <div key={fld.k}>
+                      <label style={{ fontSize: '0.85rem', fontWeight: 800, color: '#334155', display: 'block', marginBottom: 5 }}>{fld.label}</label>
+                      <textarea rows={fld.rows} style={{ ...inp, resize: 'vertical' }} placeholder={fld.ph}
+                        value={fld.k === '__script' ? r.script : ((r.vform || {})[fld.k] || '')}
+                        onChange={e => fld.k === '__script' ? setField(r.id, 'script', e.target.value) : setVf(r.id, fld.k, e.target.value)} />
+                    </div>
+                  ))}
+                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 12 }}>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 800, color: '#334155', display: 'block', marginBottom: 5 }}>🎬 Prompt HÌNH (tiếng Anh, tả người cầm SP) — nút "all-in-1" tự kèm lời thoại ô 3️⃣</label>
+                    <textarea rows={3} style={{ ...inp, resize: 'vertical' }} value={r.img_prompt} onChange={e => setField(r.id, 'img_prompt', e.target.value)} placeholder="Prompt tiếng Anh tả người cầm SP. Bấm ✨ để AI viết." />
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <button onClick={() => copyFullPrompt(r)} style={{ ...btn('#16a34a'), padding: '11px 18px', fontSize: '0.9rem' }}>📋 Copy prompt + thoại (all-in-1)</button>
+                      <a href="https://ads.tiktok.com/creative/creativestudio/create" target="_blank" rel="noreferrer" style={{ ...btn('#334155'), padding: '11px 16px', fontSize: '0.85rem', textDecoration: 'none', display: 'inline-block' }}>🌐 Mở TikTok Studio</a>
+                    </div>
+                    <div style={{ ...hintTxt, marginTop: 8 }}>📦 Ảnh sản phẩm kéo vào Seedance: lấy ở tab <b>🎨 Ảnh người mẫu</b> (đã up sẵn theo brand).</div>
                   </div>
-                  <div style={{ ...hintTxt, marginTop: 8 }}>📦 Ảnh sản phẩm để bỏ vào Seedance: lấy ở tab <b>🎨 Ảnh người mẫu</b> (đã up sẵn theo brand) — tải về rồi kéo vào.</div>
-                </StepBlock>
+                </div>
 
-                {/* ③ Video — Seedance xong → CapCut lồng tiếng → up vào */}
-                <StepBlock n="3" title="Video — Seedance xong, CapCut lồng giọng, rồi up vào đây"
-                  hint="1) Seedance gen xong → tải mp4. 2) Mở CapCut → Text-to-speech dán LỜI THOẠI ở ① + chọn giọng nữ Việt → xuất. 3) Up file cuối vào đây.">
+                {/* ③ Video — Seedance xong → up vào */}
+                <StepBlock n="3" title="Video — Seedance xong, up mp4 vào đây"
+                  hint="Seedance/TikTok Studio gen xong (đã có tiếng khớp miệng) → tải mp4 → bấm Up video, hoặc dán link.">
                   <div style={{ display: 'flex', gap: 8 }}>
                     <input style={{ ...inp, flex: 1 }} placeholder="https://... (dán link, hoặc bấm Up video)" value={r.video_url} onChange={e => setField(r.id, 'video_url', e.target.value)} />
                     <label style={{ ...btn('#16a34a'), padding: '10px 14px', fontSize: '0.8rem', cursor: busy === `${r.id}:vup` ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: busy === `${r.id}:vup` ? 0.6 : 1 }}>
