@@ -42,15 +42,20 @@ export default function LiveClipFactoryTab() {
   const [openId, setOpenId] = useState(null);
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState('');   // `${id}:${step}` khi đang gọi API
+  const [shared, setShared] = useState({}); // BỐI CẢNH CHUNG: {mo_ta,noi_dung,goc_quay,hanh_dong,img_prompt}
+  const [sharedIdea, setSharedIdea] = useState('');
+  const [sharedOpen, setSharedOpen] = useState(true);
   const pollRef = useRef({});             // intent_id -> interval tự kiểm tra video
   useEffect(() => () => { Object.values(pollRef.current).forEach(clearInterval); }, []); // dọn khi rời tab
 
   const load = async () => {
     setLoading(true);
-    const [{ data: intents }, { data: prod }] = await Promise.all([
+    const [{ data: intents }, { data: prod }, { data: cfg }] = await Promise.all([
       supabase.from('livestream_intents').select('id,label,keywords,clip,enabled').order('sort_order', { ascending: true }),
       supabase.from('livestream_clip_prod').select('*'),
+      supabase.from('livestream_config').select('clip_shared').eq('id', 'default').maybeSingle(),
     ]);
+    setShared(cfg?.clip_shared || {});
     const pmap = {}; (prod || []).forEach(p => { pmap[p.intent_id] = p; });
     setRows((intents || []).map(it => ({
       ...it,
@@ -82,27 +87,42 @@ export default function LiveClipFactoryTab() {
   };
   const copyTxt = (t) => { navigator.clipboard && navigator.clipboard.writeText(t || ''); setStatus('📋 Đã copy.'); };
 
-  // ✨ AI viết giúp: yêu cầu thô → gpt-4o-mini viết kịch bản + prompt ảnh, điền vào ô cho user duyệt
+  // ── BỐI CẢNH CHUNG (áp cho mọi câu): mô tả/nội dung/góc quay/hành động + prompt hình ──
+  const setSf = (k, v) => setShared(s => ({ ...s, [k]: v }));
+  const saveShared = async () => {
+    const { error } = await supabase.from('livestream_config').upsert({ id: 'default', clip_shared: shared, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+    setStatus(error ? '❌ Lỗi lưu bối cảnh: ' + error.message : '✅ Đã lưu BỐI CẢNH CHUNG — áp cho mọi câu.');
+  };
+  const suggestShared = async () => {
+    if (!sharedIdea.trim()) { setStatus('❌ Ghi ý bối cảnh chung trước (brand, sản phẩm, người mẫu, tông).'); return; }
+    setBusy('shared:sug'); setStatus('✨ AI đang viết bối cảnh chung... ~5-15s');
+    const j = await callApi('live_suggest', { label: 'Bối cảnh chung', idea: sharedIdea });
+    setBusy('');
+    if (!j.ok) { setStatus('❌ ' + (j.error || 'Lỗi AI')); return; }
+    const f = j.form || {};
+    setShared({ mo_ta: f.mo_ta || '', noi_dung: f.noi_dung || sharedIdea, goc_quay: f.goc_quay || '', hanh_dong: f.hanh_dong || '', img_prompt: j.img_prompt || '' });
+    setStatus('✅ AI viết bối cảnh chung xong — đọc lại rồi 💾 Lưu bối cảnh.');
+  };
+
+  // ✨ AI viết LỜI THOẠI cho 1 câu (bối cảnh dùng chung ở trên, đây chỉ ra lời thoại riêng)
   const suggestAuto = async (r) => {
-    if (!String(r.idea || '').trim()) { setStatus('❌ Gõ yêu cầu thô trước (sản phẩm, giá, ưu đãi, tông giọng…).'); return; }
-    if ((r.script.trim() || r.img_prompt.trim()) && !confirm('Ô kịch bản/prompt đang có nội dung — AI viết mới sẽ THAY THẾ. Tiếp tục?')) return;
-    setBusy(`${r.id}:sug`); setStatus('✨ AI đang viết kịch bản + prompt ảnh... ~5-15s');
+    if (!String(r.idea || '').trim()) { setStatus('❌ Gõ đại ý câu này trước (VD: hỏi giá — bảo giá ở giỏ hàng).'); return; }
+    if (r.script.trim() && !confirm('Ô lời thoại đang có nội dung — AI viết mới sẽ THAY THẾ. Tiếp tục?')) return;
+    setBusy(`${r.id}:sug`); setStatus('✨ AI đang viết lời thoại... ~5-15s');
     const j = await callApi('live_suggest', { label: r.label, idea: r.idea });
     setBusy('');
     if (!j.ok) { setStatus('❌ ' + (j.error || 'Lỗi AI viết giúp')); return; }
-    const f = j.form || {};
-    setField(r.id, 'script', j.script); setField(r.id, 'img_prompt', j.img_prompt);
-    setField(r.id, 'vform', { mo_ta: f.mo_ta || '', noi_dung: f.noi_dung || r.idea || '', goc_quay: f.goc_quay || '', hanh_dong: f.hanh_dong || '' });
-    setStatus('✅ AI viết xong — 5 ô + prompt. Đọc lại, sửa rồi 📋 Copy prompt + thoại (all-in-1).');
+    setField(r.id, 'script', j.script);
+    setStatus('✅ AI viết lời thoại xong — đọc lại rồi 📋 Copy prompt + thoại (all-in-1).');
   };
-  // set 1 ô trong form 5-ô
-  const setVf = (id, k, v) => setRows(rs => rs.map(x => x.id === id ? { ...x, vform: { ...(x.vform || {}), [k]: v } } : x));
-  // ALL-IN-1: prompt HÌNH + lời thoại (Seedance/TikTok "Reference to video" lip-sync khớp miệng) → dán 1 lần
+  // ALL-IN-1: prompt hình từ BỐI CẢNH CHUNG + lời thoại RIÊNG của câu → dán 1 lần (Seedance lip-sync khớp miệng)
   const copyFullPrompt = (r) => {
     const loi = String(r.script || '').trim();
-    if (!loi) { setStatus('❌ Chưa có lời thoại (ô 3️⃣) — bấm ✨ AI hoặc điền trước.'); return; }
-    const full = `${r.img_prompt || ''}\n\nThe host speaks these exact words in Vietnamese with accurate lip-sync (natural mouth movement, no lag): "${loi}"`;
-    copyTxt(full); setStatus('📋 Đã copy prompt ĐỦ (hình + thoại khớp miệng) — dán 1 lần vào Seedance/TikTok Studio + kéo ảnh SP.');
+    if (!loi) { setStatus('❌ Câu này chưa có lời thoại (ô 3️⃣) — bấm ✨ AI hoặc điền trước.'); return; }
+    const p = String(shared.img_prompt || '').trim();
+    if (!p) { setStatus('❌ Chưa có Prompt hình CHUNG — điền ở "Bối cảnh chung" đầu trang trước.'); return; }
+    const full = `${p}\n\nThe host speaks these exact words in Vietnamese with accurate lip-sync (natural mouth movement, no lag): "${loi}"`;
+    copyTxt(full); setStatus('📋 Đã copy prompt ĐỦ (bối cảnh chung + thoại câu này) — dán vào Seedance/TikTok Studio + kéo ảnh SP.');
   };
 
   // Up ảnh SẢN PHẨM THẬT lên kho (bucket live-assets, public) → lưu URL vào product_image_url
@@ -264,13 +284,49 @@ export default function LiveClipFactoryTab() {
         </div>
       </div>
 
+      {/* ── BỐI CẢNH CHUNG (điền 1 lần, áp cho MỌI câu — chỉ lời thoại là riêng) ── */}
+      <div style={{ ...card, border: '2px solid #c7d2fe' }}>
+        <div onClick={() => setSharedOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '15px 20px', cursor: 'pointer', background: '#eef2ff', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '1rem', color: '#6366f1' }}>{sharedOpen ? '▼' : '▶'}</span>
+          <span style={{ fontWeight: 900, color: '#3730a3', fontSize: '1.05rem' }}>🎬 Bối cảnh CHUNG — dùng cho mọi câu</span>
+          <span style={{ fontSize: '0.8rem', color: '#6366f1', fontWeight: 700 }}>(mô tả · nội dung · góc quay · hành động · prompt hình — điền 1 lần)</span>
+        </div>
+        {sharedOpen && (
+          <div style={{ padding: '4px 20px 18px' }}>
+            <div style={{ marginTop: 12, background: '#faf5ff', border: '1.5px dashed #d8b4fe', borderRadius: 12, padding: '12px 14px' }}>
+              <div style={{ ...hintTxt, marginBottom: 8 }}>Ghi ý bối cảnh (brand, người mẫu, tông) → AI viết 4 ô + prompt hình. VD: <i>"gian hàng Bodymiss, host nữ trẻ cầm chai xịt, studio sáng, tông vui tươi"</i></div>
+              <textarea style={{ ...inp, minHeight: 46, resize: 'vertical' }} placeholder="Ý bối cảnh chung..." value={sharedIdea} onChange={e => setSharedIdea(e.target.value)} />
+              <button onClick={suggestShared} disabled={busy === 'shared:sug'} style={{ ...btn('#6366f1'), marginTop: 8, opacity: busy === 'shared:sug' ? 0.6 : 1 }}>{busy === 'shared:sug' ? '⏳ AI đang viết...' : '✨ AI viết bối cảnh chung'}</button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
+              {[
+                { k: 'mo_ta', label: '1️⃣ Mô tả', ph: 'Bối cảnh + sản phẩm', rows: 2 },
+                { k: 'noi_dung', label: '2️⃣ Nội dung (điểm bán / ưu đãi chung)', ph: 'VD: ưu đãi phiên live, mua 2 giảm 50%, freeship', rows: 2 },
+                { k: 'goc_quay', label: '4️⃣ Góc quay', ph: 'VD: camera cố định, trung cảnh', rows: 1 },
+                { k: 'hanh_dong', label: '5️⃣ Hành động người', ph: 'VD: cầm sản phẩm đưa lên khoe nhãn, mỉm cười', rows: 2 },
+              ].map(fld => (
+                <div key={fld.k}>
+                  <label style={{ fontSize: '0.85rem', fontWeight: 800, color: '#334155', display: 'block', marginBottom: 5 }}>{fld.label}</label>
+                  <textarea rows={fld.rows} style={{ ...inp, resize: 'vertical' }} placeholder={fld.ph} value={shared[fld.k] || ''} onChange={e => setSf(fld.k, e.target.value)} />
+                </div>
+              ))}
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 12 }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 800, color: '#334155', display: 'block', marginBottom: 5 }}>🎬 Prompt HÌNH chung (tiếng Anh, tả người cầm SP)</label>
+                <textarea rows={3} style={{ ...inp, resize: 'vertical' }} placeholder="Prompt tiếng Anh tả người cầm SP (dùng cho mọi câu). Bấm ✨ để AI viết." value={shared.img_prompt || ''} onChange={e => setSf('img_prompt', e.target.value)} />
+              </div>
+              <button onClick={saveShared} style={{ ...btn('#6366f1'), padding: '12px 24px', fontSize: '0.95rem', alignSelf: 'flex-start' }}>💾 Lưu bối cảnh chung</button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {loading ? <div style={{ color: '#94a3b8', padding: 20 }}>⏳ Đang tải...</div> : rows.map(r => {
         const st = STATUS[r.prod_status] || STATUS.todo;
         const open = openId === r.id;
         // 4 chấm bước: xanh khi bước đó có dữ liệu
         const dots = [
           { t: '①', done: !!r.script.trim(), tip: 'Lời thoại' },
-          { t: '②', done: !!(r.img_prompt || '').trim(), tip: 'Prompt Seedance' },
+          { t: '②', done: !!String(shared.img_prompt || '').trim(), tip: 'Prompt chung' },
           { t: '③', done: !!r.video_url, tip: 'Video' },
           { t: '④', done: !!String(r.clip || '').trim(), tip: 'Clip cuối' },
         ];
@@ -303,35 +359,19 @@ export default function LiveClipFactoryTab() {
                     value={r.idea || ''} onChange={e => setField(r.id, 'idea', e.target.value)} />
                   <button onClick={() => suggestAuto(r)} disabled={busy === `${r.id}:sug`}
                     style={{ ...btn('#7c3aed'), marginTop: 8, opacity: busy === `${r.id}:sug` ? 0.6 : 1 }}>
-                    {busy === `${r.id}:sug` ? '⏳ AI đang viết...' : '✨ AI viết giúp (điền 5 ô + prompt)'}
+                    {busy === `${r.id}:sug` ? '⏳ AI đang viết...' : '✨ AI viết giúp (lời thoại câu này)'}
                   </button>
                 </div>
 
-                {/* ②Form 5 ô — Y CHANG tab Ảnh người mẫu */}
-                <div style={{ marginTop: 14, border: '1.5px solid #f1f5f9', borderLeft: `4px solid ${ACCENT}`, borderRadius: 12, padding: '14px 16px', background: '#fff', display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {[
-                    { k: 'mo_ta', label: '1️⃣ Mô tả', ph: 'Bối cảnh + sản phẩm. VD: chai xịt Bodymiss studio livestream sáng.', rows: 2 },
-                    { k: 'noi_dung', label: '2️⃣ Nội dung (điểm bán / ưu đãi)', ph: 'VD: giá đang ở giỏ hàng, mua 2 giảm 50%, freeship.', rows: 2 },
-                    { k: '__script', label: '3️⃣ Lời thoại (nhân vật sẽ NÓI — khớp miệng)', ph: 'Đoạn host nói ~15 giây', rows: 3 },
-                    { k: 'goc_quay', label: '4️⃣ Góc quay', ph: 'VD: camera cố định, trung cảnh, không di chuyển', rows: 1 },
-                    { k: 'hanh_dong', label: '5️⃣ Hành động người', ph: 'VD: cầm sản phẩm đưa lên khoe nhãn, mỉm cười thân thiện', rows: 2 },
-                  ].map(fld => (
-                    <div key={fld.k}>
-                      <label style={{ fontSize: '0.85rem', fontWeight: 800, color: '#334155', display: 'block', marginBottom: 5 }}>{fld.label}</label>
-                      <textarea rows={fld.rows} style={{ ...inp, resize: 'vertical' }} placeholder={fld.ph}
-                        value={fld.k === '__script' ? r.script : ((r.vform || {})[fld.k] || '')}
-                        onChange={e => fld.k === '__script' ? setField(r.id, 'script', e.target.value) : setVf(r.id, fld.k, e.target.value)} />
-                    </div>
-                  ))}
-                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 12 }}>
-                    <label style={{ fontSize: '0.85rem', fontWeight: 800, color: '#334155', display: 'block', marginBottom: 5 }}>🎬 Prompt HÌNH (tiếng Anh, tả người cầm SP) — nút "all-in-1" tự kèm lời thoại ô 3️⃣</label>
-                    <textarea rows={3} style={{ ...inp, resize: 'vertical' }} value={r.img_prompt} onChange={e => setField(r.id, 'img_prompt', e.target.value)} placeholder="Prompt tiếng Anh tả người cầm SP. Bấm ✨ để AI viết." />
-                    <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                      <button onClick={() => copyFullPrompt(r)} style={{ ...btn('#16a34a'), padding: '11px 18px', fontSize: '0.9rem' }}>📋 Copy prompt + thoại (all-in-1)</button>
-                      <a href="https://ads.tiktok.com/creative/creativestudio/create" target="_blank" rel="noreferrer" style={{ ...btn('#334155'), padding: '11px 16px', fontSize: '0.85rem', textDecoration: 'none', display: 'inline-block' }}>🌐 Mở TikTok Studio</a>
-                    </div>
-                    <div style={{ ...hintTxt, marginTop: 8 }}>📦 Ảnh sản phẩm kéo vào Seedance: lấy ở tab <b>🎨 Ảnh người mẫu</b> (đã up sẵn theo brand).</div>
+                {/* Chỉ LỜI THOẠI riêng câu này — bối cảnh (mô tả/góc quay/hành động/prompt) dùng chung ở đầu trang */}
+                <div style={{ marginTop: 14, border: '1.5px solid #f1f5f9', borderLeft: `4px solid ${ACCENT}`, borderRadius: 12, padding: '14px 16px', background: '#fff' }}>
+                  <label style={{ fontSize: '0.9rem', fontWeight: 800, color: '#334155', display: 'block', marginBottom: 5 }}>3️⃣ Lời thoại (RIÊNG câu này — nhân vật sẽ NÓI, khớp miệng)</label>
+                  <textarea rows={3} style={{ ...inp, resize: 'vertical' }} placeholder="Đoạn host nói ~15 giây trả lời câu này" value={r.script} onChange={e => setField(r.id, 'script', e.target.value)} />
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <button onClick={() => copyFullPrompt(r)} style={{ ...btn('#16a34a'), padding: '11px 18px', fontSize: '0.9rem' }}>📋 Copy prompt + thoại (all-in-1)</button>
+                    <a href="https://ads.tiktok.com/creative/creativestudio/create" target="_blank" rel="noreferrer" style={{ ...btn('#334155'), padding: '11px 16px', fontSize: '0.85rem', textDecoration: 'none', display: 'inline-block' }}>🌐 Mở TikTok Studio</a>
                   </div>
+                  <div style={{ ...hintTxt, marginTop: 8 }}>🎬 Prompt hình lấy từ <b>Bối cảnh CHUNG</b> đầu trang. 📦 Ảnh SP kéo vào Seedance: lấy ở tab <b>Ảnh người mẫu</b>.</div>
                 </div>
 
                 {/* ③ Video — Seedance xong → up vào */}
