@@ -623,6 +623,8 @@ export default function KocPerformanceTab() {
   // KOC blacklist → đỏ cảnh báo + (admin) tự gỡ TOÀN BỘ định danh của KOC đó
   const [blacklist, setBlacklist] = useState(() => new Set());
   const [onlyUnassigned, setOnlyUnassigned] = useState(false);
+  const [hideBlacklist, setHideBlacklist] = useState(false); // ẩn hết KOC blacklist khỏi lưới
+  const [orderOpen, setOrderOpen] = useState(null); // koc đang mở chi tiết đơn mẫu trong list GỠ
   useEffect(() => {
     (async () => { // blacklist 888 kênh, sắp vượt trần 1000 dòng/lượt của Supabase → đọc theo trang
       let all = [];
@@ -686,6 +688,22 @@ export default function KocPerformanceTab() {
     () => overdueWarns.filter(w => !castMap[(w.koc_id || '').toLowerCase().replace(/^@/, '')] && prioLeft(w.koc_id) === 0),
     [overdueWarns, castMap, prioLeft]
   );
+  // Đơn mẫu (donguis) gần nhất mỗi KOC CHO BRAND này — biết mấy bạn có gửi hàng mẫu hay chưa.
+  // CHỈ fetch cho các KOC đang nằm trong list "Đề xuất GỠ" → tránh trần 1000 dòng của anon client.
+  const [orderMap, setOrderMap] = useState({});
+  const gxKey = useMemo(
+    () => overdueWarnsCast.map(w => (w.koc_id || '').toLowerCase().replace(/^@/, '')).filter(Boolean).sort().join(','),
+    [overdueWarnsCast]
+  );
+  useEffect(() => {
+    const kocs = gxKey ? gxKey.split(',') : [];
+    if (!brand || kocs.length === 0) { setOrderMap({}); return; }
+    supabase.rpc('koc_last_sample_order', { p_brand: brand, p_kocs: kocs }).then(({ data }) => {
+      const m = {};
+      for (const r of (data || [])) { const u = (r.uname || '').toLowerCase().replace(/^@/, ''); if (u) m[u] = r; }
+      setOrderMap(m);
+    }, () => {});
+  }, [brand, gxKey]);
   // ── Admin chờ duyệt: đề xuất GÁN (ecom) + đề xuất GỠ (hệ thống: blacklist / 45 ngày) ──
   // Dùng nguồn proposedRows (query thẳng status='proposed') — KHÔNG lọc từ assignMap (dính bẫy 1000 dòng).
   const pendingProposals = useMemo(() => {
@@ -1179,6 +1197,10 @@ export default function KocPerformanceTab() {
                   style={{ padding: '6px 14px', borderRadius: 9, border: `1.5px solid ${onlyUnassigned ? ACCENT : '#e5e7eb'}`, background: onlyUnassigned ? '#fff7ed' : '#fff', color: onlyUnassigned ? '#e85518' : '#64748b', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}>
                   🔎 {onlyUnassigned ? `Chỉ chưa định danh (${fmtNum(assignRows.length)})` : 'Chỉ KOC chưa định danh'}
                 </button>
+                <button onClick={() => { setHideBlacklist(v => !v); setAssignShow(48); }}
+                  style={{ padding: '6px 14px', borderRadius: 9, border: `1.5px solid ${hideBlacklist ? '#dc2626' : '#e5e7eb'}`, background: hideBlacklist ? '#fef2f2' : '#fff', color: hideBlacklist ? '#dc2626' : '#64748b', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}>
+                  {hideBlacklist ? '⛔ Đang ẩn KOC blacklist ✕' : '⛔ Ẩn KOC blacklist'}
+                </button>
                 <span style={{ fontSize: '0.72rem', color: '#64748b' }}>⛔ viền đỏ = KOC blacklist (không gán được)</span>
               </div>
               {['admin', 'ecom', 'booking'].includes(currentUser?.role) && (pendingProposals.length > 0 || blacklistAssigned.length > 0 || overdueWarnsCast.length > 0) && (
@@ -1231,6 +1253,34 @@ export default function KocPerformanceTab() {
                                 ? <button onClick={() => removeAssign(w.koc_id)} style={{ padding: '5px 14px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>Duyệt gỡ</button>
                                 : <span style={{ color: '#64748b', fontWeight: 600, fontSize: '0.72rem' }}>⏳ chờ admin gỡ</span>}
                             </div>
+                            {(() => {
+                              const u = (w.koc_id || '').toLowerCase().replace(/^@/, '');
+                              const od = orderMap[u];
+                              const open = orderOpen === u;
+                              const late = od && od.days_since > 30;
+                              return (
+                                <div style={{ width: '100%' }}>
+                                  {od
+                                    ? <button onClick={() => setOrderOpen(open ? null : u)} title="Bấm xem chi tiết các đơn mẫu gần đây"
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8, border: `1px solid ${late ? '#fecaca' : '#bbf7d0'}`, background: late ? '#fff7f7' : '#f0fdf4', color: late ? '#dc2626' : '#15803d', fontWeight: 700, fontSize: '0.73rem', cursor: 'pointer' }}>
+                                        📦 Order mẫu gần nhất: <b>{od.days_since} ngày trước</b> ({new Date(od.last_order).toLocaleDateString('vi-VN')}) · {od.order_count} đơn {open ? '▲' : '▾'}
+                                      </button>
+                                    : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8, border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', fontWeight: 800, fontSize: '0.73rem' }}>📦 CHƯA gửi mẫu brand này — kiểm tra NS có gửi hàng không</span>}
+                                  {open && Array.isArray(od?.recent) && od.recent.length > 0 && (
+                                    <div style={{ marginTop: 6, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '7px 11px' }}>
+                                      <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700, marginBottom: 3 }}>Đơn mẫu gần đây (ngày · ai order):</div>
+                                      {od.recent.map((o, ix) => (
+                                        <div key={ix} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '2px 0', fontSize: '0.73rem', color: '#334155', flexWrap: 'wrap' }}>
+                                          <b style={{ color: '#0f172a' }}>{o.d}</b>
+                                          <span>· order bởi <b style={{ color: '#7c3aed' }}>{o.ns}</b></span>
+                                          {o.ship && <span style={{ color: '#94a3b8' }}>· {o.ship}</span>}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
                         ))}
                       </div>
@@ -1239,7 +1289,7 @@ export default function KocPerformanceTab() {
                 </div>
               )}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(248px, 1fr))', gap: 12 }}>
-                {assignRows.slice(0, assignShow).map((c, i) => {
+                {(hideBlacklist ? assignRows.filter(c => !blacklist.has((c.username || '').toLowerCase().replace(/^@/, ''))) : assignRows).slice(0, assignShow).map((c, i) => {
                   const uname = (c.username || '').toLowerCase().replace(/^@/, '');
                   const isBlack = blacklist.has(uname);
                   const cast = !isBlack ? castMap[uname] : null;
