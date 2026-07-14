@@ -269,6 +269,7 @@ function DateRangePicker({ start, end, min, onChange }) {
 // ── Định danh KOC: gán nhân sự theo brand (dùng chung bảng koc_brand_assignments với Booking) ──
 const ASSIGN_TABLE = 'koc_brand_assignments';
 const HIST_TABLE = 'koc_assignment_history';
+const PROOF_BUCKET = 'koc-tag-proof'; // kho ảnh tin nhắn chứng minh khi quản lý sàn gắn tag
 const HIST_LABEL = { assign: '🟢 Gán', propose: '🟡 Đề xuất', approve: '✓ Duyệt', remove: '🗑️ Loại' };
 const HIDDEN_STAFF = ['Anh Kiệt', 'Thiệu Huy'];
 // Shop seller_name → brand_name (khớp convention bên Booking: EHERB / MILAGANICS / ...)
@@ -302,13 +303,29 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
   const [staff, setStaff] = useState('');
   const [busy, setBusy] = useState(false);
   const [hist, setHist] = useState(null); // lịch sử (null = chưa tải)
+  const [proofUrl, setProofUrl] = useState('');   // ảnh tin nhắn chứng minh (non-admin gắn tag)
+  const [upBusy, setUpBusy] = useState(false);
 
   const status = assignment?.status; // 'proposed' | 'approved' | undefined
   const color = status === 'approved' ? '#16a34a' : status === 'proposed' ? '#d97706' : '#64748b';
   const bg = status === 'approved' ? '#f0fdf4' : status === 'proposed' ? '#fffbeb' : '#f8fafc';
   const border = status === 'approved' ? '#bbf7d0' : status === 'proposed' ? '#fde68a' : '#e5e7eb';
 
-  const openModal = (e) => { e.stopPropagation(); if (!canInteract) return; setStaff(assignment?.staff_name || staffNames[0] || ''); setHist(null); setOpen(true); };
+  const openModal = (e) => { e.stopPropagation(); if (!canInteract) return; setStaff(assignment?.staff_name || staffNames[0] || ''); setHist(null); setProofUrl(assignment?.proof_image_url || ''); setOpen(true); };
+  // Up ảnh chứng minh (chụp tin nhắn) lên bucket koc-tag-proof → link công khai
+  const uploadProof = async (file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { alert('Chọn file ẢNH (chụp màn hình tin nhắn).'); return; }
+    setUpBusy(true);
+    try {
+      const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+      const path = `${brand}/${username}_${Date.now()}.${ext}`.replace(/[^a-zA-Z0-9._/-]/g, '_');
+      const { error } = await supabase.storage.from(PROOF_BUCKET).upload(path, file, { upsert: false });
+      if (error) throw error;
+      setProofUrl(supabase.storage.from(PROOF_BUCKET).getPublicUrl(path).data.publicUrl);
+    } catch (e) { alert('Lỗi up ảnh: ' + e.message); }
+    finally { setUpBusy(false); }
+  };
   const close = (e) => { e?.stopPropagation?.(); setOpen(false); };
   const logHistory = (action, sn) => supabase.from(HIST_TABLE).insert({ koc_id: username, brand_name: brand, staff_name: sn || null, action, actor: me }).then(() => {}, () => {});
   const loadHist = async () => {
@@ -318,13 +335,15 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
 
   const save = async () => {
     const sn = (staff || '').trim(); if (!sn) return;
+    // Quản lý sàn (non-admin) gắn tag: BẮT BUỘC có ảnh tin nhắn chứng minh → duyệt THẲNG, admin khỏi duyệt.
+    if (!isAdmin && !proofUrl) { alert('⚠️ Phải đính ẢNH chụp tin nhắn chứng minh rõ ràng mới gắn tag được.'); return; }
     setBusy(true);
     const nowIso = new Date().toISOString();
     const record = isAdmin
-      ? { koc_id: username, brand_name: brand, staff_name: sn, assigned_at: assignment?.assigned_at || nowIso, updated_at: nowIso, status: 'approved', approved_by: me, approved_at: nowIso, proposed_by: assignment?.proposed_by || null, proposed_at: assignment?.proposed_at || null }
-      : { koc_id: username, brand_name: brand, staff_name: sn, assigned_at: nowIso, updated_at: nowIso, status: 'proposed', proposed_by: me, proposed_at: nowIso, approved_by: null, approved_at: null };
+      ? { koc_id: username, brand_name: brand, staff_name: sn, assigned_at: assignment?.assigned_at || nowIso, updated_at: nowIso, status: 'approved', approved_by: me, approved_at: nowIso, proposed_by: assignment?.proposed_by || null, proposed_at: assignment?.proposed_at || null, proof_image_url: proofUrl || assignment?.proof_image_url || null }
+      : { koc_id: username, brand_name: brand, staff_name: sn, assigned_at: nowIso, updated_at: nowIso, status: 'approved', proposed_by: me, proposed_at: nowIso, approved_by: me + ' (ảnh CM)', approved_at: nowIso, proof_image_url: proofUrl };
     await supabase.from(ASSIGN_TABLE).upsert(record, { onConflict: 'koc_id,brand_name' });
-    logHistory(isAdmin ? 'assign' : 'propose', sn);
+    logHistory('assign', sn);
     setBusy(false); setOpen(false); onChanged?.();
   };
   const approve = async () => {
@@ -364,6 +383,21 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
               {!staffNames.length && <option value="">Chưa có nhân sự</option>}
               {staffNames.map(n => <option key={n} value={n}>{n}</option>)}
             </select>
+            {/* Ảnh tin nhắn chứng minh — quản lý sàn BẮT BUỘC có mới gắn được (khỏi admin duyệt) */}
+            {!isAdmin && (
+              <div style={{ marginBottom: 12, background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 9, padding: '10px 12px' }}>
+                <div style={{ fontSize: '0.76rem', fontWeight: 800, color: '#9a3412', marginBottom: 6 }}>📸 Ảnh tin nhắn chứng minh (bắt buộc)</div>
+                <label style={{ display: 'inline-block', padding: '7px 12px', borderRadius: 8, background: '#0891b2', color: '#fff', fontWeight: 700, fontSize: '0.78rem', cursor: upBusy ? 'wait' : 'pointer' }}>
+                  {upBusy ? '⏳ đang up...' : (proofUrl ? '🔄 Đổi ảnh' : '⬆️ Up ảnh chứng minh')}
+                  <input type="file" accept="image/*" disabled={upBusy} style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) uploadProof(f); }} />
+                </label>
+                {proofUrl && <a href={proofUrl} target="_blank" rel="noreferrer"><img src={proofUrl} alt="" style={{ display: 'block', marginTop: 8, maxHeight: 120, borderRadius: 8, border: '1px solid #e5e7eb' }} /></a>}
+                <div style={{ fontSize: '0.7rem', color: '#9a3412', marginTop: 6 }}>Có ảnh là gắn được ngay — admin khỏi duyệt.</div>
+              </div>
+            )}
+            {isAdmin && assignment?.proof_image_url && (
+              <a href={assignment.proof_image_url} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginBottom: 10, fontSize: '0.76rem', color: '#0891b2', fontWeight: 700 }}>📸 Xem ảnh chứng minh</a>
+            )}
             {assignment && (
               <div style={{ fontSize: '0.74rem', color: '#64748b', background: '#f8fafc', borderRadius: 8, padding: '8px 10px', marginBottom: 12 }}>
                 {status === 'proposed'
@@ -386,7 +420,7 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
               )}
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button onClick={save} disabled={busy || !staff} style={{ flex: 1, padding: '9px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer', opacity: busy || !staff ? 0.6 : 1 }}>{isAdmin ? (status === 'proposed' ? 'Duyệt + lưu' : 'Lưu gán') : 'Gửi đề xuất'}</button>
+              <button onClick={save} disabled={busy || !staff || (!isAdmin && !proofUrl)} style={{ flex: 1, padding: '9px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer', opacity: (busy || !staff || (!isAdmin && !proofUrl)) ? 0.6 : 1 }}>{isAdmin ? (status === 'proposed' ? 'Duyệt + lưu' : 'Lưu gán') : (proofUrl ? 'Lưu gán (có ảnh CM)' : 'Cần ảnh CM')}</button>
               {isAdmin && status === 'proposed' && <button onClick={approve} disabled={busy} style={{ padding: '9px 12px', borderRadius: 9, border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#16a34a', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer' }}>✓ Duyệt</button>}
               {canRemove && <button onClick={remove} disabled={busy} style={{ padding: '9px 12px', borderRadius: 9, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer' }}>Loại</button>}
               <button onClick={() => setOpen(false)} style={{ padding: '9px 12px', borderRadius: 9, border: '1px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer' }}>Đóng</button>
