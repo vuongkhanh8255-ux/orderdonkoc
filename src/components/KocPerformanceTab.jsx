@@ -319,23 +319,6 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
   const save = async () => {
     const sn = (staff || '').trim(); if (!sn) return;
     setBusy(true);
-    // RULE cooldown 30 ngày: KOC bị GỠ khỏi NS này thì 30 ngày sau mới gắn lại cho NS đó được
-    // (chống gỡ-rồi-gắn-lại để reset bộ đếm 45 ngày).
-    try {
-      const cutoff = new Date(Date.now() - 30 * 86400000).toISOString();
-      const { data: recentRm } = await supabase.from(HIST_TABLE)
-        .select('created_at').eq('koc_id', username).eq('brand_name', brand)
-        .eq('staff_name', sn).eq('action', 'remove').gte('created_at', cutoff)
-        .order('created_at', { ascending: false }).limit(1);
-      if (recentRm && recentRm.length) {
-        const rmAt = new Date(recentRm[0].created_at);
-        const canAt = new Date(rmAt.getTime() + 30 * 86400000);
-        const daysLeft = Math.max(1, Math.ceil((canAt - Date.now()) / 86400000));
-        setBusy(false);
-        alert(`⛔ @${username} vừa bị gỡ khỏi ${sn} ngày ${rmAt.toLocaleDateString('vi-VN')}.\nPhải chờ đủ 30 ngày — còn ${daysLeft} ngày nữa (tới ${canAt.toLocaleDateString('vi-VN')}) mới gắn lại cho ${sn} được.`);
-        return;
-      }
-    } catch { /* lỗi check thì cho gán (không chặn cứng) */ }
     const nowIso = new Date().toISOString();
     const record = isAdmin
       ? { koc_id: username, brand_name: brand, staff_name: sn, assigned_at: assignment?.assigned_at || nowIso, updated_at: nowIso, status: 'approved', approved_by: me, approved_at: nowIso, proposed_by: assignment?.proposed_by || null, proposed_at: assignment?.proposed_at || null }
@@ -604,6 +587,16 @@ export default function KocPerformanceTab() {
   // Nạp lại cảnh báo mỗi khi số liệu shop tải xong → warnMap luôn khớp DB mới nhất (chống hiện cảnh báo cũ)
   useEffect(() => { if (data) reloadWarnings(); }, [data, reloadWarnings]);
   const refreshAssign = useCallback(() => { reloadAssignments(); reloadWarnings(); }, [reloadAssignments, reloadWarnings]);
+  // Đồng bộ TAG ORDER từ đơn mẫu (bấm tay = ngay; hệ thống cũng tự chạy mỗi giờ qua pg_cron).
+  const runSyncOrderTags = useCallback(async () => {
+    setSyncingTags(true); setSyncTagMsg('');
+    const { data, error } = await supabase.rpc('sync_order_tags', { p_days: 30 });
+    setSyncingTags(false);
+    if (error) { setSyncTagMsg('⚠️ Lỗi đồng bộ: ' + error.message); return; }
+    const n = Number(data) || 0;
+    setSyncTagMsg(n > 0 ? `✅ Vừa tự gắn ${n} tag order mới từ đơn mẫu.` : '✅ Đã bám sát đơn — không có tag mới.');
+    refreshAssign();
+  }, [refreshAssign]);
   // ĐỀ XUẤT GỠ theo HẠN limit_days (RPC koc_assignment_warnings):
   //  · TAG ORDER (KOC chưa air clip nào) -> hạn 30 ngày kể từ gắn tag.
   //  · Tag thường (KOC đã có clip) -> hạn 45 ngày kể từ AIR GẦN NHẤT (air là gia hạn, bất kể ngày gắn tag).
@@ -625,6 +618,8 @@ export default function KocPerformanceTab() {
   const [onlyUnassigned, setOnlyUnassigned] = useState(false);
   const [hideBlacklist, setHideBlacklist] = useState(false); // ẩn hết KOC blacklist khỏi lưới
   const [orderOpen, setOrderOpen] = useState(null); // koc đang mở chi tiết đơn mẫu trong list GỠ
+  const [syncingTags, setSyncingTags] = useState(false); // đang chạy sync_order_tags
+  const [syncTagMsg, setSyncTagMsg] = useState('');       // kết quả lần sync gần nhất
   useEffect(() => {
     (async () => { // blacklist 888 kênh, sắp vượt trần 1000 dòng/lượt của Supabase → đọc theo trang
       let all = [];
@@ -936,6 +931,19 @@ export default function KocPerformanceTab() {
             <br /><b style={{ color: '#7c3aed' }}>⏱️ Tag order có hạn 30 NGÀY phải lên clip</b> (khác 45 ngày của KOC đã có clip) — quá hạn mà chưa air sẽ vào danh sách đề xuất gỡ.
             {currentUser?.role === 'admin' ? ' Bạn gán là duyệt luôn 🟢.' : ' Bạn gửi đề xuất 🟡, admin duyệt sau.'}
           </div>
+          {/* TỰ ĐỘNG: NS order KOC (chưa air) → hệ thống tự gắn tag order cho NS đó. Chạy mỗi giờ + nút bấm tay. */}
+          {currentUser?.role === 'admin' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
+              <div style={{ fontSize: '0.78rem', color: '#065f46', lineHeight: 1.45, flex: '1 1 320px' }}>
+                🤖 <b>Tự động gắn tag order</b>: bạn nào order mẫu cho KOC (chưa air cho brand đó) → hệ thống <b>tự gắn tag cho bạn đó</b>, hạn 30 ngày. <span style={{ color: '#059669' }}>Tự chạy mỗi giờ</span> — không cần gắn tay nữa.
+              </div>
+              <button onClick={runSyncOrderTags} disabled={syncingTags}
+                style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: '#10b981', color: '#fff', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', opacity: syncingTags ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+                {syncingTags ? 'Đang đồng bộ…' : '🔄 Đồng bộ ngay'}
+              </button>
+              {syncTagMsg && <div style={{ fontSize: '0.78rem', color: syncTagMsg.startsWith('⚠️') ? '#dc2626' : '#059669', fontWeight: 700, flexBasis: '100%' }}>{syncTagMsg}</div>}
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
             <input value={newKocQ} onChange={e => setNewKocQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchNewKoc()}
               placeholder="@kênh TikTok (vd: heomoi1707) hoặc dán link kênh…" style={{ ...inputStyle, flex: '1 1 340px', minWidth: 260, padding: '11px 14px', fontSize: '0.9rem' }} />
