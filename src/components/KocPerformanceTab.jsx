@@ -1276,8 +1276,8 @@ export default function KocPerformanceTab() {
                                     : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8, border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', fontWeight: 800, fontSize: '0.73rem' }}>📦 CHƯA gửi mẫu brand này — kiểm tra NS có gửi hàng không</span>}
                                   {open && Array.isArray(od?.recent) && od.recent.length > 0 && (
                                     <div style={{ marginTop: 6, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '7px 11px' }}>
-                                      <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700, marginBottom: 3 }}>Đơn mẫu gần đây (ngày · ai order):</div>
-                                      {od.recent.map((o, ix) => (
+                                      <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700, marginBottom: 3 }}>Đơn mẫu gần nhất (ngày · ai order):</div>
+                                      {od.recent.slice(0, 1).map((o, ix) => (
                                         <div key={ix} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '2px 0', fontSize: '0.73rem', color: '#334155', flexWrap: 'wrap' }}>
                                           <b style={{ color: '#0f172a' }}>{o.d}</b>
                                           <span>· order bởi <b style={{ color: '#7c3aed' }}>{o.ns}</b></span>
