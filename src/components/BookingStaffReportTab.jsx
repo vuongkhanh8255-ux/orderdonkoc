@@ -321,6 +321,16 @@ function StaffDetailPanel({ r, range, bg }) {
       .then(({ data }) => { if (alive) setCastVids(data || []); }, () => { if (alive) setCastVids([]); });
     return () => { alive = false; };
   }, [r.ten_nhansu, range.start, range.end]);
+  // ── TAG ORDER: KOC nhân sự này được tự gắn tag khi order (chưa air) → theo dõi đã lên clip chưa ──
+  // Trạng thái HIỆN TẠI (không theo kỳ) — RPC staff_order_tags.
+  const [orderTags, setOrderTags] = useState(null);   // null = đang tải
+  const [otWaitOnly, setOtWaitOnly] = useState(false); // chỉ hiện KOC chưa lên clip
+  useEffect(() => {
+    let alive = true; setOrderTags(null);
+    supabase.rpc('staff_order_tags', { p_staff: r.ten_nhansu })
+      .then(({ data }) => { if (alive) setOrderTags(data || []); }, () => { if (alive) setOrderTags([]); });
+    return () => { alive = false; };
+  }, [r.ten_nhansu]);
   // ── Link air của nhân sự (mấy bạn đã điền ở Quản lý link air) — HIỆN FULL từ trước tới giờ, KHÔNG theo kỳ ──
   // Phân trang + tìm kiếm PHÍA SERVER (né trần 1000 rows của Supabase; NS có thể có vài chục nghìn link)
   const [airRows, setAirRows] = useState(null);   // rows trang hiện tại (null = đang tải)
@@ -359,6 +369,20 @@ function StaffDetailPanel({ r, range, bg }) {
     return { txt: `${dateLabel(deadline)} · còn ${daysLeft}d`, color: aired ? '#16a34a' : '#d97706', warn: false };
   };
   const warnCount = kocs.filter(k => tagInfo(k).warn).length;
+  // Trạng thái 1 tag order (đã lên clip / chờ / quá hạn)
+  const otStatus = (t) => {
+    if (t.aired) {
+      const conv = t.first_air ? Math.max(0, Math.round((new Date(t.first_air) - new Date(t.tag_date)) / 86400000)) : null;
+      return { group: 'aired', color: '#16a34a', bg: '#f0fdf4', txt: `✅ Đã lên clip${t.first_air ? ' ' + dateLabel(t.first_air) : ''}${conv != null ? ` · ${conv}d sau order` : ''}` };
+    }
+    const left = 30 - (t.days_since_tag ?? 0);
+    if (left < 0) return { group: 'over', color: '#dc2626', bg: '#fef2f2', txt: `⚠️ Quá hạn ${-left}d · chưa lên clip` };
+    return { group: 'wait', color: '#d97706', bg: '#fffbeb', txt: `⏳ Chờ lên clip · còn ${left}d` };
+  };
+  const otList = Array.isArray(orderTags) ? orderTags : [];
+  const otCnt = { aired: 0, wait: 0, over: 0 };
+  otList.forEach(t => { otCnt[otStatus(t).group]++; });
+  const otShown = otWaitOnly ? otList.filter(t => otStatus(t).group !== 'aired') : otList;
   // Phân trang bảng Top KOC (RPC trả đủ — chỉ chia trang ở UI)
   const [kocPage, setKocPage] = useState(1);
   useEffect(() => { setKocPage(1); }, [onlyWarn, r.nhansu_id, range.start, range.end]);
@@ -570,6 +594,57 @@ function StaffDetailPanel({ r, range, bg }) {
                 </div>
               )}
             </div>
+          </Section>
+
+          {/* ═══ 2b. TAG ORDER — KOC order-tag tự động, theo dõi đã lên clip chưa ═══ */}
+          <Section icon="🏷️" title="Tag order" hint={`${otList.length} KOC · tự gắn khi order`} accent={{ bg: '#f5f3ff', fg: '#6d28d9' }}>
+            <div style={{ fontSize: '0.76rem', color: '#64748b', lineHeight: 1.5, marginTop: -4 }}>
+              KOC bạn <b>{r.ten_nhansu}</b> đã <b>order mẫu</b> nhưng <b>chưa từng air</b> → hệ thống tự gắn tag (hạn 30 ngày). Lên clip trong hạn → tự thành <b>tag quản lý</b>, bạn được ghi nhận video. Quá hạn chưa air → vào <b>đề xuất gỡ</b>. <span style={{ color: '#94a3b8' }}>(trạng thái hiện tại, không theo kỳ)</span>
+            </div>
+            {/* summary chips */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ padding: '4px 12px', borderRadius: 999, background: '#f1f5f9', color: '#475569', fontWeight: 800, fontSize: '0.76rem' }}>Tổng {otList.length}</span>
+              <span style={{ padding: '4px 12px', borderRadius: 999, background: '#fffbeb', color: '#d97706', fontWeight: 800, fontSize: '0.76rem' }}>⏳ Chờ lên clip {otCnt.wait}</span>
+              <span style={{ padding: '4px 12px', borderRadius: 999, background: '#fef2f2', color: '#dc2626', fontWeight: 800, fontSize: '0.76rem' }}>⚠️ Quá hạn {otCnt.over}</span>
+              <span style={{ padding: '4px 12px', borderRadius: 999, background: '#f0fdf4', color: '#16a34a', fontWeight: 800, fontSize: '0.76rem' }}>✅ Đã lên clip {otCnt.aired}</span>
+              {otList.length > 0 && (
+                <button onClick={() => setOtWaitOnly(v => !v)}
+                  style={{ marginLeft: 'auto', padding: '4px 12px', borderRadius: 8, border: `1px solid ${otWaitOnly ? '#6d28d9' : '#ddd6fe'}`, background: otWaitOnly ? '#6d28d9' : '#fff', color: otWaitOnly ? '#fff' : '#6d28d9', fontWeight: 700, fontSize: '0.74rem', cursor: 'pointer' }}>
+                  Chỉ chưa lên clip{otWaitOnly ? ' ✕' : ''}
+                </button>
+              )}
+            </div>
+            {orderTags === null ? <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>⏳ Đang tải...</div>
+              : otList.length === 0 ? <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Chưa có tag order nào (bạn này chưa order KOC mới, hoặc KOC đã air hết).</div>
+              : (
+                <div style={{ overflowX: 'auto', maxHeight: 420, overflowY: 'auto', border: '1px solid #f1f5f9', borderRadius: 10 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead><tr style={{ position: 'sticky', top: 0, background: '#faf5ff', zIndex: 1 }}>
+                      <th style={{ ...th, padding: '8px' }}>#</th>
+                      <th style={{ ...th, padding: '8px', width: '100%' }}>KOC</th>
+                      <th style={{ ...th, padding: '8px' }}>Brand</th>
+                      <th style={{ ...th, padding: '8px', textAlign: 'center' }} title="Ngày order gần nhất = mốc tính 30 ngày">📦 Ngày order</th>
+                      <th style={{ ...th, padding: '8px', textAlign: 'center' }}>Trạng thái lên clip</th>
+                    </tr></thead>
+                    <tbody>
+                      {otShown.map((t, i) => {
+                        const st = otStatus(t);
+                        return (
+                          <tr key={t.koc_id + '|' + t.brand_name}>
+                            <td style={{ ...td, padding: '9px 8px', color: '#94a3b8', fontWeight: 700 }}>{i + 1}</td>
+                            <td style={{ ...td, padding: '9px 8px', width: '100%' }}><a href={`https://www.tiktok.com/@${t.koc_id}`} target="_blank" rel="noreferrer" style={{ color: '#475569', textDecoration: 'none', fontWeight: 600 }}>@{t.koc_id}</a></td>
+                            <td style={{ ...td, padding: '9px 8px', fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>{t.brand_name}</td>
+                            <td style={{ ...td, padding: '9px 8px', textAlign: 'center', fontSize: '0.76rem', color: '#64748b' }}>{dateLabel(t.tag_date)}</td>
+                            <td style={{ ...td, padding: '9px 8px', textAlign: 'center' }}>
+                              <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 999, background: st.bg, color: st.color, fontWeight: 700, fontSize: '0.74rem', whiteSpace: 'nowrap' }}>{st.txt}</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
           </Section>
 
           {/* ═══ 3. CAST ═══ */}
