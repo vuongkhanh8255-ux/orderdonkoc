@@ -468,6 +468,7 @@ const OrderTab = ({ currentUser } = {}) => {
 
     // ── CHẶN ORDER KÊNH YẾU: cào view 7 video mới (bỏ video ghim), < 1500 → không cho tạo đơn ──
     const VIEW_GATE_ON = true;                       // cờ bật/tắt (đổi false = về y như cũ, không chặn)
+    const ORDER_LOCK_ON = true;                      // Bước 3: khóa order KOC đang nợ clip brand đó (đổi false = tắt khóa)
     const [chanView, setChanView] = useState(null);  // { loading, username, total_view, video_count, dat, videos, err, nguong }
     const normKenh = (k) => String(k || '').trim().replace(/^@/, '').replace(/.*tiktok\.com\/@?/i, '').replace(/[/?#].*$/, '').toLowerCase();
     const checkChannelView = async (raw) => {
@@ -744,6 +745,20 @@ const OrderTab = ({ currentUser } = {}) => {
         if (conflict) {
             alert(`🚫 Kênh "${idKenh}" đã được "${conflict.staff_name}" gắn brand "${conflict.brand_name}" ở Hiệu suất KOC.\nKhông gửi sản phẩm brand này cho kênh này nữa (có thể gửi brand KHÁC).`);
             return;
+        }
+
+        // #4 (Bước 3 — khóa NỢ CLIP, Rule 2): KOC đã order brand này mà CHƯA ra clip mới → CHẶN order thêm brand đó cho tới khi lên clip.
+        //   Chống trick "cứ order để kéo gia hạn". Áp cho CẢ chính chủ (brand-lock ở trên đã chặn nhân sự khác).
+        if (ORDER_LOCK_ON) {
+            try {
+                const { data: owed } = await supabase.rpc('koc_owes_clip_brands', { p_channel: idKenh });
+                const hit = (owed || []).find(o => orderBrands.includes(normBrand(o.brand_norm)));
+                if (hit) {
+                    const over = Number(hit.days_over) || 0;
+                    alert(`🚫 KOC "@${normK(idKenh)}" đang NỢ CLIP brand "${hit.brand_name}" — đã order ${over} ngày trước mà CHƯA ra clip mới.\n\nKhông order thêm sản phẩm brand này cho KOC tới khi bạn ấy LÊN CLIP.${over > 30 ? '\n⚠️ Đã quá 30 ngày — nghi ÔM MẪU, báo quản lý!' : `\n(còn ${30 - over} ngày để trả clip)`}\n\n👉 Order brand KHÁC cho KOC này thì vẫn được.`);
+                    return;
+                }
+            } catch (err) { /* RPC lỗi thì không chặn, cho tạo đơn bình thường */ }
         }
 
         // ⚠️ Đơn bất thường → bắt xác nhận lại 1 lần nữa (tránh kế toán phải hỏi lại):
