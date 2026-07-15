@@ -390,7 +390,7 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
   // ── TAG ORDER: KOC nhân sự này được tự gắn tag khi order (chưa air) → theo dõi đã lên clip chưa ──
   // Trạng thái HIỆN TẠI (không theo kỳ) — RPC staff_order_tags.
   const [orderTags, setOrderTags] = useState(null);   // null = đang tải
-  const [otWaitOnly, setOtWaitOnly] = useState(false); // chỉ hiện KOC chưa lên clip
+  const [otFilter, setOtFilter] = useState('all'); // lọc panel tag order: all | wait | over | aired | old
   useEffect(() => {
     let alive = true; setOrderTags(null);
     supabase.rpc('staff_order_tags', { p_staff: r.ten_nhansu })
@@ -406,7 +406,7 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
   const [airPage, setAirPage] = useState(1);
   const AIR_PER = 20;
   useEffect(() => { const t = setTimeout(() => { setAirQ(airSearch.trim()); setAirPage(1); }, 400); return () => clearTimeout(t); }, [airSearch]);
-  useEffect(() => { setAirPage(1); }, [r.nhansu_id]);
+  useEffect(() => { setAirPage(1); setOtFilter('all'); }, [r.nhansu_id]);
   useEffect(() => {
     let alive = true; setAirRows(null);
     supabase.rpc('staff_air_links', { p_nhansu_id: r.nhansu_id, p_search: airQ || null, p_limit: AIR_PER, p_offset: (airPage - 1) * AIR_PER })
@@ -452,7 +452,10 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
   const otList = Array.isArray(orderTags) ? orderTags : [];
   const otCnt = { aired: 0, wait: 0, over: 0 };
   otList.forEach(t => { otCnt[otStatus(t).group]++; });
-  const otShown = otWaitOnly ? otList.filter(t => otStatus(t).group !== 'aired') : otList;
+  const otOld = otList.filter(t => t.aired_before).length;
+  const otShown = otList.filter(t => otFilter === 'all' ? true
+    : otFilter === 'old' ? t.aired_before
+    : otStatus(t).group === otFilter);
   // Phân trang bảng Top KOC (RPC trả đủ — chỉ chia trang ở UI)
   const [kocPage, setKocPage] = useState(1);
   useEffect(() => { setKocPage(1); }, [onlyWarn, r.nhansu_id, range.start, range.end]);
@@ -681,19 +684,29 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
             <div style={{ fontSize: '0.76rem', color: '#64748b', lineHeight: 1.5, marginTop: -4 }}>
               TẤT CẢ KOC bạn <b>{r.ten_nhansu}</b> đã <b>order từ tháng 7</b> — theo dõi ai <b>đã lên clip</b> ai <b>chưa</b> (hạn 30 ngày ra clip MỚI kể từ ngày order). Quá hạn chưa clip → <b style={{ color: '#dc2626' }}>nghi ôm mẫu</b>. Nhãn <b style={{ color: '#0891b2' }}>🔁 cũ</b> = KOC đã air brand này TRƯỚC khi order (KOC quen); không nhãn = KOC mới. <span style={{ color: '#94a3b8' }}>(mốc = ngày order gần nhất)</span>
             </div>
-            {/* summary chips */}
+            {/* summary chips — BẤM để lọc bảng (bấm lại = bỏ lọc) */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ padding: '4px 12px', borderRadius: 999, background: '#f1f5f9', color: '#475569', fontWeight: 800, fontSize: '0.76rem' }}>Tổng {otList.length}</span>
-              <span style={{ padding: '4px 12px', borderRadius: 999, background: '#fffbeb', color: '#d97706', fontWeight: 800, fontSize: '0.76rem' }}>⏳ Chờ lên clip {otCnt.wait}</span>
-              <span style={{ padding: '4px 12px', borderRadius: 999, background: '#fef2f2', color: '#dc2626', fontWeight: 800, fontSize: '0.76rem' }}>⚠️ Quá hạn {otCnt.over}</span>
-              <span style={{ padding: '4px 12px', borderRadius: 999, background: '#f0fdf4', color: '#16a34a', fontWeight: 800, fontSize: '0.76rem' }}>✅ Đã lên clip {otCnt.aired}</span>
-              <span style={{ padding: '4px 12px', borderRadius: 999, background: '#ecfeff', color: '#0891b2', fontWeight: 800, fontSize: '0.76rem' }} title="KOC đã air brand này trước khi order (KOC quen)">🔁 KOC cũ {otList.filter(t => t.aired_before).length}</span>
-              {otList.length > 0 && (
-                <button onClick={() => setOtWaitOnly(v => !v)}
-                  style={{ marginLeft: 'auto', padding: '4px 12px', borderRadius: 8, border: `1px solid ${otWaitOnly ? '#6d28d9' : '#ddd6fe'}`, background: otWaitOnly ? '#6d28d9' : '#fff', color: otWaitOnly ? '#fff' : '#6d28d9', fontWeight: 700, fontSize: '0.74rem', cursor: 'pointer' }}>
-                  Chỉ chưa lên clip{otWaitOnly ? ' ✕' : ''}
-                </button>
-              )}
+              {(() => {
+                const chip = (key, label, count, fg, bg, title) => {
+                  const on = otFilter === key;
+                  const clickable = key === 'all' || count > 0;
+                  return (
+                    <button key={key} onClick={() => clickable && setOtFilter(on ? 'all' : key)} title={title || 'Bấm để lọc'}
+                      style={{ padding: '4px 12px', borderRadius: 999, border: on ? `2px solid ${fg}` : '2px solid transparent',
+                        background: on ? fg : bg, color: on ? '#fff' : fg, fontWeight: 800, fontSize: '0.76rem',
+                        cursor: clickable ? 'pointer' : 'default', opacity: clickable ? 1 : 0.5 }}>
+                      {label} {count}{on ? ' ✕' : ''}
+                    </button>
+                  );
+                };
+                return <>
+                  {chip('all', 'Tổng', otList.length, '#475569', '#f1f5f9')}
+                  {chip('wait', '⏳ Chờ lên clip', otCnt.wait, '#d97706', '#fffbeb')}
+                  {chip('over', '⚠️ Quá hạn', otCnt.over, '#dc2626', '#fef2f2')}
+                  {chip('aired', '✅ Đã lên clip', otCnt.aired, '#16a34a', '#f0fdf4')}
+                  {chip('old', '🔁 KOC cũ', otOld, '#0891b2', '#ecfeff', 'KOC đã air brand này trước khi order (KOC quen)')}
+                </>;
+              })()}
             </div>
             {orderTags === null ? <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>⏳ Đang tải...</div>
               : otList.length === 0 ? <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Bạn này chưa order KOC nào từ tháng 7.</div>
