@@ -74,6 +74,10 @@ function BookingStaffReportTab() {
     budgetRemainingByStaff(String(range.end).slice(0, 7)).then(b => { if (alive) setBudgetByStaff(b); }, () => {});
     return () => { alive = false; };
   }, [range.end]);
+  // TỶ LỆ TRẢ CLIP: trên KOC nhân sự quản lý, bao nhiêu % đã air (thấp = cảnh báo)
+  const [clipRatio, setClipRatio] = useState([]);
+  const [clipOpen, setClipOpen] = useState(true);
+  useEffect(() => { supabase.rpc('staff_clip_ratio').then(({ data }) => setClipRatio(data || [])).catch(() => {}); }, []);
 
   // Danh sách THÁNG (từ T3/2026 → nay) + chọn 1 tháng = lọc trọn tháng đó (khớp Tạm đối chiếu).
   const MONTHS = useMemo(() => {
@@ -156,6 +160,53 @@ function BookingStaffReportTab() {
     <div style={wrap}>
       <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', margin: '0 0 4px' }}>📑 Báo Cáo Nhân Sự — Booking</h2>
       <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: '0 0 18px' }}>Gửi hàng · Hiệu suất KOC · CAST — lọc theo khoảng ngày, so với kỳ trước cùng độ dài.</p>
+
+      {/* TỶ LỆ TRẢ CLIP theo nhân sự — KOC order/quản lý mà chưa air = nợ clip */}
+      {clipRatio.length > 0 && (
+        <div style={{ ...card, marginBottom: 18, overflow: 'hidden' }}>
+          <div onClick={() => setClipOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', cursor: 'pointer', background: '#fff7ed', borderBottom: clipOpen ? '1px solid #fed7aa' : 'none' }}>
+            <span style={{ color: '#c2410c' }}>{clipOpen ? '▼' : '▶'}</span>
+            <span style={{ fontWeight: 800, color: '#9a3412', fontSize: '0.98rem' }}>🎬 Tỷ lệ trả clip theo nhân sự</span>
+            <span style={{ fontSize: '0.78rem', color: '#c2410c' }}>— KOC được gắn/order mà chưa air clip = nợ. Tỷ lệ thấp cần nhắc.</span>
+          </div>
+          {clipOpen && (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                <thead>
+                  <tr style={{ background: '#f8fafc' }}>
+                    {['Nhân sự', 'Tỷ lệ trả clip', 'Tổng KOC', 'Đã air', 'Chưa air (nợ)', 'Nợ quá 30 ngày'].map((h, i) => (
+                      <th key={h} style={{ padding: '9px 12px', textAlign: i === 0 ? 'left' : 'center', fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {clipRatio.map(r => {
+                    const pct = Number(r.ty_le) || 0;
+                    const c = pct < 15 ? '#dc2626' : pct < 30 ? '#d97706' : '#16a34a';
+                    return (
+                      <tr key={r.staff_name} style={{ borderTop: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '9px 12px', fontWeight: 700, color: '#0f172a' }}>{r.staff_name}</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
+                            <div style={{ width: 70, height: 8, background: '#f1f5f9', borderRadius: 5, overflow: 'hidden' }}>
+                              <div style={{ width: pct + '%', height: '100%', background: c, borderRadius: 5 }} />
+                            </div>
+                            <b style={{ color: c, minWidth: 42, textAlign: 'right' }}>{pct}%</b>
+                          </div>
+                        </td>
+                        <td style={{ padding: '9px 12px', textAlign: 'center', fontWeight: 700 }}>{r.tong}</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'center', color: '#16a34a', fontWeight: 700 }}>{r.da_air}</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'center', color: '#d97706', fontWeight: 700 }}>{r.chua_air}</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'center' }}>{r.no_qua_han > 0 ? <span style={{ background: '#fef2f2', color: '#dc2626', fontWeight: 800, borderRadius: 6, padding: '2px 8px' }}>⚠️ {r.no_qua_han}</span> : <span style={{ color: '#94a3b8' }}>0</span>}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Filters */}
       <div style={{ ...card, padding: '14px 16px', marginBottom: 18, display: 'flex', gap: 14, alignItems: 'flex-end', flexWrap: 'wrap' }}>
