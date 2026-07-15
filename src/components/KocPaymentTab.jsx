@@ -149,11 +149,11 @@ const KocPaymentTab = () => {
   useEffect(() => { load(); }, [load]);
 
   // NGÀY AIR THẬT của video (post_date) lấy từ tiktok_shop_videos — khớp video_id bóc từ link air.
-  // Dùng để ƯU TIÊN đề xuất TT cho KOC nào air SỚM NHẤT (chờ lâu nhất), thay vì ngày NHẬP đơn.
+  // Dùng để: (1) hiện cột "Ngày" = ngày air thật (thay vì ngày nhập đơn), (2) sắp thứ tự bảng mới air nhất trên đầu,
+  // (3) ƯU TIÊN đề xuất TT cho KOC nào air SỚM NHẤT (chờ lâu nhất). Cần cho MỌI đơn (kể cả đã TT), không chỉ đơn chưa TT.
   const [airDateMap, setAirDateMap] = useState({});   // { video_id: 'YYYY-MM-DD' }
   useEffect(() => {
-    // Chỉ cần ngày air của đơn CHƯA thanh toán (đó là tập dùng để đề xuất) → tải nhanh, gọn.
-    const ids = [...new Set(rows.filter(r => !r.paid).flatMap(r => extractVideoIds(r.air_link)))];
+    const ids = [...new Set(rows.flatMap(r => extractVideoIds(r.air_link)))];
     if (!ids.length) { setAirDateMap({}); return; }
     let alive = true;
     (async () => {
@@ -166,6 +166,13 @@ const KocPaymentTab = () => {
     })();
     return () => { alive = false; };
   }, [rows]);
+  // NGÀY AIR của đơn: sớm nhất trong các video (post_date) → air_date_manual (điền tay) → created_at (dự phòng khi chưa có).
+  const airDateOf = useCallback((r) => {
+    const ds = extractVideoIds(r.air_link).map(v => airDateMap[v]).filter(Boolean);
+    if (ds.length) return ds.slice().sort()[0].slice(0, 10);         // video air SỚM NHẤT của đơn
+    if (r.air_date_manual) return String(r.air_date_manual).slice(0, 10);
+    return String(r.created_at || r.pay_date || '').slice(0, 10);
+  }, [airDateMap]);
 
   // Map TẤT CẢ video id -> đơn (cảnh báo trùng, kể cả khác tháng). Reload sau mỗi load.
   const loadVidMap = useCallback(async () => {
@@ -442,7 +449,7 @@ const KocPaymentTab = () => {
   const filtered = useMemo(() => {
     const kw = q.trim().toLowerCase();
     const mr = (ym !== 'all') ? monthRange(ym) : null;
-    return rows.filter(r => {
+    const out = rows.filter(r => {
       const d = (r.pay_date || '').slice(0, 10);
       // Đang search → tìm TẤT CẢ tháng (bỏ lọc tháng). Không search → đúng tháng đã chọn.
       const monthOk = kw ? true : (!mr || (d >= mr.start && d < mr.end));
@@ -455,7 +462,9 @@ const KocPaymentTab = () => {
         (!fFrom || d >= fFrom) && (!fTo || d <= fTo) &&
         (!kw || [r.full_name, r.beneficiary, r.channel_link, r.air_link, r.bank_account, r.staff].some(v => (v || '').toLowerCase().includes(kw)));
     });
-  }, [rows, ym, fCompany, fBrand, fStaff, fApproved, fPaid, fFrom, fTo, q]);
+    // Sắp theo NGÀY AIR THẬT (mới nhất trên đầu, cũ nhất dưới cùng) — áp dụng cho MỌI dòng kể cả đã thanh toán.
+    return out.sort((a, b) => airDateOf(b).localeCompare(airDateOf(a)));
+  }, [rows, ym, fCompany, fBrand, fStaff, fApproved, fPaid, fFrom, fTo, q, airDateOf]);
 
   // Đổi bộ lọc thì về trang 1
   useEffect(() => { setPayPage(1); }, [ym, fCompany, fBrand, fStaff, fApproved, fPaid, fFrom, fTo, q]);
@@ -502,7 +511,7 @@ const KocPaymentTab = () => {
     //   ngân sách gồm đơn tháng khác bị rớt âm thầm → lệch chứng từ). Không tick gì → xuất theo bộ lọc.
     const source = Array.isArray(explicit) ? explicit : (selected.size > 0 ? rows.filter(r => selected.has(r.id)) : filtered);
     const data = source.map(r => ({
-      'NGÀY': fmtDate(r.pay_date), 'NHÂN SỰ': r.staff || '', 'CÔNG TY': r.company || '', 'BRAND': r.brand || '',
+      'NGÀY AIR': fmtDate(airDateOf(r)), 'NHÂN SỰ': r.staff || '', 'CÔNG TY': r.company || '', 'BRAND': r.brand || '',
       'LINK KÊNH': r.channel_link || '', 'CAST (NET)': num(r.cast_net), 'PIT': num(r.pit), 'TỔNG': num(r.total),
       'SỐ TÀI KHOẢN': r.bank_account || '', 'NGÂN HÀNG': r.bank_name || '', 'NGƯỜI THỤ HƯỞNG': r.beneficiary || '',
       'HỌ VÀ TÊN': r.full_name || '', 'SỐ CCCD': r.cccd || '', 'MÃ SỐ THUẾ': r.tax_code || '',
@@ -574,13 +583,6 @@ const KocPaymentTab = () => {
   };
 
   // ══════════ ĐỀ XUẤT THANH TOÁN THEO NGÂN SÁCH ══════════
-  // NGÀY AIR của đơn: sớm nhất trong các video (post_date) → air_date_manual (điền tay) → created_at (dự phòng khi chưa có).
-  const airDateOf = useCallback((r) => {
-    const ds = extractVideoIds(r.air_link).map(v => airDateMap[v]).filter(Boolean);
-    if (ds.length) return ds.slice().sort()[0].slice(0, 10);         // video air SỚM NHẤT của đơn
-    if (r.air_date_manual) return String(r.air_date_manual).slice(0, 10);
-    return String(r.created_at || r.pay_date || '').slice(0, 10);
-  }, [airDateMap]);
   // Ưu tiên KOC có video AIR SỚM NHẤT trước (chờ lâu nhất). Hoà thì theo ngày nhập đơn.
   const byUrgency = useCallback((a, b) =>
     airDateOf(a).localeCompare(airDateOf(b)) || String(a.created_at || '').localeCompare(String(b.created_at || '')),
@@ -1038,7 +1040,7 @@ const KocPaymentTab = () => {
             <thead>
               <tr>
                 <th style={{ ...th, textAlign: 'center', width: 34 }}><input type="checkbox" checked={allVisibleSelected} onChange={toggleSelAll} title="Chọn tất cả dòng đang hiện" style={{ width: 16, height: 16, cursor: 'pointer' }} /></th>
-                <th style={th}>Ngày</th><th style={th}>Nhân sự</th><th style={th}>Cty</th><th style={th}>Brand</th><th style={th}>ID kênh</th>
+                <th style={th} title="Ngày air thật của video (bóc từ link air), không phải ngày nhập đơn">Ngày air</th><th style={th}>Nhân sự</th><th style={th}>Cty</th><th style={th}>Brand</th><th style={th}>ID kênh</th>
                 <th style={th}>Họ tên</th><th style={th}>CCCD</th><th style={th}>MST</th><th style={th}>Số TK</th><th style={th}>Ngân hàng</th>
                 <th style={{ ...th, textAlign: 'right' }}>Cast</th><th style={{ ...th, textAlign: 'right' }}>PIT</th><th style={{ ...th, textAlign: 'right' }}>Tổng</th>
                 <th style={{ ...th, textAlign: 'center' }}>Link</th><th style={{ ...th, textAlign: 'center' }}>Đã TT</th><th style={{ ...th, textAlign: 'center' }}>⚙️</th>
@@ -1050,7 +1052,7 @@ const KocPaymentTab = () => {
                 : pageRows.map((r, i) => (
                   <tr key={r.id} style={{ background: (missingFields(r).length && !r.paid) ? '#fff1f2' : (missingFields(r).length && r.paid) ? '#fffbeb' : selected.has(r.id) ? '#eff6ff' : r.paid ? '#fff7ed' : (i % 2 ? '#fcfcfd' : '#fff'), boxShadow: (missingFields(r).length && !r.paid) ? 'inset 4px 0 0 #ef4444' : (missingFields(r).length && r.paid) ? 'inset 4px 0 0 #f59e0b' : 'none' }}>
                     <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSel(r.id)} style={{ width: 15, height: 15, cursor: 'pointer' }} /></td>
-                    <td style={td}>{fmtDate(r.pay_date)}</td>
+                    <td style={td}>{fmtDate(airDateOf(r))}</td>
                     <td style={td}>{r.staff || '—'}</td>
                     <td style={td}><span style={{ fontSize: '0.72rem', fontWeight: 700, color: r.company === 'OPTIMAX' ? '#7c3aed' : '#0891b2' }}>{r.company || '—'}</span></td>
                     <td style={td}>{(() => { const w = brandWarnMap[r.id]; if (!w) return r.brand || '—'; const shops = [...new Set(w.map(x => x.link_shop))].join(', '); return <span title={`⚠️ Điền brand "${r.brand || '(trống)'}" nhưng link bán ở: ${shops}. Sửa lại brand cho khớp (cast đã tính đúng theo link).`} style={{ color: '#c2410c', fontWeight: 700, cursor: 'help' }}>⚠️ {r.brand || '—'}</span>; })()}</td>
