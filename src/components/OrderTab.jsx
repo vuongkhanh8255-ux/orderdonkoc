@@ -433,8 +433,9 @@ const OrderTab = ({ currentUser } = {}) => {
         chartNhanSu, setChartNhanSu, chartData, isChartLoading
     } = useAppData();
 
-    // ── KHÓA NHÂN SỰ theo account (Khánh 14/7): account booking_staff chỉ order dưới TÊN MÌNH ──
-    const lockedStaff = currentUser?.staff || null;   // tên nhân sự gắn với account (nếu là account cá nhân)
+    // ── KHÓA NHÂN SỰ theo account (Khánh 14/7): account cá nhân chỉ order + coi đơn dưới TÊN MÌNH.
+    //    Trừ 3 sếp nhóm có seeAll (Thu Thảo/Minh Thảo/Hoàng Vy) → coi HẾT + chọn tên bất kỳ như cũ.
+    const lockedStaff = (currentUser?.staff && !currentUser?.seeAll) ? currentUser.staff : null;
     const lockedStaffId = useMemo(() => {
         if (!lockedStaff) return null;
         const m = (nhanSus || []).find(n => (n.ten_nhansu || '').trim() === lockedStaff.trim());

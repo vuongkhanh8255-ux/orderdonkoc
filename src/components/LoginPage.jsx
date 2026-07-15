@@ -167,12 +167,13 @@ export const ACCOUNTS = [
     { username: 'minhthu',    password: 'MinhThu@SK2025',  role: 'assistant',  name: 'Minh Thư'    },
     // ── BOOKING theo TỪNG NHÂN SỰ (Khánh 14/7): mỗi người 1 account, order KHÓA theo tên mình,
     //    chỉ thao tác đơn/tag của mình. `staff` = ten_nhansu KHỚP CHÍNH XÁC bảng nhansu (để lọc quyền).
-    { username: 'thuthao',   password: 'Kyn6t9#8', role: 'booking_staff', name: 'Thu Thảo',   staff: 'Thu Thảo'   },
-    { username: 'hoangvy',   password: 'Zb6#gm9z', role: 'booking_staff', name: 'Hoàng Vy',   staff: 'Hoàng Vy'   },
+    // seeAll: true = 3 sếp nhóm (Khánh 15/7) — coi HẾT đơn order + chọn tên bất kỳ (như account chung cũ).
+    { username: 'thuthao',   password: 'Kyn6t9#8', role: 'booking_staff', name: 'Thu Thảo',   staff: 'Thu Thảo',   seeAll: true },
+    { username: 'hoangvy',   password: 'Zb6#gm9z', role: 'booking_staff', name: 'Hoàng Vy',   staff: 'Hoàng Vy',   seeAll: true },
     { username: 'hoangvu',   password: 'Y2c55j@h', role: 'booking_staff', name: 'Hoàng Vũ',   staff: 'Hoàng Vũ'   },
     { username: 'trucquynh', password: 'Wi9jyy9$', role: 'booking_staff', name: 'Trúc Quỳnh', staff: 'Trúc Quỳnh' },
     { username: 'anhnhi',    password: 'Uzz3$ezy', role: 'booking_staff', name: 'Anh Nhi',    staff: 'Anh Nhi'    },
-    { username: 'minhthao',  password: 'Ymnvm36#', role: 'booking_staff', name: 'Minh Thảo',  staff: 'Minh Thảo'  },
+    { username: 'minhthao',  password: 'Ymnvm36#', role: 'booking_staff', name: 'Minh Thảo',  staff: 'Minh Thảo', seeAll: true },
     { username: 'tuongvi',   password: 'Vqi$6b6t', role: 'booking_staff', name: 'Tường Vi',   staff: 'Tường Vi'   },
     { username: 'ngocmai',   password: 'B9ak4q@7', role: 'booking_staff', name: 'Ngọc Mai',   staff: 'Ngọc Mai'   },
     { username: 'nguyenbao', password: 'Xm9xde7$', role: 'booking_staff', name: 'Nguyên Bảo', staff: 'Nguyên Bảo' },

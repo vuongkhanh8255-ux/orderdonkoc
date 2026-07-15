@@ -104,7 +104,7 @@ function App() {
       // sau lần đăng nhập trước (vd: thêm quyền 'đề xuất gán' cho ecom). Không bắt đăng nhập lại.
       const fresh = ACCOUNTS.find(a => a.username === saved.username);
       // Account bị VÔ HIỆU/xoá khỏi ACCOUNTS (vd 'booking' chung) → phiên cũ hết hiệu lực, bắt đăng nhập lại.
-      return fresh ? { ...saved, role: fresh.role, name: fresh.name, staff: fresh.staff } : null;
+      return fresh ? { ...saved, role: fresh.role, name: fresh.name, staff: fresh.staff, seeAll: fresh.seeAll } : null;
     } catch { return null; }
   });
 
