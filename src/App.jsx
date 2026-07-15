@@ -103,7 +103,8 @@ function App() {
       // Đồng bộ lại role/name từ ACCOUNTS theo username — role có thể đã được nâng cấp
       // sau lần đăng nhập trước (vd: thêm quyền 'đề xuất gán' cho ecom). Không bắt đăng nhập lại.
       const fresh = ACCOUNTS.find(a => a.username === saved.username);
-      return fresh ? { ...saved, role: fresh.role, name: fresh.name, staff: fresh.staff } : saved;
+      // Account bị VÔ HIỆU/xoá khỏi ACCOUNTS (vd 'booking' chung) → phiên cũ hết hiệu lực, bắt đăng nhập lại.
+      return fresh ? { ...saved, role: fresh.role, name: fresh.name, staff: fresh.staff } : null;
     } catch { return null; }
   });
 

@@ -150,7 +150,7 @@ const LoginPage = ({ onLogin }) => {
 export const ACCOUNTS = [
     { username: 'admin',        password: 'Admin@SK2025',    role: 'admin',      name: 'Admin Tổng'  },
     { username: 'khanhpro8255', password: 'Khanhpro@8255',   role: 'admin',      name: 'Khánh Pro'   },
-    { username: 'booking',    password: 'Booking@SK2025',  role: 'booking',    name: 'Booking'     },
+    // { username: 'booking', password: 'Booking@SK2025', role: 'booking', name: 'Booking' }, // VÔ HIỆU 14/7 — dời sang account cá nhân từng nhân sự (booking_staff)
     { username: 'cs',         password: 'CS@SK2025',       role: 'cs',         name: 'CS'          },
     { username: 'livestream', password: 'Live@SK2025',     role: 'livestream', name: 'Livestream'  },
     // ── Reviewer account (for Shopee/TikTok API review) ──
