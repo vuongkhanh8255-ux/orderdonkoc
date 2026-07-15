@@ -591,7 +591,7 @@ function StaffDetailPanel({ r, range, bg }) {
             {/* Top KOC table */}
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
-                <div style={{ fontWeight: 700, color: '#475569', fontSize: '0.85rem' }}>🏅 Top KOC theo GMV ({kocs.length})</div>
+                <div style={{ fontWeight: 700, color: '#475569', fontSize: '0.85rem' }} title="Hiện ĐỦ mọi KOC quản lý, xếp theo GMV (KOC chưa air = GMV 0 nằm cuối). 1 KOC làm nhiều brand = nhiều dòng.">🏅 KOC quản lý — xếp theo GMV <span style={{ fontWeight: 500, color: '#94a3b8' }}>({kocs.length} dòng · {new Set(kocs.map(k => k.uname)).size} KOC)</span></div>
                 {warnCount > 0 && (
                   <button onClick={() => setOnlyWarn(v => !v)} title="Brand đã quá 45 ngày kể từ lần air gần nhất (chưa air thì từ ngày gắn) → nên gỡ định danh"
                     style={{ padding: '5px 12px', borderRadius: 7, border: `1px solid ${onlyWarn ? '#dc2626' : '#fecaca'}`, background: onlyWarn ? '#dc2626' : '#fff', color: onlyWarn ? '#fff' : '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>
