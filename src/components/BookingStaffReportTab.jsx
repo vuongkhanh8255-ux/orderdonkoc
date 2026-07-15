@@ -677,9 +677,9 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
           </Section>
 
           {/* ═══ 2b. TAG ORDER — KOC order-tag tự động, theo dõi đã lên clip chưa ═══ */}
-          <Section icon="🏷️" title="Tag order" hint={`${otList.length} KOC · tự gắn khi order`} accent={{ bg: '#f5f3ff', fg: '#6d28d9' }}>
+          <Section icon="🏷️" title="Tag order" hint={`${otList.length} KOC đã order · từ T7`} accent={{ bg: '#f5f3ff', fg: '#6d28d9' }}>
             <div style={{ fontSize: '0.76rem', color: '#64748b', lineHeight: 1.5, marginTop: -4 }}>
-              KOC bạn <b>{r.ten_nhansu}</b> đã <b>order mẫu</b> nhưng <b>chưa từng air</b> → hệ thống tự gắn tag (hạn 30 ngày). Lên clip trong hạn → tự thành <b>tag quản lý</b>, bạn được ghi nhận video. Quá hạn chưa air → vào <b>đề xuất gỡ</b>. <span style={{ color: '#94a3b8' }}>(trạng thái hiện tại, không theo kỳ)</span>
+              TẤT CẢ KOC bạn <b>{r.ten_nhansu}</b> đã <b>order từ tháng 7</b> — theo dõi ai <b>đã lên clip</b> ai <b>chưa</b> (hạn 30 ngày ra clip MỚI kể từ ngày order). Quá hạn chưa clip → <b style={{ color: '#dc2626' }}>nghi ôm mẫu</b>. Nhãn <b style={{ color: '#0891b2' }}>🔁 cũ</b> = KOC đã air brand này TRƯỚC khi order (KOC quen); không nhãn = KOC mới. <span style={{ color: '#94a3b8' }}>(mốc = ngày order gần nhất)</span>
             </div>
             {/* summary chips */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -687,6 +687,7 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
               <span style={{ padding: '4px 12px', borderRadius: 999, background: '#fffbeb', color: '#d97706', fontWeight: 800, fontSize: '0.76rem' }}>⏳ Chờ lên clip {otCnt.wait}</span>
               <span style={{ padding: '4px 12px', borderRadius: 999, background: '#fef2f2', color: '#dc2626', fontWeight: 800, fontSize: '0.76rem' }}>⚠️ Quá hạn {otCnt.over}</span>
               <span style={{ padding: '4px 12px', borderRadius: 999, background: '#f0fdf4', color: '#16a34a', fontWeight: 800, fontSize: '0.76rem' }}>✅ Đã lên clip {otCnt.aired}</span>
+              <span style={{ padding: '4px 12px', borderRadius: 999, background: '#ecfeff', color: '#0891b2', fontWeight: 800, fontSize: '0.76rem' }} title="KOC đã air brand này trước khi order (KOC quen)">🔁 KOC cũ {otList.filter(t => t.aired_before).length}</span>
               {otList.length > 0 && (
                 <button onClick={() => setOtWaitOnly(v => !v)}
                   style={{ marginLeft: 'auto', padding: '4px 12px', borderRadius: 8, border: `1px solid ${otWaitOnly ? '#6d28d9' : '#ddd6fe'}`, background: otWaitOnly ? '#6d28d9' : '#fff', color: otWaitOnly ? '#fff' : '#6d28d9', fontWeight: 700, fontSize: '0.74rem', cursor: 'pointer' }}>
@@ -695,7 +696,7 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
               )}
             </div>
             {orderTags === null ? <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>⏳ Đang tải...</div>
-              : otList.length === 0 ? <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Chưa có tag order nào (bạn này chưa order KOC mới, hoặc KOC đã air hết).</div>
+              : otList.length === 0 ? <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Bạn này chưa order KOC nào từ tháng 7.</div>
               : (
                 <div style={{ overflowX: 'auto', maxHeight: 420, overflowY: 'auto', border: '1px solid #f1f5f9', borderRadius: 10 }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -712,7 +713,7 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
                         return (
                           <tr key={t.koc_id + '|' + t.brand_name}>
                             <td style={{ ...td, padding: '9px 8px', color: '#94a3b8', fontWeight: 700 }}>{i + 1}</td>
-                            <td style={{ ...td, padding: '9px 8px', width: '100%' }}><a href={`https://www.tiktok.com/@${t.koc_id}`} target="_blank" rel="noreferrer" style={{ color: '#475569', textDecoration: 'none', fontWeight: 600 }}>@{t.koc_id}</a></td>
+                            <td style={{ ...td, padding: '9px 8px', width: '100%' }}><a href={`https://www.tiktok.com/@${t.koc_id}`} target="_blank" rel="noreferrer" style={{ color: '#475569', textDecoration: 'none', fontWeight: 600 }}>@{t.koc_id}</a>{t.aired_before && <span title="Đã air brand này trước khi order (KOC quen)" style={{ marginLeft: 6, padding: '1px 7px', borderRadius: 999, background: '#ecfeff', color: '#0891b2', fontWeight: 800, fontSize: '0.66rem', verticalAlign: 'middle' }}>🔁 cũ</span>}</td>
                             <td style={{ ...td, padding: '9px 8px', fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>{t.brand_name}</td>
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'center', fontSize: '0.76rem', color: '#64748b' }}>{dateLabel(t.tag_date)}</td>
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'center' }}>
