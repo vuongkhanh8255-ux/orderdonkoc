@@ -165,6 +165,21 @@ export const ACCOUNTS = [
     // ── ABM team (chỉ xem các dashboard/chỉ số được chỉ định) ──
     { username: 'abm',        password: 'ABM@SK2025',      role: 'abm',        name: 'Team ABM'    },
     { username: 'minhthu',    password: 'MinhThu@SK2025',  role: 'assistant',  name: 'Minh Thư'    },
+    // ── BOOKING theo TỪNG NHÂN SỰ (Khánh 14/7): mỗi người 1 account, order KHÓA theo tên mình,
+    //    chỉ thao tác đơn/tag của mình. `staff` = ten_nhansu KHỚP CHÍNH XÁC bảng nhansu (để lọc quyền).
+    { username: 'thuthao',   password: 'ThuThao@SK2025',   role: 'booking_staff', name: 'Thu Thảo',   staff: 'Thu Thảo'   },
+    { username: 'hoangvy',   password: 'HoangVy@SK2025',   role: 'booking_staff', name: 'Hoàng Vy',   staff: 'Hoàng Vy'   },
+    { username: 'hoangvu',   password: 'HoangVu@SK2025',   role: 'booking_staff', name: 'Hoàng Vũ',   staff: 'Hoàng Vũ'   },
+    { username: 'trucquynh', password: 'TrucQuynh@SK2025', role: 'booking_staff', name: 'Trúc Quỳnh', staff: 'Trúc Quỳnh' },
+    { username: 'anhnhi',    password: 'AnhNhi@SK2025',    role: 'booking_staff', name: 'Anh Nhi',    staff: 'Anh Nhi'    },
+    { username: 'minhthao',  password: 'MinhThao@SK2025',  role: 'booking_staff', name: 'Minh Thảo',  staff: 'Minh Thảo'  },
+    { username: 'tuongvi',   password: 'TuongVi@SK2025',   role: 'booking_staff', name: 'Tường Vi',   staff: 'Tường Vi'   },
+    { username: 'ngocmai',   password: 'NgocMai@SK2025',   role: 'booking_staff', name: 'Ngọc Mai',   staff: 'Ngọc Mai'   },
+    { username: 'nguyenbao', password: 'NguyenBao@SK2025', role: 'booking_staff', name: 'Nguyên Bảo', staff: 'Nguyên Bảo' },
+    { username: 'huudan',    password: 'HuuDan@SK2025',    role: 'booking_staff', name: 'Hữu Đan',    staff: 'Hữu Đan'    },
+    { username: 'luuhang',   password: 'LuuHang@SK2025',   role: 'booking_staff', name: 'Lưu Hằng',   staff: 'Lưu Hằng'   },
+    { username: 'tutran',    password: 'TuTran@SK2025',    role: 'booking_staff', name: 'Tú Trần',    staff: 'Tú Trần'    },
+    { username: 'hieutran',  password: 'HieuTran@SK2025',  role: 'booking_staff', name: 'Hiếu Trần',  staff: 'Hiếu Trần'  },
 ];
 
 // ── ROLE PERMISSIONS ──────────────────────────────────────
@@ -174,6 +189,9 @@ export const ROLE_VIEWS = {
     assistant:  ['shop_analytics','overview_report','shopee_ads_dashboard','flash_sale','top_picks','shopee_autoreply','shopee_database','shopee_live_ai','shopee_clip_factory','shopee_live_studio','shopee_livestream','shopee_video','shopee_ads','stella_dashboard','listed_price','tiktok_orders','reviews','crm','cskh','livestream','staff_report','booking_budget','order','koc_performance','booking_performance','contract','koc_payment','airlinks','booking_material','booking','koc_hunt','bodymiss_scout','data_archive','nhanh_products','expense','landing_orders','camp_registration','task_notes'],
     // BOOKING: chỉ Booking group + Ngân Sách Ecom. KHÔNG Ecom group, KHÔNG Task & Notes.
     booking:    ['staff_report','booking_budget','order','koc_performance','booking_performance','contract','koc_payment','airlinks','booking_material','booking','koc_hunt','bodymiss_scout','expense'],
+    // BOOKING theo TỪNG NHÂN SỰ — chỉ Order (khóa tên mình) + Hiệu suất KOC (gắn/gỡ tag của mình) + Link air.
+    // KHÔNG thấy: thanh toán, ngân sách, báo cáo NS (toàn team), hợp đồng...
+    booking_staff: ['order','koc_performance','airlinks'],
     cs:         ['crm','cskh','reviews','order','airlinks','expense','task_notes'],
     livestream: ['stella_dashboard','livestream','expense','task_notes'],
     // ECOM: full Ecom group + CSKH + Livestream + Booking group (trừ Hợp Đồng) + Ngân Sách Ecom
