@@ -53,7 +53,7 @@ const labelStyle = { fontSize: '0.66rem', fontWeight: 800, color: '#94a3b8', tex
 
 const PRESETS = [{ label: 'Hôm qua', days: 1, single: true }, { label: '7 ngày', days: 7 }, { label: '30 ngày', days: 30 }, { label: '90 ngày', days: 90 }];
 
-function BookingStaffReportTab() {
+function BookingStaffReportTab({ currentUser } = {}) {
   // Lọc theo THÁNG (khớp module Tạm đối chiếu) — mặc định tháng hiện tại.
   const [range, setRange] = useState(() => {
     const d = new Date();
@@ -323,7 +323,7 @@ function BookingStaffReportTab() {
       </div>
       <p style={{ color: '#94a3b8', fontSize: '0.76rem', marginTop: 10 }}>* Chi phí mẫu = cost (cột AMIS V2) ×1.08×SL + 5k + ship (giống Module 1). CAST đã dùng = koc_payments. Ngân sách = max(15tr, GMV×2.2%). Chi tiết hiện bên dưới — bấm dòng khác để đổi nhân sự.</p>
 
-      {selectedRow && <StaffDetailPanel r={selectedRow} range={range} bg={budgetByStaff[selectedRow.ten_nhansu]} />}
+      {selectedRow && <StaffDetailPanel r={selectedRow} range={range} bg={budgetByStaff[selectedRow.ten_nhansu]} currentUser={currentUser} />}
     </div>
   );
 }
@@ -354,9 +354,24 @@ const Mini = ({ label, val, color = '#475569', icon }) => (
 );
 
 // ── Panel chi tiết nhân sự (hiện INLINE bên dưới bảng) ─────────────────────────
-function StaffDetailPanel({ r, range, bg }) {
+function StaffDetailPanel({ r, range, bg, currentUser }) {
   const [det, setDet] = useState(null);
   const [loadingDet, setLoadingDet] = useState(true);
+  // ── TỰ GỠ TAG (Khánh 15/7): mỗi account chỉ được tự gỡ KOC của ĐÚNG tên mình (r.ten_nhansu === currentUser.staff).
+  //    seeAll (Thu Thảo/Minh Thảo/Hoàng Vy) coi được panel người khác nhưng KHÔNG gỡ được — chỉ gỡ của chính mình.
+  //    admin gỡ được mọi nơi. Video/GMV đã tính trước đó GIỮ NGUYÊN — gỡ chỉ ngưng theo dõi từ giờ về sau.
+  const canRemove = currentUser?.role === 'admin' || (currentUser?.staff && currentUser.staff.trim() === (r.ten_nhansu || '').trim());
+  const [removingKey, setRemovingKey] = useState(null);
+  const doSelfRemove = useCallback(async (k) => {
+    if (!canRemove) return;
+    if (!window.confirm(`Tự gỡ tag @${k.uname} (${k.brand}) khỏi danh sách bạn quản lý?\n\nVideo/GMV đã ghi nhận trước đó vẫn giữ nguyên, chỉ ngưng theo dõi KOC này từ giờ.`)) return;
+    const key = k.uname + '|' + (k.brand || '');
+    setRemovingKey(key);
+    const { data, error } = await supabase.rpc('koc_remove_assignment', { p_koc: k.uname, p_brand: k.brand, p_actor: currentUser?.username || r.ten_nhansu });
+    setRemovingKey(null);
+    if (error) { alert('Lỗi gỡ tag: ' + error.message); return; }
+    setDet(d => d ? { ...d, kocs: (d.kocs || []).filter(x => !(x.uname === k.uname && x.brand === k.brand)) } : d);
+  }, [canRemove, currentUser, r.ten_nhansu]);
   const [sendMetric, setSendMetric] = useState('mau');   // tần suất gửi: don | mau
   const [perfMetric, setPerfMetric] = useState('video'); // hiệu suất: video | views
   const [castVids, setCastVids] = useState(null);        // danh sách video booking cast (xài tiền cho video/brand/SP gì)
@@ -611,6 +626,7 @@ function StaffDetailPanel({ r, range, bg }) {
                       <th style={{ ...th, padding: '8px', textAlign: 'center' }} title="Ngày gắn định danh brand này">Ngày gắn</th>
                       <th style={{ ...th, padding: '8px', textAlign: 'center' }} title="Video mới nhất KOC đăng cho brand này (all-time)">📅 Ngày air gần nhất</th>
                       <th style={{ ...th, padding: '8px', textAlign: 'center' }} title="Mốc bị gỡ định danh = ngày air gần nhất + 45 ngày (cứ air là gia hạn); brand chưa air lần nào thì tính từ ngày gắn + 45. Quá hạn = nên gỡ.">⏳ Thời gian bị gỡ tag</th>
+                      {canRemove && <th style={{ ...th, padding: '8px', textAlign: 'center' }} title="Không muốn chăm sóc KOC này nữa → tự gỡ tag. Video/GMV đã tính vẫn giữ nguyên.">Gỡ</th>}
                     </tr></thead>
                     <tbody>
                       {pagedKocs.map((k, i) => {
@@ -628,6 +644,15 @@ function StaffDetailPanel({ r, range, bg }) {
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'center', fontSize: '0.76rem', color: '#64748b' }}>{dateLabel(k.since)}</td>
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'center', fontSize: '0.76rem', fontWeight: 600, color: k.last_air ? '#0891b2' : '#f59e0b' }}>{k.last_air ? dateLabel(k.last_air) : '— chưa air'}</td>
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'center', fontSize: '0.74rem', fontWeight: 700, color: ti.color }}>{ti.txt}</td>
+                            {canRemove && (
+                              <td style={{ ...td, padding: '9px 8px', textAlign: 'center' }}>
+                                <button onClick={() => doSelfRemove(k)} disabled={removingKey === (k.uname + '|' + (k.brand || ''))}
+                                  title="Tự gỡ tag KOC này khỏi danh sách bạn quản lý"
+                                  style={{ padding: '4px 10px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>
+                                  {removingKey === (k.uname + '|' + (k.brand || '')) ? '⏳' : '🗑️ Gỡ'}
+                                </button>
+                              </td>
+                            )}
                           </tr>
                         );
                       })}

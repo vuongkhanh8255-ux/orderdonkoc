@@ -442,7 +442,7 @@ function AppMain({ user, onLogout, allowedViews }) {
           <AppErrorBoundary key={currentView}>
           <Suspense fallback={<TabLoadingFallback />}>
           {currentView === 'dashboard' && <DashboardTab />}
-          {currentView === 'staff_report' && <BookingStaffReportTab />}
+          {currentView === 'staff_report' && <BookingStaffReportTab currentUser={user} />}
           {currentView === 'order' && <OrderTab currentUser={user} />}
           {currentView === 'contract' && <ContractTab />}
           {currentView === 'airlinks' && <AirLinksTab currentUser={user} />}
