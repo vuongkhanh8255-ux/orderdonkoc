@@ -1313,9 +1313,11 @@ export default function KocPerformanceTab() {
                         {overdueWarnsCast.map(w => (
                           <div key={'od-' + w.koc_id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.78rem', background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #fee2e2', flexWrap: 'wrap' }}>
                             <a href={`https://www.tiktok.com/@${w.koc_id}`} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontWeight: 700, textDecoration: 'none' }}>@{w.koc_id}</a>
-                            <span style={{ color: '#64748b' }}>NS: <b>{w.staff_name}</b> · {w.last_air
-                              ? <>air gần nhất <b>{new Date(w.last_air).toLocaleDateString('vi-VN')}</b> ({w.days_since_air ?? w.days_since} ngày trước · hạn 45)</>
-                              : <><b style={{ color: '#7c3aed' }}>🏷️ tag order</b> · chưa air · gán {w.days_since_air ?? w.days_since} ngày (hạn 30)</>}</span>
+                            <span style={{ color: '#64748b' }}>NS: <b>{w.staff_name}</b> · {w.owes_clip
+                              ? <><b style={{ color: '#7c3aed' }}>🏷️ order chưa ra clip mới</b> · {w.days_since_air ?? w.days_since} ngày (hạn 30 · nghi ôm mẫu){w.last_air ? <> · air cũ {new Date(w.last_air).toLocaleDateString('vi-VN')}</> : null}</>
+                              : w.last_air
+                                ? <>air gần nhất <b>{new Date(w.last_air).toLocaleDateString('vi-VN')}</b> ({w.days_since_air ?? w.days_since} ngày trước · hạn 45)</>
+                                : <><b style={{ color: '#7c3aed' }}>🏷️ tag order</b> · chưa air · gán {w.days_since_air ?? w.days_since} ngày (hạn 30)</>}</span>
                             <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
                               {prioPending(w.koc_id)
                                 ? (isAdminRole
@@ -1398,7 +1400,7 @@ export default function KocPerformanceTab() {
                         if (dsa < lim - 7 && pl === 0 && !prioPending(uname)) return null;   // chưa gần hạn + không ưu tiên/đề xuất → khỏi hiện
                         if (pl > 0) return <div style={{ marginTop: 7, fontSize: '0.7rem', fontWeight: 700, color: '#6d28d9', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 8, padding: '4px 8px' }}>⭐ Ưu tiên — còn {pl} ngày gia hạn</div>;
                         if (prioPending(uname)) return <div style={{ marginTop: 7, fontSize: '0.7rem', fontWeight: 700, color: '#7c3aed', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 8, padding: '4px 8px' }}>⭐ Đã xin ưu tiên · chờ admin duyệt</div>;
-                        const cause = w.last_air ? 'kể từ air gần nhất' : '· tag order chưa air';
+                        const cause = w.owes_clip ? '· order chưa ra clip mới (nghi ôm mẫu)' : (w.last_air ? 'kể từ air gần nhất' : '· tag order chưa air');
                         if (dsa >= lim) return <div style={{ marginTop: 7, fontSize: '0.7rem', fontWeight: 700, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '4px 8px' }}>⚠️ {dsa}/{lim} ngày {cause} — đề xuất gỡ</div>;
                         if (dsa >= lim - 7) return <div style={{ marginTop: 7, fontSize: '0.7rem', fontWeight: 700, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '4px 8px' }}>⏳ sắp hết hạn — còn {lim - dsa} ngày ({cause})</div>;
                         return null;

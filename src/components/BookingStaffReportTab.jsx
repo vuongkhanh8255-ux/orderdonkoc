@@ -422,17 +422,21 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
   // ── Định danh KOC theo BRAND — RPC staff_booking_detail đã tách sẵn (uname × brand) + last_air + since ──
   const [onlyWarn, setOnlyWarn] = useState(false);
   const dateLabel = (s) => s ? new Date(s).toLocaleDateString('vi-VN') : '—';
-  // "Thời gian bị gỡ tag" (Khánh chốt 1/7): mốc = NGÀY AIR GẦN NHẤT + 45 ngày (cứ air 1 video cho brand đó là
-  // GIA HẠN thêm 45 ngày). Brand chưa air lần nào → tính từ NGÀY GẮN + 45. Quá hạn = nên gỡ (đỏ, warn).
-  const TAG_DAYS = 45;
+  // "Thời gian bị gỡ tag" — hợp nhất Rule 2 + Rule 3 (Khánh 15/7):
+  //  • NỢ CLIP (có order gần đây mà CHƯA air clip mới sau order: last_order & (chưa air | air < last_order))
+  //    → mốc = last_order + 30 ngày. Quá 30 ngày chưa clip = nghi ÔM MẪU (đỏ).
+  //  • ĐÃ air (không nợ) → mốc = air gần nhất + 45 ngày (cứ air là gia hạn). Chưa air & chưa order → ngày gắn + 45.
   const tagInfo = (k) => {
-    const base = k.last_air ? new Date(k.last_air) : (k.since ? new Date(k.since) : null);
+    const lastAir = k.last_air ? new Date(k.last_air) : null;
+    const lastOrder = k.last_order ? new Date(k.last_order) : null;
+    const owes = lastOrder && (!lastAir || lastAir < lastOrder);   // đang nợ clip mới sau order
+    const base = owes ? lastOrder : (lastAir || (k.since ? new Date(k.since) : null));
     if (!base) return { txt: '—', color: '#cbd5e1', warn: false };
-    const deadline = new Date(base.getTime() + TAG_DAYS * 86400000);
+    const days = owes ? 30 : 45;
+    const deadline = new Date(base.getTime() + days * 86400000);
     const daysLeft = Math.ceil((deadline - Date.now()) / 86400000);
-    const aired = !!k.last_air;
-    if (daysLeft < 0) return { txt: `⚠️ Quá hạn ${dateLabel(deadline)} · nên gỡ`, color: '#dc2626', warn: true };
-    return { txt: `${dateLabel(deadline)} · còn ${daysLeft}d`, color: aired ? '#16a34a' : '#d97706', warn: false };
+    if (daysLeft < 0) return { txt: owes ? `⚠️ Nợ clip quá ${-daysLeft}d · nghi ôm mẫu` : `⚠️ Quá hạn ${dateLabel(deadline)} · nên gỡ`, color: '#dc2626', warn: true };
+    return { txt: owes ? `⏳ Chờ clip · còn ${daysLeft}d` : `${dateLabel(deadline)} · còn ${daysLeft}d`, color: owes ? '#d97706' : '#16a34a', warn: false };
   };
   const warnCount = kocs.filter(k => tagInfo(k).warn).length;
   // Trạng thái 1 tag order (đã lên clip / chờ / quá hạn)
