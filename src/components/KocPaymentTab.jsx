@@ -462,8 +462,9 @@ const KocPaymentTab = () => {
         (!fFrom || d >= fFrom) && (!fTo || d <= fTo) &&
         (!kw || [r.full_name, r.beneficiary, r.channel_link, r.air_link, r.bank_account, r.staff].some(v => (v || '').toLowerCase().includes(kw)));
     });
-    // Sắp theo NGÀY AIR THẬT (mới nhất trên đầu, cũ nhất dưới cùng) — áp dụng cho MỌI dòng kể cả đã thanh toán.
-    return out.sort((a, b) => airDateOf(b).localeCompare(airDateOf(a)));
+    // CHƯA thanh toán gom lên 1 dãy trên đầu (dễ thấy còn nợ), ĐÃ thanh toán gom xuống 1 dãy dưới —
+    // mỗi dãy sắp theo NGÀY AIR THẬT (mới nhất trên đầu, cũ nhất dưới cùng).
+    return out.sort((a, b) => (a.paid === b.paid ? 0 : a.paid ? 1 : -1) || airDateOf(b).localeCompare(airDateOf(a)));
   }, [rows, ym, fCompany, fBrand, fStaff, fApproved, fPaid, fFrom, fTo, q, airDateOf]);
 
   // Đổi bộ lọc thì về trang 1
