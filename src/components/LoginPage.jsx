@@ -189,9 +189,9 @@ export const ROLE_VIEWS = {
     assistant:  ['shop_analytics','overview_report','shopee_ads_dashboard','flash_sale','top_picks','shopee_autoreply','shopee_database','shopee_live_ai','shopee_clip_factory','shopee_live_studio','shopee_livestream','shopee_video','shopee_ads','stella_dashboard','listed_price','tiktok_orders','reviews','crm','cskh','livestream','staff_report','booking_budget','order','koc_performance','booking_performance','contract','koc_payment','airlinks','booking_material','booking','koc_hunt','bodymiss_scout','data_archive','nhanh_products','expense','landing_orders','camp_registration','task_notes'],
     // BOOKING: chỉ Booking group + Ngân Sách Ecom. KHÔNG Ecom group, KHÔNG Task & Notes.
     booking:    ['staff_report','booking_budget','order','koc_performance','booking_performance','contract','koc_payment','airlinks','booking_material','booking','koc_hunt','bodymiss_scout','expense'],
-    // BOOKING theo TỪNG NHÂN SỰ — chỉ Order (khóa tên mình) + Hiệu suất KOC (gắn/gỡ tag của mình) + Link air.
-    // KHÔNG thấy: thanh toán, ngân sách, báo cáo NS (toàn team), hợp đồng...
-    booking_staff: ['order','koc_performance','airlinks'],
+    // BOOKING theo TỪNG NHÂN SỰ — Order (khóa tên mình) + Hiệu suất KOC + Link air
+    //   + (Khánh 15/7 thêm) Báo cáo nhân sự, Hợp đồng, Thanh toán KOC, Ngân sách Ecom.
+    booking_staff: ['order','koc_performance','airlinks','staff_report','contract','koc_payment','expense'],
     cs:         ['crm','cskh','reviews','order','airlinks','expense','task_notes'],
     livestream: ['stella_dashboard','livestream','expense','task_notes'],
     // ECOM: full Ecom group + CSKH + Livestream + Booking group (trừ Hợp Đồng) + Ngân Sách Ecom
