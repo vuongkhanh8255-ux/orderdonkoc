@@ -155,6 +155,8 @@ export const ACCOUNTS = [
     { username: 'livestream', password: 'Live@SK2025',     role: 'livestream', name: 'Livestream'  },
     // ── Reviewer account (for Shopee/TikTok API review) ──
     { username: 'shopee-reviewer', password: 'ShopeeTest@2026', role: 'reviewer', name: 'Reviewer' },
+    // ── TRIAL (Khánh 15/7): xem FULL data mọi trang nhưng KHÔNG thao tác được (guard read-only ở supabaseClient chặn mọi ghi). ──
+    { username: 'trial',      password: 'Trial@SK2026',    role: 'trial',      name: 'Trial (chỉ xem)' },
     // ── ECOM accounts (5 users, propose-only quyền cho phần Định danh KOC) ──
     { username: 'ha',         password: 'Ha@SK2025',       role: 'ecom',       name: 'Hạ'          },
     { username: 'phong',      password: 'Phong@SK2025',    role: 'ecom',       name: 'Phong'       },
@@ -186,6 +188,8 @@ export const ACCOUNTS = [
 // ── ROLE PERMISSIONS ──────────────────────────────────────
 export const ROLE_VIEWS = {
     admin:      ['shop_analytics','overview_report','shopee_ads_dashboard','flash_sale','top_picks','shopee_autoreply','shopee_database','shopee_live_ai','shopee_clip_factory','shopee_live_studio','shopee_livestream','shopee_video','shopee_ads','stella_dashboard','listed_price','costing','tiktok_orders','reviews','crm','cskh','livestream','staff_report','booking_budget','order','koc_blacklist','koc_performance','booking_performance','contract','koc_payment','airlinks','booking_material','booking','koc_hunt','bodymiss_scout','data_archive','nhanh_products','expense','landing_orders','camp_registration','task_notes'],
+    // TRIAL: thấy HẾT view như admin (trừ Giá Cost) — chỉ để XEM. Guard read-only ở supabaseClient chặn mọi ghi.
+    trial:      ['shop_analytics','overview_report','shopee_ads_dashboard','flash_sale','top_picks','shopee_autoreply','shopee_database','shopee_live_ai','shopee_clip_factory','shopee_live_studio','shopee_livestream','shopee_video','shopee_ads','stella_dashboard','listed_price','tiktok_orders','reviews','crm','cskh','livestream','staff_report','booking_budget','order','koc_blacklist','koc_performance','booking_performance','contract','koc_payment','airlinks','booking_material','booking','koc_hunt','bodymiss_scout','data_archive','nhanh_products','expense','landing_orders','camp_registration','task_notes'],
     // Minh Thư (trợ lí sếp) — full chức năng như admin NHƯNG bỏ 'costing' (Giá Cost). Role ≠ 'admin' nên cột Giá gốc trong Bảng giá niêm yết cũng tự ẩn.
     assistant:  ['shop_analytics','overview_report','shopee_ads_dashboard','flash_sale','top_picks','shopee_autoreply','shopee_database','shopee_live_ai','shopee_clip_factory','shopee_live_studio','shopee_livestream','shopee_video','shopee_ads','stella_dashboard','listed_price','tiktok_orders','reviews','crm','cskh','livestream','staff_report','booking_budget','order','koc_performance','booking_performance','contract','koc_payment','airlinks','booking_material','booking','koc_hunt','bodymiss_scout','data_archive','nhanh_products','expense','landing_orders','camp_registration','task_notes'],
     // BOOKING: chỉ Booking group + Ngân Sách Ecom. KHÔNG Ecom group, KHÔNG Task & Notes.
