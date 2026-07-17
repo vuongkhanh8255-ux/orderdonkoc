@@ -150,11 +150,13 @@ const LoginPage = ({ onLogin }) => {
 export const ACCOUNTS = [
     { username: 'admin',        password: 'Admin@SK2025',    role: 'admin',      name: 'Admin Tổng'  },
     { username: 'khanhpro8255', password: 'Khanhpro@8255',   role: 'admin',      name: 'Khánh Pro'   },
-    { username: 'booking',    password: 'Booking@SK2025',  role: 'booking',    name: 'Booking'     },
+    // { username: 'booking', password: 'Booking@SK2025', role: 'booking', name: 'Booking' }, // VÔ HIỆU 14/7 — dời sang account cá nhân từng nhân sự (booking_staff)
     { username: 'cs',         password: 'CS@SK2025',       role: 'cs',         name: 'CS'          },
     { username: 'livestream', password: 'Live@SK2025',     role: 'livestream', name: 'Livestream'  },
     // ── Reviewer account (for Shopee/TikTok API review) ──
     { username: 'shopee-reviewer', password: 'ShopeeTest@2026', role: 'reviewer', name: 'Reviewer' },
+    // ── TRIAL (Khánh 15/7): xem FULL data mọi trang nhưng KHÔNG thao tác được (guard read-only ở supabaseClient chặn mọi ghi). ──
+    { username: 'trial',      password: 'Trial@SK2026',    role: 'trial',      name: 'Trial (chỉ xem)' },
     // ── ECOM accounts (5 users, propose-only quyền cho phần Định danh KOC) ──
     { username: 'ha',         password: 'Ha@SK2025',       role: 'ecom',       name: 'Hạ'          },
     { username: 'phong',      password: 'Phong@SK2025',    role: 'ecom',       name: 'Phong'       },
@@ -165,15 +167,36 @@ export const ACCOUNTS = [
     // ── ABM team (chỉ xem các dashboard/chỉ số được chỉ định) ──
     { username: 'abm',        password: 'ABM@SK2025',      role: 'abm',        name: 'Team ABM'    },
     { username: 'minhthu',    password: 'MinhThu@SK2025',  role: 'assistant',  name: 'Minh Thư'    },
+    // ── BOOKING theo TỪNG NHÂN SỰ (Khánh 14/7): mỗi người 1 account, order KHÓA theo tên mình,
+    //    chỉ thao tác đơn/tag của mình. `staff` = ten_nhansu KHỚP CHÍNH XÁC bảng nhansu (để lọc quyền).
+    // seeAll: true = 3 sếp nhóm (Khánh 15/7) — coi HẾT đơn order + chọn tên bất kỳ (như account chung cũ).
+    { username: 'thuthao',   password: 'Kyn6t9#8', role: 'booking_staff', name: 'Thu Thảo',   staff: 'Thu Thảo',   seeAll: true },
+    { username: 'hoangvy',   password: 'Zb6#gm9z', role: 'booking_staff', name: 'Hoàng Vy',   staff: 'Hoàng Vy',   seeAll: true },
+    { username: 'hoangvu',   password: 'Y2c55j@h', role: 'booking_staff', name: 'Hoàng Vũ',   staff: 'Hoàng Vũ'   },
+    { username: 'trucquynh', password: 'Wi9jyy9$', role: 'booking_staff', name: 'Trúc Quỳnh', staff: 'Trúc Quỳnh' },
+    { username: 'anhnhi',    password: 'Uzz3$ezy', role: 'booking_staff', name: 'Anh Nhi',    staff: 'Anh Nhi'    },
+    { username: 'minhthao',  password: 'Ymnvm36#', role: 'booking_staff', name: 'Minh Thảo',  staff: 'Minh Thảo', seeAll: true },
+    { username: 'tuongvi',   password: 'Vqi$6b6t', role: 'booking_staff', name: 'Tường Vi',   staff: 'Tường Vi'   },
+    { username: 'ngocmai',   password: 'B9ak4q@7', role: 'booking_staff', name: 'Ngọc Mai',   staff: 'Ngọc Mai'   },
+    { username: 'nguyenbao', password: 'Xm9xde7$', role: 'booking_staff', name: 'Nguyên Bảo', staff: 'Nguyên Bảo' },
+    { username: 'huudan',    password: 'J6w8$4rg', role: 'booking_staff', name: 'Hữu Đan',    staff: 'Hữu Đan'    },
+    { username: 'luuhang',   password: 'Utfppj4@', role: 'booking_staff', name: 'Lưu Hằng',   staff: 'Lưu Hằng'   },
+    { username: 'tutran',    password: 'Qh67h94$', role: 'booking_staff', name: 'Tú Trần',    staff: 'Tú Trần'    },
+    { username: 'hieutran',  password: 'Saq4ep3$', role: 'booking_staff', name: 'Hiếu Trần',  staff: 'Hiếu Trần'  },
 ];
 
 // ── ROLE PERMISSIONS ──────────────────────────────────────
 export const ROLE_VIEWS = {
     admin:      ['shop_analytics','overview_report','shopee_ads_dashboard','flash_sale','top_picks','shopee_autoreply','shopee_database','shopee_live_ai','shopee_clip_factory','shopee_live_studio','shopee_livestream','shopee_video','shopee_ads','stella_dashboard','listed_price','costing','tiktok_orders','reviews','crm','cskh','livestream','staff_report','booking_budget','order','koc_blacklist','koc_performance','booking_performance','contract','koc_payment','airlinks','booking_material','booking','koc_hunt','bodymiss_scout','data_archive','nhanh_products','expense','landing_orders','camp_registration','task_notes'],
+    // TRIAL: thấy HẾT view như admin (trừ Giá Cost) — chỉ để XEM. Guard read-only ở supabaseClient chặn mọi ghi.
+    trial:      ['shop_analytics','overview_report','shopee_ads_dashboard','flash_sale','top_picks','shopee_autoreply','shopee_database','shopee_live_ai','shopee_clip_factory','shopee_live_studio','shopee_livestream','shopee_video','shopee_ads','stella_dashboard','listed_price','tiktok_orders','reviews','crm','cskh','livestream','staff_report','booking_budget','order','koc_blacklist','koc_performance','booking_performance','contract','koc_payment','airlinks','booking_material','booking','koc_hunt','bodymiss_scout','data_archive','nhanh_products','expense','landing_orders','camp_registration','task_notes'],
     // Minh Thư (trợ lí sếp) — full chức năng như admin NHƯNG bỏ 'costing' (Giá Cost). Role ≠ 'admin' nên cột Giá gốc trong Bảng giá niêm yết cũng tự ẩn.
     assistant:  ['shop_analytics','overview_report','shopee_ads_dashboard','flash_sale','top_picks','shopee_autoreply','shopee_database','shopee_live_ai','shopee_clip_factory','shopee_live_studio','shopee_livestream','shopee_video','shopee_ads','stella_dashboard','listed_price','tiktok_orders','reviews','crm','cskh','livestream','staff_report','booking_budget','order','koc_performance','booking_performance','contract','koc_payment','airlinks','booking_material','booking','koc_hunt','bodymiss_scout','data_archive','nhanh_products','expense','landing_orders','camp_registration','task_notes'],
     // BOOKING: chỉ Booking group + Ngân Sách Ecom. KHÔNG Ecom group, KHÔNG Task & Notes.
     booking:    ['staff_report','booking_budget','order','koc_performance','booking_performance','contract','koc_payment','airlinks','booking_material','booking','koc_hunt','bodymiss_scout','expense'],
+    // BOOKING theo TỪNG NHÂN SỰ — Order (khóa tên mình) + Hiệu suất KOC + Link air
+    //   + (Khánh 15/7 thêm) Báo cáo nhân sự, Hợp đồng, Thanh toán KOC, Ngân sách Ecom.
+    booking_staff: ['order','koc_performance','airlinks','staff_report','contract','koc_payment','expense'],
     cs:         ['crm','cskh','reviews','order','airlinks','expense','task_notes'],
     livestream: ['stella_dashboard','livestream','expense','task_notes'],
     // ECOM: full Ecom group + CSKH + Livestream + Booking group (trừ Hợp Đồng) + Ngân Sách Ecom

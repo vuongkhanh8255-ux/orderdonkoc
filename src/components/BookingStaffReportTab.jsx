@@ -53,7 +53,7 @@ const labelStyle = { fontSize: '0.66rem', fontWeight: 800, color: '#94a3b8', tex
 
 const PRESETS = [{ label: 'Hôm qua', days: 1, single: true }, { label: '7 ngày', days: 7 }, { label: '30 ngày', days: 30 }, { label: '90 ngày', days: 90 }];
 
-function BookingStaffReportTab() {
+function BookingStaffReportTab({ currentUser } = {}) {
   // Lọc theo THÁNG (khớp module Tạm đối chiếu) — mặc định tháng hiện tại.
   const [range, setRange] = useState(() => {
     const d = new Date();
@@ -74,6 +74,10 @@ function BookingStaffReportTab() {
     budgetRemainingByStaff(String(range.end).slice(0, 7)).then(b => { if (alive) setBudgetByStaff(b); }, () => {});
     return () => { alive = false; };
   }, [range.end]);
+  // TỶ LỆ TRẢ CLIP: trên KOC nhân sự quản lý, bao nhiêu % đã air (thấp = cảnh báo)
+  const [clipRatio, setClipRatio] = useState([]);
+  const [clipOpen, setClipOpen] = useState(true);
+  useEffect(() => { supabase.rpc('staff_clip_ratio').then(({ data }) => setClipRatio(data || [])).catch(() => {}); }, []);
 
   // Danh sách THÁNG (từ T3/2026 → nay) + chọn 1 tháng = lọc trọn tháng đó (khớp Tạm đối chiếu).
   const MONTHS = useMemo(() => {
@@ -156,6 +160,53 @@ function BookingStaffReportTab() {
     <div style={wrap}>
       <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', margin: '0 0 4px' }}>📑 Báo Cáo Nhân Sự — Booking</h2>
       <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: '0 0 18px' }}>Gửi hàng · Hiệu suất KOC · CAST — lọc theo khoảng ngày, so với kỳ trước cùng độ dài.</p>
+
+      {/* TỶ LỆ TRẢ CLIP theo nhân sự — KOC order/quản lý mà chưa air = nợ clip */}
+      {clipRatio.length > 0 && (
+        <div style={{ ...card, marginBottom: 18, overflow: 'hidden' }}>
+          <div onClick={() => setClipOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', cursor: 'pointer', background: '#fff7ed', borderBottom: clipOpen ? '1px solid #fed7aa' : 'none' }}>
+            <span style={{ color: '#c2410c' }}>{clipOpen ? '▼' : '▶'}</span>
+            <span style={{ fontWeight: 800, color: '#9a3412', fontSize: '0.98rem' }}>🎬 Tỷ lệ trả clip theo nhân sự</span>
+            <span style={{ fontSize: '0.78rem', color: '#c2410c' }}>— KOC được gắn/order mà chưa air clip = nợ. Tỷ lệ thấp cần nhắc.</span>
+          </div>
+          {clipOpen && (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                <thead>
+                  <tr style={{ background: '#f8fafc' }}>
+                    {['Nhân sự', 'Tỷ lệ trả clip', 'Tổng KOC', 'Đã air', 'Chưa air (nợ)', 'Nợ quá 30 ngày'].map((h, i) => (
+                      <th key={h} style={{ padding: '9px 12px', textAlign: i === 0 ? 'left' : 'center', fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {clipRatio.map(r => {
+                    const pct = Number(r.ty_le) || 0;
+                    const c = pct < 15 ? '#dc2626' : pct < 30 ? '#d97706' : '#16a34a';
+                    return (
+                      <tr key={r.staff_name} style={{ borderTop: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '9px 12px', fontWeight: 700, color: '#0f172a' }}>{r.staff_name}</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
+                            <div style={{ width: 70, height: 8, background: '#f1f5f9', borderRadius: 5, overflow: 'hidden' }}>
+                              <div style={{ width: pct + '%', height: '100%', background: c, borderRadius: 5 }} />
+                            </div>
+                            <b style={{ color: c, minWidth: 42, textAlign: 'right' }}>{pct}%</b>
+                          </div>
+                        </td>
+                        <td style={{ padding: '9px 12px', textAlign: 'center', fontWeight: 700 }}>{r.tong}</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'center', color: '#16a34a', fontWeight: 700 }}>{r.da_air}</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'center', color: '#d97706', fontWeight: 700 }}>{r.chua_air}</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'center' }}>{r.no_qua_han > 0 ? <span style={{ background: '#fef2f2', color: '#dc2626', fontWeight: 800, borderRadius: 6, padding: '2px 8px' }}>⚠️ {r.no_qua_han}</span> : <span style={{ color: '#94a3b8' }}>0</span>}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Filters */}
       <div style={{ ...card, padding: '14px 16px', marginBottom: 18, display: 'flex', gap: 14, alignItems: 'flex-end', flexWrap: 'wrap' }}>
@@ -272,7 +323,7 @@ function BookingStaffReportTab() {
       </div>
       <p style={{ color: '#94a3b8', fontSize: '0.76rem', marginTop: 10 }}>* Chi phí mẫu = cost (cột AMIS V2) ×1.08×SL + 5k + ship (giống Module 1). CAST đã dùng = koc_payments. Ngân sách = max(15tr, GMV×2.2%). Chi tiết hiện bên dưới — bấm dòng khác để đổi nhân sự.</p>
 
-      {selectedRow && <StaffDetailPanel r={selectedRow} range={range} bg={budgetByStaff[selectedRow.ten_nhansu]} />}
+      {selectedRow && <StaffDetailPanel r={selectedRow} range={range} bg={budgetByStaff[selectedRow.ten_nhansu]} currentUser={currentUser} />}
     </div>
   );
 }
@@ -303,9 +354,24 @@ const Mini = ({ label, val, color = '#475569', icon }) => (
 );
 
 // ── Panel chi tiết nhân sự (hiện INLINE bên dưới bảng) ─────────────────────────
-function StaffDetailPanel({ r, range, bg }) {
+function StaffDetailPanel({ r, range, bg, currentUser }) {
   const [det, setDet] = useState(null);
   const [loadingDet, setLoadingDet] = useState(true);
+  // ── TỰ GỠ TAG (Khánh 15/7): mỗi account chỉ được tự gỡ KOC của ĐÚNG tên mình (r.ten_nhansu === currentUser.staff).
+  //    seeAll (Thu Thảo/Minh Thảo/Hoàng Vy) coi được panel người khác nhưng KHÔNG gỡ được — chỉ gỡ của chính mình.
+  //    admin gỡ được mọi nơi. Video/GMV đã tính trước đó GIỮ NGUYÊN — gỡ chỉ ngưng theo dõi từ giờ về sau.
+  const canRemove = currentUser?.role === 'admin' || (currentUser?.staff && currentUser.staff.trim() === (r.ten_nhansu || '').trim());
+  const [removingKey, setRemovingKey] = useState(null);
+  const doSelfRemove = useCallback(async (k) => {
+    if (!canRemove) return;
+    if (!window.confirm(`Tự gỡ tag @${k.uname} (${k.brand}) khỏi danh sách bạn quản lý?\n\nVideo/GMV đã ghi nhận trước đó vẫn giữ nguyên, chỉ ngưng theo dõi KOC này từ giờ.`)) return;
+    const key = k.uname + '|' + (k.brand || '');
+    setRemovingKey(key);
+    const { data, error } = await supabase.rpc('koc_remove_assignment', { p_koc: k.uname, p_brand: k.brand, p_actor: currentUser?.username || r.ten_nhansu });
+    setRemovingKey(null);
+    if (error) { alert('Lỗi gỡ tag: ' + error.message); return; }
+    setDet(d => d ? { ...d, kocs: (d.kocs || []).filter(x => !(x.uname === k.uname && x.brand === k.brand)) } : d);
+  }, [canRemove, currentUser, r.ten_nhansu]);
   const [sendMetric, setSendMetric] = useState('mau');   // tần suất gửi: don | mau
   const [perfMetric, setPerfMetric] = useState('video'); // hiệu suất: video | views
   const [castVids, setCastVids] = useState(null);        // danh sách video booking cast (xài tiền cho video/brand/SP gì)
@@ -324,7 +390,7 @@ function StaffDetailPanel({ r, range, bg }) {
   // ── TAG ORDER: KOC nhân sự này được tự gắn tag khi order (chưa air) → theo dõi đã lên clip chưa ──
   // Trạng thái HIỆN TẠI (không theo kỳ) — RPC staff_order_tags.
   const [orderTags, setOrderTags] = useState(null);   // null = đang tải
-  const [otWaitOnly, setOtWaitOnly] = useState(false); // chỉ hiện KOC chưa lên clip
+  const [otFilter, setOtFilter] = useState('all'); // lọc panel tag order: all | wait | over | aired | old
   useEffect(() => {
     let alive = true; setOrderTags(null);
     supabase.rpc('staff_order_tags', { p_staff: r.ten_nhansu })
@@ -340,7 +406,7 @@ function StaffDetailPanel({ r, range, bg }) {
   const [airPage, setAirPage] = useState(1);
   const AIR_PER = 20;
   useEffect(() => { const t = setTimeout(() => { setAirQ(airSearch.trim()); setAirPage(1); }, 400); return () => clearTimeout(t); }, [airSearch]);
-  useEffect(() => { setAirPage(1); }, [r.nhansu_id]);
+  useEffect(() => { setAirPage(1); setOtFilter('all'); }, [r.nhansu_id]);
   useEffect(() => {
     let alive = true; setAirRows(null);
     supabase.rpc('staff_air_links', { p_nhansu_id: r.nhansu_id, p_search: airQ || null, p_limit: AIR_PER, p_offset: (airPage - 1) * AIR_PER })
@@ -356,17 +422,21 @@ function StaffDetailPanel({ r, range, bg }) {
   // ── Định danh KOC theo BRAND — RPC staff_booking_detail đã tách sẵn (uname × brand) + last_air + since ──
   const [onlyWarn, setOnlyWarn] = useState(false);
   const dateLabel = (s) => s ? new Date(s).toLocaleDateString('vi-VN') : '—';
-  // "Thời gian bị gỡ tag" (Khánh chốt 1/7): mốc = NGÀY AIR GẦN NHẤT + 45 ngày (cứ air 1 video cho brand đó là
-  // GIA HẠN thêm 45 ngày). Brand chưa air lần nào → tính từ NGÀY GẮN + 45. Quá hạn = nên gỡ (đỏ, warn).
-  const TAG_DAYS = 45;
+  // "Thời gian bị gỡ tag" — hợp nhất Rule 2 + Rule 3 (Khánh 15/7):
+  //  • NỢ CLIP (có order gần đây mà CHƯA air clip mới sau order: last_order & (chưa air | air < last_order))
+  //    → mốc = last_order + 30 ngày. Quá 30 ngày chưa clip = nghi ÔM MẪU (đỏ).
+  //  • ĐÃ air (không nợ) → mốc = air gần nhất + 45 ngày (cứ air là gia hạn). Chưa air & chưa order → ngày gắn + 45.
   const tagInfo = (k) => {
-    const base = k.last_air ? new Date(k.last_air) : (k.since ? new Date(k.since) : null);
+    const lastAir = k.last_air ? new Date(k.last_air) : null;
+    const lastOrder = k.last_order ? new Date(k.last_order) : null;
+    const owes = lastOrder && (!lastAir || lastAir < lastOrder);   // đang nợ clip mới sau order
+    const base = owes ? lastOrder : (lastAir || (k.since ? new Date(k.since) : null));
     if (!base) return { txt: '—', color: '#cbd5e1', warn: false };
-    const deadline = new Date(base.getTime() + TAG_DAYS * 86400000);
+    const days = owes ? 30 : 45;
+    const deadline = new Date(base.getTime() + days * 86400000);
     const daysLeft = Math.ceil((deadline - Date.now()) / 86400000);
-    const aired = !!k.last_air;
-    if (daysLeft < 0) return { txt: `⚠️ Quá hạn ${dateLabel(deadline)} · nên gỡ`, color: '#dc2626', warn: true };
-    return { txt: `${dateLabel(deadline)} · còn ${daysLeft}d`, color: aired ? '#16a34a' : '#d97706', warn: false };
+    if (daysLeft < 0) return { txt: owes ? `⚠️ Nợ clip quá ${-daysLeft}d · nghi ôm mẫu` : `⚠️ Quá hạn ${dateLabel(deadline)} · nên gỡ`, color: '#dc2626', warn: true };
+    return { txt: owes ? `⏳ Chờ clip · còn ${daysLeft}d` : `${dateLabel(deadline)} · còn ${daysLeft}d`, color: owes ? '#d97706' : '#16a34a', warn: false };
   };
   const warnCount = kocs.filter(k => tagInfo(k).warn).length;
   // Trạng thái 1 tag order (đã lên clip / chờ / quá hạn)
@@ -382,7 +452,10 @@ function StaffDetailPanel({ r, range, bg }) {
   const otList = Array.isArray(orderTags) ? orderTags : [];
   const otCnt = { aired: 0, wait: 0, over: 0 };
   otList.forEach(t => { otCnt[otStatus(t).group]++; });
-  const otShown = otWaitOnly ? otList.filter(t => otStatus(t).group !== 'aired') : otList;
+  const otOld = otList.filter(t => t.aired_before).length;
+  const otShown = otList.filter(t => otFilter === 'all' ? true
+    : otFilter === 'old' ? t.aired_before
+    : otStatus(t).group === otFilter);
   // Phân trang bảng Top KOC (RPC trả đủ — chỉ chia trang ở UI)
   const [kocPage, setKocPage] = useState(1);
   useEffect(() => { setKocPage(1); }, [onlyWarn, r.nhansu_id, range.start, range.end]);
@@ -540,7 +613,7 @@ function StaffDetailPanel({ r, range, bg }) {
             {/* Top KOC table */}
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
-                <div style={{ fontWeight: 700, color: '#475569', fontSize: '0.85rem' }}>🏅 Top KOC theo GMV ({kocs.length})</div>
+                <div style={{ fontWeight: 700, color: '#475569', fontSize: '0.85rem' }} title="Hiện ĐỦ mọi KOC quản lý, xếp theo GMV (KOC chưa air = GMV 0 nằm cuối). 1 KOC làm nhiều brand = nhiều dòng.">🏅 KOC quản lý — xếp theo GMV <span style={{ fontWeight: 500, color: '#94a3b8' }}>({kocs.length} dòng · {new Set(kocs.map(k => k.uname)).size} KOC)</span></div>
                 {warnCount > 0 && (
                   <button onClick={() => setOnlyWarn(v => !v)} title="Brand đã quá 45 ngày kể từ lần air gần nhất (chưa air thì từ ngày gắn) → nên gỡ định danh"
                     style={{ padding: '5px 12px', borderRadius: 7, border: `1px solid ${onlyWarn ? '#dc2626' : '#fecaca'}`, background: onlyWarn ? '#dc2626' : '#fff', color: onlyWarn ? '#fff' : '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>
@@ -560,6 +633,7 @@ function StaffDetailPanel({ r, range, bg }) {
                       <th style={{ ...th, padding: '8px', textAlign: 'center' }} title="Ngày gắn định danh brand này">Ngày gắn</th>
                       <th style={{ ...th, padding: '8px', textAlign: 'center' }} title="Video mới nhất KOC đăng cho brand này (all-time)">📅 Ngày air gần nhất</th>
                       <th style={{ ...th, padding: '8px', textAlign: 'center' }} title="Mốc bị gỡ định danh = ngày air gần nhất + 45 ngày (cứ air là gia hạn); brand chưa air lần nào thì tính từ ngày gắn + 45. Quá hạn = nên gỡ.">⏳ Thời gian bị gỡ tag</th>
+                      {canRemove && <th style={{ ...th, padding: '8px', textAlign: 'center' }} title="Không muốn chăm sóc KOC này nữa → tự gỡ tag. Video/GMV đã tính vẫn giữ nguyên.">Gỡ</th>}
                     </tr></thead>
                     <tbody>
                       {pagedKocs.map((k, i) => {
@@ -577,6 +651,15 @@ function StaffDetailPanel({ r, range, bg }) {
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'center', fontSize: '0.76rem', color: '#64748b' }}>{dateLabel(k.since)}</td>
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'center', fontSize: '0.76rem', fontWeight: 600, color: k.last_air ? '#0891b2' : '#f59e0b' }}>{k.last_air ? dateLabel(k.last_air) : '— chưa air'}</td>
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'center', fontSize: '0.74rem', fontWeight: 700, color: ti.color }}>{ti.txt}</td>
+                            {canRemove && (
+                              <td style={{ ...td, padding: '9px 8px', textAlign: 'center' }}>
+                                <button onClick={() => doSelfRemove(k)} disabled={removingKey === (k.uname + '|' + (k.brand || ''))}
+                                  title="Tự gỡ tag KOC này khỏi danh sách bạn quản lý"
+                                  style={{ padding: '4px 10px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>
+                                  {removingKey === (k.uname + '|' + (k.brand || '')) ? '⏳' : '🗑️ Gỡ'}
+                                </button>
+                              </td>
+                            )}
                           </tr>
                         );
                       })}
@@ -597,25 +680,36 @@ function StaffDetailPanel({ r, range, bg }) {
           </Section>
 
           {/* ═══ 2b. TAG ORDER — KOC order-tag tự động, theo dõi đã lên clip chưa ═══ */}
-          <Section icon="🏷️" title="Tag order" hint={`${otList.length} KOC · tự gắn khi order`} accent={{ bg: '#f5f3ff', fg: '#6d28d9' }}>
+          <Section icon="🏷️" title="Tag order" hint={`${otList.length} KOC đã order · từ T7`} accent={{ bg: '#f5f3ff', fg: '#6d28d9' }}>
             <div style={{ fontSize: '0.76rem', color: '#64748b', lineHeight: 1.5, marginTop: -4 }}>
-              KOC bạn <b>{r.ten_nhansu}</b> đã <b>order mẫu</b> nhưng <b>chưa từng air</b> → hệ thống tự gắn tag (hạn 30 ngày). Lên clip trong hạn → tự thành <b>tag quản lý</b>, bạn được ghi nhận video. Quá hạn chưa air → vào <b>đề xuất gỡ</b>. <span style={{ color: '#94a3b8' }}>(trạng thái hiện tại, không theo kỳ)</span>
+              TẤT CẢ KOC bạn <b>{r.ten_nhansu}</b> đã <b>order từ tháng 7</b> — theo dõi ai <b>đã lên clip</b> ai <b>chưa</b> (hạn 30 ngày ra clip MỚI kể từ ngày order). Quá hạn chưa clip → <b style={{ color: '#dc2626' }}>nghi ôm mẫu</b>. Nhãn <b style={{ color: '#0891b2' }}>🔁 cũ</b> = KOC đã air brand này TRƯỚC khi order (KOC quen); không nhãn = KOC mới. <span style={{ color: '#94a3b8' }}>(mốc = ngày order gần nhất)</span>
             </div>
-            {/* summary chips */}
+            {/* summary chips — BẤM để lọc bảng (bấm lại = bỏ lọc) */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ padding: '4px 12px', borderRadius: 999, background: '#f1f5f9', color: '#475569', fontWeight: 800, fontSize: '0.76rem' }}>Tổng {otList.length}</span>
-              <span style={{ padding: '4px 12px', borderRadius: 999, background: '#fffbeb', color: '#d97706', fontWeight: 800, fontSize: '0.76rem' }}>⏳ Chờ lên clip {otCnt.wait}</span>
-              <span style={{ padding: '4px 12px', borderRadius: 999, background: '#fef2f2', color: '#dc2626', fontWeight: 800, fontSize: '0.76rem' }}>⚠️ Quá hạn {otCnt.over}</span>
-              <span style={{ padding: '4px 12px', borderRadius: 999, background: '#f0fdf4', color: '#16a34a', fontWeight: 800, fontSize: '0.76rem' }}>✅ Đã lên clip {otCnt.aired}</span>
-              {otList.length > 0 && (
-                <button onClick={() => setOtWaitOnly(v => !v)}
-                  style={{ marginLeft: 'auto', padding: '4px 12px', borderRadius: 8, border: `1px solid ${otWaitOnly ? '#6d28d9' : '#ddd6fe'}`, background: otWaitOnly ? '#6d28d9' : '#fff', color: otWaitOnly ? '#fff' : '#6d28d9', fontWeight: 700, fontSize: '0.74rem', cursor: 'pointer' }}>
-                  Chỉ chưa lên clip{otWaitOnly ? ' ✕' : ''}
-                </button>
-              )}
+              {(() => {
+                const chip = (key, label, count, fg, bg, title) => {
+                  const on = otFilter === key;
+                  const clickable = key === 'all' || count > 0;
+                  return (
+                    <button key={key} onClick={() => clickable && setOtFilter(on ? 'all' : key)} title={title || 'Bấm để lọc'}
+                      style={{ padding: '4px 12px', borderRadius: 999, border: on ? `2px solid ${fg}` : '2px solid transparent',
+                        background: on ? fg : bg, color: on ? '#fff' : fg, fontWeight: 800, fontSize: '0.76rem',
+                        cursor: clickable ? 'pointer' : 'default', opacity: clickable ? 1 : 0.5 }}>
+                      {label} {count}{on ? ' ✕' : ''}
+                    </button>
+                  );
+                };
+                return <>
+                  {chip('all', 'Tổng', otList.length, '#475569', '#f1f5f9')}
+                  {chip('wait', '⏳ Chờ lên clip', otCnt.wait, '#d97706', '#fffbeb')}
+                  {chip('over', '⚠️ Quá hạn', otCnt.over, '#dc2626', '#fef2f2')}
+                  {chip('aired', '✅ Đã lên clip', otCnt.aired, '#16a34a', '#f0fdf4')}
+                  {chip('old', '🔁 KOC cũ', otOld, '#0891b2', '#ecfeff', 'KOC đã air brand này trước khi order (KOC quen)')}
+                </>;
+              })()}
             </div>
             {orderTags === null ? <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>⏳ Đang tải...</div>
-              : otList.length === 0 ? <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Chưa có tag order nào (bạn này chưa order KOC mới, hoặc KOC đã air hết).</div>
+              : otList.length === 0 ? <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Bạn này chưa order KOC nào từ tháng 7.</div>
               : (
                 <div style={{ overflowX: 'auto', maxHeight: 420, overflowY: 'auto', border: '1px solid #f1f5f9', borderRadius: 10 }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -632,7 +726,7 @@ function StaffDetailPanel({ r, range, bg }) {
                         return (
                           <tr key={t.koc_id + '|' + t.brand_name}>
                             <td style={{ ...td, padding: '9px 8px', color: '#94a3b8', fontWeight: 700 }}>{i + 1}</td>
-                            <td style={{ ...td, padding: '9px 8px', width: '100%' }}><a href={`https://www.tiktok.com/@${t.koc_id}`} target="_blank" rel="noreferrer" style={{ color: '#475569', textDecoration: 'none', fontWeight: 600 }}>@{t.koc_id}</a></td>
+                            <td style={{ ...td, padding: '9px 8px', width: '100%' }}><a href={`https://www.tiktok.com/@${t.koc_id}`} target="_blank" rel="noreferrer" style={{ color: '#475569', textDecoration: 'none', fontWeight: 600 }}>@{t.koc_id}</a>{t.aired_before && <span title="Đã air brand này trước khi order (KOC quen)" style={{ marginLeft: 6, padding: '1px 7px', borderRadius: 999, background: '#ecfeff', color: '#0891b2', fontWeight: 800, fontSize: '0.66rem', verticalAlign: 'middle' }}>🔁 cũ</span>}</td>
                             <td style={{ ...td, padding: '9px 8px', fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>{t.brand_name}</td>
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'center', fontSize: '0.76rem', color: '#64748b' }}>{dateLabel(t.tag_date)}</td>
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'center' }}>

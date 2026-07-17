@@ -433,6 +433,21 @@ const OrderTab = ({ currentUser } = {}) => {
         chartNhanSu, setChartNhanSu, chartData, isChartLoading
     } = useAppData();
 
+    // ── KHÓA NHÂN SỰ theo account (Khánh 14/7): account cá nhân chỉ order + coi đơn dưới TÊN MÌNH.
+    //    Trừ 3 sếp nhóm có seeAll (Thu Thảo/Minh Thảo/Hoàng Vy) → coi HẾT + chọn tên bất kỳ như cũ.
+    const lockedStaff = (currentUser?.staff && !currentUser?.seeAll) ? currentUser.staff : null;
+    const lockedStaffId = useMemo(() => {
+        if (!lockedStaff) return null;
+        const m = (nhanSus || []).find(n => (n.ten_nhansu || '').trim() === lockedStaff.trim());
+        return m ? String(m.id) : null;
+    }, [lockedStaff, nhanSus]);
+    // Ép chọn đúng nhân sự của mình khi TẠO đơn + LỌC danh sách chỉ đơn của mình (không cho đổi)
+    useEffect(() => {
+        if (!lockedStaffId) return;
+        if (String(selectedNhanSu) !== lockedStaffId) setSelectedNhanSu(lockedStaffId);
+        if (String(filterNhanSu) !== lockedStaffId) setFilterNhanSu(lockedStaffId);
+    }, [lockedStaffId, selectedNhanSu, filterNhanSu, setSelectedNhanSu, setFilterNhanSu]);
+
     // Blacklist
     const [blacklistChannels, setBlacklistChannels] = useState([]);
     const [blacklistLoaded, setBlacklistLoaded] = useState(false);
@@ -453,6 +468,7 @@ const OrderTab = ({ currentUser } = {}) => {
 
     // ── CHẶN ORDER KÊNH YẾU: cào view 7 video mới (bỏ video ghim), < 1500 → không cho tạo đơn ──
     const VIEW_GATE_ON = true;                       // cờ bật/tắt (đổi false = về y như cũ, không chặn)
+    const ORDER_LOCK_ON = true;                      // Bước 3: khóa order KOC đang nợ clip brand đó (đổi false = tắt khóa)
     const [chanView, setChanView] = useState(null);  // { loading, username, total_view, video_count, dat, videos, err, nguong }
     const normKenh = (k) => String(k || '').trim().replace(/^@/, '').replace(/.*tiktok\.com\/@?/i, '').replace(/[/?#].*$/, '').toLowerCase();
     const checkChannelView = async (raw) => {
@@ -731,6 +747,20 @@ const OrderTab = ({ currentUser } = {}) => {
             return;
         }
 
+        // #4 (Bước 3 — khóa NỢ CLIP, Rule 2): KOC đã order brand này mà CHƯA ra clip mới → CHẶN order thêm brand đó cho tới khi lên clip.
+        //   Chống trick "cứ order để kéo gia hạn". Áp cho CẢ chính chủ (brand-lock ở trên đã chặn nhân sự khác).
+        if (ORDER_LOCK_ON) {
+            try {
+                const { data: owed } = await supabase.rpc('koc_owes_clip_brands', { p_channel: idKenh });
+                const hit = (owed || []).find(o => orderBrands.includes(normBrand(o.brand_norm)));
+                if (hit) {
+                    const over = Number(hit.days_over) || 0;
+                    alert(`🚫 KOC "@${normK(idKenh)}" đang NỢ CLIP brand "${hit.brand_name}" — đã order ${over} ngày trước mà CHƯA ra clip mới.\n\nKhông order thêm sản phẩm brand này cho KOC tới khi bạn ấy LÊN CLIP.${over > 30 ? '\n⚠️ Đã quá 30 ngày — nghi ÔM MẪU, báo quản lý!' : `\n(còn ${30 - over} ngày để trả clip)`}\n\n👉 Order brand KHÁC cho KOC này thì vẫn được.`);
+                    return;
+                }
+            } catch (err) { /* RPC lỗi thì không chặn, cho tạo đơn bình thường */ }
+        }
+
         // ⚠️ Đơn bất thường → bắt xác nhận lại 1 lần nữa (tránh kế toán phải hỏi lại):
         //   - có sản phẩm số lượng TỪ 2 trở lên, HOẶC  - đơn có từ 2 sản phẩm trở lên
         const hasHighQty = previewList.some(it => it.so_luong >= 2);
@@ -951,10 +981,16 @@ const OrderTab = ({ currentUser } = {}) => {
 
                         <div>
                             <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#374151' }}>Nhân sự gửi (*)</label>
-                            <select value={selectedNhanSu} onChange={e => setSelectedNhanSu(e.target.value)} required style={{ width: '100%' }}>
-                                <option value="">-- Chọn nhân sự --</option>
-                                {nhanSus.filter(n => !isHiddenStaffName(n.ten_nhansu)).map(nhansu => (<option key={nhansu.id} value={nhansu.id}>{nhansu.ten_nhansu}</option>))}
-                            </select>
+                            {lockedStaff ? (
+                                <div style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 8, border: '1px solid #86efac', background: '#f0fdf4', color: '#166534', fontWeight: 700 }}>
+                                    🔒 {lockedStaff} <span style={{ fontWeight: 400, color: '#64748b', fontSize: '0.85em' }}>(tài khoản của bạn — chỉ order dưới tên này)</span>
+                                </div>
+                            ) : (
+                                <select value={selectedNhanSu} onChange={e => setSelectedNhanSu(e.target.value)} required style={{ width: '100%' }}>
+                                    <option value="">-- Chọn nhân sự --</option>
+                                    {nhanSus.filter(n => !isHiddenStaffName(n.ten_nhansu)).map(nhansu => (<option key={nhansu.id} value={nhansu.id}>{nhansu.ten_nhansu}</option>))}
+                                </select>
+                            )}
                         </div>
 
                         <div>
@@ -1151,7 +1187,11 @@ const OrderTab = ({ currentUser } = {}) => {
                         placeholder={!filterBrand ? "Chọn Brand trước" : "Tất cả Sản phẩm"}
                         style={{ flex: '1 1 320px', opacity: !filterBrand ? 0.6 : 1, pointerEvents: !filterBrand ? 'none' : 'auto' }}
                     />
-                    <select value={filterNhanSu} onChange={e => setFilterNhanSu(e.target.value)} style={{ flex: '1 1 180px' }}><option value="">Tất cả nhân sự</option>{nhanSus.filter(n => !isHiddenStaffName(n.ten_nhansu)).map(ns => <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>)}</select>
+                    {lockedStaff ? (
+                        <div style={{ flex: '1 1 180px', padding: '6px 10px', borderRadius: 6, border: '1px solid #86efac', background: '#f0fdf4', color: '#166534', fontWeight: 700, fontSize: '0.85rem' }}>🔒 {lockedStaff}</div>
+                    ) : (
+                        <select value={filterNhanSu} onChange={e => setFilterNhanSu(e.target.value)} style={{ flex: '1 1 180px' }}><option value="">Tất cả nhân sự</option>{nhanSus.filter(n => !isHiddenStaffName(n.ten_nhansu)).map(ns => <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>)}</select>
+                    )}
                     <select value={filterLoaiShip} onChange={e => setFilterLoaiShip(e.target.value)} style={{ flex: '1 1 150px' }}><option value="">Tất cả loại ship</option><option value="Ship thường">Ship thường</option><option value="Hỏa tốc">Hỏa tốc</option></select>
                     <select value={filterEditedStatus} onChange={e => setFilterEditedStatus(e.target.value)} style={{ flex: '1 1 150px' }}><option value="all">Tất cả</option><option value="edited">Đơn đã sửa</option><option value="unedited">Đơn chưa sửa</option></select>
                     <div style={{ display:'flex', alignItems:'center', gap:4, flex:'1 1 280px' }}>
