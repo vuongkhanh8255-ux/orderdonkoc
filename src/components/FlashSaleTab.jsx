@@ -1155,6 +1155,8 @@ function FlashSaleList({ flashSales, onDelete, onBulkDelete, onRefresh }) {
   const [expanded, setExpanded] = useState(null);        // #3 fsId đang bung xem SP
   const [itemsByFs, setItemsByFs] = useState({});        // #3 cache: fsId -> {loading|items|error}
   const [removing, setRemoving] = useState(null);        // #4 item_id đang xóa
+  const [deduping, setDeduping] = useState(false);       // #5 đang dọn khung trùng
+  const [dedupeMsg, setDedupeMsg] = useState('');
 
   const toggleOne = (id) => setSelected(prev => {
     const next = new Set(prev);
@@ -1167,6 +1169,26 @@ function FlashSaleList({ flashSales, onDelete, onBulkDelete, onRefresh }) {
   const fmtDay = (ymd) => { const [y, m, dd] = ymd.split('-'); return `${dd}/${m}/${y}`; };
   const days = useMemo(() => [...new Set((flashSales || []).map(fs => dayOf(fs.start_time)).filter(Boolean))].sort(), [flashSales]);
   const shown = useMemo(() => dayFilter ? (flashSales || []).filter(fs => dayOf(fs.start_time) === dayFilter) : (flashSales || []), [flashSales, dayFilter]);
+  // #5 — đếm FS TRÙNG khung (cùng start_time) → hiện badge trên nút "Dọn trùng"
+  const dupeCount = useMemo(() => {
+    const bySlot = {};
+    for (const fs of (flashSales || [])) { const k = String(fs.start_time || ''); if (k) bySlot[k] = (bySlot[k] || 0) + 1; }
+    return Object.values(bySlot).reduce((s, n) => s + Math.max(0, n - 1), 0);
+  }, [flashSales]);
+  const handleDedupe = async () => {
+    if (!confirm(`Dọn ${dupeCount} Flash Sale TRÙNG khung giờ?\nMỗi khung giữ lại bản NHIỀU sản phẩm nhất, xoá các bản trùng còn lại.`)) return;
+    setDeduping(true); setDedupeMsg('');
+    try {
+      const res = await apiCall('dedupe_slots', {}, {});
+      if (!res.ok) { setDedupeMsg('⚠️ ' + (res.error || res.message || 'Lỗi dọn trùng')); }
+      else {
+        const d = res.data || {};
+        setDedupeMsg(`✅ Đã xoá ${d.removed_count || 0} FS trùng${d.partial ? ` · còn ${d.remaining} nữa, bấm lại để dọn tiếp` : ''}.`);
+        onRefresh?.();
+      }
+    } catch (e) { setDedupeMsg('⚠️ ' + e.message); }
+    setDeduping(false);
+  };
 
   const allIds = shown.map(fs => fs.flash_sale_id).filter(Boolean);
   const allSelected = allIds.length > 0 && allIds.every(id => selected.has(id));
@@ -1246,11 +1268,18 @@ function FlashSaleList({ flashSales, onDelete, onBulkDelete, onRefresh }) {
               🗑️ Xóa {selected.size} cái đã chọn
             </button>
           )}
+          {dupeCount > 0 && (
+            <button onClick={handleDedupe} disabled={deduping} title="Nhiều Flash Sale bị đăng trùng cùng 1 khung giờ — bấm để giữ 1 bản (nhiều SP nhất), xoá phần trùng"
+              style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #f59e0b', background: deduping ? '#fef3c7' : '#fffbeb', color: '#b45309', fontWeight: 800, fontSize: '0.78rem', cursor: deduping ? 'default' : 'pointer', opacity: deduping ? 0.7 : 1 }}>
+              {deduping ? '⏳ Đang dọn…' : `🧹 Dọn ${dupeCount} khung trùng`}
+            </button>
+          )}
           <button onClick={onRefresh} style={{ ...BTN_SECONDARY, padding: '6px 14px', fontSize: '0.78rem' }}>
             🔄 Làm mới
           </button>
         </div>
       </div>
+      {dedupeMsg && <div style={{ marginBottom: 12, fontSize: '0.8rem', fontWeight: 700, color: dedupeMsg.startsWith('⚠️') ? '#dc2626' : '#059669' }}>{dedupeMsg}</div>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {shown.map((fs, i) => {
           const fsId = fs.flash_sale_id;

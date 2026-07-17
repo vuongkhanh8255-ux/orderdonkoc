@@ -987,6 +987,12 @@ function fsBuildItems(rows) {
   }));
 }
 
+// GỐC LỖI TRÙNG: Shopee trả NHIỀU timeslot_id KHÁC NHAU cho CÙNG 1 khung giờ (start_time). Code cũ
+// dedup theo timeslot_id → coi chúng là khung khác nhau → tạo FS cho từng timeslot_id → trùng giờ.
+// Định danh khung theo START_TIME (khung giờ thật) mới đúng — có ở cả list FS lẫn danh sách slot.
+const fsSlotKey = (x) => String(x?.start_time || x?.timeslot_id || x?.time_slot_id || '');
+const fsItemCount = (f) => Number(f?.item_count || 0) + Number(f?.enabled_item_count || 0);
+
 async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, maxSlots, deadline) {
   const out = [];
   const slotsRes = await handleTimeSlots(supabase, shopId);
@@ -999,22 +1005,36 @@ async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, m
     const lr = await handleList(supabase, shopId);
     const ld = lr.data;
     const fsList = Array.isArray(ld) ? ld : (ld?.flash_sale_list || ld?.flash_sale || []);
-    let delCount = 0;
+    // Gom FS đang có THEO KHUNG GIỜ (start_time) để phát hiện & DỌN TRÙNG (nhiều FS cùng 1 khung).
+    const bySlot = {};
     for (const f of (fsList || [])) {
-      const sid = String(f.timeslot_id || f.time_slot_id);
-      // Khung RỖNG (rác tạo hụt từ code cũ) → xoá để vòng dưới tạo lại + lấp SP.
-      // Guard: chỉ xoá khi số SP RÕ RÀNG = 0 (field có mặt); thiếu field → coi như đã có SP (an toàn).
-      const hasCount = ('item_count' in f) || ('enabled_item_count' in f);
-      const cnt = Number(f.item_count || 0) + Number(f.enabled_item_count || 0);
-      const isEmpty = hasCount && cnt === 0 && f.flash_sale_id;
-      // XOÁ CÓ GIỚI HẠN: bỏ qua khi dry_run (không đụng thật), tối đa 8 khung/shop/lượt,
-      // dừng khi hết ngân sách thời gian. Trước đây xoá KHÔNG giới hạn → 1 shop nhiều khung rỗng
-      // ăn hết 60s → Vercel giết → 504. Cron sau tự xoá tiếp phần còn lại (FS idempotent).
-      if (isEmpty && !dryRun && delCount < 8 && !(deadline && Date.now() > deadline)) {
-        try { await handleDelete(supabase, shopId, { flash_sale_id: f.flash_sale_id }); delCount++; continue; }
-        catch { /* xoá lỗi → coi như đang bận, để lần cron sau xử */ }
+      if (!f.flash_sale_id) continue;
+      const k = fsSlotKey(f); if (!k) continue;
+      (bySlot[k] = bySlot[k] || []).push(f);
+    }
+    let delCount = 0;
+    // XOÁ CÓ GIỚI HẠN: bỏ qua khi dry_run, tối đa 12 lần/shop/lượt, dừng khi hết ngân sách thời gian
+    // (né trần 60s Vercel). Phần còn lại để lần cron sau dọn tiếp (idempotent).
+    const canDel = () => !dryRun && delCount < 12 && !(deadline && Date.now() > deadline);
+    for (const [k, arr] of Object.entries(bySlot)) {
+      arr.sort((a, b) => fsItemCount(b) - fsItemCount(a)); // giữ bản NHIỀU SP nhất
+      // Xoá các bản TRÙNG khung (giữ arr[0])
+      for (const d of arr.slice(1)) {
+        if (!canDel()) { used.add(k); break; }
+        try { await handleDelete(supabase, shopId, { flash_sale_id: d.flash_sale_id }); delCount++; }
+        catch { /* để lần cron sau */ }
       }
-      used.add(sid); // đã có SP, hoặc khung rỗng chưa xoá lần này → không lấp đè
+      // Bản GIỮ LẠI: rỗng (rác tạo hụt) → xoá để vòng dưới lấp lại; có SP → đánh dấu used (không lấp đè).
+      // Guard: chỉ coi là rỗng khi field đếm CÓ MẶT và = 0; thiếu field → coi như đã có SP (an toàn).
+      const keep = arr[0];
+      const hasCount = ('item_count' in keep) || ('enabled_item_count' in keep);
+      const keepEmpty = hasCount && fsItemCount(keep) === 0;
+      if (keepEmpty && canDel()) {
+        try { await handleDelete(supabase, shopId, { flash_sale_id: keep.flash_sale_id }); delCount++; }
+        catch { used.add(k); }
+      } else {
+        used.add(k);
+      }
     }
   } catch { /* list lỗi không chặn */ }
 
@@ -1029,7 +1049,17 @@ async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, m
   const nModels = (its) => its.reduce((s, it) => s + (it.models?.length || 0), 0);
 
   // Khung TRỐNG cần lấp (chưa có FS), tối đa maxSlots
-  const emptySlots = slots.filter((s) => { const id = s.timeslot_id || s.time_slot_id; return id && !used.has(String(id)); }).slice(0, maxSlots);
+  // Khung TRỐNG cần lấp. QUAN TRỌNG: Shopee trả NHIỀU timeslot_id cho CÙNG 1 khung giờ (start_time) →
+  // phải gộp về 1 slot/khung, nếu không 1 lượt chạy sẽ tạo nhiều FS trùng giờ. Bỏ khung đã có FS (used).
+  const emptySlots = [];
+  const seenStart = new Set(used);
+  for (const s of slots) {
+    const k = fsSlotKey(s);
+    if (!k || seenStart.has(k)) continue;
+    seenStart.add(k);
+    emptySlots.push(s);
+    if (emptySlots.length >= maxSlots) break;
+  }
 
   let ti = 0; // con trỏ xoay vòng template
   for (const slot of emptySlots) {
@@ -1103,6 +1133,40 @@ async function handleAutoFlashSaleAll(supabase, reqUrl, req) {
   };
   if (!dryRun) { try { await supabase.from('fs_auto_log').insert({ source, summary, results }); } catch (e) { console.error('fs_auto_log err', e.message); } }
   return { ok: true, dry_run: dryRun, ...summary, results };
+}
+
+// DỌN KHUNG TRÙNG (thủ công): 1 khung giờ có nhiều FS → giữ bản NHIỀU SP nhất, xoá phần còn lại.
+// Chỉ xét khung CHƯA kết thúc. An toàn: không đụng khung chỉ có 1 FS.
+async function handleDedupeSlots(supabase, shopId) {
+  const lr = await handleList(supabase, shopId);
+  const ld = lr.data;
+  const fsList = Array.isArray(ld) ? ld : (ld?.flash_sale_list || ld?.flash_sale || []);
+  const bySlot = {};
+  for (const f of (fsList || [])) {
+    if (!f.flash_sale_id) continue;
+    if (Number(f.status) === 3 || Number(f.type) === 3) continue; // bỏ khung đã kết thúc/vô hiệu
+    const k = fsSlotKey(f); if (!k) continue;
+    (bySlot[k] = bySlot[k] || []).push(f);
+  }
+  const removed = []; const skipped = [];
+  let dupeSlots = 0;
+  const t0 = Date.now(); const BUDGET_MS = 45000; // né trần 60s Vercel; phần dư gọi lại là xong
+  outer:
+  for (const arr of Object.values(bySlot)) {
+    if (arr.length < 2) continue;
+    dupeSlots++;
+    arr.sort((a, b) => fsItemCount(b) - fsItemCount(a)); // giữ bản nhiều SP nhất
+    for (const d of arr.slice(1)) {
+      if (Date.now() - t0 > BUDGET_MS) break outer;
+      try {
+        const r = await handleDelete(supabase, shopId, { flash_sale_id: d.flash_sale_id });
+        if (r.ok) removed.push(d.flash_sale_id); else skipped.push({ flash_sale_id: d.flash_sale_id, error: r.error || r.message });
+      } catch (e) { skipped.push({ flash_sale_id: d.flash_sale_id, error: e.message }); }
+      await new Promise((r) => setTimeout(r, 180));
+    }
+  }
+  const remaining = Object.values(bySlot).reduce((s, a) => s + Math.max(0, a.length - 1), 0) - removed.length;
+  return { ok: true, data: { removed_count: removed.length, removed, skipped, dupe_slots: dupeSlots, remaining, partial: remaining > 0 } };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1190,6 +1254,9 @@ export default async function handler(req, res) {
         break;
       case 'auto_flash_sale_all':
         result = await handleAutoFlashSaleAll(supabase, reqUrl, req);
+        break;
+      case 'dedupe_slots':
+        result = await handleDedupeSlots(supabase, shopId);
         break;
       default:
         return res.status(400).json({
