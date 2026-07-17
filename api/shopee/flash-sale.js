@@ -1015,7 +1015,7 @@ async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, m
     let delCount = 0;
     // XOÁ CÓ GIỚI HẠN: bỏ qua khi dry_run, tối đa 12 lần/shop/lượt, dừng khi hết ngân sách thời gian
     // (né trần 60s Vercel). Phần còn lại để lần cron sau dọn tiếp (idempotent).
-    const canDel = () => !dryRun && delCount < 12 && !(deadline && Date.now() > deadline);
+    const canDel = () => !dryRun && delCount < 40 && !(deadline && Date.now() > deadline);
     for (const [k, arr] of Object.entries(bySlot)) {
       arr.sort((a, b) => fsItemCount(b) - fsItemCount(a)); // giữ bản NHIỀU SP nhất
       // Xoá các bản TRÙNG khung (giữ arr[0])
