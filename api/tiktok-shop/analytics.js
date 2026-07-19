@@ -1015,6 +1015,8 @@ const syncShopVideoMonth = async ({ appKey, appSecret, aconn, shop_id, ym, supab
     token = j.data?.next_page_token;
     pages++;
     if (!token) { done = true; break; }
+    // Checkpoint token mỗi 5 trang — Vercel cắt giữa chừng thì lượt sau nối tiếp, không quét lại từ đầu.
+    if (pages % 5 === 0) await supabase.from('tiktok_video_month_sync').upsert({ shop_id: String(shop_id), ym, token, done: false, synced: (Number(sm?.synced) || 0) + up, updated_at: new Date().toISOString() }, { onConflict: 'shop_id,ym' });
   }
   // final_done: chỉ chốt khi vòng quét HOÀN TẤT trên tháng ĐÃ ĐÓNG. Quét trong-tháng xong vẫn false → sang tháng cron tự quét lại vòng chốt sổ.
   const finalDone = done && monthClosed ? true : (sm?.final_done || false);
@@ -1022,10 +1024,12 @@ const syncShopVideoMonth = async ({ appKey, appSecret, aconn, shop_id, ym, supab
   return { ym, videos: up, done, final_done: finalDone };
 };
 // Mỗi run: refresh tháng hiện tại + backfill 1 tháng cũ chưa xong.
-const syncShopVideosAllMonths = async ({ appKey, appSecret, shop_id, supabase, maxPages = 8 }) => {
+const syncShopVideosAllMonths = async ({ appKey, appSecret, shop_id, supabase, maxPages = 8, onlyYm = null }) => {
   const { data: aconns } = await supabase.from('tiktok_analytics_connections').select('access_token, refresh_token, shop_cipher, shop_id').not('access_token', 'is', null);
   const aconn = (aconns || []).find(c => String(c.shop_id) === String(shop_id));
   if (!aconn) return { skipped: 'no analytics conn' };
+  // onlyYm: ép quét ĐÚNG 1 tháng chỉ định (vd vòng chốt sổ chạy tay) — dồn hết maxPages cho tháng đó, bỏ cur/past.
+  if (onlyYm) return [await syncShopVideoMonth({ appKey, appSecret, aconn, shop_id, ym: onlyYm, supabase, maxPages })];
   const months = listMonths(AFF_SYNC_FLOOR_DATE);
   const cur = months[months.length - 1];
   const out = [];
@@ -1360,13 +1364,15 @@ async function handleSyncAffVideos({ params, appKey, appSecret, supabase, res })
   const vsort = params.vsort ? String(params.vsort) : 'views'; // sort VIEWS: bắt video nhiều-view (kể cả ít đơn). API ko sort theo ngày.
   const vrpages = Math.min(Math.max(Number(params.vrpages) || 8, 1), 20);
   const results = [];
+  // ?vym=YYYY-MM: ép quét ĐÚNG 1 tháng (vòng chốt sổ chạy tay) — bỏ lượt recent/window cho nhanh, dồn vpages cho tháng đó.
+  const vym = params.vym && /^\d{4}-\d{2}$/.test(String(params.vym)) ? String(params.vym) : null;
   for (const m of targets) {
     try {
       // Lượt "video mới nhất" TRƯỚC (cửa sổ ngày hẹp + sort views → bắt video vừa air dù ít/không đơn)
-      const recent = await syncShopVideosRecent({ appKey, appSecret, shop_id: m.shop_id, supabase, sortField: vsort, maxPages: vrpages });
-      const win = await syncShopVideos({ appKey, appSecret, shop_id: m.shop_id, supabase, maxPages: 2 });
-      const mon = await syncShopVideosAllMonths({ appKey, appSecret, shop_id: m.shop_id, supabase, maxPages: vpages });
-      await supabase.from('tiktok_affiliate_sync_meta').update({ video_last_run_at: new Date().toISOString() }).eq('shop_id', m.shop_id);
+      const recent = vym ? null : await syncShopVideosRecent({ appKey, appSecret, shop_id: m.shop_id, supabase, sortField: vsort, maxPages: vrpages });
+      const win = vym ? null : await syncShopVideos({ appKey, appSecret, shop_id: m.shop_id, supabase, maxPages: 2 });
+      const mon = await syncShopVideosAllMonths({ appKey, appSecret, shop_id: m.shop_id, supabase, maxPages: vpages, onlyYm: vym });
+      if (!vym) await supabase.from('tiktok_affiliate_sync_meta').update({ video_last_run_at: new Date().toISOString() }).eq('shop_id', m.shop_id);
       results.push({ shop: m.seller_name, recent, total: win, monthly: mon });
     } catch (e) { results.push({ shop: m.seller_name, error: e.message }); }
   }
