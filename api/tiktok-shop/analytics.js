@@ -985,9 +985,14 @@ const syncShopVideoMonth = async ({ appKey, appSecret, aconn, shop_id, ym, supab
     urlParams.sign = buildSign(appSecret, path, urlParams);
     return ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(urlParams)}`, { method: 'GET', headers: { 'x-tts-access-token': aconn.access_token, 'content-type': 'application/json' } }, 12000);
   };
-  const { data: sm } = await supabase.from('tiktok_video_month_sync').select('token, synced').eq('shop_id', shop_id).eq('ym', ym).maybeSingle();
+  const { data: sm } = await supabase.from('tiktok_video_month_sync').select('token, synced, final_done').eq('shop_id', shop_id).eq('ym', ym).maybeSingle();
   let token = sm?.token || null;
   let pages = 0, up = 0, done = false;
+  // Tháng ĐÃ ĐÓNG chưa? (giờ VN). Quét trong-tháng chỉ là snapshot giữa chừng (video bị đóng dấu số lúc quét ngang,
+  // thiếu các ngày sau đó) → phải có 1 vòng quét TRỌN VẸN sau khi tháng kết thúc (final_done) số mới là final.
+  const nowVn = new Date(Date.now() + 7 * 3600 * 1000);
+  const curYm = `${nowVn.getUTCFullYear()}-${String(nowVn.getUTCMonth() + 1).padStart(2, '0')}`;
+  const monthClosed = ym < curYm;
   while (pages < maxPages) {
     let raw = await doCall(token);
     let j; try { j = JSON.parse(raw); } catch { break; }
@@ -1011,8 +1016,10 @@ const syncShopVideoMonth = async ({ appKey, appSecret, aconn, shop_id, ym, supab
     pages++;
     if (!token) { done = true; break; }
   }
-  await supabase.from('tiktok_video_month_sync').upsert({ shop_id: String(shop_id), ym, token: done ? null : token, done, synced: (Number(sm?.synced) || 0) + up, updated_at: new Date().toISOString() }, { onConflict: 'shop_id,ym' });
-  return { ym, videos: up, done };
+  // final_done: chỉ chốt khi vòng quét HOÀN TẤT trên tháng ĐÃ ĐÓNG. Quét trong-tháng xong vẫn false → sang tháng cron tự quét lại vòng chốt sổ.
+  const finalDone = done && monthClosed ? true : (sm?.final_done || false);
+  await supabase.from('tiktok_video_month_sync').upsert({ shop_id: String(shop_id), ym, token: done ? null : token, done, final_done: finalDone, synced: (Number(sm?.synced) || 0) + up, updated_at: new Date().toISOString() }, { onConflict: 'shop_id,ym' });
+  return { ym, videos: up, done, final_done: finalDone };
 };
 // Mỗi run: refresh tháng hiện tại + backfill 1 tháng cũ chưa xong.
 const syncShopVideosAllMonths = async ({ appKey, appSecret, shop_id, supabase, maxPages = 8 }) => {
@@ -1027,9 +1034,11 @@ const syncShopVideosAllMonths = async ({ appKey, appSecret, shop_id, supabase, m
   out.push(await syncShopVideoMonth({ appKey, appSecret, aconn, shop_id, ym: cur, supabase, maxPages: maxPages * 2 }));
   const past = months.slice(0, -1);
   if (past.length) {
-    const { data: sms } = await supabase.from('tiktok_video_month_sync').select('ym, done, updated_at').eq('shop_id', shop_id).in('ym', past);
+    const { data: sms } = await supabase.from('tiktok_video_month_sync').select('ym, done, updated_at, final_done').eq('shop_id', shop_id).in('ym', past);
     const byYm = {}; (sms || []).forEach(x => { byYm[x.ym] = x; });
-    const todo = past.filter(ym => !byYm[ym]?.done);
+    // Tháng cũ cần quét khi: chưa xong HOẶC xong nhưng CHƯA có vòng chốt sổ sau khi tháng đóng (final_done).
+    // (Tháng done giữa-tháng → số đông cứng thiếu ngày cuối — bug tháng 6/2026 thiếu 9% so file Seller Center.)
+    const todo = past.filter(ym => !(byYm[ym]?.done && byYm[ym]?.final_done));
     if (todo.length) {
       // Rotate: never-synced first, then oldest-updated → các tháng cũ tiến song song
       todo.sort((a, b) => (byYm[a]?.updated_at ? new Date(byYm[a].updated_at).getTime() : 0) - (byYm[b]?.updated_at ? new Date(byYm[b].updated_at).getTime() : 0));
