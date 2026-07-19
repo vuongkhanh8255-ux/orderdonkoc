@@ -1432,6 +1432,46 @@ async function handleFillKocViews({ params, appKey, appSecret, supabase, res }) 
   return res.status(200).json({ ok: true, shop_id, work: (work || []).length, filled, zero, errs });
 }
 
+// SOI 1 VIDEO (đối soát tay): gọi THẲNG by-id performance của TikTok cho các tháng chỉ định,
+// trả 3 nguồn cạnh nhau: api_live (TikTok trả ngay lúc gọi) / db_synced (số sync đang lưu) / file_sc
+// (file Seller Center up vào tiktok_performance) + intervals chi tiết → xem API trả đúng/hợp lý không.
+async function handleVideoProbe({ params, appKey, appSecret, supabase, res }) {
+  const vid = String(params.video_id || '').trim();
+  if (!vid) return res.status(200).json({ ok: false, error: 'thiếu video_id' });
+  const { data: sv } = await supabase.from('tiktok_shop_videos').select('shop_id, username, post_date').eq('id', vid).maybeSingle();
+  const shop_id = String(params.shop_id || sv?.shop_id || '');
+  if (!shop_id) return res.status(200).json({ ok: false, error: 'không tìm thấy shop của video (truyền thêm shop_id)' });
+  const { data: aconns } = await supabase.from('tiktok_analytics_connections').select('access_token, refresh_token, shop_cipher, shop_id').not('access_token', 'is', null);
+  const aconn = (aconns || []).find(c => String(c.shop_id) === shop_id);
+  if (!aconn) return res.status(200).json({ ok: false, error: 'no analytics conn for shop ' + shop_id });
+  const months = String(params.months || '').split(',').map(s => s.trim()).filter(s => /^\d{4}-\d{2}$/.test(s));
+  if (!months.length) return res.status(200).json({ ok: false, error: 'thiếu months=YYYY-MM[,YYYY-MM...]' });
+  const callVid = (sd, ed) => {
+    const path = `/analytics/${VIDEO_PERF_VERSION}/shop_videos/${vid}/performance`;
+    const u = { app_key: appKey, timestamp: String(Math.floor(Date.now() / 1000)), start_date_ge: sd, end_date_lt: ed, currency: 'LOCAL' };
+    if (aconn.shop_cipher) u.shop_cipher = aconn.shop_cipher;
+    u.sign = buildSign(appSecret, path, u);
+    return ttText(`${TIKTOK_BASE}${path}?${new URLSearchParams(u)}`, { method: 'GET', headers: { 'x-tts-access-token': aconn.access_token, 'content-type': 'application/json' } }, 12000);
+  };
+  const out = [];
+  for (const ym of months) {
+    const { sd, ed } = monthWindow(ym);
+    let raw = await callVid(sd, ed);
+    let j; try { j = JSON.parse(raw); } catch { j = { code: -1, message: raw.slice(0, 200) }; }
+    if (j?.code === 105002 && await refreshAnalyticsToken({ appKey, appSecret, conn: aconn, supabase, table: 'tiktok_analytics_connections' })) {
+      raw = await callVid(sd, ed); try { j = JSON.parse(raw); } catch { j = { code: -1, message: raw.slice(0, 200) }; }
+    }
+    const perf = j?.data?.performance || {};
+    const intervals = (perf.intervals || []).map(x => ({ start: x.start_date, end: x.end_date, views: Number(x.views) || 0, gmv: numAmt(x.gmv) }));
+    const apiLive = intervals.reduce((a, x) => a + x.views, 0);
+    const { data: dbRow } = await supabase.from('tiktok_video_monthly_views').select('views, updated_at').eq('id', vid).eq('ym', ym).maybeSingle();
+    const [y, m] = ym.split('-').map(Number);
+    const { data: fileRow } = await supabase.from('tiktok_performance').select('views').eq('video_id', vid).eq('year', y).eq('month', m).maybeSingle();
+    out.push({ ym, code: j?.code ?? null, message: j?.message || null, api_live_views: apiLive, db_synced_views: dbRow?.views ?? null, db_synced_at: dbRow?.updated_at || null, file_sc_views: fileRow?.views ?? null, intervals });
+  }
+  return res.status(200).json({ ok: true, video_id: vid, shop_id, username: sv?.username || null, post_date: sv?.post_date || null, months: out });
+}
+
 // Read + aggregate per-KOC sales from the synced table.
 // Suy brand từ tên gian hàng (khớp brandOfShop ở frontend + brands.ten_brand). null = không xác định → không lọc.
 const brandOf = (sellerName) => {
@@ -2010,6 +2050,11 @@ export default async function handler(req, res) {
 
   if (action === 'fill_koc_views') {
     try { return await handleFillKocViews({ params, appKey, appSecret, supabase, res }); }
+    catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
+  }
+
+  if (action === 'video_probe') {
+    try { return await handleVideoProbe({ params, appKey, appSecret, supabase, res }); }
     catch (err) { return res.status(200).json({ ok: false, error: err.message }); }
   }
 
