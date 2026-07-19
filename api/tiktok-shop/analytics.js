@@ -1364,8 +1364,11 @@ async function handleSyncAffVideos({ params, appKey, appSecret, supabase, res })
   const vsort = params.vsort ? String(params.vsort) : 'views'; // sort VIEWS: bắt video nhiều-view (kể cả ít đơn). API ko sort theo ngày.
   const vrpages = Math.min(Math.max(Number(params.vrpages) || 8, 1), 20);
   const results = [];
-  // ?vym=YYYY-MM: ép quét ĐÚNG 1 tháng (vòng chốt sổ chạy tay) — bỏ lượt recent/window cho nhanh, dồn vpages cho tháng đó.
-  const vym = params.vym && /^\d{4}-\d{2}$/.test(String(params.vym)) ? String(params.vym) : null;
+  // ?vym=YYYY-MM (hoặc vym=cur = tháng hiện tại giờ VN): ép quét ĐÚNG 1 tháng — bỏ lượt recent/window, dồn vpages cho tháng đó.
+  // Dùng cho cron "quét tươi" hằng đêm (fresh-views.yml) + vòng chốt sổ chạy tay.
+  let vym = params.vym ? String(params.vym) : null;
+  if (vym === 'cur') { const d = new Date(Date.now() + 7 * 3600 * 1000); vym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`; }
+  if (vym && !/^\d{4}-\d{2}$/.test(vym)) vym = null;
   for (const m of targets) {
     try {
       // Lượt "video mới nhất" TRƯỚC (cửa sổ ngày hẹp + sort views → bắt video vừa air dù ít/không đơn)
