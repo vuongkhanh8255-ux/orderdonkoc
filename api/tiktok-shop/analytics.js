@@ -1349,33 +1349,37 @@ async function handleSyncVideosFresh({ params, appKey, appSecret, supabase, res 
 // Video analytics sync — TÁCH riêng khỏi sync đơn (tránh timeout). 1 shop/run, xoay theo video_last_run_at.
 async function handleSyncAffVideos({ params, appKey, appSecret, supabase, res }) {
   const norm = (s) => (s || '').toLowerCase().trim();
-  const { data: metas } = await supabase.from('tiktok_affiliate_sync_meta').select('shop_id, seller_name, video_last_run_at').not('shop_id', 'is', null);
+  const { data: metas } = await supabase.from('tiktok_affiliate_sync_meta').select('shop_id, seller_name, video_last_run_at, vym_last_run_at').not('shop_id', 'is', null);
   const real = (metas || []).filter(m => m.shop_id && !String(m.shop_id).startsWith('noc:'));
   if (!real.length) return res.status(200).json({ ok: true, synced: 0, results: [] });
+
+  // ?vym=YYYY-MM (hoặc vym=cur = tháng hiện tại giờ VN): ép quét ĐÚNG 1 tháng — bỏ lượt recent/window, dồn vpages cho tháng đó.
+  // Dùng cho cron "quét tươi" (cron-job.org ping vym=cur không seller → tự xoay gian) + fresh-views.yml + chạy tay.
+  let vym = params.vym ? String(params.vym) : null;
+  if (vym === 'cur') { const d = new Date(Date.now() + 7 * 3600 * 1000); vym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`; }
+  if (vym && !/^\d{4}-\d{2}$/.test(vym)) vym = null;
 
   let targets;
   if (params.seller) { const w = norm(params.seller); targets = real.filter(m => norm(m.seller_name).includes(w)); }
   else if (params.all === '1') { targets = real; }
   else {
-    targets = [...real].sort((a, b) => (a.video_last_run_at ? new Date(a.video_last_run_at).getTime() : 0) - (b.video_last_run_at ? new Date(b.video_last_run_at).getTime() : 0)).slice(0, 1);
+    // Xoay 1 gian/lần: vym mode xoay theo vym_last_run_at RIÊNG (không đụng vòng xoay sync chính)
+    const key = vym ? 'vym_last_run_at' : 'video_last_run_at';
+    targets = [...real].sort((a, b) => (a[key] ? new Date(a[key]).getTime() : 0) - (b[key] ? new Date(b[key]).getTime() : 0)).slice(0, 1);
   }
 
   const vpages = Math.min(Math.max(Number(params.vpages) || 10, 1), 40);
   const vsort = params.vsort ? String(params.vsort) : 'views'; // sort VIEWS: bắt video nhiều-view (kể cả ít đơn). API ko sort theo ngày.
   const vrpages = Math.min(Math.max(Number(params.vrpages) || 8, 1), 20);
   const results = [];
-  // ?vym=YYYY-MM (hoặc vym=cur = tháng hiện tại giờ VN): ép quét ĐÚNG 1 tháng — bỏ lượt recent/window, dồn vpages cho tháng đó.
-  // Dùng cho cron "quét tươi" hằng đêm (fresh-views.yml) + vòng chốt sổ chạy tay.
-  let vym = params.vym ? String(params.vym) : null;
-  if (vym === 'cur') { const d = new Date(Date.now() + 7 * 3600 * 1000); vym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`; }
-  if (vym && !/^\d{4}-\d{2}$/.test(vym)) vym = null;
   for (const m of targets) {
     try {
       // Lượt "video mới nhất" TRƯỚC (cửa sổ ngày hẹp + sort views → bắt video vừa air dù ít/không đơn)
       const recent = vym ? null : await syncShopVideosRecent({ appKey, appSecret, shop_id: m.shop_id, supabase, sortField: vsort, maxPages: vrpages });
       const win = vym ? null : await syncShopVideos({ appKey, appSecret, shop_id: m.shop_id, supabase, maxPages: 2 });
       const mon = await syncShopVideosAllMonths({ appKey, appSecret, shop_id: m.shop_id, supabase, maxPages: vpages, onlyYm: vym });
-      if (!vym) await supabase.from('tiktok_affiliate_sync_meta').update({ video_last_run_at: new Date().toISOString() }).eq('shop_id', m.shop_id);
+      // vym mode ghi mốc xoay RIÊNG (vym_last_run_at) → cron-job.org ping URL trần vẫn tự xoay đủ gian
+      await supabase.from('tiktok_affiliate_sync_meta').update(vym ? { vym_last_run_at: new Date().toISOString() } : { video_last_run_at: new Date().toISOString() }).eq('shop_id', m.shop_id);
       results.push({ shop: m.seller_name, recent, total: win, monthly: mon });
     } catch (e) { results.push({ shop: m.seller_name, error: e.message }); }
   }
