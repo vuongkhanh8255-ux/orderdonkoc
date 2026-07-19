@@ -687,6 +687,10 @@ export default function KocPerformanceTab() {
   const [orderOpen, setOrderOpen] = useState(null); // koc đang mở chi tiết đơn mẫu trong list GỠ
   const [syncingTags, setSyncingTags] = useState(false); // đang chạy sync_order_tags
   const [syncTagMsg, setSyncTagMsg] = useState('');       // kết quả lần sync gần nhất
+  const [castLoaded, setCastLoaded] = useState(false);    // đã tải xong cast gần nhất (auto-gỡ đợi cờ này kẻo gỡ nhầm KOC đã book cast)
+  const [prioLoaded, setPrioLoaded] = useState(false);    // đã tải xong ưu tiên của brand hiện tại
+  const [autoRemovedNotice, setAutoRemovedNotice] = useState(null);  // {brand, items:[{koc,staff,label}]} — thông báo "đã tự gỡ"
+  const autoRemoveRef = useRef({});   // { brand: true } — mỗi brand chỉ tự gỡ 1 lần/phiên (chống lặp)
   useEffect(() => {
     (async () => { // blacklist 888 kênh, sắp vượt trần 1000 dòng/lượt của Supabase → đọc theo trang
       let all = [];
@@ -704,18 +708,19 @@ export default function KocPerformanceTab() {
     supabase.rpc('koc_latest_cast').then(({ data }) => {
       const m = {};
       for (const r of (data || [])) { const u = (r.uname || '').toLowerCase().replace(/^@/, ''); if (u) m[u] = { cast: Number(r.last_cast) || 0, date: r.last_date }; }
-      setCastMap(m);
-    }, () => {});
+      setCastMap(m); setCastLoaded(true);
+    }, () => setCastLoaded(true));
   }, []);
   // ── ƯU TIÊN KOC (có DUYỆT): quản lý sàn ĐỀ XUẤT (proposed) -> admin DUYỆT (approved) -> gia hạn 10 ngày. ──
   const PRIO_DAYS = 10;
   const isAdminRole = currentUser?.role === 'admin';
   const [prioMap, setPrioMap] = useState({});   // { koc_id(lower): {status, prioritized_at, proposed_at} }
   const loadPrio = useCallback(async () => {
-    if (!brand) { setPrioMap({}); return; }
+    setPrioLoaded(false);
+    if (!brand) { setPrioMap({}); setPrioLoaded(true); return; }
     const { data } = await supabase.from('koc_tag_priority').select('koc_id, status, prioritized_at, proposed_at').eq('brand_name', brand);
     const m = {}; (data || []).forEach(r => { const u = (r.koc_id || '').toLowerCase().replace(/^@/, ''); if (u) m[u] = r; });
-    setPrioMap(m);
+    setPrioMap(m); setPrioLoaded(true);
   }, [brand]);
   useEffect(() => { loadPrio(); }, [loadPrio]);
   const prioLeft = useCallback((kocId) => {   // ngày ưu tiên còn lại — CHỈ tính khi ĐÃ DUYỆT (approved)
@@ -787,6 +792,31 @@ export default function KocPerformanceTab() {
     supabase.rpc('koc_purge_blacklist_assignments', { p_actor: currentUser?.username || 'auto' })
       .then(({ data }) => { if (data) reloadAssignments(); }, () => { purgedRef.current = false; });
   }, [assignMap, blacklist, currentUser, reloadAssignments]);
+  // TỰ ĐỘNG GỠ tag quá hạn (chỉ admin): KOC quá hạn (order chưa ra clip / 45 ngày) mà KHÔNG book cast + KHÔNG ưu tiên
+  // → hệ thống gỡ luôn, khỏi bấm "Duyệt gỡ" từng cái; chỉ hiện thông báo đơn giản để admin bấm OK ẩn.
+  // Chờ castLoaded + prioLoaded mới chạy → tránh gỡ nhầm KOC đã trả tiền / đang ưu tiên (dữ liệu loại trừ tải async).
+  // Chừa KOC đang XIN ưu tiên (proposed) cho admin tự quyết. Mỗi brand chỉ tự gỡ 1 lần/phiên (autoRemoveRef).
+  useEffect(() => {
+    if (!isAdminRole || !brand || !castLoaded || !prioLoaded) return;
+    if (autoRemoveRef.current[brand]) return;
+    const list = overdueWarnsCast.filter(w => !prioPending(w.koc_id));
+    if (!list.length) return;
+    autoRemoveRef.current[brand] = true;
+    (async () => {
+      const removed = [];
+      for (const w of list) {
+        const { data, error } = await supabase.rpc('koc_remove_assignment',
+          { p_koc: w.koc_id, p_brand: brand, p_actor: (currentUser?.username || 'auto') + ' (tự gỡ quá hạn)' });
+        if (!error && data) {
+          const dsa = w.days_since_air ?? w.days_since ?? 0;
+          const lim = w.limit_days ?? 45;
+          removed.push({ koc: w.koc_id, staff: w.staff_name || '', label: `${dsa}/${lim} ngày${w.owes_clip ? ' · order chưa ra clip' : ''}` });
+        }
+      }
+      if (removed.length) setAutoRemovedNotice({ brand, items: removed });
+      refreshAssign();
+    })();
+  }, [isAdminRole, brand, castLoaded, prioLoaded, overdueWarnsCast, prioPending, currentUser, refreshAssign]);
   // Sau khi auto-gỡ ở trên, danh sách này còn rỗng — giữ lại phòng trường hợp purge chưa chạy xong.
   const blacklistAssigned = useMemo(() => {
     if (!['admin', 'ecom', 'booking'].includes(currentUser?.role) || !blacklist.size) return [];
@@ -1278,8 +1308,21 @@ export default function KocPerformanceTab() {
                 </button>
                 <span style={{ fontSize: '0.72rem', color: '#64748b' }}>⛔ viền đỏ = KOC blacklist (không gán được)</span>
               </div>
-              {['admin', 'ecom', 'booking'].includes(currentUser?.role) && (pendingProposals.length > 0 || blacklistAssigned.length > 0 || overdueWarnsCast.length > 0) && (
+              {['admin', 'ecom', 'booking'].includes(currentUser?.role) && (pendingProposals.length > 0 || blacklistAssigned.length > 0 || overdueWarnsCast.length > 0 || (autoRemovedNotice && autoRemovedNotice.brand === brand)) && (
                 <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {autoRemovedNotice && autoRemovedNotice.brand === brand && autoRemovedNotice.items.length > 0 && (
+                    <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '12px 14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+                        <div style={{ fontWeight: 800, color: '#15803d', fontSize: '0.86rem' }}>✅ Hệ thống đã TỰ GỠ {autoRemovedNotice.items.length} KOC quá hạn <span style={{ color: '#64748b', fontWeight: 600 }}>(brand {brand})</span></div>
+                        <button onClick={() => setAutoRemovedNotice(null)} style={{ marginLeft: 'auto', padding: '5px 18px', borderRadius: 7, border: '1px solid #86efac', background: '#fff', color: '#15803d', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>OK, ẩn</button>
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {autoRemovedNotice.items.map(it => (
+                          <span key={it.koc} style={{ fontSize: '0.74rem', background: '#fff', border: '1px solid #dcfce7', borderRadius: 8, padding: '4px 9px', color: '#166534' }}>@{it.koc} <span style={{ color: '#94a3b8' }}>· NS {it.staff || '—'} · {it.label}</span></span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {pendingProposals.length > 0 && (
                     <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px' }}>
                       <div style={{ fontWeight: 800, color: '#b45309', fontSize: '0.86rem', marginBottom: 8 }}>🔔 {pendingProposals.length} đề xuất GÁN chờ duyệt <span style={{ color: '#64748b', fontWeight: 600 }}>(brand {brand})</span></div>
