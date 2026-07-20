@@ -909,7 +909,10 @@ const OrderTab = ({ currentUser } = {}) => {
                                                     <div onClick={() => openViewPopup(chanView.username, { big: true, force: true })} title="Bấm để phóng to + xem video" style={{ display: 'flex', gap: 5, marginTop: 6, overflowX: 'auto', cursor: 'pointer' }}>
                                                         {chanView.videos.map((v, i) => (
                                                             <div key={i} title={`${Number(v.view).toLocaleString('vi-VN')} view`} style={{ flexShrink: 0, textAlign: 'center' }}>
-                                                                <img src={v.cover} alt="" style={{ width: 42, height: 56, objectFit: 'cover', borderRadius: 5, border: '1px solid #e2e8f0' }} />
+                                                                <div style={{ position: 'relative', width: 42, height: 56, borderRadius: 5, overflow: 'hidden', border: '1px solid #e2e8f0', background: 'linear-gradient(135deg,#334155,#0f172a)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                    <img src={v.cover} alt="" onError={e => { e.currentTarget.style.display = 'none'; }} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                                    <span style={{ position: 'absolute', color: 'rgba(255,255,255,0.9)', fontSize: '0.7rem', pointerEvents: 'none' }}>▶</span>
+                                                                </div>
                                                                 <div style={{ fontSize: '0.62rem', color: '#64748b' }}>{Number(v.view) >= 1000 ? (v.view / 1000).toFixed(1) + 'K' : v.view}</div>
                                                             </div>
                                                         ))}
@@ -1256,8 +1259,8 @@ const OrderTab = ({ currentUser } = {}) => {
                                                             <video key={v.id} src={viewPopup.playUrl} controls autoPlay playsInline style={{ width: '100%', aspectRatio: '9/16', objectFit: 'contain', background: '#000', display: 'block' }} />
                                                         )
                                                     ) : (
-                                                        <div onClick={() => openPlay(v.id, viewPopup.username)} title="Bấm để xem video ngay tại chỗ" style={{ cursor: 'pointer', position: 'relative' }}>
-                                                            <img src={v.cover} alt="" style={{ width: '100%', aspectRatio: '9/16', objectFit: 'cover', display: 'block' }} />
+                                                        <div onClick={() => openPlay(v.id, viewPopup.username)} title="Bấm để xem video ngay tại chỗ" style={{ cursor: 'pointer', position: 'relative', aspectRatio: '9/16', background: 'linear-gradient(135deg,#334155,#0f172a)' }}>
+                                                            <img src={v.cover} alt="" onError={e => { e.currentTarget.style.display = 'none'; }} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                                                             <span style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', fontSize: '2rem', color: '#fff', textShadow: '0 1px 6px rgba(0,0,0,0.7)' }}>▶</span>
                                                             <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(transparent, rgba(0,0,0,0.72))', color: '#fff', fontSize: '0.72rem', fontWeight: 700, padding: '14px 6px 4px', textAlign: 'center' }}>{Number(v.view).toLocaleString('vi-VN')} view</div>
                                                         </div>
