@@ -512,7 +512,7 @@ const KocPaymentTab = () => {
     //   ngân sách gồm đơn tháng khác bị rớt âm thầm → lệch chứng từ). Không tick gì → xuất theo bộ lọc.
     const source = Array.isArray(explicit) ? explicit : (selected.size > 0 ? rows.filter(r => selected.has(r.id)) : filtered);
     const data = source.map(r => ({
-      'NGÀY AIR': fmtDate(airDateOf(r)), 'NHÂN SỰ': r.staff || '', 'CÔNG TY': r.company || '', 'BRAND': r.brand || '',
+      'NGÀY AIR': fmtDate(airDateOf(r)), 'NGÀY': fmtDate(r.pay_date), 'NHÂN SỰ': r.staff || '', 'CÔNG TY': r.company || '', 'BRAND': r.brand || '',
       'LINK KÊNH': r.channel_link || '', 'CAST (NET)': num(r.cast_net), 'PIT': num(r.pit), 'TỔNG': num(r.total),
       'SỐ TÀI KHOẢN': r.bank_account || '', 'NGÂN HÀNG': r.bank_name || '', 'NGƯỜI THỤ HƯỞNG': r.beneficiary || '',
       'HỌ VÀ TÊN': r.full_name || '', 'SỐ CCCD': r.cccd || '', 'MÃ SỐ THUẾ': r.tax_code || '',
@@ -1041,19 +1041,20 @@ const KocPaymentTab = () => {
             <thead>
               <tr>
                 <th style={{ ...th, textAlign: 'center', width: 34 }}><input type="checkbox" checked={allVisibleSelected} onChange={toggleSelAll} title="Chọn tất cả dòng đang hiện" style={{ width: 16, height: 16, cursor: 'pointer' }} /></th>
-                <th style={th} title="Ngày air thật của video (bóc từ link air), không phải ngày nhập đơn">Ngày air</th><th style={th}>Nhân sự</th><th style={th}>Cty</th><th style={th}>Brand</th><th style={th}>ID kênh</th>
+                <th style={th} title="Ngày air thật của video (bóc từ link air), không phải ngày nhập đơn">Ngày air</th><th style={th}>Ngày</th><th style={th}>Nhân sự</th><th style={th}>Cty</th><th style={th}>Brand</th><th style={th}>ID kênh</th>
                 <th style={th}>Họ tên</th><th style={th}>CCCD</th><th style={th}>MST</th><th style={th}>Số TK</th><th style={th}>Ngân hàng</th>
                 <th style={{ ...th, textAlign: 'right' }}>Cast</th><th style={{ ...th, textAlign: 'right' }}>PIT</th><th style={{ ...th, textAlign: 'right' }}>Tổng</th>
                 <th style={{ ...th, textAlign: 'center' }}>Link</th><th style={{ ...th, textAlign: 'center' }}>Đã TT</th><th style={{ ...th, textAlign: 'center' }}>⚙️</th>
               </tr>
             </thead>
             <tbody>
-              {loading ? (<tr><td colSpan={17} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải…</td></tr>)
-                : filtered.length === 0 ? (<tr><td colSpan={17} style={{ ...td, textAlign: 'center', padding: 36, color: '#9ca3af' }}>Chưa có thanh toán nào. Bấm “➕ Thêm thanh toán”.</td></tr>)
+              {loading ? (<tr><td colSpan={18} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải…</td></tr>)
+                : filtered.length === 0 ? (<tr><td colSpan={18} style={{ ...td, textAlign: 'center', padding: 36, color: '#9ca3af' }}>Chưa có thanh toán nào. Bấm “➕ Thêm thanh toán”.</td></tr>)
                 : pageRows.map((r, i) => (
                   <tr key={r.id} style={{ background: (missingFields(r).length && !r.paid) ? '#fff1f2' : (missingFields(r).length && r.paid) ? '#fffbeb' : selected.has(r.id) ? '#eff6ff' : r.paid ? '#fff7ed' : (i % 2 ? '#fcfcfd' : '#fff'), boxShadow: (missingFields(r).length && !r.paid) ? 'inset 4px 0 0 #ef4444' : (missingFields(r).length && r.paid) ? 'inset 4px 0 0 #f59e0b' : 'none' }}>
                     <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSel(r.id)} style={{ width: 15, height: 15, cursor: 'pointer' }} /></td>
-                    <td style={td}>{fmtDate(airDateOf(r))}</td>
+                    <td style={td}>{fmtDate(airDateOf(r)) || '—'}</td>
+                    <td style={td}>{fmtDate(r.pay_date)}</td>
                     <td style={td}>{r.staff || '—'}</td>
                     <td style={td}><span style={{ fontSize: '0.72rem', fontWeight: 700, color: r.company === 'OPTIMAX' ? '#7c3aed' : '#0891b2' }}>{r.company || '—'}</span></td>
                     <td style={td}>{(() => { const w = brandWarnMap[r.id]; if (!w) return r.brand || '—'; const shops = [...new Set(w.map(x => x.link_shop))].join(', '); return <span title={`⚠️ Điền brand "${r.brand || '(trống)'}" nhưng link bán ở: ${shops}. Sửa lại brand cho khớp (cast đã tính đúng theo link).`} style={{ color: '#c2410c', fontWeight: 700, cursor: 'help' }}>⚠️ {r.brand || '—'}</span>; })()}</td>

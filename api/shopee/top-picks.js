@@ -7,7 +7,10 @@ const DEFAULT_SHOP_ID = 341325550;
 /* ── Recurring auto-boost config ────────────────────────────────────────── */
 const DEFAULT_INTERVAL_HOURS = 4;            // Shopee boost lasts 4h
 const BOOST_BATCH_SIZE = 5;                  // Shopee max 5 items per boost
-const DUE_GRACE_MS = 5 * 60 * 1000;          // 5-min grace so a cron firing exactly on the boundary still counts as "due"
+// Shopee KHÓA đẩy lại cùng SP trong 240 phút + slot bump cũ (4h) phải hết hạn trước. Mỗi shop chỉ có đúng 5 mã
+// (đẩy lại y hệt mỗi vòng) nên PHẢI chờ QUÁ 240 phút — đẩy sớm dù vài giây là dính "under 240min"/"slot limit".
+const DUE_BUFFER_MS = 6 * 60 * 1000;         // chỉ đẩy khi đã QUÁ interval + 6 phút (KHÔNG bao giờ đẩy sớm)
+const RETRY_AFTER_MS = 30 * 60 * 1000;       // đẩy hụt (slot/cooldown) → thử lại sau ~30 phút (lượt cron kế), không chờ nguyên interval
 
 /* ── Multi-app config ───────────────────────────────────────────────────── */
 const APPS = {
@@ -376,7 +379,7 @@ async function loadSchedule(supabase, shopId) {
 function computeNextRun(schedule) {
   if (!schedule || !schedule.last_run_at) return null;
   const interval = (schedule.interval_hours || DEFAULT_INTERVAL_HOURS) * 3600 * 1000;
-  return new Date(new Date(schedule.last_run_at).getTime() + interval).toISOString();
+  return new Date(new Date(schedule.last_run_at).getTime() + interval + DUE_BUFFER_MS).toISOString();
 }
 
 /** Select up to BOOST_BATCH_SIZE item_ids starting at rotationIndex, wrapping around the list */
@@ -454,12 +457,12 @@ async function runAutoBoost(supabase, shopId, { source = 'cron', force = false }
   // Due check (skip when not yet due, unless forced)
   const interval = (schedule.interval_hours || DEFAULT_INTERVAL_HOURS) * 3600 * 1000;
   const lastRun = schedule.last_run_at ? new Date(schedule.last_run_at).getTime() : 0;
-  const due = !lastRun || (Date.now() - lastRun) >= (interval - DUE_GRACE_MS);
+  const due = !lastRun || (Date.now() - lastRun) >= (interval + DUE_BUFFER_MS);
   if (!due && !force) {
     return {
       ok: true, skipped: true, reason: 'not_due',
       message: 'Chưa tới giờ đẩy',
-      next_run_at: new Date(lastRun + interval).toISOString(),
+      next_run_at: new Date(lastRun + interval + DUE_BUFFER_MS).toISOString(),
     };
   }
 
@@ -506,11 +509,18 @@ async function runAutoBoost(supabase, shopId, { source = 'cron', force = false }
     ? ` (đã thử lại ${slotRetries} lần, slot vẫn đầy)`
     : ` (đẩy lại sau ${slotRetries} lần chờ slot)`;
 
-  // Advance rotation + stamp last_run_at (always, when attempted — prevents retry spam; cron retries next cycle)
-  const newRotation = itemIds.length > 0 ? (rotationIndex + batch.length) % itemIds.length : 0;
+  // Cập nhật lịch theo kết quả:
+  //  - Đẩy ĐƯỢC (≥1 SP) → dời mốc 4h tới HIỆN TẠI + xoay vòng → lượt sau cách đủ 4h+.
+  //  - Đẩy HỤT hết (slot/cooldown/lỗi) → KHÔNG dời nguyên 4h (kẻo hụt 1 lần là tắt boost suốt 4h). Đặt mốc lùi
+  //    để lượt cron kế (sau ~RETRY_AFTER) do lại — lúc đó slot/cooldown đã hết. KHÔNG xoay vòng khi hụt.
+  const boostedOk = successCount > 0;
+  const newRotation = (boostedOk && itemIds.length > 0) ? (rotationIndex + batch.length) % itemIds.length : rotationIndex;
+  const nextLastRun = boostedOk
+    ? new Date()
+    : new Date(Date.now() - interval - DUE_BUFFER_MS + RETRY_AFTER_MS);
   await supabase
     .from('shopee_boost_schedule')
-    .update({ rotation_index: newRotation, last_run_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .update({ rotation_index: newRotation, last_run_at: nextLastRun.toISOString(), updated_at: new Date().toISOString() })
     .eq('id', schedule.id);
 
   // Write log
@@ -525,7 +535,7 @@ async function runAutoBoost(supabase, shopId, { source = 'cron', force = false }
     ok: true, ran: true, status, message,
     success_count: successCount, fail_count: failCount,
     item_ids: batch, next_rotation_index: newRotation,
-    next_run_at: new Date(Date.now() + interval).toISOString(),
+    next_run_at: new Date(nextLastRun.getTime() + interval + DUE_BUFFER_MS).toISOString(),
   };
 }
 

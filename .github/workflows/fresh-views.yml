@@ -1,0 +1,38 @@
+name: Fresh Video Views (quet tuoi thang hien tai)
+
+# Quét TƯƠI view tháng hiện tại cho cả 7 gian, mỗi đêm 2:00 sáng VN (19:00 UTC).
+# Sáng ra số view trên web luôn "tươi tính đến đêm qua" — hết cảnh trễ 1-2 ngày, khỏi kêu chạy tay.
+# (Số FINAL của tháng đã đóng thì cơ chế final_done trong analytics.js tự chốt sổ đầu tháng sau — việc khác nhau.)
+# GitHub cron có thể lệch 15-60 phút — với job hằng đêm thì vô hại. Chạy tay: tab Actions → Run workflow.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 19 * * *'   # 2:00 sáng VN hằng ngày
+
+concurrency:
+  group: fresh-views
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    name: Sweep current month all shops
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    steps:
+      - name: Sweep per shop until done
+        run: |
+          BASE="https://koc-tool.vercel.app/api/tiktok-shop/analytics"
+          # Key lọc seller_name (substring, không dấu hoa thường đều khớp) — gian to trước.
+          for S in "eherb viet" "moaw" "body" "milaganics" "minh" "healmii" "real"; do
+            echo "=== Shop: $S ==="
+            ENC=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "$S")
+            for i in $(seq 1 45); do
+              R=$(curl -sS --max-time 140 "${BASE}?action=sync_aff_videos&vym=cur&vpages=40&seller=${ENC}" || echo '{"err":"curl fail"}')
+              echo "call $i: ${R:0:220}"
+              # done=true = đã quét trọn vòng tháng hiện tại cho shop này → sang shop kế
+              echo "$R" | grep -q '"done":true' && break
+              sleep 3
+            done
+          done
+          echo "Fresh sweep complete."
