@@ -687,10 +687,8 @@ export default function KocPerformanceTab() {
   const [orderOpen, setOrderOpen] = useState(null); // koc đang mở chi tiết đơn mẫu trong list GỠ
   const [syncingTags, setSyncingTags] = useState(false); // đang chạy sync_order_tags
   const [syncTagMsg, setSyncTagMsg] = useState('');       // kết quả lần sync gần nhất
-  const [castLoaded, setCastLoaded] = useState(false);    // đã tải xong cast gần nhất (auto-gỡ đợi cờ này kẻo gỡ nhầm KOC đã book cast)
+  const [castLoaded, setCastLoaded] = useState(false);    // đã tải xong cast gần nhất
   const [prioLoaded, setPrioLoaded] = useState(false);    // đã tải xong ưu tiên của brand hiện tại
-  const [autoRemovedNotice, setAutoRemovedNotice] = useState(null);  // {brand, items:[{koc,staff,label}]} — thông báo "đã tự gỡ"
-  const autoRemoveRef = useRef({});   // { brand: true } — mỗi brand chỉ tự gỡ 1 lần/phiên (chống lặp)
   useEffect(() => {
     (async () => { // blacklist 888 kênh, sắp vượt trần 1000 dòng/lượt của Supabase → đọc theo trang
       let all = [];
@@ -792,32 +790,10 @@ export default function KocPerformanceTab() {
     supabase.rpc('koc_purge_blacklist_assignments', { p_actor: currentUser?.username || 'auto' })
       .then(({ data }) => { if (data) reloadAssignments(); }, () => { purgedRef.current = false; });
   }, [assignMap, blacklist, currentUser, reloadAssignments]);
-  // TỰ ĐỘNG GỠ tag quá hạn (chỉ admin): KOC quá hạn (order chưa ra clip / 45 ngày) mà KHÔNG book cast + KHÔNG ưu tiên
-  // → hệ thống gỡ luôn, khỏi bấm "Duyệt gỡ" từng cái; chỉ hiện thông báo đơn giản để admin bấm OK ẩn.
-  // Chờ castLoaded + prioLoaded mới chạy → tránh gỡ nhầm KOC đã trả tiền / đang ưu tiên (dữ liệu loại trừ tải async).
-  // Chừa KOC đang XIN ưu tiên (proposed) cho admin tự quyết. Mỗi brand chỉ tự gỡ 1 lần/phiên (autoRemoveRef).
-  useEffect(() => {
-    if (!isAdminRole || !brand || !castLoaded || !prioLoaded) return;
-    if (autoRemoveRef.current[brand]) return;
-    const list = overdueWarnsCast.filter(w => !prioPending(w.koc_id));
-    if (!list.length) return;
-    autoRemoveRef.current[brand] = true;
-    (async () => {
-      const removed = [];
-      for (const w of list) {
-        const { data, error } = await supabase.rpc('koc_remove_assignment',
-          { p_koc: w.koc_id, p_brand: brand, p_actor: (currentUser?.username || 'auto') + ' (tự gỡ quá hạn)' });
-        if (!error && data) {
-          const dsa = w.days_since_air ?? w.days_since ?? 0;
-          const lim = w.limit_days ?? 45;
-          removed.push({ koc: w.koc_id, staff: w.staff_name || '', label: `${dsa}/${lim} ngày${w.owes_clip ? ' · order chưa ra clip' : ''}` });
-        }
-      }
-      if (removed.length) setAutoRemovedNotice({ brand, items: removed });
-      refreshAssign();
-    })();
-  }, [isAdminRole, brand, castLoaded, prioLoaded, overdueWarnsCast, prioPending, currentUser, refreshAssign]);
-  // Sau khi auto-gỡ ở trên, danh sách này còn rỗng — giữ lại phòng trường hợp purge chưa chạy xong.
+  // GỠ TAG QUÁ HẠN giờ chạy tự động ở BACKEND (pg_cron 'auto-remove-overdue-hourly' phút 41 mỗi giờ,
+  // RPC auto_remove_overdue_assignments) — quá hạn (order chưa ra clip 30 ngày / 45 ngày kể từ air gần nhất)
+  // là gỡ luôn + ghi koc_assignment_history (actor='auto (quá hạn)'). KHÔNG còn danh sách "chờ duyệt" ở web.
+  // Sau khi auto-gỡ blacklist ở trên, danh sách này còn rỗng — giữ lại phòng trường hợp purge chưa chạy xong.
   const blacklistAssigned = useMemo(() => {
     if (!['admin', 'ecom', 'booking'].includes(currentUser?.role) || !blacklist.size) return [];
     return Object.entries(assignMap)
@@ -1308,21 +1284,8 @@ export default function KocPerformanceTab() {
                 </button>
                 <span style={{ fontSize: '0.72rem', color: '#64748b' }}>⛔ viền đỏ = KOC blacklist (không gán được)</span>
               </div>
-              {['admin', 'ecom', 'booking'].includes(currentUser?.role) && (pendingProposals.length > 0 || blacklistAssigned.length > 0 || overdueWarnsCast.length > 0 || (autoRemovedNotice && autoRemovedNotice.brand === brand)) && (
+              {['admin', 'ecom', 'booking'].includes(currentUser?.role) && pendingProposals.length > 0 && (
                 <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {autoRemovedNotice && autoRemovedNotice.brand === brand && autoRemovedNotice.items.length > 0 && (
-                    <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '12px 14px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
-                        <div style={{ fontWeight: 800, color: '#15803d', fontSize: '0.86rem' }}>✅ Hệ thống đã TỰ GỠ {autoRemovedNotice.items.length} KOC quá hạn <span style={{ color: '#64748b', fontWeight: 600 }}>(brand {brand})</span></div>
-                        <button onClick={() => setAutoRemovedNotice(null)} style={{ marginLeft: 'auto', padding: '5px 18px', borderRadius: 7, border: '1px solid #86efac', background: '#fff', color: '#15803d', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer' }}>OK, ẩn</button>
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {autoRemovedNotice.items.map(it => (
-                          <span key={it.koc} style={{ fontSize: '0.74rem', background: '#fff', border: '1px solid #dcfce7', borderRadius: 8, padding: '4px 9px', color: '#166534' }}>@{it.koc} <span style={{ color: '#94a3b8' }}>· NS {it.staff || '—'} · {it.label}</span></span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                   {pendingProposals.length > 0 && (
                     <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px' }}>
                       <div style={{ fontWeight: 800, color: '#b45309', fontSize: '0.86rem', marginBottom: 8 }}>🔔 {pendingProposals.length} đề xuất GÁN chờ duyệt <span style={{ color: '#64748b', fontWeight: 600 }}>(brand {brand})</span></div>
@@ -1335,72 +1298,6 @@ export default function KocPerformanceTab() {
                               <button onClick={() => approveProposal(p)} style={{ padding: '5px 14px', borderRadius: 7, border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#16a34a', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>✓ Duyệt</button>
                               <button onClick={() => rejectProposal(p)} style={{ padding: '5px 12px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>✕ Từ chối</button>
                             </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {(blacklistAssigned.length > 0 || overdueWarnsCast.length > 0) && (
-                    <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 14px' }}>
-                      <div style={{ fontWeight: 800, color: '#dc2626', fontSize: '0.86rem', marginBottom: 8 }}>🗑️ Đề xuất GỠ chờ duyệt — {blacklistAssigned.length + overdueWarnsCast.length} KOC <span style={{ color: '#64748b', fontWeight: 600 }}>(brand {brand})</span></div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {blacklistAssigned.map(b => (
-                          <div key={'bl-' + b.koc} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.78rem', background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #fee2e2', flexWrap: 'wrap' }}>
-                            <a href={`https://www.tiktok.com/@${b.koc}`} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontWeight: 700, textDecoration: 'none' }}>@{b.koc}</a>
-                            <span style={{ color: '#dc2626', fontWeight: 700 }}>⛔ BLACKLIST</span><span style={{ color: '#64748b' }}>· NS: <b>{b.staff_name}</b></span>
-                            {currentUser?.role === 'admin'
-                              ? <button onClick={() => removeAssign(b.koc)} style={{ marginLeft: 'auto', padding: '5px 14px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>Duyệt gỡ</button>
-                              : <span style={{ marginLeft: 'auto', color: '#64748b', fontWeight: 600, fontSize: '0.72rem' }}>⏳ chờ admin gỡ</span>}
-                          </div>
-                        ))}
-                        {overdueWarnsCast.map(w => (
-                          <div key={'od-' + w.koc_id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.78rem', background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #fee2e2', flexWrap: 'wrap' }}>
-                            <a href={`https://www.tiktok.com/@${w.koc_id}`} target="_blank" rel="noreferrer" style={{ color: ACCENT, fontWeight: 700, textDecoration: 'none' }}>@{w.koc_id}</a>
-                            <span style={{ color: '#64748b' }}>NS: <b>{w.staff_name}</b> · {w.owes_clip
-                              ? <><b style={{ color: '#7c3aed' }}>🏷️ order chưa ra clip mới</b> · {w.days_since_air ?? w.days_since} ngày (hạn 30 · nghi ôm mẫu){w.last_air ? <> · air cũ {new Date(w.last_air).toLocaleDateString('vi-VN')}</> : null}</>
-                              : w.last_air
-                                ? <>air gần nhất <b>{new Date(w.last_air).toLocaleDateString('vi-VN')}</b> ({w.days_since_air ?? w.days_since} ngày trước · hạn 45)</>
-                                : <><b style={{ color: '#7c3aed' }}>🏷️ tag order</b> · chưa air · gán {w.days_since_air ?? w.days_since} ngày (hạn 30)</>}</span>
-                            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
-                              {prioPending(w.koc_id)
-                                ? (isAdminRole
-                                    ? <button onClick={() => approvePriority(w.koc_id)} title={`Duyệt ưu tiên — gia hạn ${PRIO_DAYS} ngày`} style={{ padding: '5px 12px', borderRadius: 7, border: 'none', background: '#7c3aed', color: '#fff', fontWeight: 800, fontSize: '0.76rem', cursor: 'pointer' }}>✓ Duyệt ưu tiên</button>
-                                    : <span style={{ color: '#7c3aed', fontWeight: 700, fontSize: '0.72rem' }}>⏳ đã xin ưu tiên · chờ admin duyệt</span>)
-                                : (isAdminRole
-                                    ? <button onClick={() => approvePriority(w.koc_id)} title={`Ưu tiên — gia hạn ${PRIO_DAYS} ngày`} style={{ padding: '5px 12px', borderRadius: 7, border: '1px solid #ddd6fe', background: '#f5f3ff', color: '#7c3aed', fontWeight: 800, fontSize: '0.76rem', cursor: 'pointer' }}>⭐ Ưu tiên (+{PRIO_DAYS}n)</button>
-                                    : <button onClick={() => proposePriority(w.koc_id)} title="Xin ưu tiên (admin duyệt sau)" style={{ padding: '5px 12px', borderRadius: 7, border: '1px solid #ddd6fe', background: '#f5f3ff', color: '#7c3aed', fontWeight: 800, fontSize: '0.76rem', cursor: 'pointer' }}>⭐ Xin ưu tiên</button>)}
-                              {isAdminRole
-                                ? <button onClick={() => removeAssign(w.koc_id)} style={{ padding: '5px 14px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>Duyệt gỡ</button>
-                                : <span style={{ color: '#64748b', fontWeight: 600, fontSize: '0.72rem' }}>⏳ chờ admin gỡ</span>}
-                            </div>
-                            {(() => {
-                              const u = (w.koc_id || '').toLowerCase().replace(/^@/, '');
-                              const od = orderMap[u];
-                              const open = orderOpen === u;
-                              const late = od && od.days_since > 30;
-                              return (
-                                <div style={{ width: '100%' }}>
-                                  {od
-                                    ? <button onClick={() => setOrderOpen(open ? null : u)} title="Bấm xem chi tiết các đơn mẫu gần đây"
-                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8, border: `1px solid ${late ? '#fecaca' : '#bbf7d0'}`, background: late ? '#fff7f7' : '#f0fdf4', color: late ? '#dc2626' : '#15803d', fontWeight: 700, fontSize: '0.73rem', cursor: 'pointer' }}>
-                                        📦 Order mẫu gần nhất: <b>{od.days_since} ngày trước</b> ({new Date(od.last_order).toLocaleDateString('vi-VN')}) · {od.order_count} đơn {open ? '▲' : '▾'}
-                                      </button>
-                                    : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8, border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', fontWeight: 800, fontSize: '0.73rem' }}>📦 CHƯA gửi mẫu brand này — kiểm tra NS có gửi hàng không</span>}
-                                  {open && Array.isArray(od?.recent) && od.recent.length > 0 && (
-                                    <div style={{ marginTop: 6, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '7px 11px' }}>
-                                      <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700, marginBottom: 3 }}>Đơn mẫu gần nhất (ngày · ai order):</div>
-                                      {od.recent.slice(0, 1).map((o, ix) => (
-                                        <div key={ix} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '2px 0', fontSize: '0.73rem', color: '#334155', flexWrap: 'wrap' }}>
-                                          <b style={{ color: '#0f172a' }}>{o.d}</b>
-                                          <span>· order bởi <b style={{ color: '#7c3aed' }}>{o.ns}</b></span>
-                                          {o.ship && <span style={{ color: '#94a3b8' }}>· {o.ship}</span>}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })()}
                           </div>
                         ))}
                       </div>
