@@ -53,21 +53,28 @@ function normVid(a: any): any | null {
 
 // CÀO TRẢ PHÍ TikHub — 1 phát ra video theo username. Trả {ok, videos} (đã chuẩn hoá field tikwm).
 // ok=false -> rớt về tikwm free. Lỗi/hết tiền không tính phí bên TikHub.
-async function tikhubPosts(username: string, debug = false): Promise<{ ok: boolean; videos: any[] }> {
-  try {
-    const r = await fetchT(
-      `https://api.tikhub.io/api/v1/tiktok/app/v3/fetch_user_post_videos_v3?unique_id=${encodeURIComponent(username)}&count=15`,
-      8000, { Authorization: `Bearer ${TIKHUB_KEY}`, 'Accept': 'application/json' });
-    const j = await r.json();
-    const code = j?.code;
-    if (code !== 200 && code !== 0) { if (debug) console.log('tikhub code', code, j?.detail || j?.message || ''); return { ok: false, videos: [] }; }
-    const data = j?.data ?? j;
-    const arr = data?.aweme_list || data?.videos || data?.itemList || data?.data?.aweme_list || [];
-    if (debug) console.log('tikhub ok, top keys', Object.keys(data || {}).slice(0, 12), 'n=', Array.isArray(arr) ? arr.length : 'notarr', 'item0keys', Object.keys((Array.isArray(arr) ? arr[0] : {}) || {}).slice(0, 15));
-    if (!Array.isArray(arr)) return { ok: false, videos: [] };
-    const videos = arr.map(normVid).filter((v: any) => v);
-    return { ok: true, videos };
-  } catch (e) { if (debug) console.log('tikhub err', String(e)); return { ok: false, videos: [] }; }
+async function tikhubPosts(username: string): Promise<{ ok: boolean; videos: any[]; dbg: any }> {
+  const dbg: any = {};
+  for (let attempt = 0; attempt < 2; attempt++) {   // TikHub thi thoảng lỗi tạm -> thử 2 lần
+    try {
+      const r = await fetchT(
+        `https://api.tikhub.io/api/v1/tiktok/app/v3/fetch_user_post_videos_v3?unique_id=${encodeURIComponent(username)}&count=15`,
+        9000, { Authorization: `Bearer ${TIKHUB_KEY}`, 'Accept': 'application/json' });
+      dbg.http = r.status;
+      const j = await r.json();
+      dbg.code = j?.code; dbg.msg = j?.detail || j?.message || j?.msg || '';
+      const data = j?.data ?? j;
+      dbg.dataKeys = Object.keys(data || {}).slice(0, 14);
+      const arr = data?.aweme_list || data?.videos || data?.itemList || data?.aweme_details || data?.data?.aweme_list || [];
+      dbg.n = Array.isArray(arr) ? arr.length : 'notarr';
+      dbg.item0 = Object.keys((Array.isArray(arr) ? arr[0] : {}) || {}).slice(0, 16);
+      if ((j?.code === 200 || j?.code === 0) && Array.isArray(arr)) {
+        return { ok: true, videos: arr.map(normVid).filter((v: any) => v), dbg };
+      }
+    } catch (e) { dbg.err = String(e); }
+    if (attempt < 1) await new Promise((res) => setTimeout(res, 600));
+  }
+  return { ok: false, videos: [], dbg };
 }
 
 // Lấy thông tin kênh (follower...) — dùng làm CỨU CÁNH khi /user/posts cào không nổi.
@@ -138,10 +145,12 @@ Deno.serve(async (req) => {
     let vids: any[] = [];
     let serverBusy = true; // chưa cào được (khác với kênh không tồn tại thật)
     let info = { exists: false, follower: 0 };
+    let tikhubDbg: any = null;
 
     // 1) ƯU TIÊN nguồn TRẢ PHÍ TikHub nếu đã cắm key (ổn định, 1 phát ra video).
     if (TIKHUB_KEY) {
-      const th = await tikhubPosts(username, debug);
+      const th = await tikhubPosts(username);
+      tikhubDbg = th.dbg;
       if (th.ok) { vids = th.videos; serverBusy = false; }
     }
 
@@ -201,7 +210,7 @@ Deno.serve(async (req) => {
     // Chỉ cache kết quả CHẮC CHẮN (có video / follower cứu cánh / kênh trống thật).
     // Ca "tikwm bận không rõ" -> shouldCache=false để lần sau cào lại tươi.
     if (shouldCache) await supa.from('koc_channel_views').upsert(row, { onConflict: 'username' });
-    return json({ ok: true, cached: false, nguong: NGUONG, ...row });
+    return json({ ok: true, cached: false, nguong: NGUONG, ...row, ...(debug ? { _tikhub: tikhubDbg } : {}) });
   } catch (e) {
     return json({ ok: false, error: String((e as Error)?.message || e) }, 500);
   }
