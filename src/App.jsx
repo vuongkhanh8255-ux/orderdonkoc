@@ -47,6 +47,7 @@ const FlashSaleTab = lazy(() => import('./components/FlashSaleTab'));
 const TopPicksTab = lazy(() => import('./components/TopPicksTab'));
 const ReviewsTab = lazy(() => import('./components/ReviewsTab'));
 const SeedingTab = lazy(() => import('./components/SeedingTab'));
+const PromoCheckTab = lazy(() => import('./components/PromoCheckTab'));
 const ShopeeAdsDashboard = lazy(() => import('./components/ShopeeAdsDashboard'));
 const ShopeeAutoReplyTab = lazy(() => import('./components/ShopeeAutoReplyTab'));
 
@@ -314,6 +315,7 @@ function AppMain({ user, onLogout, allowedViews }) {
                 { view: 'cskh', icon: '📋', name: 'CSKH' },
                 { view: 'reviews', icon: '⭐', name: 'Đánh giá sàn' },
                 { view: 'seeding', icon: '🌱', name: 'Chi phí Seeding' },
+                { view: 'promo_check', icon: '🎯', name: 'Đơn sai KM' },
               ]},
               { key: 'livestream', label: '🎬 Livestream', emoji: '🎬', items: [
                 { view: 'livestream', icon: '🎬', name: 'Livestream' },
@@ -476,6 +478,7 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'top_picks' && <TopPicksTab />}
           {currentView === 'reviews' && <ReviewsTab />}
           {currentView === 'seeding' && <SeedingTab currentUser={user} />}
+          {currentView === 'promo_check' && <PromoCheckTab currentUser={user} />}
           {currentView === 'shopee_livestream' && (
             <ComingSoonPlaceholder icon="📺" title="Shopee Livestream" description="Quản lý phiên livestream, theo dõi GMV, đơn hàng, người xem trực tiếp" />
           )}
