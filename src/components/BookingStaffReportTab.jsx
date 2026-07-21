@@ -376,7 +376,11 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
   //  • NỢ CLIP (có order gần đây mà CHƯA air clip mới sau order: last_order & (chưa air | air < last_order))
   //    → mốc = last_order + 30 ngày. Quá 30 ngày chưa clip = nghi ÔM MẪU (đỏ).
   //  • ĐÃ air (không nợ) → mốc = air gần nhất + 45 ngày (cứ air là gia hạn). Chưa air & chưa order → ngày gắn + 45.
+  // "Bóng ma" = KOC hiện dưới NS này chỉ vì lịch sử gỡ cũ / cast, KHÔNG còn tag thật (ngày gắn = mốc 2000 placeholder).
+  // Không cho hiện cờ "nên gỡ" & nút Gỡ (gỡ sẽ trúng 0 dòng → báo lỗi khó hiểu).
+  const isGhost = (k) => { const s = k.since ? new Date(k.since) : null; return !s || s.getFullYear() < 2025; };
   const tagInfo = (k) => {
+    if (isGhost(k)) return { txt: '— (không còn tag)', color: '#cbd5e1', warn: false };
     const lastAir = k.last_air ? new Date(k.last_air) : null;
     const lastOrder = k.last_order ? new Date(k.last_order) : null;
     const owes = lastOrder && (!lastAir || lastAir < lastOrder);   // đang nợ clip mới sau order
@@ -598,16 +602,18 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'center', color: '#7c3aed', fontWeight: 800 }}>{fmt(k.videos_total)}</td>
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'center', color: '#a78bda', fontWeight: 600 }}>{fmt(k.videos)}</td>
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'center', color: '#ea580c' }}>{num(k.cast) > 0 ? fmtVnd(k.cast) : '—'}</td>
-                            <td style={{ ...td, padding: '9px 8px', textAlign: 'center', fontSize: '0.76rem', color: '#64748b' }}>{dateLabel(k.since)}</td>
+                            <td style={{ ...td, padding: '9px 8px', textAlign: 'center', fontSize: '0.76rem', color: '#64748b' }}>{isGhost(k) ? '—' : dateLabel(k.since)}</td>
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'center', fontSize: '0.76rem', fontWeight: 600, color: k.last_air ? '#0891b2' : '#f59e0b' }}>{k.last_air ? dateLabel(k.last_air) : '— chưa air'}</td>
                             <td style={{ ...td, padding: '9px 8px', textAlign: 'center', fontSize: '0.74rem', fontWeight: 700, color: ti.color }}>{ti.txt}</td>
                             {canRemove && (
                               <td style={{ ...td, padding: '9px 8px', textAlign: 'center' }}>
-                                <button onClick={() => doSelfRemove(k)} disabled={removingKey === (k.uname + '|' + (k.brand || ''))}
-                                  title="Tự gỡ tag KOC này khỏi danh sách bạn quản lý"
-                                  style={{ padding: '4px 10px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>
-                                  {removingKey === (k.uname + '|' + (k.brand || '')) ? '⏳' : '🗑️ Gỡ'}
-                                </button>
+                                {isGhost(k)
+                                  ? <span title="KOC này không còn tag của bạn (đã gỡ trước đó / chỉ có cast) — không cần gỡ" style={{ color: '#cbd5e1', fontSize: '0.72rem' }}>—</span>
+                                  : <button onClick={() => doSelfRemove(k)} disabled={removingKey === (k.uname + '|' + (k.brand || ''))}
+                                      title="Tự gỡ tag KOC này khỏi danh sách bạn quản lý"
+                                      style={{ padding: '4px 10px', borderRadius: 7, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' }}>
+                                      {removingKey === (k.uname + '|' + (k.brand || '')) ? '⏳' : '🗑️ Gỡ'}
+                                    </button>}
                               </td>
                             )}
                           </tr>
