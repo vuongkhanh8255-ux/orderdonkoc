@@ -16,6 +16,10 @@ const BRAND_COLORS = {
 
 const STAR_COLORS = { 1: '#ef4444', 2: '#ff7a30', 3: '#eab308', 4: '#22c55e', 5: '#10b981' };
 
+// ── Module 1 CSKH: phân loại lý do + trạng thái xử lý + đã sửa đánh giá ──
+const REASON_CATEGORIES = ['Chê sản phẩm', 'Kích ứng / Dị ứng', 'Không hiệu quả', 'Giao hàng chậm', 'Sai hàng', 'Thiếu hàng', 'Đóng gói', 'Shipper', 'Không nhận xét'];
+const FIXED_OPTIONS = [{ v: 'chua_sua', l: 'Chưa sửa' }, { v: 'da_sua_4', l: 'Đã sửa 4★' }, { v: 'da_sua_5', l: 'Đã sửa 5★' }];
+
 const normalizeBrand = (b) => {
   if (!b) return 'Không rõ';
   const n = b.toUpperCase().replace(/\s+/g, '');
@@ -786,6 +790,9 @@ function TikTokReviewsTab() {
   const [shopFilter, setShopFilter] = useState('Tất cả');
   const [ratingFilter, setRatingFilter] = useState('Tất cả');
   const [replyFilter, setReplyFilter] = useState('Tất cả');
+  const [reasonFilter, setReasonFilter] = useState('Tất cả');
+  const [handleFilter, setHandleFilter] = useState('Tất cả');
+  const [fixedFilter, setFixedFilter] = useState('Tất cả');
   const [searchText, setSearchText] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -810,6 +817,13 @@ function TikTokReviewsTab() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // CSKH: cập nhật 1 trường của đánh giá (phân loại / xử lý / đã sửa) — lưu thẳng DB
+  const updateReview = async (id, patch) => {
+    setReviews(prev => prev.map(r => (r.id === id ? { ...r, ...patch } : r))); // optimistic
+    const { error: e } = await supabase.from('tiktok_shop_reviews').update(patch).eq('id', id);
+    if (e) { alert('Lưu không được: ' + e.message); fetchReviews(); }
   };
 
   // Fetch connected shops
@@ -1029,6 +1043,9 @@ function TikTokReviewsTab() {
       if (ratingFilter !== 'Tất cả' && String(r.rating) !== String(ratingFilter)) return false;
       if (replyFilter === 'Đã trả lời' && !r.is_replied) return false;
       if (replyFilter === 'Chưa trả lời' && r.is_replied) return false;
+      if (reasonFilter !== 'Tất cả' && (r.reason_category || '') !== reasonFilter) return false;
+      if (handleFilter !== 'Tất cả' && (r.handle_status || 'chua_xu_ly') !== handleFilter) return false;
+      if (fixedFilter !== 'Tất cả' && (r.fixed_status || 'chua_sua') !== fixedFilter) return false;
       if (dateFrom || dateTo) {
         const ts = r.review_at ? new Date(r.review_at).getTime() : 0;
         if (!ts) return false;
@@ -1043,15 +1060,17 @@ function TikTokReviewsTab() {
       }
       return true;
     });
-  }, [reviews, shopFilter, ratingFilter, replyFilter, searchText, dateFrom, dateTo]);
+  }, [reviews, shopFilter, ratingFilter, replyFilter, reasonFilter, handleFilter, fixedFilter, searchText, dateFrom, dateTo]);
 
   // Stats
   const stats = useMemo(() => {
     const byShop = {};
     const byStar = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    const byReason = {};
     let totalRating = 0;
     let ratingCount = 0;
     let replied = 0;
+    let fixedCount = 0;
 
     filtered.forEach(r => {
       const shop = normalizeShopName(r.seller_name);
@@ -1062,16 +1081,22 @@ function TikTokReviewsTab() {
         ratingCount++;
       }
       if (r.is_replied) replied++;
+      if (r.reason_category) byReason[r.reason_category] = (byReason[r.reason_category] || 0) + 1;
+      if (r.fixed_status === 'da_sua_4' || r.fixed_status === 'da_sua_5') fixedCount++;
     });
 
     return {
       byShop,
       byStar,
+      byReason,
       total: filtered.length,
       avgRating: ratingCount > 0 ? (totalRating / ratingCount).toFixed(1) : '0.0',
       replyRate: filtered.length > 0 ? ((replied / filtered.length) * 100).toFixed(1) : '0.0',
       replied,
       negative: (byStar[1] || 0) + (byStar[2] || 0),
+      positive: (byStar[4] || 0) + (byStar[5] || 0),
+      posRate: filtered.length > 0 ? (((byStar[4] || 0) + (byStar[5] || 0)) / filtered.length * 100).toFixed(1) : '0.0',
+      fixedCount,
     };
   }, [filtered]);
 
@@ -1090,10 +1115,15 @@ function TikTokReviewsTab() {
       .slice(0, 8);
   }, [filtered]);
 
+  // Top phân loại lý do (CSKH)
+  const topReasons = useMemo(() =>
+    Object.entries(stats.byReason).sort((a, b) => b[1] - a[1]),
+    [stats.byReason]);
+
   const totalPages = Math.ceil(filtered.length / perPage);
   const pageData = filtered.slice((page - 1) * perPage, page * perPage);
 
-  useEffect(() => { setPage(1); }, [shopFilter, ratingFilter, replyFilter, searchText, dateFrom, dateTo]);
+  useEffect(() => { setPage(1); }, [shopFilter, ratingFilter, replyFilter, reasonFilter, handleFilter, fixedFilter, searchText, dateFrom, dateTo]);
 
   const formatDate = (d) => {
     if (!d) return '—';
@@ -1358,6 +1388,16 @@ function TikTokReviewsTab() {
           <div style={{ fontSize: 28, fontWeight: 900, color: '#ef4444' }}>{stats.negative}</div>
           <div style={{ fontSize: 11, color: '#aaa' }}>1-2 sao</div>
         </div>
+        <div style={{ ...card, borderTop: '3px solid #22c55e' }}>
+          <div style={labelSt}>Tỷ lệ 4-5★</div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: '#22c55e' }}>{stats.posRate}%</div>
+          <div style={{ fontSize: 11, color: '#aaa' }}>{stats.positive} tích cực</div>
+        </div>
+        <div style={{ ...card, borderTop: '3px solid #8b5cf6' }}>
+          <div style={labelSt}>Đã sửa đánh giá</div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: '#8b5cf6' }}>{stats.fixedCount}</div>
+          <div style={{ fontSize: 11, color: '#aaa' }}>khách sửa lên 4-5★</div>
+        </div>
       </div>
 
       {/* Shop cards + Star distribution */}
@@ -1423,6 +1463,27 @@ function TikTokReviewsTab() {
         </div>
       )}
 
+      {/* Top phân loại lý do (CSKH) */}
+      {topReasons.length > 0 && (
+        <div style={{ ...card, marginBottom: 20 }}>
+          <div style={{ ...labelSt, marginBottom: 12 }}>Top phân loại lý do đánh giá</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {topReasons.map(([reason, count]) => {
+              const pct = stats.total > 0 ? (count / stats.total * 100).toFixed(1) : 0;
+              const active = reasonFilter === reason;
+              return (
+                <div key={reason} onClick={() => setReasonFilter(active ? 'Tất cả' : reason)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '7px 12px', borderRadius: 8, background: active ? '#ff7a3018' : '#f9fafb', border: `1px solid ${active ? '#ff7a30' : '#f3f4f6'}` }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{reason}</span>
+                  <span style={{ fontWeight: 800, color: '#ff7a30', fontSize: 14 }}>{count}</span>
+                  <span style={{ fontSize: 11, color: '#aaa' }}>{pct}%</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Filters */}
       <div style={{ ...card, marginBottom: 20 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, alignItems: 'end' }}>
@@ -1448,6 +1509,30 @@ function TikTokReviewsTab() {
             </select>
           </div>
           <div>
+            <div style={labelSt}>Phân loại lý do</div>
+            <select value={reasonFilter} onChange={e => setReasonFilter(e.target.value)} style={selectSt}>
+              <option value="Tất cả">Tất cả</option>
+              {REASON_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={labelSt}>Xử lý</div>
+            <select value={handleFilter} onChange={e => setHandleFilter(e.target.value)} style={selectSt}>
+              <option value="Tất cả">Tất cả</option>
+              <option value="chua_xu_ly">Chưa xử lý</option>
+              <option value="da_xu_ly">Đã xử lý</option>
+            </select>
+          </div>
+          <div>
+            <div style={labelSt}>Đã sửa đánh giá</div>
+            <select value={fixedFilter} onChange={e => setFixedFilter(e.target.value)} style={selectSt}>
+              <option value="Tất cả">Tất cả</option>
+              <option value="chua_sua">Chưa sửa</option>
+              <option value="da_sua_4">Đã sửa 4★</option>
+              <option value="da_sua_5">Đã sửa 5★</option>
+            </select>
+          </div>
+          <div>
             <div style={labelSt}>Từ ngày</div>
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={selectSt} />
           </div>
@@ -1463,16 +1548,19 @@ function TikTokReviewsTab() {
           </div>
         </div>
         {/* Active pills */}
-        {(shopFilter !== 'Tất cả' || ratingFilter !== 'Tất cả' || replyFilter !== 'Tất cả' || searchText || dateFrom || dateTo) && (
+        {(shopFilter !== 'Tất cả' || ratingFilter !== 'Tất cả' || replyFilter !== 'Tất cả' || reasonFilter !== 'Tất cả' || handleFilter !== 'Tất cả' || fixedFilter !== 'Tất cả' || searchText || dateFrom || dateTo) && (
           <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
             <span style={{ fontSize: 12, color: '#888' }}>Đang lọc:</span>
             {shopFilter !== 'Tất cả' && <button onClick={() => setShopFilter('Tất cả')} style={pill(true)}>{shopFilter} ✕</button>}
             {ratingFilter !== 'Tất cả' && <button onClick={() => setRatingFilter('Tất cả')} style={pill(true)}>{ratingFilter}⭐ ✕</button>}
             {replyFilter !== 'Tất cả' && <button onClick={() => setReplyFilter('Tất cả')} style={pill(true)}>{replyFilter} ✕</button>}
+            {reasonFilter !== 'Tất cả' && <button onClick={() => setReasonFilter('Tất cả')} style={pill(true)}>{reasonFilter} ✕</button>}
+            {handleFilter !== 'Tất cả' && <button onClick={() => setHandleFilter('Tất cả')} style={pill(true)}>{handleFilter === 'da_xu_ly' ? 'Đã xử lý' : 'Chưa xử lý'} ✕</button>}
+            {fixedFilter !== 'Tất cả' && <button onClick={() => setFixedFilter('Tất cả')} style={pill(true)}>{FIXED_OPTIONS.find(o => o.v === fixedFilter)?.l} ✕</button>}
             {dateFrom && <button onClick={() => setDateFrom('')} style={pill(true)}>Từ {dateFrom} ✕</button>}
             {dateTo && <button onClick={() => setDateTo('')} style={pill(true)}>Đến {dateTo} ✕</button>}
             {searchText && <button onClick={() => setSearchText('')} style={pill(true)}>"{searchText}" ✕</button>}
-            <button onClick={() => { setShopFilter('Tất cả'); setRatingFilter('Tất cả'); setReplyFilter('Tất cả'); setSearchText(''); setDateFrom(''); setDateTo(''); }}
+            <button onClick={() => { setShopFilter('Tất cả'); setRatingFilter('Tất cả'); setReplyFilter('Tất cả'); setReasonFilter('Tất cả'); setHandleFilter('Tất cả'); setFixedFilter('Tất cả'); setSearchText(''); setDateFrom(''); setDateTo(''); }}
               style={{ ...pill(false), fontSize: 11 }}>Xóa tất cả</button>
           </div>
         )}
@@ -1578,6 +1666,25 @@ function TikTokReviewsTab() {
                       ID đơn: <span style={{ fontFamily: 'monospace', color: '#888' }}>{r.order_id}</span>
                     </div>
                   )}
+
+                  {/* CSKH: thao tác nhân viên — lưu thẳng DB */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 10, paddingTop: 10, borderTop: '1px dashed #e5e7eb' }}>
+                    <select value={r.reason_category || ''} onChange={e => updateReview(r.id, { reason_category: e.target.value || null })}
+                      style={{ ...selectSt, width: 'auto', minWidth: 150, padding: '6px 10px', fontSize: 12 }}>
+                      <option value="">— Phân loại lý do —</option>
+                      {REASON_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <select value={r.fixed_status || 'chua_sua'} onChange={e => updateReview(r.id, { fixed_status: e.target.value })}
+                      style={{ ...selectSt, width: 'auto', padding: '6px 10px', fontSize: 12, color: (r.fixed_status === 'da_sua_4' || r.fixed_status === 'da_sua_5') ? '#16a34a' : '#666' }}>
+                      {FIXED_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+                    </select>
+                    <button onClick={() => updateReview(r.id, r.handle_status === 'da_xu_ly'
+                      ? { handle_status: 'chua_xu_ly', handled_at: null }
+                      : { handle_status: 'da_xu_ly', handled_at: new Date().toISOString() })}
+                      style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, marginLeft: 'auto', background: r.handle_status === 'da_xu_ly' ? '#16a34a' : '#f3f4f6', color: r.handle_status === 'da_xu_ly' ? '#fff' : '#666' }}>
+                      {r.handle_status === 'da_xu_ly' ? '✅ Đã xử lý' : '○ Chưa xử lý'}
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -1612,6 +1719,7 @@ function TikTokReviewsTab() {
 const TABS = [
   { key: 'chat_inbox', label: '💬 Chat Inbox' },
   { key: 'danh_gia', label: '📋 Quản lý đánh giá' },
+  { key: 'tiktok_reviews', label: '⭐ Đánh giá sàn (auto)' },
   { key: 'report_cs', label: '📝 Report CS' },
   { key: 'tiktok_health', label: '🔴 Điểm TK TikTok' },
 ];
