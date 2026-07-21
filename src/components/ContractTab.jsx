@@ -32,11 +32,18 @@ const ContractTab = () => {
         const s = String(link || '').trim();
         if (!s) { setAirMsg(''); return; }
         const m = s.match(/\/video\/(\d{6,})/) || s.match(/\b(\d{15,})\b/);
-        if (!m) { setAirMsg('⚠️ Link rút gọn chưa tự lấy được — dán link đầy đủ (có /video/số) hoặc điền Ngày air tay.'); return; }
+        if (!m) { setAirMsg('⚠️ Dán link đầy đủ có /video/số (hoặc điền Ngày air tay).'); return; }
+        const vid = m[1];
         setAirMsg('⏳ Đang lấy ngày air...');
-        const { data } = await supabase.from('tiktok_shop_videos').select('post_date').eq('id', m[1]).maybeSingle();
-        if (!data?.post_date) { setAirMsg('⚠️ Video chưa có trong hệ thống — điền Ngày air tay (Ngày làm HĐ vẫn tự = air − 3).'); return; }
-        setFromAir(data.post_date);
+        // 1) Thử trong hệ thống trước (nhanh, miễn phí)
+        const { data } = await supabase.from('tiktok_shop_videos').select('post_date').eq('id', vid).maybeSingle();
+        if (data?.post_date) { setFromAir(data.post_date); return; }
+        // 2) Không có → hỏi TikHub (lấy ngày đăng của mọi video)
+        try {
+            const { data: j } = await supabase.functions.invoke('koc-channel-views', { body: { air_id: vid } });
+            if (j?.date) { setFromAir(j.date); return; }
+        } catch (_) { /* bỏ qua, xuống báo lỗi */ }
+        setAirMsg('⚠️ Không tự lấy được ngày air (video quá mới / TikTok chặn) — điền Ngày air tay, ngày HĐ vẫn tự = air − 3.');
     };
     const soHDPreview = (() => {
         if (!contractData.ngayKy || !contractData.benB_ten) return '(tự sinh khi bấm Tạo)';
@@ -134,17 +141,15 @@ const ContractTab = () => {
                         <fieldset style={{ border: '1px solid #ddd', padding: '1.5rem', borderRadius: '12px', backgroundColor: '#f9fafb' }}>
                             <legend style={{ padding: '0 10px', fontWeight: '700', fontSize: '1.1rem', color: '#3b82f6', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Công việc</legend>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '0.5rem' }}>
-                                <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                                    <label style={{ color: '#666', fontSize: '0.9rem' }}>🔗 Link air clip <span style={{ color: '#ff6a2c' }}>(dán vào → tự lấy ngày air, ngày HĐ = air − 3)</span></label>
-                                    <input type="text" value={airLink} placeholder="https://www.tiktok.com/@.../video/..."
-                                        onChange={e => setAirLink(e.target.value)} onBlur={() => resolveAirDate(airLink)} />
-                                    {airMsg && <div style={{ fontSize: '0.78rem', marginTop: 5, fontWeight: 600, color: airMsg.startsWith('✅') ? '#16a34a' : airMsg.startsWith('⏳') ? '#64748b' : '#d97706' }}>{airMsg}</div>}
-                                </div>
-                                <div className="form-group"><label style={{ color: '#666', fontSize: '0.9rem' }}>Ngày air (đăng clip)</label><input type="date" id="ngayThucHien" value={contractData.ngayThucHien} onChange={e => setFromAir(e.target.value)} required /></div>
+                                <div className="form-group"><label style={{ color: '#666', fontSize: '0.9rem' }}>Ngày air (đăng clip) <span style={{ color: '#ff6a2c' }}>(tự nhảy từ Link SP)</span></label><input type="date" id="ngayThucHien" value={contractData.ngayThucHien} onChange={e => setFromAir(e.target.value)} required /></div>
                                 <div className="form-group"><label style={{ color: '#666', fontSize: '0.9rem' }}>Ngày làm HĐ <span style={{ color: '#16a34a' }}>(tự = air − 3)</span></label><input type="date" id="ngayKy" value={contractData.ngayKy} readOnly style={{ background: '#f0fdf4', cursor: 'not-allowed' }} /></div>
                                 <div className="form-group" style={{ gridColumn: 'span 2' }}><label style={{ color: '#666', fontSize: '0.9rem' }}>Số HĐ <span style={{ color: '#16a34a' }}>(tự động)</span></label><input type="text" value={soHDPreview} readOnly style={{ background: '#f0fdf4', cursor: 'not-allowed', fontWeight: 700 }} /></div>
                                 <div className="form-group"><label style={{ color: '#666', fontSize: '0.9rem' }}>Sản phẩm</label><input type="text" id="sanPham" value={contractData.sanPham} onChange={handleContractFormChange} required /></div>
-                                <div className="form-group" style={{ gridColumn: 'span 2' }}><label style={{ color: '#666', fontSize: '0.9rem' }}>Link SP</label><input type="text" id="linkSanPham" value={contractData.linkSanPham} onChange={handleContractFormChange} required /></div>
+                                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                                    <label style={{ color: '#666', fontSize: '0.9rem' }}>Link SP / Link air clip <span style={{ color: '#ff6a2c' }}>(dán link video air → tự lấy ngày air, ngày HĐ = air − 3)</span></label>
+                                    <input type="text" id="linkSanPham" value={contractData.linkSanPham} onChange={handleContractFormChange} onBlur={() => resolveAirDate(contractData.linkSanPham)} required />
+                                    {airMsg && <div style={{ fontSize: '0.78rem', marginTop: 5, fontWeight: 600, color: airMsg.startsWith('✅') ? '#16a34a' : airMsg.startsWith('⏳') ? '#64748b' : '#d97706' }}>{airMsg}</div>}
+                                </div>
                                 <div className="form-group" style={{ gridColumn: 'span 2' }}><label style={{ color: '#666', fontSize: '0.9rem' }}>Link Kênh</label><input type="text" id="linkKenh" value={contractData.linkKenh} onChange={handleContractFormChange} required /></div>
                                 <div className="form-group"><label style={{ color: '#666', fontSize: '0.9rem' }}>Số lượng</label><input type="number" id="soLuong" value={contractData.soLuong} onChange={handleContractFormChange} required /></div>
                                 <div className="form-group"><label style={{ color: '#666', fontSize: '0.9rem' }}>Đơn giá</label><input type="number" id="donGia" value={contractData.donGia} onChange={handleContractFormChange} required /></div>

@@ -112,6 +112,26 @@ async function tikwmPlay(link: string) {
   } catch (_) { return { play: null, wmplay: null, hdplay: null }; }
 }
 
+// Lấy NGÀY ĐĂNG (create_time) của 1 video theo aweme_id qua TikHub (fetch_one_video). Cho Hợp đồng.
+async function tikhubVideoDate(awemeId: string): Promise<{ ok: boolean; create_time: number; dbg: any }> {
+  const dbg: any = {};
+  if (!TIKHUB_KEY) return { ok: false, create_time: 0, dbg: { err: 'no key' } };
+  try {
+    const r = await fetchT(
+      `https://api.tikhub.io/api/v1/tiktok/app/v3/fetch_one_video?aweme_id=${encodeURIComponent(awemeId)}`,
+      9000, { Authorization: `Bearer ${TIKHUB_KEY}`, 'Accept': 'application/json' });
+    dbg.http = r.status;
+    const j = await r.json();
+    dbg.code = j?.code; dbg.msg = j?.detail || j?.message || '';
+    const data = j?.data ?? j;
+    const detail = data?.aweme_detail ?? data?.aweme_details?.[0] ?? data?.aweme_list?.[0] ?? data;
+    const ct = detail?.create_time ?? detail?.createTime ?? 0;
+    dbg.keys = Object.keys(detail || {}).slice(0, 16);
+    if (ct) return { ok: true, create_time: Number(ct), dbg };
+  } catch (e) { dbg.err = String(e); }
+  return { ok: false, create_time: 0, dbg };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
@@ -127,6 +147,14 @@ Deno.serve(async (req) => {
       const link = vuser ? `https://www.tiktok.com/@${vuser}/video/${videoId}` : `https://www.tiktok.com/video/${videoId}`;
       const p = await tikwmPlay(link);
       return json({ ok: true, video_id: videoId, ...p });
+    }
+
+    // Chế độ NGÀY AIR: trả ngày đăng của 1 video (Hợp đồng tự tính ngày). air_id = aweme_id.
+    const airId = url.searchParams.get('air_id') || body.air_id || '';
+    if (airId) {
+      const r = await tikhubVideoDate(airId);
+      const dateStr = r.ok && r.create_time ? new Date(r.create_time * 1000).toISOString().slice(0, 10) : '';
+      return json({ ok: r.ok, aweme_id: airId, create_time: r.create_time, date: dateStr, _dbg: (url.searchParams.get('debug') === '1' ? r.dbg : undefined) });
     }
 
     username = normUser(username);
