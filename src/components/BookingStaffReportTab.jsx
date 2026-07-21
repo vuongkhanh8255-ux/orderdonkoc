@@ -347,6 +347,15 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
       .then(({ data }) => { if (alive) setOrderTags(data || []); }, () => { if (alive) setOrderTags([]); });
     return () => { alive = false; };
   }, [r.ten_nhansu]);
+  // ── TAG HIỆN CÓ THẬT (koc_brand_assignments approved) — để biết KOC nào còn tag → gỡ được; KOC đã gỡ trong QK không hiện nút Gỡ ──
+  const [curTags, setCurTags] = useState(null);   // Set "uname|brand_canon"; null = đang tải
+  useEffect(() => {
+    let alive = true; setCurTags(null);
+    supabase.rpc('staff_current_tags', { p_nhansu_id: r.nhansu_id })
+      .then(({ data }) => { if (alive) setCurTags(new Set((data || []).map(t => (t.uname || '') + '|' + (t.brand || '')))); },
+            () => { if (alive) setCurTags(new Set()); });
+    return () => { alive = false; };
+  }, [r.nhansu_id]);
   // ── Link air của nhân sự (mấy bạn đã điền ở Quản lý link air) — HIỆN FULL từ trước tới giờ, KHÔNG theo kỳ ──
   // Phân trang + tìm kiếm PHÍA SERVER (né trần 1000 rows của Supabase; NS có thể có vài chục nghìn link)
   const [airRows, setAirRows] = useState(null);   // rows trang hiện tại (null = đang tải)
@@ -401,7 +410,13 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
   //  • ĐÃ air (không nợ) → mốc = air gần nhất + 45 ngày (cứ air là gia hạn). Chưa air & chưa order → ngày gắn + 45.
   // "Bóng ma" = KOC hiện dưới NS này chỉ vì lịch sử gỡ cũ / cast, KHÔNG còn tag thật (ngày gắn = mốc 2000 placeholder).
   // Không cho hiện cờ "nên gỡ" & nút Gỡ (gỡ sẽ trúng 0 dòng → báo lỗi khó hiểu).
-  const isGhost = (k) => { const s = k.since ? new Date(k.since) : null; return !s || s.getFullYear() < 2025; };
+  // "Bóng ma" = KOC KHÔNG còn tag thật (đã gỡ trong quá khứ / chỉ có cast) → không hiện ở panel quản lý, không có nút Gỡ.
+  // Nguồn chuẩn = curTags (koc_brand_assignments approved). Lúc đang tải curTags thì tạm đoán theo năm (since<2025).
+  const isGhost = (k) => {
+    if (curTags) return !curTags.has((k.uname || '') + '|' + (k.brand || ''));
+    const s = k.since ? new Date(k.since) : null;
+    return !s || s.getFullYear() < 2025;
+  };
   const tagInfo = (k) => {
     if (isGhost(k)) return { txt: '— (không còn tag)', color: '#cbd5e1', warn: false };
     const lastAir = k.last_air ? new Date(k.last_air) : null;
