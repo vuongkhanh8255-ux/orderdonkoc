@@ -31,9 +31,9 @@ const GROUPS = [
   },
   {
     title: '↩️ Trả hàng & Khiếu nại', items: [
-      { k: 'return_new', label: 'Trả hàng mới' },
-      { k: 'complaint_new', label: 'Khiếu nại mới', warn: true },
-      { k: 'cases_open', label: 'Hồ sơ chưa xử lý' },
+      { k: 'return_open', label: 'Trả hàng đang mở' },
+      { k: 'complaint_open', label: 'Khiếu nại đang mở', warn: true },
+      { k: 'cases_open', label: 'Tổng đang xử lý' },
       { k: 'cases_overdue', label: 'Quá hạn (>3N)', warn: true },
     ],
   },
@@ -52,7 +52,7 @@ const suggestSummary = (date, k) => {
   L.push(`📅 BÁO CÁO NGÀY ${fmtDateVN(date)}`);
   L.push('');
   L.push(`• Đơn hàng: Shopee ${k.shopee_orders || 0} đơn (GMV ${fmtMoney(k.shopee_gmv)}đ), TikTok ${k.tiktok_orders || 0} đơn (GMV ${fmtMoney(k.tiktok_gmv)}đ). Đơn hủy Shopee: ${k.shopee_cancel || 0}.`);
-  L.push(`• Trả hàng/Khiếu nại: ${k.return_new || 0} đơn trả mới, ${k.complaint_new || 0} khiếu nại mới. Tồn ${k.cases_open || 0} hồ sơ chưa xử lý${(k.cases_overdue || 0) > 0 ? ` (⚠️ ${k.cases_overdue} quá hạn)` : ''}.`);
+  L.push(`• Trả hàng/Khiếu nại: ${k.return_open || 0} hồ sơ trả hàng đang mở, ${k.complaint_open || 0} khiếu nại đang mở. Tổng ${k.cases_open || 0} hồ sơ chưa xử lý${(k.cases_overdue || 0) > 0 ? ` (⚠️ ${k.cases_overdue} quá hạn)` : ''}.`);
   L.push(`• Voucher hỗ trợ: cấp ${k.voucher_new || 0} voucher (giá trị ${fmtMoney(k.voucher_value)}đ).`);
   L.push(`• Sản phẩm lỗi mới: ${k.defect_new || 0}.`);
   L.push(`• Chi Seeding: ${fmtMoney(k.seeding_spend)}đ.`);
