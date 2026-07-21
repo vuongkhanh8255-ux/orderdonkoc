@@ -700,6 +700,9 @@ export const AppDataProvider = ({ children }) => {
     };
     const ngayKy = formatDate(data.ngayKy);
     const ngayThucHien = formatDate(data.ngayThucHien);
+    // Số HĐ TỰ ĐỘNG: DDMMYYYY,HĐQC/TÊNKOC - STELLA (DDMMYYYY = ngày ký = ngày air − 3)
+    const _tenKoc = (data.benB_ten || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const soHopDongAuto = `${ngayKy.ngay}${ngayKy.thang}${ngayKy.nam},HĐQC/${_tenKoc} - STELLA`;
 
     // NGUYÊN VĂN HTML DÀI NGOẰNG
     const contractTemplate = `
@@ -736,7 +739,7 @@ export const AppDataProvider = ({ children }) => {
     </div>
     <br>
     <h2>HỢP ĐỒNG DỊCH VỤ</h2>
-    <p class="center-text">Số: ${data.soHopDong}</p>
+    <p class="center-text">Số: ${soHopDongAuto}</p>
     <br>
     <p>Căn cứ Bộ luật Dân sự 2015 số 91/2015/QH13 ngày 24/11/2015;</p>
     <p>Căn cứ Luật Thương Mại 
@@ -812,12 +815,10 @@ export const AppDataProvider = ({ children }) => {
     <p class="bold-text">ĐIỀU 1: NỘI DUNG HỢP ĐỒNG</p>
     <p>1.1.
     Bên A mời Bên B đồng ý nhận cung cấp dịch vụ quảng cáo và Bên A đồng ý sử dụng dịch vụ quảng cáo trên kênh của B, cụ thể như sau:</p>
-    <p style="padding-left: 20px;">a.
-    Thời gian: ${ngayThucHien.ngay}/${ngayThucHien.thang}/${ngayThucHien.nam}</p>
-    <p style="padding-left: 20px;">b. Sản phẩm: ${data.sanPham}</p>
-    <p style="padding-left: 20px;">c.
+    <p style="padding-left: 20px;">a. Sản phẩm: ${data.sanPham}</p>
+    <p style="padding-left: 20px;">b.
     Link sản phẩm: ${data.linkSanPham}</p>
-    <p style="padding-left: 20px;">d.
+    <p style="padding-left: 20px;">c.
     Nội dung công việc cụ thể:</p>
     <table>
         <thead>
