@@ -712,6 +712,21 @@ export default function KocPerformanceTab() {
   // ── ƯU TIÊN KOC (có DUYỆT): quản lý sàn ĐỀ XUẤT (proposed) -> admin DUYỆT (approved) -> gia hạn 10 ngày. ──
   const PRIO_DAYS = 10;
   const isAdminRole = currentUser?.role === 'admin';
+  // Cờ bật/tắt auto-gỡ tag quá hạn (bảng app_flags) — admin tắt nhanh khi cần
+  const [autoRemoveOn, setAutoRemoveOn] = useState(true);
+  useEffect(() => {
+    supabase.from('app_flags').select('enabled').eq('flag', 'auto_remove_overdue').maybeSingle()
+      .then(({ data }) => { if (data) setAutoRemoveOn(data.enabled); }, () => {});
+  }, []);
+  const toggleAutoRemove = async () => {
+    const next = !autoRemoveOn;
+    if (!confirm(next ? 'BẬT lại auto-gỡ tag quá hạn?' : 'TẮT auto-gỡ tag quá hạn?\n\nKOC quá hạn sẽ KHÔNG bị gỡ cho tới khi bật lại.')) return;
+    setAutoRemoveOn(next);
+    const { error } = await supabase.from('app_flags').upsert(
+      { flag: 'auto_remove_overdue', enabled: next, updated_at: new Date().toISOString(), updated_by: currentUser?.username || '' },
+      { onConflict: 'flag' });
+    if (error) { alert('Lỗi: ' + error.message); setAutoRemoveOn(!next); }
+  };
   const [prioMap, setPrioMap] = useState({});   // { koc_id(lower): {status, prioritized_at, proposed_at} }
   const loadPrio = useCallback(async () => {
     setPrioLoaded(false);
@@ -1015,6 +1030,17 @@ export default function KocPerformanceTab() {
                 {syncingTags ? 'Đang đồng bộ…' : '🔄 Đồng bộ ngay'}
               </button>
               {syncTagMsg && <div style={{ fontSize: '0.78rem', color: syncTagMsg.startsWith('⚠️') ? '#dc2626' : '#059669', fontWeight: 700, flexBasis: '100%' }}>{syncTagMsg}</div>}
+            </div>
+          )}
+          {currentUser?.role === 'admin' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: autoRemoveOn ? '#eff6ff' : '#fef2f2', border: `1px solid ${autoRemoveOn ? '#bfdbfe' : '#fecaca'}`, borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
+              <div style={{ fontSize: '0.78rem', color: '#334155', lineHeight: 1.45, flex: '1 1 320px' }}>
+                🤖 <b>Tự động GỠ tag quá hạn</b> (order 30 ngày chưa clip / 45 ngày từ air gần nhất) — chạy mỗi giờ ở nền, chừa KOC có cast + đang/đã được ưu tiên. {autoRemoveOn ? <span style={{ color: '#1d4ed8', fontWeight: 700 }}>Đang BẬT</span> : <span style={{ color: '#dc2626', fontWeight: 700 }}>Đang TẮT — KOC quá hạn sẽ không bị gỡ</span>}
+              </div>
+              <button onClick={toggleAutoRemove}
+                style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: autoRemoveOn ? '#dc2626' : '#16a34a', color: '#fff', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                {autoRemoveOn ? '⏸️ TẮT auto-gỡ' : '▶️ BẬT auto-gỡ'}
+              </button>
             </div>
           )}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
