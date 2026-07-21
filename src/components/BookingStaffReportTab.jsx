@@ -366,6 +366,29 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
   }, [r.nhansu_id, airQ, airPage]);
   const airTotalPages = Math.max(1, Math.ceil(airTotal / AIR_PER));
   const airPageC = Math.min(airPage, airTotalPages);
+  // ── Video TỰ ĐỘNG ghi nhận theo TAG (tenure) — video air trong lúc NS đang giữ tag KOC, hệ thống tự tính (không cần điền link air) ──
+  // Lọc theo KỲ đang chọn (video air trong kỳ). View/GMV = trong kỳ. Để mấy bạn tự soi video nào được credit qua tag.
+  const [tenVids, setTenVids] = useState(null);   // null = đang tải
+  const [tenSearch, setTenSearch] = useState('');
+  const [tenPage, setTenPage] = useState(1);
+  const TEN_PER = 20;
+  useEffect(() => {
+    let alive = true; setTenVids(null); setTenPage(1);
+    supabase.rpc('staff_tenure_videos', { p_nhansu_id: r.nhansu_id, p_from: range.start, p_to: range.end })
+      .then(({ data }) => { if (alive) setTenVids(data || []); }, () => { if (alive) setTenVids([]); });
+    return () => { alive = false; };
+  }, [r.nhansu_id, range.start, range.end]);
+  useEffect(() => { setTenPage(1); }, [tenSearch]);
+  const tenFiltered = (tenVids || []).filter(v => {
+    const q = tenSearch.trim().toLowerCase();
+    if (!q) return true;
+    return (v.kenh || '').toLowerCase().includes(q) || (v.brand || '').toLowerCase().includes(q) || String(v.content_id || '').toLowerCase().includes(q);
+  });
+  const tenTotalPages = Math.max(1, Math.ceil(tenFiltered.length / TEN_PER));
+  const tenPageC = Math.min(tenPage, tenTotalPages);
+  const tenPageRows = tenFiltered.slice((tenPageC - 1) * TEN_PER, tenPageC * TEN_PER);
+  const tenView = tenFiltered.reduce((s, v) => s + num(v.view_period), 0);
+  const tenGmv = tenFiltered.reduce((s, v) => s + num(v.gmv_period), 0);
   const daily = Array.isArray(det?.daily) ? det.daily : [];
   const kocs = Array.isArray(det?.kocs) ? det.kocs : [];
 
@@ -839,6 +862,57 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
                     <button onClick={() => setAirPage(p => Math.max(1, p - 1))} disabled={airPageC <= 1} style={{ ...ctrl, cursor: airPageC <= 1 ? 'default' : 'pointer', opacity: airPageC <= 1 ? 0.5 : 1 }}>‹ Trước</button>
                     <span style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 700 }}>Trang {airPageC}/{airTotalPages}</span>
                     <button onClick={() => setAirPage(p => Math.min(airTotalPages, p + 1))} disabled={airPageC >= airTotalPages} style={{ ...ctrl, cursor: airPageC >= airTotalPages ? 'default' : 'pointer', opacity: airPageC >= airTotalPages ? 0.5 : 1 }}>Sau ›</button>
+                  </div>
+                )}
+              </>
+            )}
+          </Section>
+
+          {/* ═══ VIDEO TỰ ĐỘNG GHI NHẬN THEO TAG (tenure) ═══ để nhân sự TỰ CHECK video nào được credit qua tag */}
+          <Section icon="🎬" title="Video tự động ghi nhận theo tag" hint={tenVids == null ? 'đang tải…' : `${fmt(tenFiltered.length)} video · ${fmtView(tenView)} view · ${fmtVnd(tenGmv)}đ GMV — trong kỳ`} accent={{ bg: '#f0fdf4', fg: '#15803d' }}>
+            <div style={{ fontSize: '0.8rem', color: '#475569', marginBottom: 4, lineHeight: 1.55, background: '#f0fdf4', border: '1px solid #dcfce7', borderRadius: 10, padding: '8px 12px' }}>
+              🎯 Đây là các video hệ thống <b>TỰ ĐỘNG ghi nhận</b> cho bạn vì bạn <b>đang giữ tag KOC lúc video lên</b> — <b>không cần điền link air</b>. Chỉ tính video air <b>trong kỳ đang chọn</b>; View &amp; GMV cũng tính trong kỳ. (Video air trước khi bạn gắn tag hoặc sau khi gỡ tag sẽ không nằm ở đây.)
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <input value={tenSearch} onChange={e => setTenSearch(e.target.value)} placeholder="🔎 Tìm kênh KOC / brand / ID video..." style={{ ...ctrl, flex: '1 1 260px' }} />
+            </div>
+            {tenVids == null ? (
+              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>⏳ Đang tải video...</div>
+            ) : tenFiltered.length === 0 ? (
+              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>{tenSearch ? 'Không tìm thấy video khớp.' : 'Chưa có video nào được tự động ghi nhận theo tag trong kỳ này.'}</div>
+            ) : (
+              <>
+                <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #f1f5f9' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
+                    <thead>
+                      <tr style={{ background: '#f8fafc' }}>
+                        {['STT', 'KÊNH / KOC', 'BRAND', 'NGÀY AIR', 'VIEW (KỲ)', 'GMV (KỲ)', 'LINK'].map((h, i) => (
+                          <th key={i} style={{ padding: '10px 12px', textAlign: i === 4 || i === 5 ? 'right' : 'left', fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: '2px solid #e2e8f0' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tenPageRows.map((v, i) => (
+                        <tr key={v.content_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#94a3b8' }}>{(tenPageC - 1) * TEN_PER + i + 1}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{v.kenh || '—'}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155' }}>{v.brand || '—'}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155', whiteSpace: 'nowrap' }}>{v.air_date ? new Date(v.air_date).toLocaleDateString('vi-VN') : '—'}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 700, color: '#0f766e', textAlign: 'right' }}>{fmt(v.view_period)}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 700, color: '#b45309', textAlign: 'right' }}>{fmtVnd(v.gmv_period)}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
+                            <a href={`https://www.tiktok.com/${v.kenh || ''}/video/${v.content_id}`} target="_blank" rel="noreferrer" style={{ color: '#f97316', fontWeight: 700, textDecoration: 'none' }}>Xem ▸</a>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {tenTotalPages > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 6 }}>
+                    <button onClick={() => setTenPage(p => Math.max(1, p - 1))} disabled={tenPageC <= 1} style={{ ...ctrl, cursor: tenPageC <= 1 ? 'default' : 'pointer', opacity: tenPageC <= 1 ? 0.5 : 1 }}>‹ Trước</button>
+                    <span style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 700 }}>Trang {tenPageC}/{tenTotalPages}</span>
+                    <button onClick={() => setTenPage(p => Math.min(tenTotalPages, p + 1))} disabled={tenPageC >= tenTotalPages} style={{ ...ctrl, cursor: tenPageC >= tenTotalPages ? 'default' : 'pointer', opacity: tenPageC >= tenTotalPages ? 0.5 : 1 }}>Sau ›</button>
                   </div>
                 )}
               </>
