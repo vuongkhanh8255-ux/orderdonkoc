@@ -319,6 +319,7 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
     const { data, error } = await supabase.rpc('koc_remove_assignment', { p_koc: k.uname, p_brand: k.brand, p_actor: currentUser?.username || r.ten_nhansu });
     setRemovingKey(null);
     if (error) { alert('Lỗi gỡ tag: ' + error.message); return; }
+    if (!data || Number(data) === 0) { alert('⚠️ Không gỡ được tag này (hệ thống không tìm thấy). Thử tải lại trang rồi gỡ lại.'); return; }
     setDet(d => d ? { ...d, kocs: (d.kocs || []).filter(x => !(x.uname === k.uname && x.brand === k.brand)) } : d);
   }, [canRemove, currentUser, r.ten_nhansu]);
   const [sendMetric, setSendMetric] = useState('mau');   // tần suất gửi: don | mau
