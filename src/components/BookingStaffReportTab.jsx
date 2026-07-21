@@ -435,8 +435,15 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
     : otStatus(t).group === otFilter);
   // Phân trang bảng Top KOC (RPC trả đủ — chỉ chia trang ở UI)
   const [kocPage, setKocPage] = useState(1);
-  useEffect(() => { setKocPage(1); }, [onlyWarn, r.nhansu_id, range.start, range.end]);
-  const filteredKocs = onlyWarn ? kocs.filter(k => tagInfo(k).warn) : kocs;
+  const [kocSearch, setKocSearch] = useState('');   // tìm KOC / brand trong panel quản lý
+  useEffect(() => { setKocPage(1); }, [onlyWarn, kocSearch, r.nhansu_id, range.start, range.end]);
+  // ẨN KOC "bóng ma" (không còn tag thật — chỉ còn do lịch sử gỡ cũ / cast) khỏi panel quản lý.
+  // GMV/view cũ của mấy KOC này VẪN tính ở tổng & bảng "Video tự động ghi nhận theo tag" (server tính theo tenure), không mất gì.
+  const liveKocs = kocs.filter(k => !isGhost(k));
+  const kocQ = kocSearch.trim().toLowerCase();
+  const filteredKocs = liveKocs
+    .filter(k => !onlyWarn || tagInfo(k).warn)
+    .filter(k => !kocQ || (k.uname || '').toLowerCase().includes(kocQ) || (k.brand || '').toLowerCase().includes(kocQ));
   const KOC_PER_PAGE = 15;
   const kocTotalPages = Math.max(1, Math.ceil(filteredKocs.length / KOC_PER_PAGE));
   const kocPageC = Math.min(kocPage, kocTotalPages);
@@ -590,15 +597,19 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
             {/* Top KOC table */}
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
-                <div style={{ fontWeight: 700, color: '#475569', fontSize: '0.85rem' }} title="Hiện ĐỦ mọi KOC quản lý, xếp theo GMV (KOC chưa air = GMV 0 nằm cuối). 1 KOC làm nhiều brand = nhiều dòng.">🏅 KOC quản lý — xếp theo GMV <span style={{ fontWeight: 500, color: '#94a3b8' }}>({kocs.length} dòng · {new Set(kocs.map(k => k.uname)).size} KOC)</span></div>
-                {warnCount > 0 && (
-                  <button onClick={() => setOnlyWarn(v => !v)} title="Brand đã quá 45 ngày kể từ lần air gần nhất (chưa air thì từ ngày gắn) → nên gỡ định danh"
-                    style={{ padding: '5px 12px', borderRadius: 7, border: `1px solid ${onlyWarn ? '#dc2626' : '#fecaca'}`, background: onlyWarn ? '#dc2626' : '#fff', color: onlyWarn ? '#fff' : '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>
-                    ⚠️ Quá hạn – nên gỡ ({warnCount}){onlyWarn ? ' ✕' : ''}
-                  </button>
-                )}
+                <div style={{ fontWeight: 700, color: '#475569', fontSize: '0.85rem' }} title="Chỉ hiện KOC còn tag thật, xếp theo GMV (KOC chưa air = GMV 0 nằm cuối). 1 KOC làm nhiều brand = nhiều dòng.">🏅 KOC quản lý — xếp theo GMV <span style={{ fontWeight: 500, color: '#94a3b8' }}>({liveKocs.length} dòng · {new Set(liveKocs.map(k => k.uname)).size} KOC)</span></div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <input value={kocSearch} onChange={e => setKocSearch(e.target.value)} placeholder="🔎 Tìm KOC / brand..."
+                    style={{ ...ctrl, padding: '5px 10px', fontSize: '0.78rem', width: 190 }} />
+                  {warnCount > 0 && (
+                    <button onClick={() => setOnlyWarn(v => !v)} title="Brand đã quá 45 ngày kể từ lần air gần nhất (chưa air thì từ ngày gắn) → nên gỡ định danh"
+                      style={{ padding: '5px 12px', borderRadius: 7, border: `1px solid ${onlyWarn ? '#dc2626' : '#fecaca'}`, background: onlyWarn ? '#dc2626' : '#fff', color: onlyWarn ? '#fff' : '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>
+                      ⚠️ Quá hạn – nên gỡ ({warnCount}){onlyWarn ? ' ✕' : ''}
+                    </button>
+                  )}
+                </div>
               </div>
-              {loadingDet ? <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>⏳ Đang tải...</div> : kocs.length === 0 ? <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Không có dữ liệu.</div> : (
+              {loadingDet ? <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>⏳ Đang tải...</div> : filteredKocs.length === 0 ? <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>{kocQ ? 'Không tìm thấy KOC khớp.' : onlyWarn ? 'Không có KOC quá hạn.' : 'Không có KOC nào còn tag.'}</div> : (
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead><tr>
