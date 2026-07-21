@@ -827,7 +827,7 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
           </Section>
 
           {/* ═══ LINK AIR CỦA NHÂN SỰ ═══ (không có cột cast/cms/đã order) */}
-          <Section icon="🔗" title="Link air của nhân sự" hint={airRows == null ? 'đang tải…' : `${fmt(airTotal)} link${airQ ? ' (khớp tìm kiếm)' : ' · toàn bộ từ trước tới nay'}`} accent={{ bg: '#eff6ff', fg: '#1d4ed8' }}>
+          <Section icon="🔗" title={<>Link air của nhân sự: <span style={{ padding: '2px 11px', borderRadius: 20, background: '#1d4ed8', color: '#fff', fontSize: '0.85rem', fontWeight: 800, marginLeft: 4 }}>👤 {r.ten_nhansu}</span></>} hint={airRows == null ? 'đang tải…' : `${fmt(airTotal)} link${airQ ? ' (khớp tìm kiếm)' : ' · toàn bộ từ trước tới nay'}`} accent={{ bg: '#eff6ff', fg: '#1d4ed8' }}>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
               <input value={airSearch} onChange={e => setAirSearch(e.target.value)} placeholder="🔎 Tìm ID kênh / video / SP / brand... (tìm trong TẤT CẢ link)" style={{ ...ctrl, flex: '1 1 260px' }} />
             </div>
@@ -880,7 +880,7 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
           </Section>
 
           {/* ═══ VIDEO TỰ ĐỘNG GHI NHẬN THEO TAG (tenure) ═══ để nhân sự TỰ CHECK video nào được credit qua tag */}
-          <Section icon="🎬" title="Video tự động ghi nhận theo tag" hint={tenVids == null ? 'đang tải…' : `${fmt(tenFiltered.length)} video · ${fmtView(tenView)} view · ${fmtVnd(tenGmv)}đ GMV — trong kỳ`} accent={{ bg: '#f0fdf4', fg: '#15803d' }}>
+          <Section icon="🎬" title={<>Video tự động ghi nhận theo tag: <span style={{ padding: '2px 11px', borderRadius: 20, background: '#15803d', color: '#fff', fontSize: '0.85rem', fontWeight: 800, marginLeft: 4 }}>👤 {r.ten_nhansu}</span></>} hint={tenVids == null ? 'đang tải…' : `${fmt(tenFiltered.length)} video · ${fmtView(tenView)} view · ${fmtVnd(tenGmv)}đ GMV — trong kỳ`} accent={{ bg: '#f0fdf4', fg: '#15803d' }}>
             <div style={{ fontSize: '0.8rem', color: '#475569', marginBottom: 4, lineHeight: 1.55, background: '#f0fdf4', border: '1px solid #dcfce7', borderRadius: 10, padding: '8px 12px' }}>
               🎯 Đây là các video hệ thống <b>TỰ ĐỘNG ghi nhận</b> cho bạn vì bạn <b>đang giữ tag KOC lúc video lên</b> — <b>không cần điền link air</b>. Chỉ tính video air <b>trong kỳ đang chọn</b>; View &amp; GMV cũng tính trong kỳ. (Video air trước khi bạn gắn tag hoặc sau khi gỡ tag sẽ không nằm ở đây.)
             </div>
