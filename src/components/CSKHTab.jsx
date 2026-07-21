@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ReportCSTab from './ReportCSTab';
-import ChatInboxTab from './ChatInboxTab';
 import { supabase } from '../supabaseClient';
 import * as XLSX from 'xlsx';
 
@@ -1717,14 +1716,13 @@ function TikTokReviewsTab() {
 
 // Wrapper with tabs
 const TABS = [
-  { key: 'chat_inbox', label: '💬 Chat Inbox' },
   { key: 'danh_gia', label: '📋 Quản lý đánh giá' },
   { key: 'report_cs', label: '📝 Report CS' },
   { key: 'tiktok_health', label: '🔴 Điểm TK TikTok' },
 ];
 
 export default function CSKHTab() {
-  const [tab, setTab] = useState('chat_inbox');
+  const [tab, setTab] = useState('danh_gia');
   return (
     <div style={{ fontFamily: "'Outfit', sans-serif" }}>
       {/* Tab bar */}
@@ -1742,7 +1740,6 @@ export default function CSKHTab() {
           </button>
         ))}
       </div>
-      {tab === 'chat_inbox' && <ChatInboxTab />}
       {tab === 'danh_gia' && <DanhGiaTab />}
       {tab === 'tiktok_reviews' && <TikTokReviewsTab />}
       {tab === 'report_cs' && <ReportCSTab />}
