@@ -1719,7 +1719,6 @@ function TikTokReviewsTab() {
 const TABS = [
   { key: 'chat_inbox', label: '💬 Chat Inbox' },
   { key: 'danh_gia', label: '📋 Quản lý đánh giá' },
-  { key: 'tiktok_reviews', label: '⭐ Đánh giá sàn (auto)' },
   { key: 'report_cs', label: '📝 Report CS' },
   { key: 'tiktok_health', label: '🔴 Điểm TK TikTok' },
 ];

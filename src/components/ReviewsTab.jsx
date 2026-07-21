@@ -1,7 +1,12 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { supabase } from '../supabaseClient';
 
 const STAR_COLORS = { 5: '#22c55e', 4: '#84cc16', 3: '#eab308', 2: '#ff7a30', 1: '#ef4444' };
 const PAGE_SIZE = 20;
+
+// ── Module 1 CSKH: phân loại lý do + trạng thái xử lý + đã sửa đánh giá (lưu ở bảng review_cs_meta) ──
+const REASON_CATEGORIES = ['Chê sản phẩm', 'Kích ứng / Dị ứng', 'Không hiệu quả', 'Giao hàng chậm', 'Sai hàng', 'Thiếu hàng', 'Đóng gói', 'Shipper', 'Không nhận xét'];
+const FIXED_OPTIONS = [{ v: 'chua_sua', l: 'Chưa sửa' }, { v: 'da_sua_4', l: 'Đã sửa 4★' }, { v: 'da_sua_5', l: 'Đã sửa 5★' }];
 
 const SHOP_MAP = {
   '1031859035': 'Bodymiss', '1243148826': 'Milaganics', '341325550': 'Milaganics FBS',
@@ -126,6 +131,12 @@ export default function ReviewsTab() {
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState(null);
 
+  // CSKH meta (phân loại/xử lý/đã sửa) — lưu ở review_cs_meta, key theo review id (s-/t-)
+  const [metaMap, setMetaMap] = useState({});
+  const [reasonFilter, setReasonFilter] = useState('all');
+  const [handleFilter, setHandleFilter] = useState('all');
+  const [fixedFilter, setFixedFilter] = useState('all');
+
   const didMount = useRef(false);
   const reviewsRef = useRef(null);
   const [productFilter, setProductFilter] = useState(null); // { productId, platform, productName } | null
@@ -186,6 +197,30 @@ export default function ReviewsTab() {
     if (!didMount.current) { didMount.current = true; fetchReviews(); }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Tải nhãn CSKH cho các đánh giá đang hiển thị (chia đợt 300 tránh URL quá dài)
+  useEffect(() => {
+    if (!reviews.length) return;
+    let cancelled = false;
+    (async () => {
+      const ids = reviews.map(r => r.id);
+      const m = {};
+      for (let i = 0; i < ids.length; i += 300) {
+        const { data } = await supabase.from('review_cs_meta').select('*').in('review_id', ids.slice(i, i + 300));
+        (data || []).forEach(x => { m[x.review_id] = x; });
+      }
+      if (!cancelled) setMetaMap(m);
+    })().catch(() => {});
+    return () => { cancelled = true; };
+  }, [reviews]);
+
+  // Lưu 1 nhãn CSKH cho 1 đánh giá → upsert review_cs_meta (optimistic)
+  const updateMeta = async (r, patch) => {
+    setMetaMap(prev => ({ ...prev, [r.id]: { review_id: r.id, platform: r.platform, handle_status: 'chua_xu_ly', fixed_status: 'chua_sua', ...(prev[r.id] || {}), ...patch } }));
+    const { error } = await supabase.from('review_cs_meta')
+      .upsert({ review_id: r.id, platform: r.platform, ...patch, updated_at: new Date().toISOString() }, { onConflict: 'review_id' });
+    if (error) alert('Lưu không được: ' + error.message);
+  };
+
   // Phạm vi dashboard theo nút Sàn (Shopee/TikTok/Tất cả) + khoảng ngày → MỌI thống kê bám theo
   const scoped = useMemo(() => reviews.filter(r => {
     if (platform !== 'both' && r.platform !== platform) return false;
@@ -197,26 +232,31 @@ export default function ReviewsTab() {
   // ── Stats ──
   const stats = useMemo(() => {
     const dist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-    let sum = 0, replied = 0;
+    const byReason = {};
+    let sum = 0, replied = 0, fixedCount = 0, handledCount = 0;
     const shopee = { total: 0, sum: 0, dist: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } };
     const tiktok = { total: 0, sum: 0, dist: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } };
     for (const r of scoped) {
       dist[r.star]++;
       sum += r.star;
       if (r.hasReply) replied++;
+      const meta = metaMap[r.id];
+      if (meta?.reason_category) byReason[meta.reason_category] = (byReason[meta.reason_category] || 0) + 1;
+      if (meta?.fixed_status === 'da_sua_4' || meta?.fixed_status === 'da_sua_5') fixedCount++;
+      if (meta?.handle_status === 'da_xu_ly') handledCount++;
       const p = r.platform === 'shopee' ? shopee : tiktok;
       p.total++; p.sum += r.star; p.dist[r.star]++;
     }
     const total = reviews.length;
     return {
-      total, replied, dist,
+      total, replied, dist, byReason, fixedCount, handledCount,
       avg: total ? (sum / total).toFixed(1) : '0.0',
       fiveStarPct: total ? ((dist[5] / total) * 100).toFixed(1) : '0.0',
       replyPct: total ? ((replied / total) * 100).toFixed(1) : '0.0',
       shopee: { ...shopee, avg: shopee.total ? (shopee.sum / shopee.total).toFixed(1) : '—' },
       tiktok: { ...tiktok, avg: tiktok.total ? (tiktok.sum / tiktok.total).toFixed(1) : '—' },
     };
-  }, [scoped]);
+  }, [scoped, metaMap]);
 
   // ── Product stats ──
   const productStats = useMemo(() => {
@@ -297,6 +337,9 @@ export default function ReviewsTab() {
     .sort((a, b) => b.bad - a.bad)
     .slice(0, 8), [productStats]);
 
+  // Top phân loại lý do (CSKH)
+  const topReasons = useMemo(() => Object.entries(stats.byReason).sort((a, b) => b[1] - a[1]), [stats.byReason]);
+
   // ── Filtered reviews ──
   const filtered = useMemo(() => {
     let result = [...scoped]; // đã lọc sàn + ngày
@@ -306,6 +349,9 @@ export default function ReviewsTab() {
     if (starFilter > 0) result = result.filter(r => r.star === starFilter);
     if (replyFilter === 'replied') result = result.filter(r => r.hasReply);
     if (replyFilter === 'unreplied') result = result.filter(r => !r.hasReply);
+    if (reasonFilter !== 'all') result = result.filter(r => (metaMap[r.id]?.reason_category || '') === reasonFilter);
+    if (handleFilter !== 'all') result = result.filter(r => (metaMap[r.id]?.handle_status || 'chua_xu_ly') === handleFilter);
+    if (fixedFilter !== 'all') result = result.filter(r => (metaMap[r.id]?.fixed_status || 'chua_sua') === fixedFilter);
     if (searchText) {
       const q = searchText.toLowerCase();
       result = result.filter(r =>
@@ -324,7 +370,7 @@ export default function ReviewsTab() {
       }
     });
     return result;
-  }, [scoped, brandFilter, shopFilter, productFilter, starFilter, replyFilter, searchText, sortBy]);
+  }, [scoped, brandFilter, shopFilter, productFilter, starFilter, replyFilter, reasonFilter, handleFilter, fixedFilter, searchText, sortBy, metaMap]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -430,6 +476,8 @@ export default function ReviewsTab() {
             { label: 'Trung bình sao', value: `${stats.avg} ⭐`, icon: '⭐', color: '#eab308' },
             { label: 'Tỉ lệ 5 sao', value: `${stats.fiveStarPct}%`, icon: '🏆', color: '#22c55e' },
             { label: 'Đã phản hồi', value: `${stats.replyPct}%`, icon: '💬', color: '#3b82f6' },
+            { label: 'Đã sửa đánh giá', value: fmtNum(stats.fixedCount), icon: '🔧', color: '#8b5cf6' },
+            { label: 'CS đã xử lý', value: fmtNum(stats.handledCount), icon: '✅', color: '#16a34a' },
           ].map((c, i) => (
             <div key={i} style={{ ...card, display: 'flex', alignItems: 'center', gap: 14 }}>
               <div style={{ width: 44, height: 44, borderRadius: 10, background: c.color + '12', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem', flexShrink: 0 }}>
@@ -568,6 +616,31 @@ export default function ReviewsTab() {
             </div>
           )}
         </div>
+
+        {/* ── TOP PHÂN LOẠI LÝ DO (CSKH) ── */}
+        {topReasons.length > 0 && (
+          <div style={{ ...card, marginBottom: 20 }}>
+            <h3 style={{ margin: '0 0 12px', fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>🏷️ Top phân loại lý do đánh giá</h3>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {topReasons.map(([reason, count]) => {
+                const active = reasonFilter === reason;
+                const pct = stats.total ? (count / stats.total * 100).toFixed(1) : 0;
+                return (
+                  <div key={reason} onClick={() => { setReasonFilter(active ? 'all' : reason); setPage(1); focusReviews(); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '7px 12px', borderRadius: 8, background: active ? '#fff7ed' : '#f8fafc', border: `1.5px solid ${active ? '#fed7aa' : '#e5e7eb'}` }}>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>{reason}</span>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#ff6a2c' }}>{count}</span>
+                    <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{pct}%</span>
+                  </div>
+                );
+              })}
+            </div>
+            {reasonFilter !== 'all' && (
+              <div style={{ marginTop: 10, fontSize: '0.72rem', color: '#ff6a2c', fontWeight: 600, cursor: 'pointer' }}
+                onClick={() => { setReasonFilter('all'); setPage(1); }}>✕ Bỏ lọc lý do "{reasonFilter}"</div>
+            )}
+          </div>
+        )}
 
         {/* ── SHOP STATS ── */}
         <div style={{ ...card, marginBottom: 20 }}>
@@ -739,6 +812,27 @@ export default function ReviewsTab() {
             <option value="unreplied">Chưa phản hồi</option>
           </select>
 
+          <select value={reasonFilter} onChange={e => { setReasonFilter(e.target.value); setPage(1); }}
+            style={{ padding: '8px 12px', borderRadius: 8, border: `1.5px solid ${reasonFilter !== 'all' ? '#ff6a2c' : '#e5e7eb'}`, fontSize: '0.82rem', fontFamily: 'inherit', color: reasonFilter !== 'all' ? '#ff6a2c' : '#0f172a', background: reasonFilter !== 'all' ? '#fff7ed' : '#fff', cursor: 'pointer', fontWeight: reasonFilter !== 'all' ? 700 : 400 }}>
+            <option value="all">Lý do: Tất cả</option>
+            {REASON_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+
+          <select value={handleFilter} onChange={e => { setHandleFilter(e.target.value); setPage(1); }}
+            style={{ padding: '8px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.82rem', fontFamily: 'inherit', color: '#0f172a', background: '#fff', cursor: 'pointer' }}>
+            <option value="all">Xử lý: Tất cả</option>
+            <option value="chua_xu_ly">Chưa xử lý</option>
+            <option value="da_xu_ly">Đã xử lý</option>
+          </select>
+
+          <select value={fixedFilter} onChange={e => { setFixedFilter(e.target.value); setPage(1); }}
+            style={{ padding: '8px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.82rem', fontFamily: 'inherit', color: '#0f172a', background: '#fff', cursor: 'pointer' }}>
+            <option value="all">Đã sửa: Tất cả</option>
+            <option value="chua_sua">Chưa sửa</option>
+            <option value="da_sua_4">Đã sửa 4★</option>
+            <option value="da_sua_5">Đã sửa 5★</option>
+          </select>
+
           <select value={sortBy} onChange={e => setSortBy(e.target.value)}
             style={{ padding: '8px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.82rem', fontFamily: 'inherit', color: '#0f172a', background: '#fff', cursor: 'pointer' }}>
             <option value="date_desc">Mới nhất</option>
@@ -766,6 +860,7 @@ export default function ReviewsTab() {
                   <th style={{ ...thStyle, width: 100 }}>Người dùng</th>
                   <th style={{ ...thStyle, width: 90, textAlign: 'center' }}>Ngày</th>
                   <th style={{ ...thStyle, width: 55, textAlign: 'center' }}>Reply</th>
+                  <th style={{ ...thStyle, width: 190 }}>🏷️ CSKH xử lý</th>
                 </tr>
               </thead>
               <tbody>
@@ -852,6 +947,32 @@ export default function ReviewsTab() {
                           ? <span style={{ color: '#22c55e', fontWeight: 700, fontSize: '0.85rem' }} title="Đã phản hồi">✅</span>
                           : <span style={{ color: '#d1d5db', fontWeight: 700, fontSize: '0.85rem' }} title="Chưa phản hồi">—</span>
                         }
+                      </td>
+                      <td style={tdStyle} onClick={e => e.stopPropagation()}>
+                        {(() => {
+                          const meta = metaMap[r.id] || {};
+                          const handled = meta.handle_status === 'da_xu_ly';
+                          const fixed = meta.fixed_status || 'chua_sua';
+                          return (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 170 }}>
+                              <select value={meta.reason_category || ''} onChange={e => updateMeta(r, { reason_category: e.target.value || null })}
+                                style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: '0.72rem', fontFamily: 'inherit', background: '#fff', cursor: 'pointer' }}>
+                                <option value="">— Phân loại lý do —</option>
+                                {REASON_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                              </select>
+                              <div style={{ display: 'flex', gap: 5 }}>
+                                <button onClick={() => updateMeta(r, handled ? { handle_status: 'chua_xu_ly', handled_at: null } : { handle_status: 'da_xu_ly', handled_at: new Date().toISOString() })}
+                                  style={{ flex: 1, padding: '4px 6px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 700, background: handled ? '#16a34a' : '#f1f5f9', color: handled ? '#fff' : '#64748b' }}>
+                                  {handled ? '✅ Đã xử lý' : '○ Xử lý'}
+                                </button>
+                                <select value={fixed} onChange={e => updateMeta(r, { fixed_status: e.target.value })}
+                                  style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: '0.7rem', fontFamily: 'inherit', background: '#fff', cursor: 'pointer', color: (fixed === 'da_sua_4' || fixed === 'da_sua_5') ? '#16a34a' : '#64748b' }}>
+                                  {FIXED_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+                                </select>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </td>
                     </tr>
                   );
