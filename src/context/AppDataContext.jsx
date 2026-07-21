@@ -19,11 +19,14 @@ function dochangchuc(so, daydu) {
   } else if (chuc == 1) {
     chuoi = " mười";
     if (donvi == 5) { chuoi += " lăm"; }
+    else if (donvi == 1) { chuoi += " một"; }
   } else if (daydu && donvi > 0) {
     chuoi = " lẻ";
   }
   if (donvi == 5 && chuc > 1) {
     chuoi += " lăm";
+  } else if (donvi == 5 && chuc < 1) {
+    chuoi += " " + mangso[donvi];
   } else if (donvi > 0 && donvi != 1 && donvi != 5) {
     chuoi += " " + mangso[donvi];
   } else if (donvi == 1 && chuc < 1) {
@@ -72,9 +75,9 @@ function to_vietnamese_string(so) {
     let ty = so % 1000000000;
     so = Math.floor(so / 1000000000);
     if (so > 0) {
-      chuoi = dochangtram(ty, true) + hauto + chuoi;
+      chuoi = dochangtrieu(ty, true) + hauto + chuoi;
     } else {
-      chuoi = dochangtram(ty, false) + hauto + chuoi;
+      chuoi = dochangtrieu(ty, false) + hauto + chuoi;
     }
     hauto = " tỷ";
   } while (so > 0);
@@ -685,12 +688,26 @@ export const AppDataProvider = ({ children }) => {
     const data = contractData;
     const formatCurrency = (num) => num.toLocaleString('vi-VN');
     const tongGiaTri = data.soLuong * data.donGia;
-    const tongCong = Math.round(tongGiaTri / 0.9);
-    const thueTNCN = tongCong - tongGiaTri;
+    // Ngưỡng miễn thuế TNCN theo NGÀY KÝ (ngày làm HĐ): trước 1/7/2026 <2tr miễn, từ 1/7/2026 <5tr miễn.
+    const nguongThue = (data.ngayKy || '') >= '2026-07-01' ? 5_000_000 : 2_000_000;
+    const coThueTNCN = tongGiaTri >= nguongThue;
+    const tongCong = coThueTNCN ? Math.round(tongGiaTri / 0.9) : tongGiaTri;
+    const thueTNCN = coThueTNCN ? tongCong - tongGiaTri : 0;
     const thucTeThanhToan = tongGiaTri;
     const tongCongChu = to_vietnamese_string(tongCong) + ' đồng';
     const thueTNCNChu = to_vietnamese_string(thueTNCN) + ' đồng';
     const thucTeThanhToanChu = to_vietnamese_string(thucTeThanhToan) + ' đồng chẵn';
+    const thueTNCNRow = coThueTNCN ? `
+            <tr>
+                <td colspan="4">Thuế TNCN 10%</td>
+                <td style="text-align: right;">${formatCurrency(thueTNCN)}</td>
+            </tr>` : '';
+    const dieu21b = coThueTNCN ? `<p style="padding-left: 20px;">b.
+    Nghĩa vụ thuế TNCN của Bên B là: <b>${formatCurrency(thueTNCN)} VNĐ</b> <i>(Bằng chữ: ${thueTNCNChu}.)</i> Bên A có trách nhiệm khấu trừ tiền thuế tại nguồn để nộp thuế TNCN cho bên B.</p>
+    <p style="padding-left: 20px;">c.
+    Giá trị Hợp đồng Bên A thực tế thanh toán cho Bên B sau khi đã khấu trừ thuế TNCN cho Bên B là: <b>${formatCurrency(thucTeThanhToan)} VNĐ</b> <i>(Bằng chữ: ${thucTeThanhToanChu}).</i></p>` : `<p style="padding-left: 20px;">b.
+    Giá trị Hợp đồng Bên A thực tế thanh toán cho Bên B là: <b>${formatCurrency(thucTeThanhToan)} VNĐ</b> <i>(Bằng chữ: ${thucTeThanhToanChu}).</i></p>`;
+    const dieu21dLetter = coThueTNCN ? 'd' : 'c';
     const formatDate = (dateString) => {
       const dateObj = new Date(dateString);
       const ngay = String(dateObj.getDate()).padStart(2, '0');
@@ -846,12 +863,9 @@ export const AppDataProvider = ({ children }) => {
             <td style="text-align: right;"
     class="bold-text">${formatCurrency(tongGiaTri)}</td>
             </tr>
+            ${thueTNCNRow}
             <tr>
-                <td colspan="4">Thuế TNCN 10%</td>
-                <td style="text-align: right;">${formatCurrency(thueTNCN)}</td>
-            </tr>
-            <tr>
-               
+
             <td colspan="4" class="bold-text">TỔNG CỘNG</td>
                 <td style="text-align: right;"
     class="bold-text">${formatCurrency(tongCong)}</td>
@@ -894,12 +908,9 @@ export const AppDataProvider = ({ children }) => {
     <p>2.1.
     Giá trị và thời gian thanh toán:</p>
     <p style="padding-left: 20px;">a.
-    Tổng chi phí cho công việc mà Bên B thực hiện là <b>${formatCurrency(tongCong)} VNĐ</b> <i>(Bằng chữ: ${tongCongChu}.)</i> - Đã bao gồm thuế TNCN (10%)</p>
-    <p style="padding-left: 20px;">b.
-    Nghĩa vụ thuế TNCN của Bên B là: <b>${formatCurrency(thueTNCN)} VNĐ</b> <i>(Bằng chữ: ${thueTNCNChu}.)</i> Bên A có trách nhiệm khấu trừ tiền thuế tại nguồn để nộp thuế TNCN cho bên B.</p>
-    <p style="padding-left: 20px;">c.
-    Giá trị Hợp đồng Bên A thực tế thanh toán cho Bên B sau khi đã khấu trừ thuế TNCN cho Bên B là: <b>${formatCurrency(thucTeThanhToan)} VNĐ</b> <i>(Bằng chữ: ${thucTeThanhToanChu}).</i></p>
-    <p style="padding-left: 20px;">d.
+    Tổng chi phí cho công việc mà Bên B thực hiện là <b>${formatCurrency(tongCong)} VNĐ</b> <i>(Bằng chữ: ${tongCongChu}.)</i>${coThueTNCN ? ' - Đã bao gồm thuế TNCN (10%)' : ''}</p>
+    ${dieu21b}
+    <p style="padding-left: 20px;">${dieu21dLetter}.
     Trong quá trình thực hiện Hợp đồng, nếu có phát sinh bất kỳ khoản chi phí nào ngoài giá trị Hợp đồng nêu trên, Bên B phải thông báo ngay lập tức cho Bên A và chỉ thực hiện phần công việc phát sinh chi phí đó khi nhận được sự đồng ý bằng văn bản của Bên A. Bên A không có trách nhiệm thanh toán cho Bên B bất kỳ khoản chi phí nào được triển khai khi chưa nhận được sự chấp thuận của Bên A.</p>
     <p>2.2.
     Thanh toán:</p>
