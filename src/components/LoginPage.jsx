@@ -160,7 +160,7 @@ export const ACCOUNTS = [
     // ── ECOM accounts (5 users, propose-only quyền cho phần Định danh KOC) ──
     { username: 'ha',         password: 'Ha@SK2025',       role: 'ecom',       name: 'Hạ'          },
     { username: 'phong',      password: 'Phong@SK2025',    role: 'ecom',       name: 'Phong'       },
-    { username: 'dan',        password: 'Dan@SK2025',      role: 'ecom',       name: 'Đan'         },
+    { username: 'dan',        password: 'Dan@SK2025',      role: 'ecom',       name: 'Đan',        staff: 'Hữu Đan' },
     { username: 'hieu',       password: 'Hieu@SK2025',     role: 'ecom',       name: 'Hiếu'        },
     { username: 'tamnhu',     password: 'TamNhu@SK2025',   role: 'ecom',       name: 'Tâm Như'     },
     { username: 'khanh',      password: 'Khanh@SK2025',    role: 'ecom',       name: 'Khánh'       },

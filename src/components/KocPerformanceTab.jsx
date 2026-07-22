@@ -383,12 +383,21 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
   };
   const remove = async () => {
     setBusy(true);
-    await supabase.from(ASSIGN_TABLE).delete().eq('koc_id', username).eq('brand_name', brand);
-    logHistory('remove', assignment?.staff_name);
+    if (isAdmin) {
+      await supabase.from(ASSIGN_TABLE).delete().eq('koc_id', username).eq('brand_name', brand);
+      logHistory('remove', assignment?.staff_name);
+    } else {
+      // ecom (Đan) gỡ tag: qua RPC → chắc chắn (canon brand), tự lưu ngày gắn (tag_since) + ghi lịch sử.
+      const { data, error } = await supabase.rpc('koc_remove_assignment', { p_koc: username, p_brand: brand, p_actor: me });
+      if (error || !data || Number(data) === 0) { alert('⚠️ Không gỡ được tag này. Tải lại trang rồi gỡ lại.'); setBusy(false); return; }
+    }
     setBusy(false); setOpen(false); onChanged?.();
   };
 
-  const canRemove = assignment && (isAdmin || (isEcom && status === 'proposed' && assignment.proposed_by === me));
+  // ecom có `staff` (VD Đan = 'Hữu Đan') → được gỡ tag của KOC gắn cho ĐÚNG tên mình (Khánh: Đan chỉ gỡ KOC của Hữu Đan).
+  const canRemove = assignment && (isAdmin
+    || (isEcom && status === 'proposed' && assignment.proposed_by === me)
+    || (isEcom && currentUser?.staff && (assignment.staff_name || '').trim() === (currentUser.staff || '').trim()));
 
   return (
     <>
