@@ -398,6 +398,29 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
   const tenPageRows = tenFiltered.slice((tenPageC - 1) * TEN_PER, tenPageC * TEN_PER);
   const tenView = tenFiltered.reduce((s, v) => s + num(v.view_period), 0);
   const tenGmv = tenFiltered.reduce((s, v) => s + num(v.gmv_period), 0);
+  // Xuất Excel bảng "Video tự động ghi nhận theo tag" — để nhân sự tự dò link video
+  const exportTenVids = async () => {
+    if (!tenFiltered.length) return;
+    const XLSX = await import('xlsx').then(m => m.default || m);
+    const aoa = [
+      ['STT', 'Kênh / KOC', 'Brand', 'Ngày air', 'View (kỳ)', 'GMV (kỳ)', 'Link video'],
+      ...tenFiltered.map((v, i) => [
+        i + 1,
+        v.kenh || '',
+        v.brand || '',
+        v.air_date ? new Date(v.air_date).toLocaleDateString('vi-VN') : '',
+        num(v.view_period),
+        num(v.gmv_period),
+        `https://www.tiktok.com/${v.kenh || ''}/video/${v.content_id}`,
+      ]),
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{ wch: 6 }, { wch: 22 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 58 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Video theo tag');
+    const safe = String(r.ten_nhansu || 'NS').replace(/\s+/g, '-');
+    XLSX.writeFile(wb, `video-theo-tag_${safe}_${range.start}_${range.end}.xlsx`);
+  };
   const daily = Array.isArray(det?.daily) ? det.daily : [];
   const kocs = Array.isArray(det?.kocs) ? det.kocs : [];
 
@@ -901,6 +924,10 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
               <input value={tenSearch} onChange={e => setTenSearch(e.target.value)} placeholder="🔎 Tìm kênh KOC / brand / ID video..." style={{ ...ctrl, flex: '1 1 260px' }} />
+              <button onClick={exportTenVids} disabled={!tenFiltered.length} title="Xuất toàn bộ video trong bảng ra Excel để dò link"
+                style={{ ...ctrl, background: tenFiltered.length ? '#15803d' : '#e2e8f0', color: '#fff', border: 'none', fontWeight: 700, cursor: tenFiltered.length ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>
+                📊 Xuất Excel{tenFiltered.length ? ` (${fmt(tenFiltered.length)})` : ''}
+              </button>
             </div>
             {tenVids == null ? (
               <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>⏳ Đang tải video...</div>
