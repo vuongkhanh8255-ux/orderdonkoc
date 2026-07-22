@@ -394,6 +394,17 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
   }, [r.nhansu_id, castQ, castPage]);
   const castTotalPages = Math.max(1, Math.ceil(castTotal / CAST_PER));
   const castPageC = Math.min(castPage, castTotalPages);
+  // ── KOC của tôi BỊ GỠ (90 ngày) — để nhân sự biết KOC nào bị gỡ (nhất là auto-gỡ), phân biệt đã-gắn-lại hay còn-gỡ ──
+  const [rmKocs, setRmKocs] = useState(null);
+  const [rmOnlyOff, setRmOnlyOff] = useState(false);   // chỉ hiện KOC còn đang bị gỡ (chưa gắn lại)
+  useEffect(() => {
+    let alive = true; setRmKocs(null);
+    supabase.rpc('staff_removed_kocs', { p_nhansu_id: r.nhansu_id })
+      .then(({ data }) => { if (alive) setRmKocs(data || []); }, () => { if (alive) setRmKocs([]); });
+    return () => { alive = false; };
+  }, [r.nhansu_id]);
+  const rmList = (rmKocs || []).filter(k => !rmOnlyOff || !k.dang_gan_lai);
+  const rmConGo = (rmKocs || []).filter(k => !k.dang_gan_lai).length;
   // ── Video TỰ ĐỘNG ghi nhận theo TAG (tenure) — video air trong lúc NS đang giữ tag KOC, hệ thống tự tính (không cần điền link air) ──
   // Lọc theo KỲ đang chọn (video air trong kỳ). View/GMV = trong kỳ. Để mấy bạn tự soi video nào được credit qua tag.
   const [tenVids, setTenVids] = useState(null);   // null = đang tải
@@ -1044,6 +1055,50 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
                   </div>
                 )}
               </>
+            )}
+          </Section>
+
+          {/* ═══ KOC CỦA TÔI BỊ GỠ ═══ để nhân sự biết KOC nào bị gỡ (nhất là auto-gỡ), 90 ngày gần nhất */}
+          <Section icon="🗑️" title={<>KOC của bạn bị gỡ (90 ngày): <span style={{ padding: '2px 11px', borderRadius: 20, background: '#b91c1c', color: '#fff', fontSize: '0.85rem', fontWeight: 800, marginLeft: 4 }}>👤 {r.ten_nhansu}</span></>} hint={rmKocs == null ? 'đang tải…' : `${fmt((rmKocs || []).length)} lần gỡ · ${fmt(rmConGo)} còn đang gỡ`} accent={{ bg: '#fef2f2', fg: '#b91c1c' }}>
+            <div style={{ fontSize: '0.8rem', color: '#7f1d1d', marginBottom: 4, lineHeight: 1.55, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '8px 12px' }}>
+              🗑️ KOC của bạn <b>bị gỡ tag</b> trong 90 ngày (tự động quá hạn / blacklist / gỡ tay). Cột trạng thái: <b>🟢 Đã gắn lại</b> = hệ thống đã khôi phục; <b>🔴 Còn gỡ</b> = hiện không còn tag. Coi <b>Ngày air</b> — nếu air gần đây mà bị 🤖 auto-gỡ thì báo admin gắn lại.
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <button onClick={() => setRmOnlyOff(v => !v)} style={{ padding: '5px 12px', borderRadius: 7, border: `1px solid ${rmOnlyOff ? '#dc2626' : '#fecaca'}`, background: rmOnlyOff ? '#dc2626' : '#fff', color: rmOnlyOff ? '#fff' : '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>🔴 Chỉ KOC còn đang gỡ ({rmConGo}){rmOnlyOff ? ' ✕' : ''}</button>
+            </div>
+            {rmKocs == null ? (
+              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>⏳ Đang tải...</div>
+            ) : rmList.length === 0 ? (
+              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>{rmOnlyOff ? 'Không còn KOC nào đang bị gỡ. 🎉' : 'Chưa có KOC nào bị gỡ trong 90 ngày.'}</div>
+            ) : (
+              <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #f1f5f9' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
+                  <thead>
+                    <tr style={{ background: '#fef2f2' }}>
+                      {['STT', 'KÊNH / KOC', 'BRAND', 'NGÀY GỠ', 'LÝ DO', 'NGÀY AIR', 'TRẠNG THÁI'].map((h, i) => (
+                        <th key={i} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.72rem', fontWeight: 800, color: '#991b1b', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: '2px solid #fecaca' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rmList.map((k, i) => (
+                      <tr key={(k.koc || '') + (k.brand || '') + i} style={{ borderBottom: '1px solid #f1f5f9', background: k.dang_gan_lai ? '#fff' : '#fff5f5' }}>
+                        <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#94a3b8' }}>{i + 1}</td>
+                        <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{k.koc || '—'}</td>
+                        <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155' }}>{k.brand || '—'}</td>
+                        <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155', whiteSpace: 'nowrap' }}>{k.ngay_go ? new Date(k.ngay_go).toLocaleDateString('vi-VN') : '—'}</td>
+                        <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155', whiteSpace: 'nowrap' }}>{k.ly_do || '—'}</td>
+                        <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: k.last_air ? '#0891b2' : '#94a3b8', whiteSpace: 'nowrap' }}>{k.last_air ? new Date(k.last_air).toLocaleDateString('vi-VN') : '—'}</td>
+                        <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontSize: '0.74rem', fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: k.dang_gan_lai ? '#dcfce7' : '#fee2e2', color: k.dang_gan_lai ? '#166534' : '#b91c1c' }}>
+                            {k.dang_gan_lai ? '🟢 Đã gắn lại' : '🔴 Còn gỡ'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </Section>
 
