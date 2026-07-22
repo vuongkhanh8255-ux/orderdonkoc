@@ -375,6 +375,25 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
   }, [r.nhansu_id, airQ, airPage]);
   const airTotalPages = Math.max(1, Math.ceil(airTotal / AIR_PER));
   const airPageC = Math.min(airPage, airTotalPages);
+  // ── Link air CÓ CAST — hiển thị link air có tiền cast để bạn BIẾT. KOC có cast KHÔNG gắn tag, KHÔNG tính vào số KOC quản lý (chỉ hiện cho biết). ──
+  const [castRows, setCastRows] = useState(null);
+  const [castTotal, setCastTotal] = useState(0);
+  const [castTong, setCastTong] = useState(0);
+  const [castSearch, setCastSearch] = useState('');
+  const [castQ, setCastQ] = useState('');
+  const [castPage, setCastPage] = useState(1);
+  const CAST_PER = 20;
+  useEffect(() => { const t = setTimeout(() => { setCastQ(castSearch.trim()); setCastPage(1); }, 400); return () => clearTimeout(t); }, [castSearch]);
+  useEffect(() => { setCastPage(1); }, [r.nhansu_id]);
+  useEffect(() => {
+    let alive = true; setCastRows(null);
+    supabase.rpc('staff_cast_air_links', { p_nhansu_id: r.nhansu_id, p_search: castQ || null, p_limit: CAST_PER, p_offset: (castPage - 1) * CAST_PER })
+      .then(({ data }) => { if (!alive) return; setCastRows(data || []); setCastTotal(data && data.length ? Number(data[0].total) : 0); setCastTong(data && data.length ? Number(data[0].tong_cast) : 0); },
+            () => { if (alive) { setCastRows([]); setCastTotal(0); setCastTong(0); } });
+    return () => { alive = false; };
+  }, [r.nhansu_id, castQ, castPage]);
+  const castTotalPages = Math.max(1, Math.ceil(castTotal / CAST_PER));
+  const castPageC = Math.min(castPage, castTotalPages);
   // ── Video TỰ ĐỘNG ghi nhận theo TAG (tenure) — video air trong lúc NS đang giữ tag KOC, hệ thống tự tính (không cần điền link air) ──
   // Lọc theo KỲ đang chọn (video air trong kỳ). View/GMV = trong kỳ. Để mấy bạn tự soi video nào được credit qua tag.
   const [tenVids, setTenVids] = useState(null);   // null = đang tải
@@ -966,6 +985,62 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
                     <button onClick={() => setTenPage(p => Math.max(1, p - 1))} disabled={tenPageC <= 1} style={{ ...ctrl, cursor: tenPageC <= 1 ? 'default' : 'pointer', opacity: tenPageC <= 1 ? 0.5 : 1 }}>‹ Trước</button>
                     <span style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 700 }}>Trang {tenPageC}/{tenTotalPages}</span>
                     <button onClick={() => setTenPage(p => Math.min(tenTotalPages, p + 1))} disabled={tenPageC >= tenTotalPages} style={{ ...ctrl, cursor: tenPageC >= tenTotalPages ? 'default' : 'pointer', opacity: tenPageC >= tenTotalPages ? 0.5 : 1 }}>Sau ›</button>
+                  </div>
+                )}
+              </>
+            )}
+          </Section>
+
+          {/* ═══ LINK AIR CÓ CAST ═══ chỉ hiển thị cho biết — KHÔNG gắn tag, KHÔNG tính vào số KOC quản lý */}
+          <Section icon="💸" title={<>Link air có cast: <span style={{ padding: '2px 11px', borderRadius: 20, background: '#c2410c', color: '#fff', fontSize: '0.85rem', fontWeight: 800, marginLeft: 4 }}>👤 {r.ten_nhansu}</span></>} hint={castRows == null ? 'đang tải…' : `${fmt(castTotal)} link · Σ cast ${fmtVnd(castTong)}đ`} accent={{ bg: '#fff7ed', fg: '#c2410c' }}>
+            <div style={{ fontSize: '0.8rem', color: '#7c2d12', marginBottom: 4, lineHeight: 1.55, background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, padding: '8px 12px' }}>
+              💸 Đây là các link air <b>CÓ tiền cast</b> ghi nhận cho bạn — chỉ <b>hiển thị để bạn BIẾT</b>. KOC có cast <b>KHÔNG gắn tag</b> và <b>KHÔNG tính vào số lượng KOC quản lý</b> của bạn.
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <input value={castSearch} onChange={e => setCastSearch(e.target.value)} placeholder="🔎 Tìm ID kênh / video / SP / brand..." style={{ ...ctrl, flex: '1 1 260px' }} />
+            </div>
+            {castRows == null ? (
+              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>⏳ Đang tải link cast...</div>
+            ) : castTotal === 0 ? (
+              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>{castQ ? 'Không tìm thấy link khớp.' : 'Nhân sự này chưa có link air nào có cast.'}</div>
+            ) : (
+              <>
+                <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #f1f5f9' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
+                    <thead>
+                      <tr style={{ background: '#fff7ed' }}>
+                        {['STT', 'LINK AIR', 'ID KÊNH', 'BRAND', 'SẢN PHẨM', 'NGÀY AIR', 'CAST', 'TRẠNG THÁI'].map((h, i) => (
+                          <th key={i} style={{ padding: '10px 12px', textAlign: i === 6 ? 'right' : 'left', fontSize: '0.72rem', fontWeight: 800, color: '#9a3412', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: '2px solid #fed7aa' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(castRows || []).map((a, i) => (
+                        <tr key={a.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#94a3b8' }}>{(castPageC - 1) * CAST_PER + i + 1}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', maxWidth: 210 }}>
+                            {a.link_air_koc ? <a href={a.link_air_koc} target="_blank" rel="noreferrer" style={{ color: '#f97316', fontWeight: 700, textDecoration: 'none', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.link_air_koc}</a> : '—'}
+                          </td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 600, color: '#334155' }}>{a.id_kenh || '—'}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155' }}>{a.ten_brand || '—'}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.san_pham || ''}>{a.san_pham || '—'}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155', whiteSpace: 'nowrap' }}>{a.ngay_air ? new Date(a.ngay_air).toLocaleDateString('vi-VN') : '—'}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 800, color: '#ea580c', textAlign: 'right', whiteSpace: 'nowrap' }}>{fmtVnd(a.cast_amount)}đ</td>
+                          <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: '0.74rem', fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: a.status === 'Đã On-air' ? '#dcfce7' : '#fef9c3', color: a.status === 'Đã On-air' ? '#166534' : '#a16207' }}>
+                              {a.status === 'Đã On-air' ? '🟢 Đã On-air' : '🟡 Chưa air'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {castTotalPages > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 6 }}>
+                    <button onClick={() => setCastPage(p => Math.max(1, p - 1))} disabled={castPageC <= 1} style={{ ...ctrl, cursor: castPageC <= 1 ? 'default' : 'pointer', opacity: castPageC <= 1 ? 0.5 : 1 }}>‹ Trước</button>
+                    <span style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 700 }}>Trang {castPageC}/{castTotalPages}</span>
+                    <button onClick={() => setCastPage(p => Math.min(castTotalPages, p + 1))} disabled={castPageC >= castTotalPages} style={{ ...ctrl, cursor: castPageC >= castTotalPages ? 'default' : 'pointer', opacity: castPageC >= castTotalPages ? 0.5 : 1 }}>Sau ›</button>
                   </div>
                 )}
               </>
