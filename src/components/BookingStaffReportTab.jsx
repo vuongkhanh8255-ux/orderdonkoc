@@ -397,13 +397,17 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
   // ── KOC của tôi BỊ GỠ (90 ngày) — để nhân sự biết KOC nào bị gỡ (nhất là auto-gỡ), phân biệt đã-gắn-lại hay còn-gỡ ──
   const [rmKocs, setRmKocs] = useState(null);
   const [rmOnlyOff, setRmOnlyOff] = useState(false);   // chỉ hiện KOC còn đang bị gỡ (chưa gắn lại)
+  const [rmSearch, setRmSearch] = useState('');        // tìm KOC / brand
   useEffect(() => {
     let alive = true; setRmKocs(null);
     supabase.rpc('staff_removed_kocs', { p_nhansu_id: r.nhansu_id })
       .then(({ data }) => { if (alive) setRmKocs(data || []); }, () => { if (alive) setRmKocs([]); });
     return () => { alive = false; };
   }, [r.nhansu_id]);
-  const rmList = (rmKocs || []).filter(k => !rmOnlyOff || !k.dang_gan_lai);
+  const rmQ = rmSearch.trim().toLowerCase();
+  const rmList = (rmKocs || []).filter(k =>
+    (!rmOnlyOff || !k.dang_gan_lai) &&
+    (!rmQ || (k.koc || '').toLowerCase().includes(rmQ) || (k.brand || '').toLowerCase().includes(rmQ)));
   const rmConGo = (rmKocs || []).filter(k => !k.dang_gan_lai).length;
   // ── Video TỰ ĐỘNG ghi nhận theo TAG (tenure) — video air trong lúc NS đang giữ tag KOC, hệ thống tự tính (không cần điền link air) ──
   // Lọc theo KỲ đang chọn (video air trong kỳ). View/GMV = trong kỳ. Để mấy bạn tự soi video nào được credit qua tag.
@@ -1065,11 +1069,12 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
               <button onClick={() => setRmOnlyOff(v => !v)} style={{ padding: '5px 12px', borderRadius: 7, border: `1px solid ${rmOnlyOff ? '#dc2626' : '#fecaca'}`, background: rmOnlyOff ? '#dc2626' : '#fff', color: rmOnlyOff ? '#fff' : '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>🔴 Chỉ KOC còn đang gỡ ({rmConGo}){rmOnlyOff ? ' ✕' : ''}</button>
+              <input value={rmSearch} onChange={e => setRmSearch(e.target.value)} placeholder="🔎 Tìm ID kênh KOC / brand..." style={{ ...ctrl, flex: '1 1 220px', minWidth: 180 }} />
             </div>
             {rmKocs == null ? (
               <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>⏳ Đang tải...</div>
             ) : rmList.length === 0 ? (
-              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>{rmOnlyOff ? 'Không còn KOC nào đang bị gỡ. 🎉' : 'Chưa có KOC nào bị gỡ trong 90 ngày.'}</div>
+              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>{rmQ ? 'Không tìm thấy KOC khớp.' : rmOnlyOff ? 'Không còn KOC nào đang bị gỡ. 🎉' : 'Chưa có KOC nào bị gỡ trong 90 ngày.'}</div>
             ) : (
               <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #f1f5f9' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
