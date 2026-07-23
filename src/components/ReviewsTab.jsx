@@ -270,7 +270,7 @@ export default function ReviewsTab() {
 
       setReviews([...byId.values()]);
       setPage(1);
-      setStarFilter(0);
+      setStarSel([]);
       setProductFilter(null);
       setHasFetched(true);
     } catch (err) {
@@ -537,17 +537,27 @@ export default function ReviewsTab() {
     };
   };
 
-  // Chọn nhanh TRỌN 1 THÁNG (CS cần lọc cả tháng để chỉnh phân loại lý do).
-  // offset 0 = tháng này, -1 = tháng trước... Tháng hiện tại thì kẹp ngày cuối = hôm nay.
-  const pickMonth = (offset) => {
+  // Chọn nhanh TRỌN 1 THÁNG của năm nay (CS cần lọc cả tháng để chỉnh phân loại).
+  // Tháng đang chạy thì kẹp ngày cuối = hôm nay.
+  const curYear = new Date().getFullYear();
+  const curMonth = new Date().getMonth() + 1;
+  const pickMonthNum = (m) => {
     const now = new Date();
-    const first = new Date(now.getFullYear(), now.getMonth() + offset, 1);
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + offset + 1, 0);
+    const first = new Date(curYear, m - 1, 1);
+    const lastDay = new Date(curYear, m, 0);
     const s = toYmd(first);
     const e = toYmd(lastDay > now ? now : lastDay);
     setStartDate(s); setEndDate(e); fetchReviews(s, e);
   };
-  const monthBtn = { ...btnBase, padding: '6px 12px', fontSize: '0.78rem', background: '#fff7ed', color: '#ff6a2c', borderColor: '#fed7aa', fontWeight: 700 };
+  // Tô sáng nút tháng nào đang xem: từ ngày 1 và cùng nằm trong 1 tháng của năm nay
+  const activeMonth = (startDate.slice(0, 4) === String(curYear) && startDate.slice(8, 10) === '01'
+    && endDate.slice(0, 7) === startDate.slice(0, 7)) ? Number(startDate.slice(5, 7)) : 0;
+  const monthBtn = (on) => ({
+    ...btnBase, padding: '6px 0', width: 42, fontSize: '0.78rem', fontWeight: 800,
+    background: on ? '#ff6a2c' : '#fff', color: on ? '#fff' : '#64748b',
+    borderColor: on ? '#ff6a2c' : '#e5e7eb',
+  });
+  const barLabel = { fontSize: '0.62rem', fontWeight: 800, color: '#94a3b8', letterSpacing: '0.5px', marginBottom: 4 };
 
   // Xuất Excel ĐÚNG data đang lọc — kèm mã đơn / ID người dùng / phân loại lý do (CS khỏi report tay).
   const exportXlsx = () => {
@@ -587,23 +597,25 @@ export default function ReviewsTab() {
           ⭐ Đánh giá sàn
         </h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', borderRadius: 10, border: '1.5px solid #e5e7eb', padding: '6px 12px' }}>
-            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-              style={{ border: 'none', outline: 'none', fontSize: '0.84rem', fontFamily: 'inherit', color: '#0f172a', fontWeight: 600, background: 'transparent' }} />
-            <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>→</span>
-            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
-              style={{ border: 'none', outline: 'none', fontSize: '0.84rem', fontFamily: 'inherit', color: '#0f172a', fontWeight: 600, background: 'transparent' }} />
+          {/* Bấm 1 phát ra TRỌN THÁNG — CS lọc theo tháng là chính, khỏi rê 2 ô ngày */}
+          <div>
+            <div style={barLabel}>THÁNG {curYear}</div>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {Array.from({ length: curMonth }, (_, i) => i + 1).map(m => (
+                <button key={m} onClick={() => pickMonthNum(m)} style={monthBtn(m === activeMonth)}
+                  title={`Trọn tháng ${m}/${curYear}`}>T{m}</button>
+              ))}
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {[7, 30, 60].map(d => (
-              <button key={d}
-                onClick={() => { const s = toYmd(new Date(Date.now() - (d - 1) * 86400000)); setStartDate(s); setEndDate(today); fetchReviews(s, today); }}
-                style={{ ...btnBase, padding: '6px 12px', fontSize: '0.78rem', background: '#fff', color: '#64748b', borderColor: '#e5e7eb' }}>
-                {d} ngày
-              </button>
-            ))}
-            <button onClick={() => pickMonth(0)} style={monthBtn}>Tháng này</button>
-            <button onClick={() => pickMonth(-1)} style={monthBtn}>Tháng trước</button>
+          <div>
+            <div style={barLabel}>TÙY CHỌN NGÀY</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', borderRadius: 10, border: '1.5px solid #e5e7eb', padding: '5px 12px' }}>
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+                style={{ border: 'none', outline: 'none', fontSize: '0.84rem', fontFamily: 'inherit', color: '#0f172a', fontWeight: 600, background: 'transparent' }} />
+              <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>→</span>
+              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
+                style={{ border: 'none', outline: 'none', fontSize: '0.84rem', fontFamily: 'inherit', color: '#0f172a', fontWeight: 600, background: 'transparent' }} />
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
             <button onClick={() => setPlatform('both')} style={platformBtn('both')}>Tất cả</button>
@@ -784,7 +796,7 @@ export default function ReviewsTab() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {topBad.map(p => (
                 <div key={p.key}
-                  onClick={() => { setProductFilter({ productId: p.productId, platform: p.platform, productName: p.productName }); setStarFilter(0); setPage(1); focusReviews(); }}
+                  onClick={() => { setProductFilter({ productId: p.productId, platform: p.platform, productName: p.productName }); setStarSel([]); setPage(1); focusReviews(); }}
                   style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: '#fff7f7', border: '1px solid #fee2e2', cursor: 'pointer' }}>
                   {p.productImage && <img src={p.productImage} alt="" style={{ width: 32, height: 32, borderRadius: 5, objectFit: 'cover', flexShrink: 0 }} onError={e => { e.target.style.display = 'none'; }} />}
                   <span style={{ flex: 1, fontSize: '0.8rem', fontWeight: 600, color: '#0f172a', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.productName}>
