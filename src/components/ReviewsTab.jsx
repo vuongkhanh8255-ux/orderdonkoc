@@ -14,6 +14,7 @@ const SHOP_MAP = {
   '7495107349171898427': 'Bodymiss', '7494529979361168222': 'eHerb',
   '7495838925500090511': 'eHerb HCM', '7495831977917385095': 'Moaw Moaws',
   '7494813818973817115': 'Milaganics', '7494251668499498533': 'Healmii',
+  '7496180170889726491': 'Real Steel',
 };
 const shopName = (id) => SHOP_MAP[id] || id;
 // Brand = tên shop bỏ hậu tố sàn/loại (eHerb HCM→eHerb, Milaganics FBS→Milaganics, …)
