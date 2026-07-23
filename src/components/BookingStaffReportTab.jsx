@@ -377,6 +377,7 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
   const [allPage, setAllPage] = useState(1);
   const [allBusy, setAllBusy] = useState(false);    // đang xuất Excel
   const [allProg, setAllProg] = useState(0);        // số dòng đã kéo được khi xuất
+  const [allErr, setAllErr] = useState('');         // lỗi tải (hiện rõ, KHÔNG im lặng báo 0 dòng)
   const ALL_PER = 25;
   const LOAI_LABEL = { air: '🔗 Link air', cast: '💸 Link air có cast', tag: '🎬 Video theo tag' };
   useEffect(() => { const t = setTimeout(() => { setAllQ(allSearch.trim()); setAllPage(1); }, 400); return () => clearTimeout(t); }, [allSearch]);
@@ -385,8 +386,11 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
   useEffect(() => {
     let alive = true; setAllRows(null);
     supabase.rpc('staff_all_records', { p_nhansu_id: r.nhansu_id, p_from: range.start, p_to: range.end, p_loai: allLoai || null, p_search: allQ || null, p_limit: ALL_PER, p_offset: (allPage - 1) * ALL_PER })
-      .then(({ data }) => { if (!alive) return; setAllRows(data || []); setAllTotal(data && data.length ? Number(data[0].total) : 0); },
-            () => { if (alive) { setAllRows([]); setAllTotal(0); } });
+      .then(({ data, error }) => {
+        if (!alive) return;
+        if (error) { setAllErr(error.message || 'Lỗi tải dữ liệu'); setAllRows([]); setAllTotal(0); return; }
+        setAllErr(''); setAllRows(data || []); setAllTotal(data && data.length ? Number(data[0].total) : 0);
+      }, (e) => { if (alive) { setAllErr(e?.message || 'Lỗi tải dữ liệu'); setAllRows([]); setAllTotal(0); } });
     return () => { alive = false; };
   }, [r.nhansu_id, range.start, range.end, allLoai, allQ, allPage]);
   const allTotalPages = Math.max(1, Math.ceil(allTotal / ALL_PER));
@@ -533,6 +537,11 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
   const chartLoading = (h) => <div style={{ height: h, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>⏳ Đang tải biểu đồ...</div>;
   const chartEmpty = (h, msg) => <div style={{ height: h, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>{msg}</div>;
 
+  // ── Thanh tiến độ tải: đếm số phần dữ liệu đã xong, để mấy bạn biết còn phải đợi bao lâu ──
+  const loadFlags = [!loadingDet, castVids !== null, orderTags !== null, curTags !== null, allRows !== null, rmKocs !== null];
+  const loadDone = loadFlags.filter(Boolean).length;
+  const loadPct = Math.round((loadDone / loadFlags.length) * 100);
+
   return (
     <div style={{ ...card, marginTop: 18, overflow: 'hidden' }}>
         {/* header */}
@@ -545,6 +554,18 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
             <span style={{ background: '#fff', color: b.color, fontWeight: 800, fontSize: '0.8rem', padding: '5px 14px', borderRadius: 20 }}>{b.label}</span>
           </div>
         </div>
+        {/* Thanh % tải — chỉ hiện khi chưa xong */}
+        {loadPct < 100 && (
+          <div style={{ padding: '10px 24px 12px', background: '#fff7ed', borderBottom: '1px solid #fed7aa' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 700, color: '#9a3412', marginBottom: 6 }}>
+              <span>⏳ Đang tải báo cáo... ({loadDone}/{loadFlags.length} phần)</span>
+              <span>{loadPct}%</span>
+            </div>
+            <div style={{ height: 7, borderRadius: 20, background: '#fed7aa', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${loadPct}%`, background: 'linear-gradient(90deg,#fb923c,#ea580c)', borderRadius: 20, transition: 'width .35s ease' }} />
+            </div>
+          </div>
+        )}
 
         <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18, background: '#f8fafc' }}>
 
@@ -895,6 +916,11 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
             </div>
             {allRows == null ? (
               <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>⏳ Đang tải...</div>
+            ) : allErr ? (
+              <div style={{ color: '#b91c1c', fontSize: '0.86rem', padding: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10 }}>
+                ⚠️ <b>Lỗi tải dữ liệu:</b> {allErr}<br />
+                <span style={{ color: '#7f1d1d' }}>Thử tải lại trang; nếu vẫn lỗi thì báo admin (kèm dòng lỗi này).</span>
+              </div>
             ) : allTotal === 0 ? (
               <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>{allQ ? 'Không tìm thấy dòng khớp.' : 'Chưa có link air hoặc video nào.'}</div>
             ) : (
