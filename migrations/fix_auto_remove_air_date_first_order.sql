@@ -1,0 +1,15 @@
+-- 23/7/2026 — FIX: auto-gỡ tag KHÔNG gỡ KOC quá hạn (Anh Nhi báo qua @reviewsieuchatluong)
+-- TRIỆU CHỨNG: web hiện badge "78/45 ngày kể từ air gần nhất — đề xuất gỡ" nhưng KOC vẫn còn tag;
+--   cron auto-remove chạy OK (đang bật, log 'succeeded') mà ra 0 rows suốt từ 05:41.
+-- GỐC: 2 chỗ tính "ngày air gần nhất" KHÁC NHAU:
+--   - koc_assignment_warnings (badge): ngày air = MIN(order_date) theo TỪNG content_id = ngày video AIR. ĐÚNG.
+--   - auto_remove_overdue_assignments: ngày air = MAX(order_date) cả kênh = ngày CÓ ĐƠN gần nhất. SAI.
+--   Video cũ mà bán dai thì luôn có đơn mới -> auto-gỡ tưởng "vừa air" -> KOC không bao giờ bị gỡ.
+--   Ví dụ @reviewsieuchatluong/EHERB: video air 20/3 nhưng còn 195 đơn tới 22/7 -> auto-gỡ thấy air=22/7.
+-- FIX: đổi nguồn orders trong auto_remove sang CTE `vid_air` = min(order_date) group by (shop,uname,content_id),
+--   rồi last_air = max(post_d) -> khớp đúng định nghĩa của badge. 2 nguồn còn lại (shop_videos, koc_video_unit)
+--   giữ nguyên. Không đụng các bộ lọc miễn trừ (KOC có cast, koc_tag_priority).
+-- KẾT QUẢ: dry-run 0 -> 54 ca. Kiểm chứng độc lập: top (129-93 ngày) air thật từ 16/3-21/4;
+--   ranh giới đúng 45 ngày = air 8/6. Đã chạy gỡ thật 54 tag (Tường Vi 11, Tú Trần 7, Ngọc Mai 6,
+--   Hoàng Vũ 6, Trúc Quỳnh 6, Anh Nhi 5, Thu Thảo 3, Hữu Đan 3, Minh Thảo 2, Lưu Hằng 2, Nguyên Bảo 2, Hoàng Vy 1).
+-- BÀI HỌC: "ngày air" phải là ngày ĐƠN ĐẦU TIÊN của mỗi video, KHÔNG phải đơn gần nhất của kênh.
