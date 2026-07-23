@@ -189,6 +189,10 @@ export default function ReviewsTab() {
         const data = await res.json();
         if (!data.success) throw new Error(data.error || 'Lỗi tải dữ liệu');
         for (const r of normalizeChunk(data)) byId.set(r.id, r);
+        // NHẢ luồng cho trình duyệt "thở" giữa các đợt: mỗi đợt ~5-6MB JSON, tải cả tháng ~28MB.
+        // Không nhả thì Chrome báo "Trang không phản hồi" dù thực ra vẫn đang chạy.
+        setProgress(`Đã tải ${byId.size.toLocaleString('vi-VN')} đánh giá (đợt ${i + 1}/${chunks.length})...`);
+        await new Promise((r) => setTimeout(r, 0));
       }
 
       setReviews([...byId.values()]);
@@ -210,20 +214,23 @@ export default function ReviewsTab() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Tải nhãn CSKH cho các đánh giá đang hiển thị (chia đợt 300 tránh URL quá dài)
+  // Tải nhãn CSKH 1 LẦN lúc vào trang. Bảng review_cs_meta chỉ chứa review ĐÃ gán nhãn (nhỏ),
+  // nên tải hết theo trang nhẹ hơn nhiều so với chia đợt .in() theo hàng ngàn id (trước gây treo).
   useEffect(() => {
-    if (!reviews.length) return;
     let cancelled = false;
     (async () => {
-      const ids = reviews.map(r => r.id);
       const m = {};
-      for (let i = 0; i < ids.length; i += 300) {
-        const { data } = await supabase.from('review_cs_meta').select('*').in('review_id', ids.slice(i, i + 300));
-        (data || []).forEach(x => { m[x.review_id] = x; });
+      for (let from = 0; from < 50000; from += 1000) {
+        const { data, error } = await supabase.from('review_cs_meta').select('*').range(from, from + 999);
+        if (error || !data || data.length === 0) break;
+        data.forEach(x => { m[x.review_id] = x; });
+        if (data.length < 1000) break;
+        await new Promise((r) => setTimeout(r, 0));
       }
       if (!cancelled) setMetaMap(m);
     })().catch(() => {});
     return () => { cancelled = true; };
-  }, [reviews]);
+  }, []);
 
   // Lưu 1 nhãn CSKH cho 1 đánh giá → upsert review_cs_meta (optimistic)
   const updateMeta = async (r, patch) => {
@@ -352,9 +359,15 @@ export default function ReviewsTab() {
   // Top phân loại lý do (CSKH)
   const topReasons = useMemo(() => Object.entries(stats.byReason).sort((a, b) => b[1] - a[1]), [stats.byReason]);
 
-  // Danh sách SẢN PHẨM + PHÂN LOẠI (SKU) đang có — cho bộ lọc CS
-  const prodList = useMemo(() => ['all', ...Array.from(new Set(scoped.map(r => r.productName).filter(Boolean))).sort()], [scoped]);
-  const skuList = useMemo(() => ['all', ...Array.from(new Set(scoped.map(r => r.sku || '—').filter(Boolean))).sort()], [scoped]);
+  // Danh sách SẢN PHẨM + PHÂN LOẠI (SKU) cho bộ lọc CS — xếp theo SỐ ĐÁNH GIÁ giảm dần
+  // và cắt 300 mục: lọc cả tháng có thể ra hàng nghìn mục, render hết sẽ làm đơ trang.
+  const topOf = (getKey) => {
+    const m = {};
+    scoped.forEach(r => { const k = getKey(r); if (k) m[k] = (m[k] || 0) + 1; });
+    return ['all', ...Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 300).map(([k]) => k)];
+  };
+  const prodList = useMemo(() => topOf(r => r.productName), [scoped]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const skuList = useMemo(() => topOf(r => r.sku || '—'), [scoped]);     // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── TOP XẤU (1-3★) — số CS cần để report ──
   const badScoped = useMemo(() => scoped.filter(r => r.star > 0 && r.star <= 3), [scoped]);
