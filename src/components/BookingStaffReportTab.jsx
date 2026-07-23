@@ -365,6 +365,7 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
   const [allQ, setAllQ] = useState('');
   const [allPage, setAllPage] = useState(1);
   const [allBusy, setAllBusy] = useState(false);    // đang xuất Excel
+  const [allProg, setAllProg] = useState(0);        // số dòng đã kéo được khi xuất
   const ALL_PER = 25;
   const LOAI_LABEL = { air: '🔗 Link air', cast: '💸 Link air có cast', tag: '🎬 Video theo tag' };
   useEffect(() => { const t = setTimeout(() => { setAllQ(allSearch.trim()); setAllPage(1); }, 400); return () => clearTimeout(t); }, [allSearch]);
@@ -379,13 +380,23 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
   }, [r.nhansu_id, range.start, range.end, allLoai, allQ, allPage]);
   const allTotalPages = Math.max(1, Math.ceil(allTotal / ALL_PER));
   const allPageC = Math.min(allPage, allTotalPages);
-  // Xuất Excel TOÀN BỘ dòng đang lọc (tối đa 5.000/lần)
+  // Xuất Excel TOÀN BỘ dòng đang lọc — kéo NHIỀU LƯỢT cho tới hết (Supabase cắt ~1000 dòng/lần)
   const exportAll = async () => {
     if (!allTotal) return;
-    setAllBusy(true);
+    setAllBusy(true); setAllProg(0);
     try {
-      const { data } = await supabase.rpc('staff_all_records', { p_nhansu_id: r.nhansu_id, p_from: range.start, p_to: range.end, p_loai: allLoai || null, p_search: allQ || null, p_limit: 5000, p_offset: 0 });
-      const rows = data || [];
+      const CHUNK = 1000;
+      const rows = [];
+      let off = 0;
+      while (off < allTotal) {
+        const { data, error } = await supabase.rpc('staff_all_records', { p_nhansu_id: r.nhansu_id, p_from: range.start, p_to: range.end, p_loai: allLoai || null, p_search: allQ || null, p_limit: CHUNK, p_offset: off });
+        if (error) throw error;
+        const batch = data || [];
+        if (!batch.length) break;                 // hết dữ liệu
+        rows.push(...batch);
+        off += batch.length;                      // nhích theo số dòng THẬT nhận được (né mọi mức cắt của server)
+        setAllProg(rows.length);
+      }
       const XLSX = await import('xlsx').then(m => m.default || m);
       const aoa = [
         ['STT', 'Loại', 'Kênh / KOC', 'Brand', 'Sản phẩm', 'Ngày air', 'CAST (đ)', 'View (kỳ)', 'GMV (kỳ)', 'Trạng thái', 'Link'],
@@ -397,9 +408,9 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Link-Video');
       XLSX.writeFile(wb, `link-video_${String(r.ten_nhansu || 'NS').replace(/\s+/g, '-')}_${range.start}_${range.end}.xlsx`);
-      if (rows.length < allTotal) alert(`Đã xuất ${fmt(rows.length)}/${fmt(allTotal)} dòng (giới hạn 5.000/lần). Lọc bớt rồi xuất tiếp nhé.`);
+      if (rows.length < allTotal) alert(`⚠️ Chỉ lấy được ${fmt(rows.length)}/${fmt(allTotal)} dòng — server ngắt giữa chừng. Thử xuất lại hoặc lọc bớt theo loại.`);
     } catch (e) { alert('Lỗi xuất Excel: ' + e.message); }
-    finally { setAllBusy(false); }
+    finally { setAllBusy(false); setAllProg(0); }
   };
   // ── KOC của tôi BỊ GỠ (90 ngày) — để nhân sự biết KOC nào bị gỡ (nhất là auto-gỡ), phân biệt đã-gắn-lại hay còn-gỡ ──
   const [rmKocs, setRmKocs] = useState(null);
@@ -869,7 +880,7 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
                 <button key={v} onClick={() => setAllLoai(v)} style={{ padding: '5px 12px', borderRadius: 7, border: `1px solid ${allLoai === v ? '#1d4ed8' : '#cbd5e1'}`, background: allLoai === v ? '#1d4ed8' : '#fff', color: allLoai === v ? '#fff' : '#475569', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>{lb}</button>
               ))}
               <input value={allSearch} onChange={e => setAllSearch(e.target.value)} placeholder="🔎 Tìm KOC / brand / SP / ID video..." style={{ ...ctrl, flex: '1 1 220px', minWidth: 180 }} />
-              <button onClick={exportAll} disabled={!allTotal || allBusy} style={{ ...ctrl, background: allTotal ? '#16a34a' : '#e2e8f0', color: '#fff', border: 'none', fontWeight: 700, cursor: allTotal && !allBusy ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>{allBusy ? '⏳ Đang xuất...' : `📊 Xuất Excel${allTotal ? ` (${fmt(allTotal)})` : ''}`}</button>
+              <button onClick={exportAll} disabled={!allTotal || allBusy} style={{ ...ctrl, background: allTotal ? '#16a34a' : '#e2e8f0', color: '#fff', border: 'none', fontWeight: 700, cursor: allTotal && !allBusy ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>{allBusy ? `⏳ Đang xuất ${fmt(allProg)}/${fmt(allTotal)}...` : `📊 Xuất Excel${allTotal ? ` (${fmt(allTotal)})` : ''}`}</button>
             </div>
             {allRows == null ? (
               <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>⏳ Đang tải...</div>
