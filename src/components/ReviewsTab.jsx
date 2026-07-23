@@ -9,16 +9,22 @@ const PAGE_SIZE = 20;
 const REASON_CATEGORIES = ['Chê sản phẩm', 'Kích ứng / Dị ứng', 'Không hiệu quả', 'Giao hàng chậm', 'Sai hàng', 'Thiếu hàng', 'Đóng gói', 'Shipper', 'Không nhận xét'];
 const FIXED_OPTIONS = [{ v: 'chua_sua', l: 'Chưa sửa' }, { v: 'da_sua_4', l: 'Đã sửa 4★' }, { v: 'da_sua_5', l: 'Đã sửa 5★' }];
 
+// (21/7/2026) SỬA MAP SAI: 341325550 + 831509831 trước đây bị ghi nhầm là "Milaganics FBS/SPA",
+// thực tế là 2 gian eHerb (đối chiếu shop_name trong shopee_orders: "eHerb Việt Nam" 29k đơn,
+// "eHerb Hồ Chí Minh" 4.3k đơn) -> vừa mất tên gian, vừa đếm nhầm đánh giá eHerb sang brand Milaganics.
 const SHOP_MAP = {
-  '1031859035': 'Bodymiss', '1243148826': 'Milaganics', '341325550': 'Milaganics FBS',
-  '831509831': 'Milaganics SPA', '1017289279': 'Moaw Moaws',
+  // Shopee (seller_id ngắn)
+  '1031859035': 'Bodymiss', '1243148826': 'Milaganics',
+  '341325550': 'eHerb', '831509831': 'eHerb HCM',
+  '1017289279': 'Moaw Moaws', '1616999364': 'Masube',
+  // TikTok (seller_id dài)
   '7495107349171898427': 'Bodymiss', '7494529979361168222': 'eHerb',
   '7495838925500090511': 'eHerb HCM', '7495831977917385095': 'Moaw Moaws',
   '7494813818973817115': 'Milaganics', '7494251668499498533': 'Healmii',
   '7496180170889726491': 'Real Steel',
 };
 const shopName = (id) => SHOP_MAP[id] || id;
-// Brand = tên shop bỏ hậu tố sàn/loại (eHerb HCM→eHerb, Milaganics FBS→Milaganics, …)
+// Brand = tên shop bỏ hậu tố sàn/loại (eHerb HCM→eHerb, … ) để gộp các gian cùng brand
 const brandOf = (shop) => (shop || '').replace(/\s+(FBS|SPA|HCM|Mall|MP|Mp)\b.*$/i, '').trim() || (shop || '—');
 
 function fmtDate(iso) {
@@ -41,7 +47,8 @@ const toYmd = (d) => {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 };
 
-// (21/7/2026) BỎ ẩn Milaganics SPA + FBS — CS cần ĐỦ data Shopee để report (2 gian này ~520 đánh giá/tuần).
+// (21/7/2026) BỎ ẩn 341325550 + 831509831: HOÁ RA đó là 2 gian eHerb Shopee, trước bị map nhầm tên
+// thành "Milaganics FBS/SPA" rồi ẩn oan -> đúng cái "thiếu data eHerb Shopee" CS kêu (1.346 đánh giá T7).
 // Muốn ẩn gian nào thì thêm seller_id vào Set này.
 const EXCLUDED_SELLERS = new Set([]);
 
