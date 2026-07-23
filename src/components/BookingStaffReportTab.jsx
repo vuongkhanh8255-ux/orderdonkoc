@@ -379,7 +379,7 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
   const [allProg, setAllProg] = useState(0);        // số dòng đã kéo được khi xuất
   const [allErr, setAllErr] = useState('');         // lỗi tải (hiện rõ, KHÔNG im lặng báo 0 dòng)
   const ALL_PER = 25;
-  const LOAI_LABEL = { air: '🔗 Link air', cast: '💸 Link air có cast', tag: '🎬 Video theo tag' };
+  const LOAI_LABEL = { air: '🔗 Link air', cast: '💸 Link air có cast', tag: '🎬 Video theo tag', pay: '💸 Đã trả cast (chưa có link air)' };
   useEffect(() => { const t = setTimeout(() => { setAllQ(allSearch.trim()); setAllPage(1); }, 400); return () => clearTimeout(t); }, [allSearch]);
   useEffect(() => { setAllPage(1); setOtFilter('all'); }, [r.nhansu_id]);
   useEffect(() => { setAllPage(1); }, [allLoai]);
