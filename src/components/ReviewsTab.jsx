@@ -8,9 +8,22 @@ const PAGE_SIZE = 20;
 // ── Module 1 CSKH: phân loại lý do + trạng thái xử lý + đã sửa đánh giá (lưu ở bảng review_cs_meta) ──
 const REASON_CATEGORIES = ['Chê sản phẩm', 'Kích ứng / Dị ứng', 'Không hiệu quả', 'Giao hàng chậm', 'Sai hàng', 'Thiếu hàng', 'Đóng gói', 'Shipper', 'Spam', 'Hiểu nhầm', 'Không nhận xét'];
 const FIXED_OPTIONS = [{ v: 'chua_sua', l: 'Chưa sửa' }, { v: 'da_sua_4', l: 'Đã sửa 4★' }, { v: 'da_sua_5', l: 'Đã sửa 5★' }];
-// CS TỰ PHÂN LOẠI nhóm sản phẩm (lưu vào review_cs_meta.product_category).
-// >>> CS gửi danh sách chuẩn thì SỬA ĐÚNG MẢNG NÀY là xong, không cần đụng chỗ khác. <<<
-const PRODUCT_CATEGORIES = ['Sữa rửa mặt', 'Toner', 'Serum / Tinh chất', 'Kem dưỡng', 'Chống nắng', 'Tẩy trang', 'Mặt nạ', 'Trị mụn', 'Tắm gội', 'Dưỡng thể / Body', 'Nước hoa / Bodymist', 'Thực phẩm chức năng', 'Khác'];
+// PHÂN LOẠI SẢN PHẨM — danh sách CS gửi 22/7 (lưu vào review_cs_meta.product_category).
+// >>> Thêm/bớt/sửa phân loại thì CHỈ cần sửa mảng này, không đụng chỗ nào khác. <<<
+const PRODUCT_CATEGORIES = [
+  'DARK NIGHT', 'BE LOVER', 'BLINDED LOVE', 'LOVE WINS', 'SUNSET', 'HIDE N SEEK', 'STOP N STARE',
+  'FUNKY FRESH', 'PARADISE', 'ĐỘC LẬP', 'TỰ DO', 'HẠNH PHÚC', 'CARE FREE', 'IRICH', 'TALK2MUCH',
+  'MONEY HONEY', 'PHÊFAIRY', 'SAYDERELLA', 'MÊMAND', 'AURA TEARS', 'BLACK QUEEN', 'DARK VELVET',
+  'GAME ON', 'FREE FLOW', 'SWIFT MOVE', 'FRIEND ZONE', 'LOFI', 'SHAYMEN', '18 ANOTHER TOUCH',
+  '18 SCANDAL LUST', 'LOTION REALSTEEL', 'SERUM STANDARD', 'SERUM ULTRA', 'NƯỚC HOA REVOLT',
+  'NƯỚC HOA SILENT', 'LIPCERIN BLOOM', 'LIPCERIN VITA', 'MẶT NẠ ĐẬU NÀNH', 'MẶT NẠ ĐẬU ĐỎ',
+  'SCRUB MÔI MASUBE', 'GOOD CARE', 'GOOD MOOD', 'GOOD HUG', 'MUỐI TINH THẦN', 'MUỐI TÀI LỘC',
+  'MUỐI TÌNH YÊU', 'GEL NHA ĐAM B5', 'GEL NHA ĐAM', 'SCRUB NÁCH DÂU TẰM', 'SCRUB NÁCH HẠNH NHÂN',
+  'LOVE OIL', 'CHILL OIL', 'SCRUB HẠNH NHÂN', 'DẦU OLIU BHA', 'BỘT Ủ TRẮNG', 'XỊT BƯỞI',
+  'TONER HOA CÚC NEW', 'TẨY TRANG', 'SRM HOA CÚC', 'SUNKISSED', 'SERUM SACHI', 'SCRUB MUỐI HỒNG',
+  'SCRUB AHA - BHA', 'MẶT NẠ TRÀM TRÀ', 'MẶT NẠ HOA CÚC', 'GỘI BƯỞI', 'XẢ BƯỞI', 'BỘT MẶT NẠ',
+  'BODY OIL', 'SON DƯỠNG', 'Ủ BƯỞI',
+];
 
 // (21/7/2026) SỬA MAP SAI: 341325550 + 831509831 trước đây bị ghi nhầm là "Milaganics FBS/SPA",
 // thực tế là 2 gian eHerb (đối chiếu shop_name trong shopee_orders: "eHerb Việt Nam" 29k đơn,
@@ -48,6 +61,33 @@ const brandOfProduct = (productName, fallbackShop) => {
   for (const [key, brand] of BRAND_KEYS) if (s.includes(key)) return brand;
   const fb = brandOf(fallbackShop || '');
   return fb && fb !== '—' ? noAccent(fb) : '(không rõ)';
+};
+
+// TỰ GỢI Ý phân loại SP từ tên SP + phân loại/mẫu (SKU) — để CS khỏi phải điền tay hàng ngàn dòng.
+// CS chọn tay thì giá trị CS LUÔN được ưu tiên hơn gợi ý này.
+// Chuẩn hoá: bỏ dấu, "&"/"and" -> "N" (sàn ghi "HIDE & SEEK", CS ghi "HIDE N SEEK"),
+// mọi ký tự lạ -> khoảng trắng (nên "SCRUB AHA - BHA" khớp được "Scrub AHA/BHA").
+const catNorm = (s) => noAccent(s || '')
+  .replace(/&/g, ' N ').replace(/\bAND\b/g, ' N ')
+  .replace(/[^A-Z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+// Tên khác của cùng 1 SP mà sàn hay đặt (trái phải: tên trên sàn -> phân loại của CS)
+const CAT_ALIASES = [['GEL LO HOI', 'GEL NHA ĐAM']];
+// Vòng 1: khớp NGUYÊN CỤM (dài trước, nên "GEL NHA ĐAM B5" không bị "GEL NHA ĐAM" nuốt)
+const CAT_PHRASE = [
+  ...PRODUCT_CATEGORIES.map(c => [catNorm(c), c]),
+  ...CAT_ALIASES.map(([a, c]) => [catNorm(a), c]),
+].sort((a, b) => b[0].length - a[0].length);
+// Vòng 2: khớp ĐỦ TỪ dù nằm rời nhau ("Dầu oliu dưỡng da BHA" -> DẦU OLIU BHA).
+// Chỉ nhận phân loại từ 2 chữ trở lên và mỗi chữ >= 3 ký tự, tránh "TỰ DO"/"Ủ BƯỞI" khớp bừa.
+const CAT_TOKENS = PRODUCT_CATEGORIES
+  .map(c => [c, catNorm(c).split(' ')])
+  .filter(([, t]) => t.length >= 2 && t.every(w => w.length >= 3))
+  .sort((a, b) => b[1].length - a[1].length);
+const autoProductCategory = (productName, sku) => {
+  const s = ` ${catNorm(`${productName || ''} ${sku || ''}`)} `;
+  for (const [needle, cat] of CAT_PHRASE) if (s.includes(` ${needle} `)) return cat;
+  for (const [cat, tokens] of CAT_TOKENS) if (tokens.every(w => s.includes(` ${w} `))) return cat;
+  return '';
 };
 
 function fmtDate(iso) {
@@ -110,6 +150,7 @@ function normalizeChunk(data) {
         shop: shopName(r.seller_id),
         shopKey: `shopee-${r.seller_id}`,
         brand: brandOfProduct(r.productName || '', shopName(r.seller_id)),
+        autoCat: autoProductCategory(r.productName || '', r.modelName || ''),
         images: Array.isArray(r.images)
           ? r.images.map(h => (typeof h === 'string' && h.startsWith('http')) ? h : `https://cf.shopee.vn/file/${h}`)
           : [],
@@ -139,6 +180,7 @@ function normalizeChunk(data) {
         shop: shopName(r.seller_id),
         shopKey: `tiktok-${r.seller_id}`,
         brand: brandOfProduct(r.product_info?.product_name || '', shopName(r.seller_id)),
+        autoCat: autoProductCategory(r.product_info?.product_name || '', r.product_info?.sku_specification || ''),
         images: [], // TikTok chỉ trả cờ has_imgs, không kèm URL ảnh review
       });
     }
@@ -178,7 +220,7 @@ export default function ReviewsTab() {
   const [handleFilter, setHandleFilter] = useState('all');
   const [fixedFilter, setFixedFilter] = useState('all');
   const [prodNameFilter, setProdNameFilter] = useState('all');   // lọc theo SẢN PHẨM
-  const [skuFilter, setSkuFilter] = useState('all');             // lọc theo PHÂN LOẠI (SKU/mẫu)
+  const [catFilter, setCatFilter] = useState('all');             // lọc theo PHÂN LOẠI SP (danh sách CS)
 
   const didMount = useRef(false);
   const reviewsRef = useRef(null);
@@ -400,7 +442,15 @@ export default function ReviewsTab() {
     return ['all', ...Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 300).map(([k]) => k)];
   };
   const prodList = useMemo(() => topOf(r => r.productName), [scoped]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const skuList = useMemo(() => topOf(r => r.sku || '—'), [scoped]);     // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Phân loại SP dùng để lọc + thống kê: CS chọn tay LUÔN thắng gợi ý tự động
+  const catOf = (r) => metaMap[r.id]?.product_category || r.autoCat || '';
+  // Chỉ hiện trong dropdown những phân loại THỰC SỰ có đánh giá trong kỳ (kèm số lượng)
+  const catList = useMemo(() => {
+    const m = {};
+    scoped.forEach(r => { const k = catOf(r); if (k) m[k] = (m[k] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  }, [scoped, metaMap]);                                                // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── TOP XẤU (1-3★) — số CS cần để report ──
   const badScoped = useMemo(() => scoped.filter(r => r.star > 0 && r.star <= 3), [scoped]);
@@ -409,11 +459,11 @@ export default function ReviewsTab() {
     badScoped.forEach(r => { const k = metaMap[r.id]?.reason_category; if (k) m[k] = (m[k] || 0) + 1; });
     return Object.entries(m).sort((a, b) => b[1] - a[1]);
   }, [badScoped, metaMap]);
-  const topBadSku = useMemo(() => {
+  const topBadCat = useMemo(() => {
     const m = {};
-    badScoped.forEach(r => { const k = r.sku || '(không phân loại)'; m[k] = (m[k] || 0) + 1; });
+    badScoped.forEach(r => { const k = catOf(r) || '(chưa phân loại)'; m[k] = (m[k] || 0) + 1; });
     return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  }, [badScoped]);
+  }, [badScoped, metaMap]);                                             // eslint-disable-line react-hooks/exhaustive-deps
   const chuaPhanLoai = useMemo(() => badScoped.filter(r => !metaMap[r.id]?.reason_category).length, [badScoped, metaMap]);
 
   // ── Filtered reviews ──
@@ -429,7 +479,7 @@ export default function ReviewsTab() {
     if (handleFilter !== 'all') result = result.filter(r => (metaMap[r.id]?.handle_status || 'chua_xu_ly') === handleFilter);
     if (fixedFilter !== 'all') result = result.filter(r => (metaMap[r.id]?.fixed_status || 'chua_sua') === fixedFilter);
     if (prodNameFilter !== 'all') result = result.filter(r => r.productName === prodNameFilter);
-    if (skuFilter !== 'all') result = result.filter(r => (r.sku || '—') === skuFilter);
+    if (catFilter !== 'all') result = result.filter(r => (catOf(r) || '(chưa phân loại)') === catFilter);
     if (searchText) {
       const q = searchText.toLowerCase();
       result = result.filter(r =>
@@ -450,7 +500,7 @@ export default function ReviewsTab() {
       }
     });
     return result;
-  }, [scoped, brandFilter, shopSel, productFilter, starSel, replyFilter, reasonFilter, handleFilter, fixedFilter, prodNameFilter, skuFilter, searchText, sortBy, metaMap]);
+  }, [scoped, brandFilter, shopSel, productFilter, starSel, replyFilter, reasonFilter, handleFilter, fixedFilter, prodNameFilter, catFilter, searchText, sortBy, metaMap]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -518,7 +568,8 @@ export default function ReviewsTab() {
         'Ngày': fmtDate(r.date),
         'Đã phản hồi': r.hasReply ? 'x' : '',
         'Phân loại lý do': meta.reason_category || '',
-        'Phân loại SP (CS)': meta.product_category || '',
+        'Phân loại SP': meta.product_category || r.autoCat || '',
+        'Nguồn phân loại': meta.product_category ? 'CS chọn' : (r.autoCat ? 'Tự động' : ''),
         'Trạng thái xử lý': meta.handle_status === 'da_xu_ly' ? 'Đã xử lý' : 'Chưa xử lý',
         'Đã sửa đánh giá': meta.fixed_status === 'da_sua_5' ? '5 sao' : meta.fixed_status === 'da_sua_4' ? '4 sao' : '',
       };
@@ -805,12 +856,12 @@ export default function ReviewsTab() {
             </div>
             <div style={card}>
               <h3 style={{ margin: '0 0 3px', fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>📦 Top PHÂN LOẠI SP bị đánh giá xấu</h3>
-              <p style={{ margin: '0 0 10px', fontSize: '0.72rem', color: '#94a3b8' }}>Theo phân loại/mẫu (SKU) — bấm để lọc review</p>
-              {topBadSku.map(([sku, n]) => {
+              <p style={{ margin: '0 0 10px', fontSize: '0.72rem', color: '#94a3b8' }}>Theo phân loại SP của CS — bấm để lọc review</p>
+              {topBadCat.map(([sku, n]) => {
                 const pct = badScoped.length ? (n / badScoped.length * 100) : 0;
-                const active = skuFilter === sku;
+                const active = catFilter === sku;
                 return (
-                  <div key={sku} onClick={() => { setSkuFilter(active ? 'all' : sku); setPage(1); focusReviews(); }}
+                  <div key={sku} onClick={() => { setCatFilter(active ? 'all' : sku); setPage(1); focusReviews(); }}
                     style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 6px', borderRadius: 8, cursor: 'pointer', background: active ? '#fff7ed' : 'transparent' }}>
                     <span style={{ flex: 1, fontSize: '0.8rem', fontWeight: active ? 800 : 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={sku}>{sku}</span>
                     <div style={{ width: 80, height: 12, background: '#f1f5f9', borderRadius: 6, overflow: 'hidden' }}>
@@ -1036,10 +1087,11 @@ export default function ReviewsTab() {
             {prodList.filter(p => p !== 'all').map(p => <option key={p} value={p}>{truncate(p, 60)}</option>)}
           </select>
 
-          <select value={skuFilter} onChange={e => { setSkuFilter(e.target.value); setPage(1); }}
-            style={{ padding: '8px 12px', borderRadius: 8, border: `1.5px solid ${skuFilter !== 'all' ? '#ff6a2c' : '#e5e7eb'}`, fontSize: '0.82rem', fontFamily: 'inherit', color: skuFilter !== 'all' ? '#ff6a2c' : '#0f172a', background: skuFilter !== 'all' ? '#fff7ed' : '#fff', cursor: 'pointer', maxWidth: 220, fontWeight: skuFilter !== 'all' ? 700 : 400 }}>
-            <option value="all">Phân loại: Tất cả</option>
-            {skuList.filter(s => s !== 'all').map(s => <option key={s} value={s}>{truncate(s, 50)}</option>)}
+          <select value={catFilter} onChange={e => { setCatFilter(e.target.value); setPage(1); }}
+            style={{ padding: '8px 12px', borderRadius: 8, border: `1.5px solid ${catFilter !== 'all' ? '#ff6a2c' : '#e5e7eb'}`, fontSize: '0.82rem', fontFamily: 'inherit', color: catFilter !== 'all' ? '#ff6a2c' : '#0f172a', background: catFilter !== 'all' ? '#fff7ed' : '#fff', cursor: 'pointer', maxWidth: 240, fontWeight: catFilter !== 'all' ? 700 : 400 }}>
+            <option value="all">Phân loại SP: Tất cả</option>
+            {catList.map(([c, n]) => <option key={c} value={c}>{truncate(c, 40)} ({n})</option>)}
+            <option value="(chưa phân loại)">— Chưa phân loại —</option>
           </select>
 
           <select value={sortBy} onChange={e => setSortBy(e.target.value)}
@@ -1173,9 +1225,17 @@ export default function ReviewsTab() {
                                 <option value="">— Phân loại lý do —</option>
                                 {REASON_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                               </select>
-                              <select value={meta.product_category || ''} onChange={e => updateMeta(r, { product_category: e.target.value || null })}
-                                style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: '0.72rem', fontFamily: 'inherit', background: '#fff', cursor: 'pointer' }}
-                                title="CS tự phân loại nhóm sản phẩm">
+                              {/* Chưa có CS chọn thì hiện GỢI Ý tự động (chữ nghiêng xám) — CS chọn là ghi đè + lưu */}
+                              <select value={meta.product_category || r.autoCat || ''} onChange={e => updateMeta(r, { product_category: e.target.value || null })}
+                                style={{
+                                  padding: '4px 6px', borderRadius: 6, fontSize: '0.72rem', fontFamily: 'inherit', cursor: 'pointer',
+                                  border: `1px solid ${meta.product_category ? '#c7d2fe' : '#e5e7eb'}`,
+                                  background: meta.product_category ? '#eef2ff' : '#fff',
+                                  color: meta.product_category ? '#1e3a8a' : '#94a3b8',
+                                  fontStyle: meta.product_category ? 'normal' : 'italic',
+                                  fontWeight: meta.product_category ? 700 : 400,
+                                }}
+                                title={meta.product_category ? 'CS đã chọn' : (r.autoCat ? 'Gợi ý tự động từ tên SP — chọn lại nếu sai' : 'CS tự phân loại sản phẩm')}>
                                 <option value="">— Phân loại SP —</option>
                                 {PRODUCT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                               </select>
