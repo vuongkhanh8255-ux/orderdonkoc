@@ -6,7 +6,7 @@ const STAR_COLORS = { 5: '#22c55e', 4: '#84cc16', 3: '#eab308', 2: '#ff7a30', 1:
 const PAGE_SIZE = 20;
 
 // ── Module 1 CSKH: phân loại lý do + trạng thái xử lý + đã sửa đánh giá (lưu ở bảng review_cs_meta) ──
-const REASON_CATEGORIES = ['Chê sản phẩm', 'Kích ứng / Dị ứng', 'Không hiệu quả', 'Giao hàng chậm', 'Sai hàng', 'Thiếu hàng', 'Đóng gói', 'Shipper', 'Spam', 'Hiểu nhầm', 'Không nhận xét'];
+const REASON_CATEGORIES = ['Chê sản phẩm', 'Lỗi sản phẩm', 'Kích ứng / Dị ứng', 'Không hiệu quả', 'Giao hàng chậm', 'Sai hàng', 'Thiếu hàng', 'Đóng gói', 'Shipper', 'Spam', 'Hiểu nhầm', 'Không nhận xét'];
 const FIXED_OPTIONS = [{ v: 'chua_sua', l: 'Chưa sửa' }, { v: 'da_sua_4', l: 'Đã sửa 4★' }, { v: 'da_sua_5', l: 'Đã sửa 5★' }];
 // PHÂN LOẠI SẢN PHẨM — danh sách CS gửi 22/7 (lưu vào review_cs_meta.product_category).
 // >>> Thêm/bớt/sửa phân loại thì CHỈ cần sửa mảng này, không đụng chỗ nào khác. <<<
