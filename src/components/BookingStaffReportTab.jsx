@@ -356,44 +356,51 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
             () => { if (alive) setCurTags(new Set()); });
     return () => { alive = false; };
   }, [r.nhansu_id]);
-  // ── Link air của nhân sự (mấy bạn đã điền ở Quản lý link air) — HIỆN FULL từ trước tới giờ, KHÔNG theo kỳ ──
-  // Phân trang + tìm kiếm PHÍA SERVER (né trần 1000 rows của Supabase; NS có thể có vài chục nghìn link)
-  const [airRows, setAirRows] = useState(null);   // rows trang hiện tại (null = đang tải)
-  const [airTotal, setAirTotal] = useState(0);
-  const [airSearch, setAirSearch] = useState('');
-  const [airQ, setAirQ] = useState('');            // từ khoá đã debounce
-  const [airPage, setAirPage] = useState(1);
-  const AIR_PER = 20;
-  useEffect(() => { const t = setTimeout(() => { setAirQ(airSearch.trim()); setAirPage(1); }, 400); return () => clearTimeout(t); }, [airSearch]);
-  useEffect(() => { setAirPage(1); setOtFilter('all'); }, [r.nhansu_id]);
+  // ── BẢNG GỘP "Link & Video của nhân sự" = Link air + Link air có cast + Video theo tag (1 bảng, lọc theo LOẠI) ──
+  // Phân trang + tìm kiếm PHÍA SERVER (RPC staff_all_records). Link air = toàn bộ từ trước tới nay; Video theo tag = trong kỳ.
+  const [allRows, setAllRows] = useState(null);
+  const [allTotal, setAllTotal] = useState(0);
+  const [allLoai, setAllLoai] = useState('');       // '' = tất cả | 'air' | 'cast' | 'tag'
+  const [allSearch, setAllSearch] = useState('');
+  const [allQ, setAllQ] = useState('');
+  const [allPage, setAllPage] = useState(1);
+  const [allBusy, setAllBusy] = useState(false);    // đang xuất Excel
+  const ALL_PER = 25;
+  const LOAI_LABEL = { air: '🔗 Link air', cast: '💸 Link air có cast', tag: '🎬 Video theo tag' };
+  useEffect(() => { const t = setTimeout(() => { setAllQ(allSearch.trim()); setAllPage(1); }, 400); return () => clearTimeout(t); }, [allSearch]);
+  useEffect(() => { setAllPage(1); setOtFilter('all'); }, [r.nhansu_id]);
+  useEffect(() => { setAllPage(1); }, [allLoai]);
   useEffect(() => {
-    let alive = true; setAirRows(null);
-    supabase.rpc('staff_air_links', { p_nhansu_id: r.nhansu_id, p_search: airQ || null, p_limit: AIR_PER, p_offset: (airPage - 1) * AIR_PER })
-      .then(({ data }) => { if (!alive) return; setAirRows(data || []); setAirTotal(data && data.length ? Number(data[0].total) : 0); },
-            () => { if (alive) { setAirRows([]); setAirTotal(0); } });
+    let alive = true; setAllRows(null);
+    supabase.rpc('staff_all_records', { p_nhansu_id: r.nhansu_id, p_from: range.start, p_to: range.end, p_loai: allLoai || null, p_search: allQ || null, p_limit: ALL_PER, p_offset: (allPage - 1) * ALL_PER })
+      .then(({ data }) => { if (!alive) return; setAllRows(data || []); setAllTotal(data && data.length ? Number(data[0].total) : 0); },
+            () => { if (alive) { setAllRows([]); setAllTotal(0); } });
     return () => { alive = false; };
-  }, [r.nhansu_id, airQ, airPage]);
-  const airTotalPages = Math.max(1, Math.ceil(airTotal / AIR_PER));
-  const airPageC = Math.min(airPage, airTotalPages);
-  // ── Link air CÓ CAST — hiển thị link air có tiền cast để bạn BIẾT. KOC có cast KHÔNG gắn tag, KHÔNG tính vào số KOC quản lý (chỉ hiện cho biết). ──
-  const [castRows, setCastRows] = useState(null);
-  const [castTotal, setCastTotal] = useState(0);
-  const [castTong, setCastTong] = useState(0);
-  const [castSearch, setCastSearch] = useState('');
-  const [castQ, setCastQ] = useState('');
-  const [castPage, setCastPage] = useState(1);
-  const CAST_PER = 20;
-  useEffect(() => { const t = setTimeout(() => { setCastQ(castSearch.trim()); setCastPage(1); }, 400); return () => clearTimeout(t); }, [castSearch]);
-  useEffect(() => { setCastPage(1); }, [r.nhansu_id]);
-  useEffect(() => {
-    let alive = true; setCastRows(null);
-    supabase.rpc('staff_cast_air_links', { p_nhansu_id: r.nhansu_id, p_search: castQ || null, p_limit: CAST_PER, p_offset: (castPage - 1) * CAST_PER })
-      .then(({ data }) => { if (!alive) return; setCastRows(data || []); setCastTotal(data && data.length ? Number(data[0].total) : 0); setCastTong(data && data.length ? Number(data[0].tong_cast) : 0); },
-            () => { if (alive) { setCastRows([]); setCastTotal(0); setCastTong(0); } });
-    return () => { alive = false; };
-  }, [r.nhansu_id, castQ, castPage]);
-  const castTotalPages = Math.max(1, Math.ceil(castTotal / CAST_PER));
-  const castPageC = Math.min(castPage, castTotalPages);
+  }, [r.nhansu_id, range.start, range.end, allLoai, allQ, allPage]);
+  const allTotalPages = Math.max(1, Math.ceil(allTotal / ALL_PER));
+  const allPageC = Math.min(allPage, allTotalPages);
+  // Xuất Excel TOÀN BỘ dòng đang lọc (tối đa 5.000/lần)
+  const exportAll = async () => {
+    if (!allTotal) return;
+    setAllBusy(true);
+    try {
+      const { data } = await supabase.rpc('staff_all_records', { p_nhansu_id: r.nhansu_id, p_from: range.start, p_to: range.end, p_loai: allLoai || null, p_search: allQ || null, p_limit: 5000, p_offset: 0 });
+      const rows = data || [];
+      const XLSX = await import('xlsx').then(m => m.default || m);
+      const aoa = [
+        ['STT', 'Loại', 'Kênh / KOC', 'Brand', 'Sản phẩm', 'Ngày air', 'CAST (đ)', 'View (kỳ)', 'GMV (kỳ)', 'Trạng thái', 'Link'],
+        ...rows.map((v, i) => [i + 1, LOAI_LABEL[v.loai] || v.loai, v.koc || '', v.brand || '', v.san_pham || '',
+          v.ngay_air ? new Date(v.ngay_air).toLocaleDateString('vi-VN') : '', num(v.cast_amount), num(v.view_ky), num(v.gmv_ky), v.trang_thai || '', v.link || '']),
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = [{ wch: 5 }, { wch: 18 }, { wch: 20 }, { wch: 14 }, { wch: 22 }, { wch: 11 }, { wch: 13 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 52 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Link-Video');
+      XLSX.writeFile(wb, `link-video_${String(r.ten_nhansu || 'NS').replace(/\s+/g, '-')}_${range.start}_${range.end}.xlsx`);
+      if (rows.length < allTotal) alert(`Đã xuất ${fmt(rows.length)}/${fmt(allTotal)} dòng (giới hạn 5.000/lần). Lọc bớt rồi xuất tiếp nhé.`);
+    } catch (e) { alert('Lỗi xuất Excel: ' + e.message); }
+    finally { setAllBusy(false); }
+  };
   // ── KOC của tôi BỊ GỠ (90 ngày) — để nhân sự biết KOC nào bị gỡ (nhất là auto-gỡ), phân biệt đã-gắn-lại hay còn-gỡ ──
   const [rmKocs, setRmKocs] = useState(null);
   const [rmOnlyOff, setRmOnlyOff] = useState(false);   // chỉ hiện KOC còn đang bị gỡ (chưa gắn lại)
@@ -409,52 +416,6 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
     (!rmOnlyOff || !k.dang_gan_lai) &&
     (!rmQ || (k.koc || '').toLowerCase().includes(rmQ) || (k.brand || '').toLowerCase().includes(rmQ)));
   const rmConGo = (rmKocs || []).filter(k => !k.dang_gan_lai).length;
-  // ── Video TỰ ĐỘNG ghi nhận theo TAG (tenure) — video air trong lúc NS đang giữ tag KOC, hệ thống tự tính (không cần điền link air) ──
-  // Lọc theo KỲ đang chọn (video air trong kỳ). View/GMV = trong kỳ. Để mấy bạn tự soi video nào được credit qua tag.
-  const [tenVids, setTenVids] = useState(null);   // null = đang tải
-  const [tenSearch, setTenSearch] = useState('');
-  const [tenPage, setTenPage] = useState(1);
-  const TEN_PER = 20;
-  useEffect(() => {
-    let alive = true; setTenVids(null); setTenPage(1);
-    supabase.rpc('staff_tenure_videos', { p_nhansu_id: r.nhansu_id, p_from: range.start, p_to: range.end })
-      .then(({ data }) => { if (alive) setTenVids(data || []); }, () => { if (alive) setTenVids([]); });
-    return () => { alive = false; };
-  }, [r.nhansu_id, range.start, range.end]);
-  useEffect(() => { setTenPage(1); }, [tenSearch]);
-  const tenFiltered = (tenVids || []).filter(v => {
-    const q = tenSearch.trim().toLowerCase();
-    if (!q) return true;
-    return (v.kenh || '').toLowerCase().includes(q) || (v.brand || '').toLowerCase().includes(q) || String(v.content_id || '').toLowerCase().includes(q);
-  });
-  const tenTotalPages = Math.max(1, Math.ceil(tenFiltered.length / TEN_PER));
-  const tenPageC = Math.min(tenPage, tenTotalPages);
-  const tenPageRows = tenFiltered.slice((tenPageC - 1) * TEN_PER, tenPageC * TEN_PER);
-  const tenView = tenFiltered.reduce((s, v) => s + num(v.view_period), 0);
-  const tenGmv = tenFiltered.reduce((s, v) => s + num(v.gmv_period), 0);
-  // Xuất Excel bảng "Video tự động ghi nhận theo tag" — để nhân sự tự dò link video
-  const exportTenVids = async () => {
-    if (!tenFiltered.length) return;
-    const XLSX = await import('xlsx').then(m => m.default || m);
-    const aoa = [
-      ['STT', 'Kênh / KOC', 'Brand', 'Ngày air', 'View (kỳ)', 'GMV (kỳ)', 'Link video'],
-      ...tenFiltered.map((v, i) => [
-        i + 1,
-        v.kenh || '',
-        v.brand || '',
-        v.air_date ? new Date(v.air_date).toLocaleDateString('vi-VN') : '',
-        num(v.view_period),
-        num(v.gmv_period),
-        `https://www.tiktok.com/${v.kenh || ''}/video/${v.content_id}`,
-      ]),
-    ];
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = [{ wch: 6 }, { wch: 22 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 58 }];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Video theo tag');
-    const safe = String(r.ten_nhansu || 'NS').replace(/\s+/g, '-');
-    XLSX.writeFile(wb, `video-theo-tag_${safe}_${range.start}_${range.end}.xlsx`);
-  };
   const daily = Array.isArray(det?.daily) ? det.daily : [];
   const kocs = Array.isArray(det?.kocs) ? det.kocs : [];
 
@@ -898,164 +859,63 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
             </div>
           </Section>
 
-          {/* ═══ LINK AIR CỦA NHÂN SỰ ═══ (không có cột cast/cms/đã order) */}
-          <Section icon="🔗" title={<>Link air của nhân sự: <span style={{ padding: '2px 11px', borderRadius: 20, background: '#1d4ed8', color: '#fff', fontSize: '0.85rem', fontWeight: 800, marginLeft: 4 }}>👤 {r.ten_nhansu}</span></>} hint={airRows == null ? 'đang tải…' : `${fmt(airTotal)} link${airQ ? ' (khớp tìm kiếm)' : ' · toàn bộ từ trước tới nay'}`} accent={{ bg: '#eff6ff', fg: '#1d4ed8' }}>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              <input value={airSearch} onChange={e => setAirSearch(e.target.value)} placeholder="🔎 Tìm ID kênh / video / SP / brand... (tìm trong TẤT CẢ link)" style={{ ...ctrl, flex: '1 1 260px' }} />
+          {/* ═══ LINK & VIDEO CỦA NHÂN SỰ (GỘP 3 BẢNG) ═══ link air + link air có cast + video theo tag; lọc theo loại + xuất Excel */}
+          <Section icon="🔗" title={<>Link &amp; Video của nhân sự: <span style={{ padding: '2px 11px', borderRadius: 20, background: '#1d4ed8', color: '#fff', fontSize: '0.85rem', fontWeight: 800, marginLeft: 4 }}>👤 {r.ten_nhansu}</span></>} hint={allRows == null ? 'đang tải…' : `${fmt(allTotal)} dòng${allLoai ? ' · ' + LOAI_LABEL[allLoai] : ''}`} accent={{ bg: '#eff6ff', fg: '#1d4ed8' }}>
+            <div style={{ fontSize: '0.8rem', color: '#475569', marginBottom: 4, lineHeight: 1.55, background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 10, padding: '8px 12px' }}>
+              Gộp 3 nguồn: <b>🔗 Link air</b> (bạn tự điền — toàn bộ từ trước tới nay) · <b>💸 Link air có cast</b> (có tiền cast — chỉ để BIẾT, <b>không</b> tính vào số KOC quản lý) · <b>🎬 Video theo tag</b> (hệ thống tự ghi nhận vì bạn giữ tag lúc video lên — trong kỳ đang chọn). Bấm nút để lọc từng loại, hoặc <b>Xuất Excel</b> để dò offline.
             </div>
-            {airRows == null ? (
-              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>⏳ Đang tải link air...</div>
-            ) : airTotal === 0 ? (
-              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>{airQ ? 'Không tìm thấy link khớp.' : 'Nhân sự này chưa có link air nào.'}</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              {[['', 'Tất cả'], ['air', '🔗 Link air'], ['cast', '💸 Có cast'], ['tag', '🎬 Video theo tag']].map(([v, lb]) => (
+                <button key={v} onClick={() => setAllLoai(v)} style={{ padding: '5px 12px', borderRadius: 7, border: `1px solid ${allLoai === v ? '#1d4ed8' : '#cbd5e1'}`, background: allLoai === v ? '#1d4ed8' : '#fff', color: allLoai === v ? '#fff' : '#475569', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>{lb}</button>
+              ))}
+              <input value={allSearch} onChange={e => setAllSearch(e.target.value)} placeholder="🔎 Tìm KOC / brand / SP / ID video..." style={{ ...ctrl, flex: '1 1 220px', minWidth: 180 }} />
+              <button onClick={exportAll} disabled={!allTotal || allBusy} style={{ ...ctrl, background: allTotal ? '#16a34a' : '#e2e8f0', color: '#fff', border: 'none', fontWeight: 700, cursor: allTotal && !allBusy ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>{allBusy ? '⏳ Đang xuất...' : `📊 Xuất Excel${allTotal ? ` (${fmt(allTotal)})` : ''}`}</button>
+            </div>
+            {allRows == null ? (
+              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>⏳ Đang tải...</div>
+            ) : allTotal === 0 ? (
+              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>{allQ ? 'Không tìm thấy dòng khớp.' : 'Chưa có link air hoặc video nào.'}</div>
             ) : (
               <>
                 <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #f1f5f9' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 820 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1040 }}>
                     <thead>
                       <tr style={{ background: '#f8fafc' }}>
-                        {['STT', 'LINK AIR', 'ID KÊNH', 'ID VIDEO', 'BRAND', 'SẢN PHẨM', 'NGÀY AIR', 'TRẠNG THÁI'].map((h, i) => (
-                          <th key={i} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: '2px solid #e2e8f0' }}>{h}</th>
+                        {['STT', 'LOẠI', 'KÊNH / KOC', 'BRAND', 'SẢN PHẨM', 'NGÀY AIR', 'CAST', 'VIEW (KỲ)', 'GMV (KỲ)', 'TRẠNG THÁI', 'LINK'].map((h, i) => (
+                          <th key={i} style={{ padding: '10px 12px', textAlign: (i >= 6 && i <= 8) ? 'right' : 'left', fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: '2px solid #e2e8f0' }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {(airRows || []).map((a, i) => (
-                        <tr key={a.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#94a3b8' }}>{(airPageC - 1) * AIR_PER + i + 1}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', maxWidth: 210 }}>
-                            {a.link_air_koc ? <a href={a.link_air_koc} target="_blank" rel="noreferrer" style={{ color: '#f97316', fontWeight: 700, textDecoration: 'none', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.link_air_koc}</a> : '—'}
-                          </td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 600, color: '#334155' }}>{a.id_kenh || '—'}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.78rem', color: '#64748b' }}>{a.id_video || '—'}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155' }}>{a.ten_brand || '—'}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.san_pham || ''}>{a.san_pham || '—'}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155', whiteSpace: 'nowrap' }}>{a.ngay_air ? new Date(a.ngay_air).toLocaleDateString('vi-VN') : '—'}</td>
+                      {(allRows || []).map((a, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid #f1f5f9', background: a.loai === 'cast' ? '#fffbf5' : a.loai === 'tag' ? '#f8fefb' : '#fff' }}>
+                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#94a3b8' }}>{(allPageC - 1) * ALL_PER + i + 1}</td>
                           <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
-                            <span style={{ fontSize: '0.74rem', fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: a.status === 'Đã On-air' ? '#dcfce7' : '#fef9c3', color: a.status === 'Đã On-air' ? '#166534' : '#a16207' }}>
-                              {a.status === 'Đã On-air' ? '🟢 Đã On-air' : '🟡 Chưa air'}
-                            </span>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '3px 9px', borderRadius: 20, background: a.loai === 'cast' ? '#fff7ed' : a.loai === 'tag' ? '#f0fdf4' : '#eff6ff', color: a.loai === 'cast' ? '#c2410c' : a.loai === 'tag' ? '#15803d' : '#1d4ed8' }}>{LOAI_LABEL[a.loai] || a.loai}</span>
                           </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {airTotalPages > 1 && (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 6 }}>
-                    <button onClick={() => setAirPage(p => Math.max(1, p - 1))} disabled={airPageC <= 1} style={{ ...ctrl, cursor: airPageC <= 1 ? 'default' : 'pointer', opacity: airPageC <= 1 ? 0.5 : 1 }}>‹ Trước</button>
-                    <span style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 700 }}>Trang {airPageC}/{airTotalPages}</span>
-                    <button onClick={() => setAirPage(p => Math.min(airTotalPages, p + 1))} disabled={airPageC >= airTotalPages} style={{ ...ctrl, cursor: airPageC >= airTotalPages ? 'default' : 'pointer', opacity: airPageC >= airTotalPages ? 0.5 : 1 }}>Sau ›</button>
-                  </div>
-                )}
-              </>
-            )}
-          </Section>
-
-          {/* ═══ VIDEO TỰ ĐỘNG GHI NHẬN THEO TAG (tenure) ═══ để nhân sự TỰ CHECK video nào được credit qua tag */}
-          <Section icon="🎬" title={<>Video tự động ghi nhận theo tag: <span style={{ padding: '2px 11px', borderRadius: 20, background: '#15803d', color: '#fff', fontSize: '0.85rem', fontWeight: 800, marginLeft: 4 }}>👤 {r.ten_nhansu}</span></>} hint={tenVids == null ? 'đang tải…' : `${fmt(tenFiltered.length)} video · ${fmtView(tenView)} view · ${fmtVnd(tenGmv)}đ GMV — trong kỳ`} accent={{ bg: '#f0fdf4', fg: '#15803d' }}>
-            <div style={{ fontSize: '0.8rem', color: '#475569', marginBottom: 4, lineHeight: 1.55, background: '#f0fdf4', border: '1px solid #dcfce7', borderRadius: 10, padding: '8px 12px' }}>
-              🎯 Đây là các video hệ thống <b>TỰ ĐỘNG ghi nhận</b> cho bạn vì bạn <b>đang giữ tag KOC lúc video lên</b> — <b>không cần điền link air</b>. Chỉ tính video air <b>trong kỳ đang chọn</b>; View &amp; GMV cũng tính trong kỳ. (Video air trước khi bạn gắn tag hoặc sau khi gỡ tag sẽ không nằm ở đây.)
-            </div>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              <input value={tenSearch} onChange={e => setTenSearch(e.target.value)} placeholder="🔎 Tìm kênh KOC / brand / ID video..." style={{ ...ctrl, flex: '1 1 260px' }} />
-              <button onClick={exportTenVids} disabled={!tenFiltered.length} title="Xuất toàn bộ video trong bảng ra Excel để dò link"
-                style={{ ...ctrl, background: tenFiltered.length ? '#15803d' : '#e2e8f0', color: '#fff', border: 'none', fontWeight: 700, cursor: tenFiltered.length ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>
-                📊 Xuất Excel{tenFiltered.length ? ` (${fmt(tenFiltered.length)})` : ''}
-              </button>
-            </div>
-            {tenVids == null ? (
-              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>⏳ Đang tải video...</div>
-            ) : tenFiltered.length === 0 ? (
-              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>{tenSearch ? 'Không tìm thấy video khớp.' : 'Chưa có video nào được tự động ghi nhận theo tag trong kỳ này.'}</div>
-            ) : (
-              <>
-                <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #f1f5f9' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
-                    <thead>
-                      <tr style={{ background: '#f8fafc' }}>
-                        {['STT', 'KÊNH / KOC', 'BRAND', 'NGÀY AIR', 'VIEW (KỲ)', 'GMV (KỲ)', 'LINK'].map((h, i) => (
-                          <th key={i} style={{ padding: '10px 12px', textAlign: i === 4 || i === 5 ? 'right' : 'left', fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: '2px solid #e2e8f0' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {tenPageRows.map((v, i) => (
-                        <tr key={v.content_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#94a3b8' }}>{(tenPageC - 1) * TEN_PER + i + 1}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{v.kenh || '—'}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155' }}>{v.brand || '—'}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155', whiteSpace: 'nowrap' }}>{v.air_date ? new Date(v.air_date).toLocaleDateString('vi-VN') : '—'}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 700, color: '#0f766e', textAlign: 'right' }}>{fmt(v.view_period)}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 700, color: '#b45309', textAlign: 'right' }}>{fmtVnd(v.gmv_period)}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{a.koc || '—'}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155' }}>{a.brand || '—'}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155', maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.san_pham || ''}>{a.san_pham || '—'}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155', whiteSpace: 'nowrap' }}>{a.ngay_air ? new Date(a.ngay_air).toLocaleDateString('vi-VN') : '—'}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 800, color: num(a.cast_amount) > 0 ? '#ea580c' : '#cbd5e1', textAlign: 'right', whiteSpace: 'nowrap' }}>{num(a.cast_amount) > 0 ? fmtVnd(a.cast_amount) + 'đ' : '—'}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 700, color: '#0f766e', textAlign: 'right' }}>{fmt(a.view_ky)}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 700, color: '#b45309', textAlign: 'right' }}>{fmtVnd(a.gmv_ky)}</td>
+                          <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: '0.74rem', fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: a.trang_thai === 'Đã On-air' ? '#dcfce7' : '#fef9c3', color: a.trang_thai === 'Đã On-air' ? '#166534' : '#a16207' }}>{a.trang_thai === 'Đã On-air' ? '🟢 Đã On-air' : '🟡 Chưa air'}</span>
+                          </td>
                           <td style={{ padding: '9px 12px', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
-                            <a href={`https://www.tiktok.com/${v.kenh || ''}/video/${v.content_id}`} target="_blank" rel="noreferrer" style={{ color: '#f97316', fontWeight: 700, textDecoration: 'none' }}>Xem ▸</a>
+                            {a.link ? <a href={a.link} target="_blank" rel="noreferrer" style={{ color: '#f97316', fontWeight: 700, textDecoration: 'none' }}>Xem ▸</a> : '—'}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-                {tenTotalPages > 1 && (
+                {allTotalPages > 1 && (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 6 }}>
-                    <button onClick={() => setTenPage(p => Math.max(1, p - 1))} disabled={tenPageC <= 1} style={{ ...ctrl, cursor: tenPageC <= 1 ? 'default' : 'pointer', opacity: tenPageC <= 1 ? 0.5 : 1 }}>‹ Trước</button>
-                    <span style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 700 }}>Trang {tenPageC}/{tenTotalPages}</span>
-                    <button onClick={() => setTenPage(p => Math.min(tenTotalPages, p + 1))} disabled={tenPageC >= tenTotalPages} style={{ ...ctrl, cursor: tenPageC >= tenTotalPages ? 'default' : 'pointer', opacity: tenPageC >= tenTotalPages ? 0.5 : 1 }}>Sau ›</button>
-                  </div>
-                )}
-              </>
-            )}
-          </Section>
-
-          {/* ═══ LINK AIR CÓ CAST ═══ chỉ hiển thị cho biết — KHÔNG gắn tag, KHÔNG tính vào số KOC quản lý */}
-          <Section icon="💸" title={<>Link air có cast: <span style={{ padding: '2px 11px', borderRadius: 20, background: '#c2410c', color: '#fff', fontSize: '0.85rem', fontWeight: 800, marginLeft: 4 }}>👤 {r.ten_nhansu}</span></>} hint={castRows == null ? 'đang tải…' : `${fmt(castTotal)} link · Σ cast ${fmtVnd(castTong)}đ`} accent={{ bg: '#fff7ed', fg: '#c2410c' }}>
-            <div style={{ fontSize: '0.8rem', color: '#7c2d12', marginBottom: 4, lineHeight: 1.55, background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, padding: '8px 12px' }}>
-              💸 Đây là các link air <b>CÓ tiền cast</b> ghi nhận cho bạn — chỉ <b>hiển thị để bạn BIẾT</b>. KOC có cast <b>KHÔNG gắn tag</b> và <b>KHÔNG tính vào số lượng KOC quản lý</b> của bạn.
-            </div>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              <input value={castSearch} onChange={e => setCastSearch(e.target.value)} placeholder="🔎 Tìm ID kênh / video / SP / brand..." style={{ ...ctrl, flex: '1 1 260px' }} />
-            </div>
-            {castRows == null ? (
-              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>⏳ Đang tải link cast...</div>
-            ) : castTotal === 0 ? (
-              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>{castQ ? 'Không tìm thấy link khớp.' : 'Nhân sự này chưa có link air nào có cast.'}</div>
-            ) : (
-              <>
-                <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #f1f5f9' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
-                    <thead>
-                      <tr style={{ background: '#fff7ed' }}>
-                        {['STT', 'LINK AIR', 'ID KÊNH', 'BRAND', 'SẢN PHẨM', 'NGÀY AIR', 'CAST', 'TRẠNG THÁI'].map((h, i) => (
-                          <th key={i} style={{ padding: '10px 12px', textAlign: i === 6 ? 'right' : 'left', fontSize: '0.72rem', fontWeight: 800, color: '#9a3412', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: '2px solid #fed7aa' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(castRows || []).map((a, i) => (
-                        <tr key={a.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#94a3b8' }}>{(castPageC - 1) * CAST_PER + i + 1}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', maxWidth: 210 }}>
-                            {a.link_air_koc ? <a href={a.link_air_koc} target="_blank" rel="noreferrer" style={{ color: '#f97316', fontWeight: 700, textDecoration: 'none', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.link_air_koc}</a> : '—'}
-                          </td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 600, color: '#334155' }}>{a.id_kenh || '—'}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155' }}>{a.ten_brand || '—'}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.san_pham || ''}>{a.san_pham || '—'}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155', whiteSpace: 'nowrap' }}>{a.ngay_air ? new Date(a.ngay_air).toLocaleDateString('vi-VN') : '—'}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 800, color: '#ea580c', textAlign: 'right', whiteSpace: 'nowrap' }}>{fmtVnd(a.cast_amount)}đ</td>
-                          <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
-                            <span style={{ fontSize: '0.74rem', fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: a.status === 'Đã On-air' ? '#dcfce7' : '#fef9c3', color: a.status === 'Đã On-air' ? '#166534' : '#a16207' }}>
-                              {a.status === 'Đã On-air' ? '🟢 Đã On-air' : '🟡 Chưa air'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {castTotalPages > 1 && (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 6 }}>
-                    <button onClick={() => setCastPage(p => Math.max(1, p - 1))} disabled={castPageC <= 1} style={{ ...ctrl, cursor: castPageC <= 1 ? 'default' : 'pointer', opacity: castPageC <= 1 ? 0.5 : 1 }}>‹ Trước</button>
-                    <span style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 700 }}>Trang {castPageC}/{castTotalPages}</span>
-                    <button onClick={() => setCastPage(p => Math.min(castTotalPages, p + 1))} disabled={castPageC >= castTotalPages} style={{ ...ctrl, cursor: castPageC >= castTotalPages ? 'default' : 'pointer', opacity: castPageC >= castTotalPages ? 0.5 : 1 }}>Sau ›</button>
+                    <button onClick={() => setAllPage(p => Math.max(1, p - 1))} disabled={allPageC <= 1} style={{ ...ctrl, cursor: allPageC <= 1 ? 'default' : 'pointer', opacity: allPageC <= 1 ? 0.5 : 1 }}>‹ Trước</button>
+                    <span style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 700 }}>Trang {allPageC}/{allTotalPages}</span>
+                    <button onClick={() => setAllPage(p => Math.min(allTotalPages, p + 1))} disabled={allPageC >= allTotalPages} style={{ ...ctrl, cursor: allPageC >= allTotalPages ? 'default' : 'pointer', opacity: allPageC >= allTotalPages ? 0.5 : 1 }}>Sau ›</button>
                   </div>
                 )}
               </>
