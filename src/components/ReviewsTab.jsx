@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
 
 const STAR_COLORS = { 5: '#22c55e', 4: '#84cc16', 3: '#eab308', 2: '#ff7a30', 1: '#ef4444' };
@@ -40,8 +41,9 @@ const toYmd = (d) => {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 };
 
-// Shop bị loại khỏi dashboard đánh giá (theo yêu cầu): Milaganics SPA (831509831) + Milaganics FBS (341325550)
-const EXCLUDED_SELLERS = new Set(['831509831', '341325550']);
+// (21/7/2026) BỎ ẩn Milaganics SPA + FBS — CS cần ĐỦ data Shopee để report (2 gian này ~520 đánh giá/tuần).
+// Muốn ẩn gian nào thì thêm seller_id vào Set này.
+const EXCLUDED_SELLERS = new Set([]);
 
 // Ngày review → 'YYYY-MM-DD' an toàn (ISO / ms / unix-giây đều xử lý được, không parse được thì trả '')
 const reviewYmd = (d) => {
@@ -137,6 +139,8 @@ export default function ReviewsTab() {
   const [reasonFilter, setReasonFilter] = useState('all');
   const [handleFilter, setHandleFilter] = useState('all');
   const [fixedFilter, setFixedFilter] = useState('all');
+  const [prodNameFilter, setProdNameFilter] = useState('all');   // lọc theo SẢN PHẨM
+  const [skuFilter, setSkuFilter] = useState('all');             // lọc theo PHÂN LOẠI (SKU/mẫu)
 
   const didMount = useRef(false);
   const reviewsRef = useRef(null);
@@ -341,6 +345,24 @@ export default function ReviewsTab() {
   // Top phân loại lý do (CSKH)
   const topReasons = useMemo(() => Object.entries(stats.byReason).sort((a, b) => b[1] - a[1]), [stats.byReason]);
 
+  // Danh sách SẢN PHẨM + PHÂN LOẠI (SKU) đang có — cho bộ lọc CS
+  const prodList = useMemo(() => ['all', ...Array.from(new Set(scoped.map(r => r.productName).filter(Boolean))).sort()], [scoped]);
+  const skuList = useMemo(() => ['all', ...Array.from(new Set(scoped.map(r => r.sku || '—').filter(Boolean))).sort()], [scoped]);
+
+  // ── TOP XẤU (1-3★) — số CS cần để report ──
+  const badScoped = useMemo(() => scoped.filter(r => r.star > 0 && r.star <= 3), [scoped]);
+  const topBadReasons = useMemo(() => {
+    const m = {};
+    badScoped.forEach(r => { const k = metaMap[r.id]?.reason_category; if (k) m[k] = (m[k] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  }, [badScoped, metaMap]);
+  const topBadSku = useMemo(() => {
+    const m = {};
+    badScoped.forEach(r => { const k = r.sku || '(không phân loại)'; m[k] = (m[k] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  }, [badScoped]);
+  const chuaPhanLoai = useMemo(() => badScoped.filter(r => !metaMap[r.id]?.reason_category).length, [badScoped, metaMap]);
+
   // ── Filtered reviews ──
   const filtered = useMemo(() => {
     let result = [...scoped]; // đã lọc sàn + ngày
@@ -353,13 +375,17 @@ export default function ReviewsTab() {
     if (reasonFilter !== 'all') result = result.filter(r => (metaMap[r.id]?.reason_category || '') === reasonFilter);
     if (handleFilter !== 'all') result = result.filter(r => (metaMap[r.id]?.handle_status || 'chua_xu_ly') === handleFilter);
     if (fixedFilter !== 'all') result = result.filter(r => (metaMap[r.id]?.fixed_status || 'chua_sua') === fixedFilter);
+    if (prodNameFilter !== 'all') result = result.filter(r => r.productName === prodNameFilter);
+    if (skuFilter !== 'all') result = result.filter(r => (r.sku || '—') === skuFilter);
     if (searchText) {
       const q = searchText.toLowerCase();
       result = result.filter(r =>
         r.productName.toLowerCase().includes(q) ||
         r.comment.toLowerCase().includes(q) ||
         r.userName.toLowerCase().includes(q) ||
-        r.sku.toLowerCase().includes(q)
+        r.sku.toLowerCase().includes(q) ||
+        String(r.orderCode || '').toLowerCase().includes(q) ||
+        String(r.userId || '').toLowerCase().includes(q)
       );
     }
     result.sort((a, b) => {
@@ -371,7 +397,7 @@ export default function ReviewsTab() {
       }
     });
     return result;
-  }, [scoped, brandFilter, shopFilter, productFilter, starFilter, replyFilter, reasonFilter, handleFilter, fixedFilter, searchText, sortBy, metaMap]);
+  }, [scoped, brandFilter, shopFilter, productFilter, starFilter, replyFilter, reasonFilter, handleFilter, fixedFilter, prodNameFilter, skuFilter, searchText, sortBy, metaMap]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -403,6 +429,46 @@ export default function ReviewsTab() {
     borderColor: starFilter === val ? (val === 0 ? '#fed7aa' : STAR_COLORS[val]) : '#e5e7eb',
   });
 
+  // Chọn nhanh TRỌN 1 THÁNG (CS cần lọc cả tháng để chỉnh phân loại lý do).
+  // offset 0 = tháng này, -1 = tháng trước... Tháng hiện tại thì kẹp ngày cuối = hôm nay.
+  const pickMonth = (offset) => {
+    const now = new Date();
+    const first = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + offset + 1, 0);
+    const s = toYmd(first);
+    const e = toYmd(lastDay > now ? now : lastDay);
+    setStartDate(s); setEndDate(e); fetchReviews(s, e);
+  };
+  const monthBtn = { ...btnBase, padding: '6px 12px', fontSize: '0.78rem', background: '#fff7ed', color: '#ff6a2c', borderColor: '#fed7aa', fontWeight: 700 };
+
+  // Xuất Excel ĐÚNG data đang lọc — kèm mã đơn / ID người dùng / phân loại lý do (CS khỏi report tay).
+  const exportXlsx = () => {
+    const rows = filtered.map((r, i) => {
+      const meta = metaMap[r.id] || {};
+      return {
+        STT: i + 1,
+        'Sàn': r.platform === 'shopee' ? 'Shopee' : 'TikTok',
+        'Shop': r.shop,
+        'Brand': brandOf(r.shop),
+        'Sản phẩm': r.productName,
+        'Phân loại (SKU)': r.sku,
+        'Sao': r.star,
+        'Nội dung': r.comment,
+        'Người dùng': r.userName,
+        'ID người dùng': r.userId || '',
+        'Mã đơn': r.orderCode || '',
+        'Ngày': fmtDate(r.date),
+        'Đã phản hồi': r.hasReply ? 'x' : '',
+        'Phân loại lý do': meta.reason_category || '',
+        'Trạng thái xử lý': meta.handle_status === 'da_xu_ly' ? 'Đã xử lý' : 'Chưa xử lý',
+        'Đã sửa đánh giá': meta.fixed_status === 'da_sua_5' ? '5 sao' : meta.fixed_status === 'da_sua_4' ? '4 sao' : '',
+      };
+    });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'DanhGia');
+    XLSX.writeFile(wb, `DanhGiaSan_${startDate}_den_${endDate}.xlsx`);
+  };
+
   return (
     <div style={{ fontFamily: "'Outfit', sans-serif", maxWidth: 1400 }}>
       {/* ── HEADER ── */}
@@ -426,6 +492,8 @@ export default function ReviewsTab() {
                 {d} ngày
               </button>
             ))}
+            <button onClick={() => pickMonth(0)} style={monthBtn}>Tháng này</button>
+            <button onClick={() => pickMonth(-1)} style={monthBtn}>Tháng trước</button>
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
             <button onClick={() => setPlatform('both')} style={platformBtn('both')}>Tất cả</button>
@@ -439,6 +507,11 @@ export default function ReviewsTab() {
           <button onClick={fetchReviews} disabled={loading}
             style={{ ...btnBase, background: loading ? '#d1d5db' : '#ff6a2c', color: '#fff', borderColor: loading ? '#d1d5db' : '#ff6a2c', boxShadow: loading ? 'none' : '0 4px 12px rgba(255,106,44,0.2)', minWidth: 120 }}>
             {loading ? '⏳ Đang tải...' : '🔍 Tải dữ liệu'}
+          </button>
+          <button onClick={exportXlsx} disabled={loading || filtered.length === 0}
+            style={{ ...btnBase, background: '#0f172a', color: '#fff', borderColor: '#0f172a', opacity: (loading || filtered.length === 0) ? 0.45 : 1 }}
+            title="Xuất đúng data đang lọc ra Excel (kèm mã đơn, ID người dùng, phân loại lý do)">
+            📥 Xuất Excel
           </button>
         </div>
       </div>
@@ -643,6 +716,55 @@ export default function ReviewsTab() {
           </div>
         )}
 
+        {/* ── TOP ĐÁNH GIÁ XẤU (1-3★) — số CS cần để report ── */}
+        {badScoped.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+            <div style={card}>
+              <h3 style={{ margin: '0 0 3px', fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>😡 Top LÝ DO bị đánh giá xấu <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '0.74rem' }}>(1-3★)</span></h3>
+              <p style={{ margin: '0 0 10px', fontSize: '0.72rem', color: '#94a3b8' }}>
+                {fmtNum(badScoped.length)} đánh giá xấu · {chuaPhanLoai > 0
+                  ? <b style={{ color: '#ef4444' }}>{fmtNum(chuaPhanLoai)} chưa gán lý do</b>
+                  : <b style={{ color: '#22c55e' }}>đã gán hết lý do 🎉</b>}
+              </p>
+              {topBadReasons.length === 0 ? (
+                <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Chưa gán lý do nào — gán ở cột “🏷️ CSKH xử lý” cuối bảng review.</div>
+              ) : topBadReasons.map(([reason, n]) => {
+                const pct = badScoped.length ? (n / badScoped.length * 100) : 0;
+                const active = reasonFilter === reason;
+                return (
+                  <div key={reason} onClick={() => { setReasonFilter(active ? 'all' : reason); setPage(1); focusReviews(); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 6px', borderRadius: 8, cursor: 'pointer', background: active ? '#fff7ed' : 'transparent' }}>
+                    <span style={{ flex: 1, fontSize: '0.82rem', fontWeight: active ? 800 : 600 }}>{reason}</span>
+                    <div style={{ width: 80, height: 12, background: '#f1f5f9', borderRadius: 6, overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: '#ef4444', borderRadius: 6, minWidth: n > 0 ? 3 : 0 }} />
+                    </div>
+                    <span style={{ width: 34, textAlign: 'right', fontSize: '0.82rem', fontWeight: 800, color: '#ef4444' }}>{n}</span>
+                    <span style={{ width: 44, textAlign: 'right', fontSize: '0.72rem', color: '#94a3b8' }}>{pct.toFixed(1)}%</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={card}>
+              <h3 style={{ margin: '0 0 3px', fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>📦 Top PHÂN LOẠI SP bị đánh giá xấu</h3>
+              <p style={{ margin: '0 0 10px', fontSize: '0.72rem', color: '#94a3b8' }}>Theo phân loại/mẫu (SKU) — bấm để lọc review</p>
+              {topBadSku.map(([sku, n]) => {
+                const pct = badScoped.length ? (n / badScoped.length * 100) : 0;
+                const active = skuFilter === sku;
+                return (
+                  <div key={sku} onClick={() => { setSkuFilter(active ? 'all' : sku); setPage(1); focusReviews(); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 6px', borderRadius: 8, cursor: 'pointer', background: active ? '#fff7ed' : 'transparent' }}>
+                    <span style={{ flex: 1, fontSize: '0.8rem', fontWeight: active ? 800 : 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={sku}>{sku}</span>
+                    <div style={{ width: 80, height: 12, background: '#f1f5f9', borderRadius: 6, overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: '#f97316', borderRadius: 6, minWidth: n > 0 ? 3 : 0 }} />
+                    </div>
+                    <span style={{ width: 34, textAlign: 'right', fontSize: '0.82rem', fontWeight: 800, color: '#f97316' }}>{n}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* ── SHOP STATS ── */}
         <div style={{ ...card, marginBottom: 20 }}>
           <h3 style={{ margin: '0 0 14px', fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>
@@ -834,6 +956,18 @@ export default function ReviewsTab() {
             <option value="da_sua_5">Đã sửa 5★</option>
           </select>
 
+          <select value={prodNameFilter} onChange={e => { setProdNameFilter(e.target.value); setPage(1); }}
+            style={{ padding: '8px 12px', borderRadius: 8, border: `1.5px solid ${prodNameFilter !== 'all' ? '#ff6a2c' : '#e5e7eb'}`, fontSize: '0.82rem', fontFamily: 'inherit', color: prodNameFilter !== 'all' ? '#ff6a2c' : '#0f172a', background: prodNameFilter !== 'all' ? '#fff7ed' : '#fff', cursor: 'pointer', maxWidth: 240, fontWeight: prodNameFilter !== 'all' ? 700 : 400 }}>
+            <option value="all">Sản phẩm: Tất cả</option>
+            {prodList.filter(p => p !== 'all').map(p => <option key={p} value={p}>{truncate(p, 60)}</option>)}
+          </select>
+
+          <select value={skuFilter} onChange={e => { setSkuFilter(e.target.value); setPage(1); }}
+            style={{ padding: '8px 12px', borderRadius: 8, border: `1.5px solid ${skuFilter !== 'all' ? '#ff6a2c' : '#e5e7eb'}`, fontSize: '0.82rem', fontFamily: 'inherit', color: skuFilter !== 'all' ? '#ff6a2c' : '#0f172a', background: skuFilter !== 'all' ? '#fff7ed' : '#fff', cursor: 'pointer', maxWidth: 220, fontWeight: skuFilter !== 'all' ? 700 : 400 }}>
+            <option value="all">Phân loại: Tất cả</option>
+            {skuList.filter(s => s !== 'all').map(s => <option key={s} value={s}>{truncate(s, 50)}</option>)}
+          </select>
+
           <select value={sortBy} onChange={e => setSortBy(e.target.value)}
             style={{ padding: '8px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.82rem', fontFamily: 'inherit', color: '#0f172a', background: '#fff', cursor: 'pointer' }}>
             <option value="date_desc">Mới nhất</option>
@@ -859,6 +993,8 @@ export default function ReviewsTab() {
                   <th style={{ ...thStyle, width: 50, textAlign: 'center' }}>Sao</th>
                   <th style={{ ...thStyle, minWidth: 200 }}>Nội dung</th>
                   <th style={{ ...thStyle, width: 100 }}>Người dùng</th>
+                  <th style={{ ...thStyle, width: 120 }}>Mã đơn</th>
+                  <th style={{ ...thStyle, width: 100 }}>ID người dùng</th>
                   <th style={{ ...thStyle, width: 90, textAlign: 'center' }}>Ngày</th>
                   <th style={{ ...thStyle, width: 55, textAlign: 'center' }}>Reply</th>
                   <th style={{ ...thStyle, width: 190 }}>🏷️ CSKH xử lý</th>
@@ -942,6 +1078,13 @@ export default function ReviewsTab() {
                         {r.images?.length > 0 && <span style={{ marginLeft: 6, color: '#ff6a2c', fontSize: '0.72rem', fontWeight: 700, fontStyle: 'normal', whiteSpace: 'nowrap' }} title={`${r.images.length} ảnh`}>📷{r.images.length}</span>}
                       </td>
                       <td style={{ ...tdStyle, fontSize: '0.78rem', fontWeight: 600 }}>{r.userName}</td>
+                      <td style={{ ...tdStyle, fontSize: '0.72rem', fontFamily: 'monospace', color: '#475569' }} onClick={e => e.stopPropagation()}>
+                        {r.orderCode ? <span style={{ userSelect: 'all' }} title="Bấm giữ để copy">{r.orderCode}</span> : <span style={{ color: '#cbd5e1' }}>—</span>}
+                      </td>
+                      <td style={{ ...tdStyle, fontSize: '0.72rem', fontFamily: 'monospace', color: '#475569' }} onClick={e => e.stopPropagation()}>
+                        {r.userId ? <span style={{ userSelect: 'all' }} title="Bấm giữ để copy">{r.userId}</span>
+                          : <span style={{ color: '#cbd5e1' }} title="TikTok không cấp ID người dùng qua API">—</span>}
+                      </td>
                       <td style={{ ...tdStyle, textAlign: 'center', fontSize: '0.76rem', color: '#64748b' }}>{fmtDate(r.date)}</td>
                       <td style={{ ...tdStyle, textAlign: 'center' }}>
                         {r.hasReply
