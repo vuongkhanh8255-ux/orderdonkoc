@@ -105,11 +105,22 @@ function BookingStaffReportTab({ currentUser } = {}) {
   }, [range]);
   useEffect(() => { load(); }, [load]);
 
-  const allStaff = useMemo(() => rows.map(r => r.ten_nhansu), [rows]);
-  const filtered = useMemo(() => rows.filter(r =>
+  // ── GIỚI HẠN QUYỀN XEM (Khánh 22/7): mỗi tài khoản CHỈ xem báo cáo của CHÍNH MÌNH.
+  // Admin xem hết. Account có `staff` (booking_staff, ecom Đan…) → chỉ thấy đúng dòng tên mình.
+  // Lọc ngay từ gốc nên áp cho TẤT CẢ: bảng, tổng KPI, biểu đồ, và panel chi tiết bên dưới.
+  const onlyMe = currentUser?.role !== 'admin' && !!currentUser?.staff;
+  const myName = (currentUser?.staff || '').trim();
+  const scopeRows = useCallback((rs) => onlyMe
+    ? (rs || []).filter(x => (x.ten_nhansu || '').trim() === myName)
+    : (rs || []), [onlyMe, myName]);
+  const rowsV = useMemo(() => scopeRows(rows), [rows, scopeRows]);
+  const prevRowsV = useMemo(() => scopeRows(prevRows), [prevRows, scopeRows]);
+
+  const allStaff = useMemo(() => rowsV.map(r => r.ten_nhansu), [rowsV]);
+  const filtered = useMemo(() => rowsV.filter(r =>
     (!selStaff || r.ten_nhansu === selStaff) &&
     (!fProduct || (r.top_product || '').toLowerCase().includes(fProduct.toLowerCase()))
-  ), [rows, selStaff, fProduct]);
+  ), [rowsV, selStaff, fProduct]);
   // Nhân sự đang xem chi tiết: theo dòng đã bấm, mặc định dòng đầu (GMV cao nhất) → luôn hiện chi tiết bên dưới.
   const selectedRow = useMemo(() => filtered.find(r => r.nhansu_id === selectedId) || filtered[0] || null, [filtered, selectedId]);
 
@@ -119,7 +130,7 @@ function BookingStaffReportTab({ currentUser } = {}) {
     cast: a.cast + num(r.cast_used), budget: a.budget + BUDGET(r.aff_gmv), chiphi: a.chiphi + num(r.chi_phi_mau),
   }), { don: 0, mau: 0, koc: 0, gmv: 0, video: 0, view: 0, cast: 0, budget: 0, chiphi: 0 });
   const T = useMemo(() => sumRows(filtered), [filtered]);
-  const P = useMemo(() => sumRows(prevRows), [prevRows]);
+  const P = useMemo(() => sumRows(prevRowsV), [prevRowsV]);
   // Tổng ngân sách (theo hàm chung) — cho KPI "CAST còn lại" khớp Tạm đối chiếu.
   const budgetTot = useMemo(() => filtered.reduce((a, r) => {
     const b = budgetByStaff[r.ten_nhansu]; return { conLai: a.conLai + (b?.conLai || 0), dmThuc: a.dmThuc + (b?.dmThuc || 0) };
@@ -144,7 +155,7 @@ function BookingStaffReportTab({ currentUser } = {}) {
   const KPIS = [
     { label: 'Tổng đơn gửi', val: fmt(T.don), d: delta(T.don, P.don), sub: `${fmt(T.mau)} mẫu`, icon: '📦', color: '#f97316' },
     { label: 'Chi phí mẫu', val: fmtVnd(T.chiphi) + ' đ', d: delta(T.chiphi, P.chiphi), sub: `${T.mau > 0 ? fmtVnd(T.chiphi / T.mau) : 0}/mẫu`, icon: '🧾', color: '#e11d48' },
-    { label: 'KOC đã gắn', val: fmt(T.koc), d: delta(T.koc, P.koc), sub: `${rows.length} nhân sự`, icon: '🏷️', color: '#9333ea' },
+    { label: 'KOC đã gắn', val: fmt(T.koc), d: delta(T.koc, P.koc), sub: `${rowsV.length} nhân sự`, icon: '🏷️', color: '#9333ea' },
     { label: 'GMV (KOC gắn)', val: fmtVnd(T.gmv) + ' đ', d: delta(T.gmv, P.gmv), sub: `ROAS ${castTot > 0 ? (T.gmv / castTot).toFixed(1) : '∞'}x`, icon: '💰', color: '#16a34a' },
     { label: 'Video', val: fmt(T.video), d: delta(T.video, P.video), sub: `${fmtView(T.view)} view`, icon: '🎬', color: '#7c3aed' },
     { label: 'View', val: fmtView(T.view), d: delta(T.view, P.view), sub: `${T.video > 0 ? fmtView(T.view / T.video) : 0}/video`, icon: '👁️', color: '#0891b2' },
@@ -212,7 +223,7 @@ function BookingStaffReportTab({ currentUser } = {}) {
                 <span style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, background: `linear-gradient(135deg, ${k.color}, ${k.color}bb)`, boxShadow: `0 5px 12px ${k.color}66, inset 0 1px 1px rgba(255,255,255,0.45)`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.95rem' }}>{k.icon}</span>
                 <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k.label}</span>
               </div>
-              {k.d !== null && Number.isFinite(k.d) && prevRows.length > 0 && (
+              {k.d !== null && Number.isFinite(k.d) && prevRowsV.length > 0 && (
                 <span style={{ fontSize: '0.68rem', fontWeight: 800, color: k.d >= 0 ? '#16a34a' : '#dc2626', background: k.d >= 0 ? '#dcfce7' : '#fef2f2', padding: '2px 8px', borderRadius: 20, whiteSpace: 'nowrap' }}>{k.d >= 0 ? '▲' : '▼'} {Math.abs(k.d).toFixed(0)}%</span>
               )}
             </div>
@@ -879,7 +890,7 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
               {[['', 'Tất cả'], ['air', '🔗 Link air'], ['cast', '💸 Có cast'], ['tag', '🎬 Video theo tag']].map(([v, lb]) => (
                 <button key={v} onClick={() => setAllLoai(v)} style={{ padding: '5px 12px', borderRadius: 7, border: `1px solid ${allLoai === v ? '#1d4ed8' : '#cbd5e1'}`, background: allLoai === v ? '#1d4ed8' : '#fff', color: allLoai === v ? '#fff' : '#475569', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>{lb}</button>
               ))}
-              <input value={allSearch} onChange={e => setAllSearch(e.target.value)} placeholder="🔎 Tìm KOC / brand / SP / ID video..." style={{ ...ctrl, flex: '1 1 220px', minWidth: 180 }} />
+              <input value={allSearch} onChange={e => setAllSearch(e.target.value)} placeholder="🔎 Tìm KOC / brand / SP / ID video / dán nguyên link air..." style={{ ...ctrl, flex: '1 1 220px', minWidth: 180 }} />
               <button onClick={exportAll} disabled={!allTotal || allBusy} style={{ ...ctrl, background: allTotal ? '#16a34a' : '#e2e8f0', color: '#fff', border: 'none', fontWeight: 700, cursor: allTotal && !allBusy ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>{allBusy ? `⏳ Đang xuất ${fmt(allProg)}/${fmt(allTotal)}...` : `📊 Xuất Excel${allTotal ? ` (${fmt(allTotal)})` : ''}`}</button>
             </div>
             {allRows == null ? (
