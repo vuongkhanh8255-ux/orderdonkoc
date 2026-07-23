@@ -6,8 +6,11 @@ const STAR_COLORS = { 5: '#22c55e', 4: '#84cc16', 3: '#eab308', 2: '#ff7a30', 1:
 const PAGE_SIZE = 20;
 
 // ── Module 1 CSKH: phân loại lý do + trạng thái xử lý + đã sửa đánh giá (lưu ở bảng review_cs_meta) ──
-const REASON_CATEGORIES = ['Chê sản phẩm', 'Kích ứng / Dị ứng', 'Không hiệu quả', 'Giao hàng chậm', 'Sai hàng', 'Thiếu hàng', 'Đóng gói', 'Shipper', 'Không nhận xét'];
+const REASON_CATEGORIES = ['Chê sản phẩm', 'Kích ứng / Dị ứng', 'Không hiệu quả', 'Giao hàng chậm', 'Sai hàng', 'Thiếu hàng', 'Đóng gói', 'Shipper', 'Spam', 'Hiểu nhầm', 'Không nhận xét'];
 const FIXED_OPTIONS = [{ v: 'chua_sua', l: 'Chưa sửa' }, { v: 'da_sua_4', l: 'Đã sửa 4★' }, { v: 'da_sua_5', l: 'Đã sửa 5★' }];
+// CS TỰ PHÂN LOẠI nhóm sản phẩm (lưu vào review_cs_meta.product_category).
+// >>> CS gửi danh sách chuẩn thì SỬA ĐÚNG MẢNG NÀY là xong, không cần đụng chỗ khác. <<<
+const PRODUCT_CATEGORIES = ['Sữa rửa mặt', 'Toner', 'Serum / Tinh chất', 'Kem dưỡng', 'Chống nắng', 'Tẩy trang', 'Mặt nạ', 'Trị mụn', 'Tắm gội', 'Dưỡng thể / Body', 'Nước hoa / Bodymist', 'Thực phẩm chức năng', 'Khác'];
 
 // (21/7/2026) SỬA MAP SAI: 341325550 + 831509831 trước đây bị ghi nhầm là "Milaganics FBS/SPA",
 // thực tế là 2 gian eHerb (đối chiếu shop_name trong shopee_orders: "eHerb Việt Nam" 29k đơn,
@@ -24,8 +27,28 @@ const SHOP_MAP = {
   '7496180170889726491': 'Real Steel',
 };
 const shopName = (id) => SHOP_MAP[id] || id;
-// Brand = tên shop bỏ hậu tố sàn/loại (eHerb HCM→eHerb, … ) để gộp các gian cùng brand
+// Brand theo GIAN = tên shop bỏ hậu tố sàn/loại (eHerb HCM→eHerb) — chỉ dùng làm phương án dự phòng.
 const brandOf = (shop) => (shop || '').replace(/\s+(FBS|SPA|HCM|Mall|MP|Mp)\b.*$/i, '').trim() || (shop || '—');
+
+// (22/7) BRAND suy từ TÊN SẢN PHẨM — theo CS: "brand BODYMISS là nhiều shop bán, lọc brand là ra
+// hết các đánh giá chứ không cần lọc theo từng shop". Tên SP không nhận ra brand nào thì mới
+// rơi về brand của gian bán. Thêm brand mới -> thêm 1 dòng vào BRAND_KEYS.
+const BRAND_KEYS = [
+  ['BODYMISS', 'BODYMISS'], ['BODY MISS', 'BODYMISS'],
+  ['MILAGANICS', 'MILAGANICS'], ['MILAGANIC', 'MILAGANICS'],
+  ['EHERB', 'EHERB'], ['E HERB', 'EHERB'],
+  ['MOAW', 'MOAW MOAWS'],
+  ['HEALMII', 'HEALMII'], ['HEALMI', 'HEALMII'],
+  ['REAL STEEL', 'REAL STEEL'], ['REALSTEEL', 'REAL STEEL'],
+  ['MASUBE', 'MASUBE'],
+];
+const noAccent = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toUpperCase();
+const brandOfProduct = (productName, fallbackShop) => {
+  const s = noAccent(productName);
+  for (const [key, brand] of BRAND_KEYS) if (s.includes(key)) return brand;
+  const fb = brandOf(fallbackShop || '');
+  return fb && fb !== '—' ? noAccent(fb) : '(không rõ)';
+};
 
 function fmtDate(iso) {
   if (!iso) return '—';
@@ -85,6 +108,8 @@ function normalizeChunk(data) {
         replyText: r.reply?.comment || '',
         sellerId: r.seller_id,
         shop: shopName(r.seller_id),
+        shopKey: `shopee-${r.seller_id}`,
+        brand: brandOfProduct(r.productName || '', shopName(r.seller_id)),
         images: Array.isArray(r.images)
           ? r.images.map(h => (typeof h === 'string' && h.startsWith('http')) ? h : `https://cf.shopee.vn/file/${h}`)
           : [],
@@ -112,6 +137,8 @@ function normalizeChunk(data) {
         replyText: r.reply_text || '',
         sellerId: r.seller_id,
         shop: shopName(r.seller_id),
+        shopKey: `tiktok-${r.seller_id}`,
+        brand: brandOfProduct(r.product_info?.product_name || '', shopName(r.seller_id)),
         images: [], // TikTok chỉ trả cờ has_imgs, không kèm URL ảnh review
       });
     }
@@ -132,9 +159,13 @@ export default function ReviewsTab() {
   const [hasFetched, setHasFetched] = useState(false);
   const [progress, setProgress] = useState('');
 
-  const [starFilter, setStarFilter] = useState(0);
-  const [shopFilter, setShopFilter] = useState('all');
+  // (22/7) CHỌN NHIỀU cùng lúc: [] = tất cả. starSel = [1,2,3] lọc 1 lần; shopSel theo shopKey
+  // (`sàn-sellerId`) nên chọn "Shopee Milaganics" KHÔNG kéo theo "TikTok Milaganics" nữa.
+  const [starSel, setStarSel] = useState([]);
+  const [shopSel, setShopSel] = useState([]);
   const [brandFilter, setBrandFilter] = useState('all');
+  const toggleStar = (s) => { setStarSel(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]); setPage(1); };
+  const toggleShop = (k) => { setShopSel(prev => prev.includes(k) ? prev.filter(x => x !== k) : [...prev, k]); setPage(1); };
   const [searchText, setSearchText] = useState('');
   const [replyFilter, setReplyFilter] = useState('all');
   const [sortBy, setSortBy] = useState('date_desc');
@@ -322,13 +353,15 @@ export default function ReviewsTab() {
       .sort((a, b) => b.total - a.total);
   }, [scoped]);
 
+  // Danh sách GIAN tách theo sàn (shopKey duy nhất) — để chọn nhiều gian mà không dính nhầm sàn kia
   const shopList = useMemo(() => {
-    const set = new Set(reviews.map(r => r.shop));
-    return ['all', ...Array.from(set).sort()];
+    const m = new Map();
+    reviews.forEach(r => { if (!m.has(r.shopKey)) m.set(r.shopKey, { key: r.shopKey, label: r.shop, platform: r.platform }); });
+    return Array.from(m.values()).sort((a, b) => a.label.localeCompare(b.label) || a.platform.localeCompare(b.platform));
   }, [reviews]);
 
   const brandList = useMemo(() => {
-    const set = new Set(reviews.map(r => brandOf(r.shop)));
+    const set = new Set(reviews.map(r => r.brand));   // brand theo TÊN SẢN PHẨM (gộp mọi gian)
     return ['all', ...Array.from(set).sort()];
   }, [reviews]);
 
@@ -336,7 +369,7 @@ export default function ReviewsTab() {
   const brandStats = useMemo(() => {
     const map = {};
     for (const r of scoped) {
-      const brand = brandOf(r.shop);
+      const brand = r.brand;
       if (!map[brand]) map[brand] = { brand, total: 0, sum: 0, replied: 0, dist: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, shops: new Set() };
       const m = map[brand];
       m.total++; m.sum += r.star; m.dist[r.star]++; if (r.hasReply) m.replied++; m.shops.add(r.shop);
@@ -386,10 +419,10 @@ export default function ReviewsTab() {
   // ── Filtered reviews ──
   const filtered = useMemo(() => {
     let result = [...scoped]; // đã lọc sàn + ngày
-    if (brandFilter !== 'all') result = result.filter(r => brandOf(r.shop) === brandFilter);
-    if (shopFilter !== 'all') result = result.filter(r => r.shop === shopFilter);
+    if (brandFilter !== 'all') result = result.filter(r => r.brand === brandFilter);
+    if (shopSel.length) result = result.filter(r => shopSel.includes(r.shopKey));
     if (productFilter) result = result.filter(r => r.productId === productFilter.productId && r.platform === productFilter.platform);
-    if (starFilter > 0) result = result.filter(r => r.star === starFilter);
+    if (starSel.length) result = result.filter(r => starSel.includes(r.star));
     if (replyFilter === 'replied') result = result.filter(r => r.hasReply);
     if (replyFilter === 'unreplied') result = result.filter(r => !r.hasReply);
     if (reasonFilter !== 'all') result = result.filter(r => (metaMap[r.id]?.reason_category || '') === reasonFilter);
@@ -417,7 +450,7 @@ export default function ReviewsTab() {
       }
     });
     return result;
-  }, [scoped, brandFilter, shopFilter, productFilter, starFilter, replyFilter, reasonFilter, handleFilter, fixedFilter, prodNameFilter, skuFilter, searchText, sortBy, metaMap]);
+  }, [scoped, brandFilter, shopSel, productFilter, starSel, replyFilter, reasonFilter, handleFilter, fixedFilter, prodNameFilter, skuFilter, searchText, sortBy, metaMap]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -440,14 +473,19 @@ export default function ReviewsTab() {
     };
   };
 
-  const starFilterBtn = (val) => ({
-    ...btnBase,
-    padding: '6px 12px',
-    fontSize: '0.78rem',
-    background: starFilter === val ? (val === 0 ? '#fff7ed' : (STAR_COLORS[val] + '18')) : '#fff',
-    color: starFilter === val ? (val === 0 ? '#ff6a2c' : STAR_COLORS[val]) : '#94a3b8',
-    borderColor: starFilter === val ? (val === 0 ? '#fed7aa' : STAR_COLORS[val]) : '#e5e7eb',
-  });
+  // val=0 là nút "Tất cả" (bật khi chưa chọn sao nào); còn lại bật khi sao đó nằm trong starSel
+  const starFilterBtn = (val) => {
+    const on = val === 0 ? starSel.length === 0 : starSel.includes(val);
+    return {
+      ...btnBase,
+      padding: '6px 12px',
+      fontSize: '0.78rem',
+      background: on ? (val === 0 ? '#fff7ed' : (STAR_COLORS[val] + '18')) : '#fff',
+      color: on ? (val === 0 ? '#ff6a2c' : STAR_COLORS[val]) : '#94a3b8',
+      borderColor: on ? (val === 0 ? '#fed7aa' : STAR_COLORS[val]) : '#e5e7eb',
+      fontWeight: on ? 800 : 600,
+    };
+  };
 
   // Chọn nhanh TRỌN 1 THÁNG (CS cần lọc cả tháng để chỉnh phân loại lý do).
   // offset 0 = tháng này, -1 = tháng trước... Tháng hiện tại thì kẹp ngày cuối = hôm nay.
@@ -469,7 +507,7 @@ export default function ReviewsTab() {
         STT: i + 1,
         'Sàn': r.platform === 'shopee' ? 'Shopee' : 'TikTok',
         'Shop': r.shop,
-        'Brand': brandOf(r.shop),
+        'Brand': r.brand,
         'Sản phẩm': r.productName,
         'Phân loại (SKU)': r.sku,
         'Sao': r.star,
@@ -480,6 +518,7 @@ export default function ReviewsTab() {
         'Ngày': fmtDate(r.date),
         'Đã phản hồi': r.hasReply ? 'x' : '',
         'Phân loại lý do': meta.reason_category || '',
+        'Phân loại SP (CS)': meta.product_category || '',
         'Trạng thái xử lý': meta.handle_status === 'da_xu_ly' ? 'Đã xử lý' : 'Chưa xử lý',
         'Đã sửa đánh giá': meta.fixed_status === 'da_sua_5' ? '5 sao' : meta.fixed_status === 'da_sua_4' ? '4 sao' : '',
       };
@@ -593,10 +632,10 @@ export default function ReviewsTab() {
             {[5, 4, 3, 2, 1].map(star => {
               const count = stats.dist[star];
               const pct = stats.total ? (count / stats.total) * 100 : 0;
-              const isActive = starFilter === star;
+              const isActive = starSel.includes(star);
               return (
                 <div key={star}
-                  onClick={() => { setStarFilter(starFilter === star ? 0 : star); setPage(1); }}
+                  onClick={() => toggleStar(star)}
                   style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', borderRadius: 8, cursor: 'pointer', background: isActive ? STAR_COLORS[star] + '14' : 'transparent', transition: 'background 0.15s', marginBottom: 4 }}>
                   <span style={{ width: 36, fontSize: '0.82rem', fontWeight: 700, color: STAR_COLORS[star] }}>{star} ★</span>
                   <div style={{ flex: 1, height: 14, background: '#f1f5f9', borderRadius: 7, overflow: 'hidden' }}>
@@ -607,10 +646,10 @@ export default function ReviewsTab() {
                 </div>
               );
             })}
-            {starFilter > 0 && (
+            {starSel.length > 0 && (
               <div style={{ marginTop: 8, fontSize: '0.72rem', color: '#ff6a2c', fontWeight: 600, cursor: 'pointer' }}
-                onClick={() => { setStarFilter(0); setPage(1); }}>
-                ✕ Bỏ lọc {starFilter} sao
+                onClick={() => { setStarSel([]); setPage(1); }}>
+                ✕ Bỏ lọc {starSel.slice().sort().join('-')} sao (bấm nhiều mức để chọn cùng lúc)
               </div>
             )}
           </div>
@@ -795,8 +834,8 @@ export default function ReviewsTab() {
               const replyPct = s.total ? ((s.replied / s.total) * 100).toFixed(0) : 0;
               return (
                 <div key={s.key}
-                  onClick={() => { setShopFilter(shopFilter === s.shop ? 'all' : s.shop); setPage(1); focusReviews(); }}
-                  style={{ padding: '14px 16px', borderRadius: 10, background: shopFilter === s.shop ? '#fff7ed' : '#f8fafc', border: `1.5px solid ${shopFilter === s.shop ? '#fed7aa' : '#e5e7eb'}`, cursor: 'pointer', transition: 'all 0.15s' }}>
+                  onClick={() => { toggleShop(`${s.platform}-${s.sellerId}`); focusReviews(); }}
+                  style={{ padding: '14px 16px', borderRadius: 10, background: shopSel.includes(`${s.platform}-${s.sellerId}`) ? '#fff7ed' : '#f8fafc', border: `1.5px solid ${shopSel.includes(`${s.platform}-${s.sellerId}`) ? '#fed7aa' : '#e5e7eb'}`, cursor: 'pointer', transition: 'all 0.15s' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: '0.72rem', padding: '2px 7px', borderRadius: 5, fontWeight: 700, background: s.platform === 'shopee' ? '#fff7ed' : '#f8fafc', color: s.platform === 'shopee' ? '#ff6a2c' : '#0f172a', border: `1px solid ${s.platform === 'shopee' ? '#fed7aa' : '#e5e7eb'}` }}>
@@ -829,10 +868,10 @@ export default function ReviewsTab() {
               );
             })}
           </div>
-          {shopFilter !== 'all' && (
+          {shopSel.length > 0 && (
             <div style={{ marginTop: 10, fontSize: '0.72rem', color: '#ff6a2c', fontWeight: 600, cursor: 'pointer' }}
-              onClick={() => { setShopFilter('all'); setPage(1); }}>
-              ✕ Bỏ lọc shop "{shopFilter}"
+              onClick={() => { setShopSel([]); setPage(1); }}>
+              ✕ Bỏ lọc {shopSel.length} gian đang chọn (bấm nhiều thẻ để chọn cùng lúc)
             </div>
           )}
         </div>
@@ -933,20 +972,35 @@ export default function ReviewsTab() {
           </div>
 
           <div style={{ display: 'flex', gap: 4 }}>
-            <button onClick={() => { setStarFilter(0); setPage(1); }} style={starFilterBtn(0)}>Tất cả</button>
+            <button onClick={() => { setStarSel([]); setPage(1); }} style={starFilterBtn(0)}>Tất cả</button>
             {[5, 4, 3, 2, 1].map(s => (
-              <button key={s} onClick={() => { setStarFilter(starFilter === s ? 0 : s); setPage(1); }} style={starFilterBtn(s)}>
+              <button key={s} onClick={() => toggleStar(s)} style={starFilterBtn(s)} title="Bấm nhiều mức để lọc cùng lúc (vd 1+2+3★)">
                 {s}★
               </button>
             ))}
+            <button onClick={() => { setStarSel([1, 2, 3]); setPage(1); }}
+              style={{ ...btnBase, padding: '6px 12px', fontSize: '0.78rem', background: '#fef2f2', color: '#ef4444', borderColor: '#fecaca', fontWeight: 800 }}
+              title="Chọn nhanh toàn bộ đánh giá xấu">1-2-3★</button>
           </div>
 
-          <select value={shopFilter} onChange={e => { setShopFilter(e.target.value); setPage(1); }}
-            style={{ padding: '8px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.82rem', fontFamily: 'inherit', color: '#0f172a', background: '#fff', cursor: 'pointer' }}>
-            {shopList.map(s => (
-              <option key={s} value={s}>{s === 'all' ? 'Shop: Tất cả' : s}</option>
-            ))}
-          </select>
+          {/* CHỌN NHIỀU GIAN — tách theo sàn nên "Shopee Milaganics" không kéo theo "TikTok Milaganics" */}
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.76rem', color: '#94a3b8', fontWeight: 700 }}>Gian:</span>
+            <button onClick={() => { setShopSel([]); setPage(1); }}
+              style={{ ...btnBase, padding: '5px 10px', fontSize: '0.74rem', background: shopSel.length === 0 ? '#fff7ed' : '#fff', color: shopSel.length === 0 ? '#ff6a2c' : '#94a3b8', borderColor: shopSel.length === 0 ? '#fed7aa' : '#e5e7eb', fontWeight: shopSel.length === 0 ? 800 : 600 }}>
+              Tất cả
+            </button>
+            {shopList.map(s => {
+              const on = shopSel.includes(s.key);
+              return (
+                <button key={s.key} onClick={() => toggleShop(s.key)}
+                  style={{ ...btnBase, padding: '5px 10px', fontSize: '0.74rem', background: on ? '#fff7ed' : '#fff', color: on ? '#ff6a2c' : '#64748b', borderColor: on ? '#fed7aa' : '#e5e7eb', fontWeight: on ? 800 : 600 }}
+                  title={`${s.platform === 'shopee' ? 'Shopee' : 'TikTok'} · ${s.label}`}>
+                  {s.platform === 'shopee' ? '🟠' : '⬛'} {s.label}
+                </button>
+              );
+            })}
+          </div>
 
           <select value={replyFilter} onChange={e => { setReplyFilter(e.target.value); setPage(1); }}
             style={{ padding: '8px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.82rem', fontFamily: 'inherit', color: '#0f172a', background: '#fff', cursor: 'pointer' }}>
@@ -1014,7 +1068,6 @@ export default function ReviewsTab() {
                   <th style={{ ...thStyle, minWidth: 200 }}>Nội dung</th>
                   <th style={{ ...thStyle, width: 100 }}>Người dùng</th>
                   <th style={{ ...thStyle, width: 120 }}>Mã đơn</th>
-                  <th style={{ ...thStyle, width: 100 }}>ID người dùng</th>
                   <th style={{ ...thStyle, width: 90, textAlign: 'center' }}>Ngày</th>
                   <th style={{ ...thStyle, width: 55, textAlign: 'center' }}>Reply</th>
                   <th style={{ ...thStyle, width: 190 }}>🏷️ CSKH xử lý</th>
@@ -1101,10 +1154,6 @@ export default function ReviewsTab() {
                       <td style={{ ...tdStyle, fontSize: '0.72rem', fontFamily: 'monospace', color: '#475569' }} onClick={e => e.stopPropagation()}>
                         {r.orderCode ? <span style={{ userSelect: 'all' }} title="Bấm giữ để copy">{r.orderCode}</span> : <span style={{ color: '#cbd5e1' }}>—</span>}
                       </td>
-                      <td style={{ ...tdStyle, fontSize: '0.72rem', fontFamily: 'monospace', color: '#475569' }} onClick={e => e.stopPropagation()}>
-                        {r.userId ? <span style={{ userSelect: 'all' }} title="Bấm giữ để copy">{r.userId}</span>
-                          : <span style={{ color: '#cbd5e1' }} title="TikTok không cấp ID người dùng qua API">—</span>}
-                      </td>
                       <td style={{ ...tdStyle, textAlign: 'center', fontSize: '0.76rem', color: '#64748b' }}>{fmtDate(r.date)}</td>
                       <td style={{ ...tdStyle, textAlign: 'center' }}>
                         {r.hasReply
@@ -1123,6 +1172,12 @@ export default function ReviewsTab() {
                                 style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: '0.72rem', fontFamily: 'inherit', background: '#fff', cursor: 'pointer' }}>
                                 <option value="">— Phân loại lý do —</option>
                                 {REASON_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                              </select>
+                              <select value={meta.product_category || ''} onChange={e => updateMeta(r, { product_category: e.target.value || null })}
+                                style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: '0.72rem', fontFamily: 'inherit', background: '#fff', cursor: 'pointer' }}
+                                title="CS tự phân loại nhóm sản phẩm">
+                                <option value="">— Phân loại SP —</option>
+                                {PRODUCT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                               </select>
                               <div style={{ display: 'flex', gap: 5 }}>
                                 <button onClick={() => updateMeta(r, handled ? { handle_status: 'chua_xu_ly', handled_at: null } : { handle_status: 'da_xu_ly', handled_at: new Date().toISOString() })}
