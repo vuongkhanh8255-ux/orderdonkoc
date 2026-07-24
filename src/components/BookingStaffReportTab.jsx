@@ -318,7 +318,7 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
   const [det, setDet] = useState(null);
   const [loadingDet, setLoadingDet] = useState(true);
   // ── TỰ GỠ TAG (Khánh 15/7): mỗi account chỉ được tự gỡ KOC của ĐÚNG tên mình (r.ten_nhansu === currentUser.staff).
-  //    seeAll (Thu Thảo/Minh Thảo/Hoàng Vy) coi được panel người khác nhưng KHÔNG gỡ được — chỉ gỡ của chính mình.
+  //    (Khánh 23/7: Thu Thảo/Minh Thảo/Hoàng Vy đã bỏ seeAll -> giới hạn như booking khác, chỉ thấy & gỡ của mình.)
   //    admin gỡ được mọi nơi. Video/GMV đã tính trước đó GIỮ NGUYÊN — gỡ chỉ ngưng theo dõi từ giờ về sau.
   const canRemove = currentUser?.role === 'admin' || (currentUser?.staff && currentUser.staff.trim() === (r.ten_nhansu || '').trim());
   const [removingKey, setRemovingKey] = useState(null);

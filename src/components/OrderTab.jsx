@@ -434,7 +434,7 @@ const OrderTab = ({ currentUser } = {}) => {
     } = useAppData();
 
     // ── KHÓA NHÂN SỰ theo account (Khánh 14/7): account cá nhân chỉ order + coi đơn dưới TÊN MÌNH.
-    //    Trừ 3 sếp nhóm có seeAll (Thu Thảo/Minh Thảo/Hoàng Vy) → coi HẾT + chọn tên bất kỳ như cũ.
+    //    Chỉ account có cờ seeAll mới coi HẾT + chọn tên bất kỳ (Khánh 23/7: không còn account nào bật cờ này).
     const lockedStaff = (currentUser?.staff && !currentUser?.seeAll) ? currentUser.staff : null;
     const lockedStaffId = useMemo(() => {
         if (!lockedStaff) return null;
