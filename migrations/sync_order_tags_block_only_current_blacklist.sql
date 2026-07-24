@@ -1,11 +1,15 @@
--- 24/7/2026 — Khánh: bỏ cooldown 30 ngày cho ca GỠ VÌ QUÁ HẠN nợ clip.
--- Chỉ blacklist / admin gỡ / từ chối / nhân sự gỡ tay mới bị khóa gắn lại 30 ngày.
--- KOC bị gỡ "quá hạn" mà order lại là được gắn tag lại NGAY.
--- Nhận diện "quá hạn" qua actor chứa chữ 'quá hạn':
---   auto (quá hạn), admin (tự gỡ quá hạn), <staff> (tự gỡ quá hạn)...
--- Thay đổi DUY NHẤT so với bản cũ nằm ở nhánh (A) elig: thêm điều kiện
---   and coalesce(h.actor,'') not ilike '%quá hạn%'
--- (toàn văn hàm giữ nguyên phần B/C; xem DB để lấy bản mới nhất nếu có sửa tiếp).
+-- 24/7/2026 (Khánh chốt) — LUẬT GẮN LẠI TAG:
+--   • Blacklist  → KHÔNG cho gắn. Chỉ chặn khi kênh ĐANG nằm trong bảng koc_blacklist
+--                  (gỡ khỏi blacklist rồi thì thành KOC thường, order lại được tag lại).
+--   • Admin / nhân sự gỡ tay / từ chối / quá hạn nợ clip → order LẠI là gắn lại BÌNH THƯỜNG.
+--     (BỎ HẲN cooldown 30 ngày cũ.)
+--
+-- LƯU Ý interplay với trigger `trg_block_zombie_assignment` trên koc_brand_assignments:
+--   trigger bỏ qua insert nếu có lần 'remove' created_at > NEW.assigned_at (theo NGÀY order).
+--   => Tự động ép đúng nghĩa "phải ORDER LẠI (sau khi bị gỡ) mới được tag lại":
+--      - đơn gần nhất SAU ngày gỡ  → tag lại (đúng).
+--      - bị gỡ sau đơn cuối, chưa order lại → CHƯA tag (đúng, chờ order mới).
+--   Không cần sửa trigger; nó là guard thời gian, còn chặn theo LOẠI (blacklist) nằm ở hàm dưới.
 
 CREATE OR REPLACE FUNCTION public.sync_order_tags(p_days integer DEFAULT 30)
  RETURNS integer
@@ -32,15 +36,12 @@ begin
   ) x where x.staff_name <> ''
   order by uname, brand_name, adate desc;
 
-  -- (A) INSERT tag MỚI: cooldown 30 ngày CHỈ tính lần gỡ blacklist/admin/nhân sự/từ chối.
-  --     Gỡ vì QUÁ HẠN (actor chứa 'quá hạn') KHÔNG khóa → order lại là gắn lại ngay.
+  -- (A) INSERT tag MỚI: chưa có tag brand đó + KÊNH KHÔNG đang blacklist. Không còn cooldown 30 ngày.
   with elig as (
     select c.* from _cand c
     where not exists (select 1 from koc_brand_assignments a where a.koc_id = c.uname and a.brand_name = c.brand_name)
-      and not exists (select 1 from koc_assignment_history h
-                       where h.koc_id = c.uname and h.brand_name = c.brand_name
-                         and h.action = 'remove' and h.created_at >= now() - interval '30 days'
-                         and coalesce(h.actor,'') not ilike '%quá hạn%')
+      and not exists (select 1 from koc_blacklist bl
+                       where lower(regexp_replace(bl.id_kenh,'^@','')) = c.uname)
   ),
   ins as (
     insert into koc_brand_assignments (koc_id, brand_name, staff_name, assigned_at, last_order_at, updated_at, status, approved_by, approved_at)
