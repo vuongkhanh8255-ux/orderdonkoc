@@ -1,23 +1,94 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
 
 const STAR_COLORS = { 5: '#22c55e', 4: '#84cc16', 3: '#eab308', 2: '#ff7a30', 1: '#ef4444' };
 const PAGE_SIZE = 20;
 
 // ── Module 1 CSKH: phân loại lý do + trạng thái xử lý + đã sửa đánh giá (lưu ở bảng review_cs_meta) ──
-const REASON_CATEGORIES = ['Chê sản phẩm', 'Kích ứng / Dị ứng', 'Không hiệu quả', 'Giao hàng chậm', 'Sai hàng', 'Thiếu hàng', 'Đóng gói', 'Shipper', 'Không nhận xét'];
+const REASON_CATEGORIES = ['Chê sản phẩm', 'Lỗi sản phẩm', 'Kích ứng / Dị ứng', 'Không hiệu quả', 'Giao hàng chậm', 'Sai hàng', 'Thiếu hàng', 'Đóng gói', 'Shipper', 'Spam', 'Hiểu nhầm', 'Không nhận xét'];
 const FIXED_OPTIONS = [{ v: 'chua_sua', l: 'Chưa sửa' }, { v: 'da_sua_4', l: 'Đã sửa 4★' }, { v: 'da_sua_5', l: 'Đã sửa 5★' }];
+// PHÂN LOẠI SẢN PHẨM — danh sách CS gửi 22/7 (lưu vào review_cs_meta.product_category).
+// >>> Thêm/bớt/sửa phân loại thì CHỈ cần sửa mảng này, không đụng chỗ nào khác. <<<
+const PRODUCT_CATEGORIES = [
+  'DARK NIGHT', 'BE LOVER', 'BLINDED LOVE', 'LOVE WINS', 'SUNSET', 'HIDE N SEEK', 'STOP N STARE',
+  'FUNKY FRESH', 'PARADISE', 'ĐỘC LẬP', 'TỰ DO', 'HẠNH PHÚC', 'CARE FREE', 'IRICH', 'TALK2MUCH',
+  'MONEY HONEY', 'PHÊFAIRY', 'SAYDERELLA', 'MÊMAND', 'AURA TEARS', 'BLACK QUEEN', 'DARK VELVET',
+  'GAME ON', 'FREE FLOW', 'SWIFT MOVE', 'FRIEND ZONE', 'LOFI', 'SHAYMEN', '18 ANOTHER TOUCH',
+  '18 SCANDAL LUST', 'LOTION REALSTEEL', 'SERUM STANDARD', 'SERUM ULTRA', 'NƯỚC HOA REVOLT',
+  'NƯỚC HOA SILENT', 'LIPCERIN BLOOM', 'LIPCERIN VITA', 'MẶT NẠ ĐẬU NÀNH', 'MẶT NẠ ĐẬU ĐỎ',
+  'SCRUB MÔI MASUBE', 'GOOD CARE', 'GOOD MOOD', 'GOOD HUG', 'MUỐI TINH THẦN', 'MUỐI TÀI LỘC',
+  'MUỐI TÌNH YÊU', 'GEL NHA ĐAM B5', 'GEL NHA ĐAM', 'SCRUB NÁCH DÂU TẰM', 'SCRUB NÁCH HẠNH NHÂN',
+  'LOVE OIL', 'CHILL OIL', 'SCRUB HẠNH NHÂN', 'DẦU OLIU BHA', 'BỘT Ủ TRẮNG', 'XỊT BƯỞI',
+  'TONER HOA CÚC NEW', 'TẨY TRANG', 'SRM HOA CÚC', 'SUNKISSED', 'SERUM SACHI', 'SCRUB MUỐI HỒNG',
+  'SCRUB AHA - BHA', 'MẶT NẠ TRÀM TRÀ', 'MẶT NẠ HOA CÚC', 'GỘI BƯỞI', 'XẢ BƯỞI', 'BỘT MẶT NẠ',
+  'BODY OIL', 'SON DƯỠNG', 'Ủ BƯỞI',
+];
 
+// (21/7/2026) SỬA MAP SAI: 341325550 + 831509831 trước đây bị ghi nhầm là "Milaganics FBS/SPA",
+// thực tế là 2 gian eHerb (đối chiếu shop_name trong shopee_orders: "eHerb Việt Nam" 29k đơn,
+// "eHerb Hồ Chí Minh" 4.3k đơn) -> vừa mất tên gian, vừa đếm nhầm đánh giá eHerb sang brand Milaganics.
 const SHOP_MAP = {
-  '1031859035': 'Bodymiss', '1243148826': 'Milaganics', '341325550': 'Milaganics FBS',
-  '831509831': 'Milaganics SPA', '1017289279': 'Moaw Moaws',
+  // Shopee (seller_id ngắn)
+  '1031859035': 'Bodymiss', '1243148826': 'Milaganics',
+  '341325550': 'eHerb', '831509831': 'eHerb HCM',
+  '1017289279': 'Moaw Moaws', '1616999364': 'Masube',
+  // TikTok (seller_id dài)
   '7495107349171898427': 'Bodymiss', '7494529979361168222': 'eHerb',
   '7495838925500090511': 'eHerb HCM', '7495831977917385095': 'Moaw Moaws',
   '7494813818973817115': 'Milaganics', '7494251668499498533': 'Healmii',
+  '7496180170889726491': 'Real Steel',
 };
 const shopName = (id) => SHOP_MAP[id] || id;
-// Brand = tên shop bỏ hậu tố sàn/loại (eHerb HCM→eHerb, Milaganics FBS→Milaganics, …)
+// Brand theo GIAN = tên shop bỏ hậu tố sàn/loại (eHerb HCM→eHerb) — chỉ dùng làm phương án dự phòng.
 const brandOf = (shop) => (shop || '').replace(/\s+(FBS|SPA|HCM|Mall|MP|Mp)\b.*$/i, '').trim() || (shop || '—');
+
+// (22/7) BRAND suy từ TÊN SẢN PHẨM — theo CS: "brand BODYMISS là nhiều shop bán, lọc brand là ra
+// hết các đánh giá chứ không cần lọc theo từng shop". Tên SP không nhận ra brand nào thì mới
+// rơi về brand của gian bán. Thêm brand mới -> thêm 1 dòng vào BRAND_KEYS.
+const BRAND_KEYS = [
+  ['BODYMISS', 'BODYMISS'], ['BODY MISS', 'BODYMISS'],
+  ['MILAGANICS', 'MILAGANICS'], ['MILAGANIC', 'MILAGANICS'],
+  ['EHERB', 'EHERB'], ['E HERB', 'EHERB'],
+  ['MOAW', 'MOAW MOAWS'],
+  ['HEALMII', 'HEALMII'], ['HEALMI', 'HEALMII'],
+  ['REAL STEEL', 'REAL STEEL'], ['REALSTEEL', 'REAL STEEL'],
+  ['MASUBE', 'MASUBE'],
+];
+const noAccent = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toUpperCase();
+const brandOfProduct = (productName, fallbackShop) => {
+  const s = noAccent(productName);
+  for (const [key, brand] of BRAND_KEYS) if (s.includes(key)) return brand;
+  const fb = brandOf(fallbackShop || '');
+  return fb && fb !== '—' ? noAccent(fb) : '(không rõ)';
+};
+
+// TỰ GỢI Ý phân loại SP từ tên SP + phân loại/mẫu (SKU) — để CS khỏi phải điền tay hàng ngàn dòng.
+// CS chọn tay thì giá trị CS LUÔN được ưu tiên hơn gợi ý này.
+// Chuẩn hoá: bỏ dấu, "&"/"and" -> "N" (sàn ghi "HIDE & SEEK", CS ghi "HIDE N SEEK"),
+// mọi ký tự lạ -> khoảng trắng (nên "SCRUB AHA - BHA" khớp được "Scrub AHA/BHA").
+const catNorm = (s) => noAccent(s || '')
+  .replace(/&/g, ' N ').replace(/\bAND\b/g, ' N ')
+  .replace(/[^A-Z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+// Tên khác của cùng 1 SP mà sàn hay đặt (trái phải: tên trên sàn -> phân loại của CS)
+const CAT_ALIASES = [['GEL LO HOI', 'GEL NHA ĐAM']];
+// Vòng 1: khớp NGUYÊN CỤM (dài trước, nên "GEL NHA ĐAM B5" không bị "GEL NHA ĐAM" nuốt)
+const CAT_PHRASE = [
+  ...PRODUCT_CATEGORIES.map(c => [catNorm(c), c]),
+  ...CAT_ALIASES.map(([a, c]) => [catNorm(a), c]),
+].sort((a, b) => b[0].length - a[0].length);
+// Vòng 2: khớp ĐỦ TỪ dù nằm rời nhau ("Dầu oliu dưỡng da BHA" -> DẦU OLIU BHA).
+// Chỉ nhận phân loại từ 2 chữ trở lên và mỗi chữ >= 3 ký tự, tránh "TỰ DO"/"Ủ BƯỞI" khớp bừa.
+const CAT_TOKENS = PRODUCT_CATEGORIES
+  .map(c => [c, catNorm(c).split(' ')])
+  .filter(([, t]) => t.length >= 2 && t.every(w => w.length >= 3))
+  .sort((a, b) => b[1].length - a[1].length);
+const autoProductCategory = (productName, sku) => {
+  const s = ` ${catNorm(`${productName || ''} ${sku || ''}`)} `;
+  for (const [needle, cat] of CAT_PHRASE) if (s.includes(` ${needle} `)) return cat;
+  for (const [cat, tokens] of CAT_TOKENS) if (tokens.every(w => s.includes(` ${w} `))) return cat;
+  return '';
+};
 
 function fmtDate(iso) {
   if (!iso) return '—';
@@ -39,8 +110,10 @@ const toYmd = (d) => {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 };
 
-// Shop bị loại khỏi dashboard đánh giá (theo yêu cầu): Milaganics SPA (831509831) + Milaganics FBS (341325550)
-const EXCLUDED_SELLERS = new Set(['831509831', '341325550']);
+// (21/7/2026) BỎ ẩn 341325550 + 831509831: HOÁ RA đó là 2 gian eHerb Shopee, trước bị map nhầm tên
+// thành "Milaganics FBS/SPA" rồi ẩn oan -> đúng cái "thiếu data eHerb Shopee" CS kêu (1.346 đánh giá T7).
+// Muốn ẩn gian nào thì thêm seller_id vào Set này.
+const EXCLUDED_SELLERS = new Set([]);
 
 // Ngày review → 'YYYY-MM-DD' an toàn (ISO / ms / unix-giây đều xử lý được, không parse được thì trả '')
 const reviewYmd = (d) => {
@@ -75,6 +148,9 @@ function normalizeChunk(data) {
         replyText: r.reply?.comment || '',
         sellerId: r.seller_id,
         shop: shopName(r.seller_id),
+        shopKey: `shopee-${r.seller_id}`,
+        brand: brandOfProduct(r.productName || '', shopName(r.seller_id)),
+        autoCat: autoProductCategory(r.productName || '', r.modelName || ''),
         images: Array.isArray(r.images)
           ? r.images.map(h => (typeof h === 'string' && h.startsWith('http')) ? h : `https://cf.shopee.vn/file/${h}`)
           : [],
@@ -102,6 +178,9 @@ function normalizeChunk(data) {
         replyText: r.reply_text || '',
         sellerId: r.seller_id,
         shop: shopName(r.seller_id),
+        shopKey: `tiktok-${r.seller_id}`,
+        brand: brandOfProduct(r.product_info?.product_name || '', shopName(r.seller_id)),
+        autoCat: autoProductCategory(r.product_info?.product_name || '', r.product_info?.sku_specification || ''),
         images: [], // TikTok chỉ trả cờ has_imgs, không kèm URL ảnh review
       });
     }
@@ -122,9 +201,13 @@ export default function ReviewsTab() {
   const [hasFetched, setHasFetched] = useState(false);
   const [progress, setProgress] = useState('');
 
-  const [starFilter, setStarFilter] = useState(0);
-  const [shopFilter, setShopFilter] = useState('all');
+  // (22/7) CHỌN NHIỀU cùng lúc: [] = tất cả. starSel = [1,2,3] lọc 1 lần; shopSel theo shopKey
+  // (`sàn-sellerId`) nên chọn "Shopee Milaganics" KHÔNG kéo theo "TikTok Milaganics" nữa.
+  const [starSel, setStarSel] = useState([]);
+  const [shopSel, setShopSel] = useState([]);
   const [brandFilter, setBrandFilter] = useState('all');
+  const toggleStar = (s) => { setStarSel(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]); setPage(1); };
+  const toggleShop = (k) => { setShopSel(prev => prev.includes(k) ? prev.filter(x => x !== k) : [...prev, k]); setPage(1); };
   const [searchText, setSearchText] = useState('');
   const [replyFilter, setReplyFilter] = useState('all');
   const [sortBy, setSortBy] = useState('date_desc');
@@ -136,6 +219,8 @@ export default function ReviewsTab() {
   const [reasonFilter, setReasonFilter] = useState('all');
   const [handleFilter, setHandleFilter] = useState('all');
   const [fixedFilter, setFixedFilter] = useState('all');
+  const [prodNameFilter, setProdNameFilter] = useState('all');   // lọc theo SẢN PHẨM
+  const [catFilter, setCatFilter] = useState('all');             // lọc theo PHÂN LOẠI SP (danh sách CS)
 
   const didMount = useRef(false);
   const reviewsRef = useRef(null);
@@ -177,11 +262,15 @@ export default function ReviewsTab() {
         const data = await res.json();
         if (!data.success) throw new Error(data.error || 'Lỗi tải dữ liệu');
         for (const r of normalizeChunk(data)) byId.set(r.id, r);
+        // NHẢ luồng cho trình duyệt "thở" giữa các đợt: mỗi đợt ~5-6MB JSON, tải cả tháng ~28MB.
+        // Không nhả thì Chrome báo "Trang không phản hồi" dù thực ra vẫn đang chạy.
+        setProgress(`Đã tải ${byId.size.toLocaleString('vi-VN')} đánh giá (đợt ${i + 1}/${chunks.length})...`);
+        await new Promise((r) => setTimeout(r, 0));
       }
 
       setReviews([...byId.values()]);
       setPage(1);
-      setStarFilter(0);
+      setStarSel([]);
       setProductFilter(null);
       setHasFetched(true);
     } catch (err) {
@@ -198,20 +287,23 @@ export default function ReviewsTab() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Tải nhãn CSKH cho các đánh giá đang hiển thị (chia đợt 300 tránh URL quá dài)
+  // Tải nhãn CSKH 1 LẦN lúc vào trang. Bảng review_cs_meta chỉ chứa review ĐÃ gán nhãn (nhỏ),
+  // nên tải hết theo trang nhẹ hơn nhiều so với chia đợt .in() theo hàng ngàn id (trước gây treo).
   useEffect(() => {
-    if (!reviews.length) return;
     let cancelled = false;
     (async () => {
-      const ids = reviews.map(r => r.id);
       const m = {};
-      for (let i = 0; i < ids.length; i += 300) {
-        const { data } = await supabase.from('review_cs_meta').select('*').in('review_id', ids.slice(i, i + 300));
-        (data || []).forEach(x => { m[x.review_id] = x; });
+      for (let from = 0; from < 50000; from += 1000) {
+        const { data, error } = await supabase.from('review_cs_meta').select('*').range(from, from + 999);
+        if (error || !data || data.length === 0) break;
+        data.forEach(x => { m[x.review_id] = x; });
+        if (data.length < 1000) break;
+        await new Promise((r) => setTimeout(r, 0));
       }
       if (!cancelled) setMetaMap(m);
     })().catch(() => {});
     return () => { cancelled = true; };
-  }, [reviews]);
+  }, []);
 
   // Lưu 1 nhãn CSKH cho 1 đánh giá → upsert review_cs_meta (optimistic)
   const updateMeta = async (r, patch) => {
@@ -303,13 +395,15 @@ export default function ReviewsTab() {
       .sort((a, b) => b.total - a.total);
   }, [scoped]);
 
+  // Danh sách GIAN tách theo sàn (shopKey duy nhất) — để chọn nhiều gian mà không dính nhầm sàn kia
   const shopList = useMemo(() => {
-    const set = new Set(reviews.map(r => r.shop));
-    return ['all', ...Array.from(set).sort()];
+    const m = new Map();
+    reviews.forEach(r => { if (!m.has(r.shopKey)) m.set(r.shopKey, { key: r.shopKey, label: r.shop, platform: r.platform }); });
+    return Array.from(m.values()).sort((a, b) => a.label.localeCompare(b.label) || a.platform.localeCompare(b.platform));
   }, [reviews]);
 
   const brandList = useMemo(() => {
-    const set = new Set(reviews.map(r => brandOf(r.shop)));
+    const set = new Set(reviews.map(r => r.brand));   // brand theo TÊN SẢN PHẨM (gộp mọi gian)
     return ['all', ...Array.from(set).sort()];
   }, [reviews]);
 
@@ -317,7 +411,7 @@ export default function ReviewsTab() {
   const brandStats = useMemo(() => {
     const map = {};
     for (const r of scoped) {
-      const brand = brandOf(r.shop);
+      const brand = r.brand;
       if (!map[brand]) map[brand] = { brand, total: 0, sum: 0, replied: 0, dist: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, shops: new Set() };
       const m = map[brand];
       m.total++; m.sum += r.star; m.dist[r.star]++; if (r.hasReply) m.replied++; m.shops.add(r.shop);
@@ -340,25 +434,61 @@ export default function ReviewsTab() {
   // Top phân loại lý do (CSKH)
   const topReasons = useMemo(() => Object.entries(stats.byReason).sort((a, b) => b[1] - a[1]), [stats.byReason]);
 
+  // Danh sách SẢN PHẨM + PHÂN LOẠI (SKU) cho bộ lọc CS — xếp theo SỐ ĐÁNH GIÁ giảm dần
+  // và cắt 300 mục: lọc cả tháng có thể ra hàng nghìn mục, render hết sẽ làm đơ trang.
+  const topOf = (getKey) => {
+    const m = {};
+    scoped.forEach(r => { const k = getKey(r); if (k) m[k] = (m[k] || 0) + 1; });
+    return ['all', ...Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 300).map(([k]) => k)];
+  };
+  const prodList = useMemo(() => topOf(r => r.productName), [scoped]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Phân loại SP dùng để lọc + thống kê: CS chọn tay LUÔN thắng gợi ý tự động
+  const catOf = (r) => metaMap[r.id]?.product_category || r.autoCat || '';
+  // Chỉ hiện trong dropdown những phân loại THỰC SỰ có đánh giá trong kỳ (kèm số lượng)
+  const catList = useMemo(() => {
+    const m = {};
+    scoped.forEach(r => { const k = catOf(r); if (k) m[k] = (m[k] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  }, [scoped, metaMap]);                                                // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── TOP XẤU (1-3★) — số CS cần để report ──
+  const badScoped = useMemo(() => scoped.filter(r => r.star > 0 && r.star <= 3), [scoped]);
+  const topBadReasons = useMemo(() => {
+    const m = {};
+    badScoped.forEach(r => { const k = metaMap[r.id]?.reason_category; if (k) m[k] = (m[k] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  }, [badScoped, metaMap]);
+  const topBadCat = useMemo(() => {
+    const m = {};
+    badScoped.forEach(r => { const k = catOf(r) || '(chưa phân loại)'; m[k] = (m[k] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  }, [badScoped, metaMap]);                                             // eslint-disable-line react-hooks/exhaustive-deps
+  const chuaPhanLoai = useMemo(() => badScoped.filter(r => !metaMap[r.id]?.reason_category).length, [badScoped, metaMap]);
+
   // ── Filtered reviews ──
   const filtered = useMemo(() => {
     let result = [...scoped]; // đã lọc sàn + ngày
-    if (brandFilter !== 'all') result = result.filter(r => brandOf(r.shop) === brandFilter);
-    if (shopFilter !== 'all') result = result.filter(r => r.shop === shopFilter);
+    if (brandFilter !== 'all') result = result.filter(r => r.brand === brandFilter);
+    if (shopSel.length) result = result.filter(r => shopSel.includes(r.shopKey));
     if (productFilter) result = result.filter(r => r.productId === productFilter.productId && r.platform === productFilter.platform);
-    if (starFilter > 0) result = result.filter(r => r.star === starFilter);
+    if (starSel.length) result = result.filter(r => starSel.includes(r.star));
     if (replyFilter === 'replied') result = result.filter(r => r.hasReply);
     if (replyFilter === 'unreplied') result = result.filter(r => !r.hasReply);
     if (reasonFilter !== 'all') result = result.filter(r => (metaMap[r.id]?.reason_category || '') === reasonFilter);
     if (handleFilter !== 'all') result = result.filter(r => (metaMap[r.id]?.handle_status || 'chua_xu_ly') === handleFilter);
     if (fixedFilter !== 'all') result = result.filter(r => (metaMap[r.id]?.fixed_status || 'chua_sua') === fixedFilter);
+    if (prodNameFilter !== 'all') result = result.filter(r => r.productName === prodNameFilter);
+    if (catFilter !== 'all') result = result.filter(r => (catOf(r) || '(chưa phân loại)') === catFilter);
     if (searchText) {
       const q = searchText.toLowerCase();
       result = result.filter(r =>
         r.productName.toLowerCase().includes(q) ||
         r.comment.toLowerCase().includes(q) ||
         r.userName.toLowerCase().includes(q) ||
-        r.sku.toLowerCase().includes(q)
+        r.sku.toLowerCase().includes(q) ||
+        String(r.orderCode || '').toLowerCase().includes(q) ||
+        String(r.userId || '').toLowerCase().includes(q)
       );
     }
     result.sort((a, b) => {
@@ -370,7 +500,7 @@ export default function ReviewsTab() {
       }
     });
     return result;
-  }, [scoped, brandFilter, shopFilter, productFilter, starFilter, replyFilter, reasonFilter, handleFilter, fixedFilter, searchText, sortBy, metaMap]);
+  }, [scoped, brandFilter, shopSel, productFilter, starSel, replyFilter, reasonFilter, handleFilter, fixedFilter, prodNameFilter, catFilter, searchText, sortBy, metaMap]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -393,14 +523,71 @@ export default function ReviewsTab() {
     };
   };
 
-  const starFilterBtn = (val) => ({
-    ...btnBase,
-    padding: '6px 12px',
-    fontSize: '0.78rem',
-    background: starFilter === val ? (val === 0 ? '#fff7ed' : (STAR_COLORS[val] + '18')) : '#fff',
-    color: starFilter === val ? (val === 0 ? '#ff6a2c' : STAR_COLORS[val]) : '#94a3b8',
-    borderColor: starFilter === val ? (val === 0 ? '#fed7aa' : STAR_COLORS[val]) : '#e5e7eb',
+  // val=0 là nút "Tất cả" (bật khi chưa chọn sao nào); còn lại bật khi sao đó nằm trong starSel
+  const starFilterBtn = (val) => {
+    const on = val === 0 ? starSel.length === 0 : starSel.includes(val);
+    return {
+      ...btnBase,
+      padding: '6px 12px',
+      fontSize: '0.78rem',
+      background: on ? (val === 0 ? '#fff7ed' : (STAR_COLORS[val] + '18')) : '#fff',
+      color: on ? (val === 0 ? '#ff6a2c' : STAR_COLORS[val]) : '#94a3b8',
+      borderColor: on ? (val === 0 ? '#fed7aa' : STAR_COLORS[val]) : '#e5e7eb',
+      fontWeight: on ? 800 : 600,
+    };
+  };
+
+  // Chọn nhanh TRỌN 1 THÁNG của năm nay (CS cần lọc cả tháng để chỉnh phân loại).
+  // Tháng đang chạy thì kẹp ngày cuối = hôm nay.
+  const curYear = new Date().getFullYear();
+  const curMonth = new Date().getMonth() + 1;
+  const pickMonthNum = (m) => {
+    const now = new Date();
+    const first = new Date(curYear, m - 1, 1);
+    const lastDay = new Date(curYear, m, 0);
+    const s = toYmd(first);
+    const e = toYmd(lastDay > now ? now : lastDay);
+    setStartDate(s); setEndDate(e); fetchReviews(s, e);
+  };
+  // Tô sáng nút tháng nào đang xem: từ ngày 1 và cùng nằm trong 1 tháng của năm nay
+  const activeMonth = (startDate.slice(0, 4) === String(curYear) && startDate.slice(8, 10) === '01'
+    && endDate.slice(0, 7) === startDate.slice(0, 7)) ? Number(startDate.slice(5, 7)) : 0;
+  const monthBtn = (on) => ({
+    ...btnBase, padding: '6px 0', width: 42, fontSize: '0.78rem', fontWeight: 800,
+    background: on ? '#ff6a2c' : '#fff', color: on ? '#fff' : '#64748b',
+    borderColor: on ? '#ff6a2c' : '#e5e7eb',
   });
+  const barLabel = { fontSize: '0.62rem', fontWeight: 800, color: '#94a3b8', letterSpacing: '0.5px', marginBottom: 4 };
+
+  // Xuất Excel ĐÚNG data đang lọc — kèm mã đơn / ID người dùng / phân loại lý do (CS khỏi report tay).
+  const exportXlsx = () => {
+    const rows = filtered.map((r, i) => {
+      const meta = metaMap[r.id] || {};
+      return {
+        STT: i + 1,
+        'Sàn': r.platform === 'shopee' ? 'Shopee' : 'TikTok',
+        'Shop': r.shop,
+        'Brand': r.brand,
+        'Sản phẩm': r.productName,
+        'Phân loại (SKU)': r.sku,
+        'Sao': r.star,
+        'Nội dung': r.comment,
+        'Người dùng': r.userName,
+        'ID người dùng': r.userId || '',
+        'Mã đơn': r.orderCode || '',
+        'Ngày': fmtDate(r.date),
+        'Đã phản hồi': r.hasReply ? 'x' : '',
+        'Phân loại lý do': meta.reason_category || '',
+        'Phân loại SP': meta.product_category || r.autoCat || '',
+        'Nguồn phân loại': meta.product_category ? 'CS chọn' : (r.autoCat ? 'Tự động' : ''),
+        'Trạng thái xử lý': meta.handle_status === 'da_xu_ly' ? 'Đã xử lý' : 'Chưa xử lý',
+        'Đã sửa đánh giá': meta.fixed_status === 'da_sua_5' ? '5 sao' : meta.fixed_status === 'da_sua_4' ? '4 sao' : '',
+      };
+    });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'DanhGia');
+    XLSX.writeFile(wb, `DanhGiaSan_${startDate}_den_${endDate}.xlsx`);
+  };
 
   return (
     <div style={{ fontFamily: "'Outfit', sans-serif", maxWidth: 1400 }}>
@@ -410,21 +597,25 @@ export default function ReviewsTab() {
           ⭐ Đánh giá sàn
         </h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', borderRadius: 10, border: '1.5px solid #e5e7eb', padding: '6px 12px' }}>
-            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-              style={{ border: 'none', outline: 'none', fontSize: '0.84rem', fontFamily: 'inherit', color: '#0f172a', fontWeight: 600, background: 'transparent' }} />
-            <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>→</span>
-            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
-              style={{ border: 'none', outline: 'none', fontSize: '0.84rem', fontFamily: 'inherit', color: '#0f172a', fontWeight: 600, background: 'transparent' }} />
+          {/* Bấm 1 phát ra TRỌN THÁNG — CS lọc theo tháng là chính, khỏi rê 2 ô ngày */}
+          <div>
+            <div style={barLabel}>THÁNG {curYear}</div>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {Array.from({ length: curMonth }, (_, i) => i + 1).map(m => (
+                <button key={m} onClick={() => pickMonthNum(m)} style={monthBtn(m === activeMonth)}
+                  title={`Trọn tháng ${m}/${curYear}`}>T{m}</button>
+              ))}
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {[7, 30, 60].map(d => (
-              <button key={d}
-                onClick={() => { const s = toYmd(new Date(Date.now() - (d - 1) * 86400000)); setStartDate(s); setEndDate(today); fetchReviews(s, today); }}
-                style={{ ...btnBase, padding: '6px 12px', fontSize: '0.78rem', background: '#fff', color: '#64748b', borderColor: '#e5e7eb' }}>
-                {d} ngày
-              </button>
-            ))}
+          <div>
+            <div style={barLabel}>TÙY CHỌN NGÀY</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', borderRadius: 10, border: '1.5px solid #e5e7eb', padding: '5px 12px' }}>
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+                style={{ border: 'none', outline: 'none', fontSize: '0.84rem', fontFamily: 'inherit', color: '#0f172a', fontWeight: 600, background: 'transparent' }} />
+              <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>→</span>
+              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
+                style={{ border: 'none', outline: 'none', fontSize: '0.84rem', fontFamily: 'inherit', color: '#0f172a', fontWeight: 600, background: 'transparent' }} />
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
             <button onClick={() => setPlatform('both')} style={platformBtn('both')}>Tất cả</button>
@@ -438,6 +629,11 @@ export default function ReviewsTab() {
           <button onClick={fetchReviews} disabled={loading}
             style={{ ...btnBase, background: loading ? '#d1d5db' : '#ff6a2c', color: '#fff', borderColor: loading ? '#d1d5db' : '#ff6a2c', boxShadow: loading ? 'none' : '0 4px 12px rgba(255,106,44,0.2)', minWidth: 120 }}>
             {loading ? '⏳ Đang tải...' : '🔍 Tải dữ liệu'}
+          </button>
+          <button onClick={exportXlsx} disabled={loading || filtered.length === 0}
+            style={{ ...btnBase, background: '#0f172a', color: '#fff', borderColor: '#0f172a', opacity: (loading || filtered.length === 0) ? 0.45 : 1 }}
+            title="Xuất đúng data đang lọc ra Excel (kèm mã đơn, ID người dùng, phân loại lý do)">
+            📥 Xuất Excel
           </button>
         </div>
       </div>
@@ -499,10 +695,10 @@ export default function ReviewsTab() {
             {[5, 4, 3, 2, 1].map(star => {
               const count = stats.dist[star];
               const pct = stats.total ? (count / stats.total) * 100 : 0;
-              const isActive = starFilter === star;
+              const isActive = starSel.includes(star);
               return (
                 <div key={star}
-                  onClick={() => { setStarFilter(starFilter === star ? 0 : star); setPage(1); }}
+                  onClick={() => toggleStar(star)}
                   style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', borderRadius: 8, cursor: 'pointer', background: isActive ? STAR_COLORS[star] + '14' : 'transparent', transition: 'background 0.15s', marginBottom: 4 }}>
                   <span style={{ width: 36, fontSize: '0.82rem', fontWeight: 700, color: STAR_COLORS[star] }}>{star} ★</span>
                   <div style={{ flex: 1, height: 14, background: '#f1f5f9', borderRadius: 7, overflow: 'hidden' }}>
@@ -513,10 +709,10 @@ export default function ReviewsTab() {
                 </div>
               );
             })}
-            {starFilter > 0 && (
+            {starSel.length > 0 && (
               <div style={{ marginTop: 8, fontSize: '0.72rem', color: '#ff6a2c', fontWeight: 600, cursor: 'pointer' }}
-                onClick={() => { setStarFilter(0); setPage(1); }}>
-                ✕ Bỏ lọc {starFilter} sao
+                onClick={() => { setStarSel([]); setPage(1); }}>
+                ✕ Bỏ lọc {starSel.slice().sort().join('-')} sao (bấm nhiều mức để chọn cùng lúc)
               </div>
             )}
           </div>
@@ -600,7 +796,7 @@ export default function ReviewsTab() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {topBad.map(p => (
                 <div key={p.key}
-                  onClick={() => { setProductFilter({ productId: p.productId, platform: p.platform, productName: p.productName }); setStarFilter(0); setPage(1); focusReviews(); }}
+                  onClick={() => { setProductFilter({ productId: p.productId, platform: p.platform, productName: p.productName }); setStarSel([]); setPage(1); focusReviews(); }}
                   style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: '#fff7f7', border: '1px solid #fee2e2', cursor: 'pointer' }}>
                   {p.productImage && <img src={p.productImage} alt="" style={{ width: 32, height: 32, borderRadius: 5, objectFit: 'cover', flexShrink: 0 }} onError={e => { e.target.style.display = 'none'; }} />}
                   <span style={{ flex: 1, fontSize: '0.8rem', fontWeight: 600, color: '#0f172a', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.productName}>
@@ -642,6 +838,55 @@ export default function ReviewsTab() {
           </div>
         )}
 
+        {/* ── TOP ĐÁNH GIÁ XẤU (1-3★) — số CS cần để report ── */}
+        {badScoped.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+            <div style={card}>
+              <h3 style={{ margin: '0 0 3px', fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>😡 Top LÝ DO bị đánh giá xấu <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '0.74rem' }}>(1-3★)</span></h3>
+              <p style={{ margin: '0 0 10px', fontSize: '0.72rem', color: '#94a3b8' }}>
+                {fmtNum(badScoped.length)} đánh giá xấu · {chuaPhanLoai > 0
+                  ? <b style={{ color: '#ef4444' }}>{fmtNum(chuaPhanLoai)} chưa gán lý do</b>
+                  : <b style={{ color: '#22c55e' }}>đã gán hết lý do 🎉</b>}
+              </p>
+              {topBadReasons.length === 0 ? (
+                <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Chưa gán lý do nào — gán ở cột “🏷️ CSKH xử lý” cuối bảng review.</div>
+              ) : topBadReasons.map(([reason, n]) => {
+                const pct = badScoped.length ? (n / badScoped.length * 100) : 0;
+                const active = reasonFilter === reason;
+                return (
+                  <div key={reason} onClick={() => { setReasonFilter(active ? 'all' : reason); setPage(1); focusReviews(); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 6px', borderRadius: 8, cursor: 'pointer', background: active ? '#fff7ed' : 'transparent' }}>
+                    <span style={{ flex: 1, fontSize: '0.82rem', fontWeight: active ? 800 : 600 }}>{reason}</span>
+                    <div style={{ width: 80, height: 12, background: '#f1f5f9', borderRadius: 6, overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: '#ef4444', borderRadius: 6, minWidth: n > 0 ? 3 : 0 }} />
+                    </div>
+                    <span style={{ width: 34, textAlign: 'right', fontSize: '0.82rem', fontWeight: 800, color: '#ef4444' }}>{n}</span>
+                    <span style={{ width: 44, textAlign: 'right', fontSize: '0.72rem', color: '#94a3b8' }}>{pct.toFixed(1)}%</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={card}>
+              <h3 style={{ margin: '0 0 3px', fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>📦 Top PHÂN LOẠI SP bị đánh giá xấu</h3>
+              <p style={{ margin: '0 0 10px', fontSize: '0.72rem', color: '#94a3b8' }}>Theo phân loại SP của CS — bấm để lọc review</p>
+              {topBadCat.map(([sku, n]) => {
+                const pct = badScoped.length ? (n / badScoped.length * 100) : 0;
+                const active = catFilter === sku;
+                return (
+                  <div key={sku} onClick={() => { setCatFilter(active ? 'all' : sku); setPage(1); focusReviews(); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 6px', borderRadius: 8, cursor: 'pointer', background: active ? '#fff7ed' : 'transparent' }}>
+                    <span style={{ flex: 1, fontSize: '0.8rem', fontWeight: active ? 800 : 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={sku}>{sku}</span>
+                    <div style={{ width: 80, height: 12, background: '#f1f5f9', borderRadius: 6, overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: '#f97316', borderRadius: 6, minWidth: n > 0 ? 3 : 0 }} />
+                    </div>
+                    <span style={{ width: 34, textAlign: 'right', fontSize: '0.82rem', fontWeight: 800, color: '#f97316' }}>{n}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* ── SHOP STATS ── */}
         <div style={{ ...card, marginBottom: 20 }}>
           <h3 style={{ margin: '0 0 14px', fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>
@@ -652,8 +897,8 @@ export default function ReviewsTab() {
               const replyPct = s.total ? ((s.replied / s.total) * 100).toFixed(0) : 0;
               return (
                 <div key={s.key}
-                  onClick={() => { setShopFilter(shopFilter === s.shop ? 'all' : s.shop); setPage(1); focusReviews(); }}
-                  style={{ padding: '14px 16px', borderRadius: 10, background: shopFilter === s.shop ? '#fff7ed' : '#f8fafc', border: `1.5px solid ${shopFilter === s.shop ? '#fed7aa' : '#e5e7eb'}`, cursor: 'pointer', transition: 'all 0.15s' }}>
+                  onClick={() => { toggleShop(`${s.platform}-${s.sellerId}`); focusReviews(); }}
+                  style={{ padding: '14px 16px', borderRadius: 10, background: shopSel.includes(`${s.platform}-${s.sellerId}`) ? '#fff7ed' : '#f8fafc', border: `1.5px solid ${shopSel.includes(`${s.platform}-${s.sellerId}`) ? '#fed7aa' : '#e5e7eb'}`, cursor: 'pointer', transition: 'all 0.15s' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: '0.72rem', padding: '2px 7px', borderRadius: 5, fontWeight: 700, background: s.platform === 'shopee' ? '#fff7ed' : '#f8fafc', color: s.platform === 'shopee' ? '#ff6a2c' : '#0f172a', border: `1px solid ${s.platform === 'shopee' ? '#fed7aa' : '#e5e7eb'}` }}>
@@ -686,10 +931,10 @@ export default function ReviewsTab() {
               );
             })}
           </div>
-          {shopFilter !== 'all' && (
+          {shopSel.length > 0 && (
             <div style={{ marginTop: 10, fontSize: '0.72rem', color: '#ff6a2c', fontWeight: 600, cursor: 'pointer' }}
-              onClick={() => { setShopFilter('all'); setPage(1); }}>
-              ✕ Bỏ lọc shop "{shopFilter}"
+              onClick={() => { setShopSel([]); setPage(1); }}>
+              ✕ Bỏ lọc {shopSel.length} gian đang chọn (bấm nhiều thẻ để chọn cùng lúc)
             </div>
           )}
         </div>
@@ -790,20 +1035,35 @@ export default function ReviewsTab() {
           </div>
 
           <div style={{ display: 'flex', gap: 4 }}>
-            <button onClick={() => { setStarFilter(0); setPage(1); }} style={starFilterBtn(0)}>Tất cả</button>
+            <button onClick={() => { setStarSel([]); setPage(1); }} style={starFilterBtn(0)}>Tất cả</button>
             {[5, 4, 3, 2, 1].map(s => (
-              <button key={s} onClick={() => { setStarFilter(starFilter === s ? 0 : s); setPage(1); }} style={starFilterBtn(s)}>
+              <button key={s} onClick={() => toggleStar(s)} style={starFilterBtn(s)} title="Bấm nhiều mức để lọc cùng lúc (vd 1+2+3★)">
                 {s}★
               </button>
             ))}
+            <button onClick={() => { setStarSel([1, 2, 3]); setPage(1); }}
+              style={{ ...btnBase, padding: '6px 12px', fontSize: '0.78rem', background: '#fef2f2', color: '#ef4444', borderColor: '#fecaca', fontWeight: 800 }}
+              title="Chọn nhanh toàn bộ đánh giá xấu">1-2-3★</button>
           </div>
 
-          <select value={shopFilter} onChange={e => { setShopFilter(e.target.value); setPage(1); }}
-            style={{ padding: '8px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.82rem', fontFamily: 'inherit', color: '#0f172a', background: '#fff', cursor: 'pointer' }}>
-            {shopList.map(s => (
-              <option key={s} value={s}>{s === 'all' ? 'Shop: Tất cả' : s}</option>
-            ))}
-          </select>
+          {/* CHỌN NHIỀU GIAN — tách theo sàn nên "Shopee Milaganics" không kéo theo "TikTok Milaganics" */}
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.76rem', color: '#94a3b8', fontWeight: 700 }}>Gian:</span>
+            <button onClick={() => { setShopSel([]); setPage(1); }}
+              style={{ ...btnBase, padding: '5px 10px', fontSize: '0.74rem', background: shopSel.length === 0 ? '#fff7ed' : '#fff', color: shopSel.length === 0 ? '#ff6a2c' : '#94a3b8', borderColor: shopSel.length === 0 ? '#fed7aa' : '#e5e7eb', fontWeight: shopSel.length === 0 ? 800 : 600 }}>
+              Tất cả
+            </button>
+            {shopList.map(s => {
+              const on = shopSel.includes(s.key);
+              return (
+                <button key={s.key} onClick={() => toggleShop(s.key)}
+                  style={{ ...btnBase, padding: '5px 10px', fontSize: '0.74rem', background: on ? '#fff7ed' : '#fff', color: on ? '#ff6a2c' : '#64748b', borderColor: on ? '#fed7aa' : '#e5e7eb', fontWeight: on ? 800 : 600 }}
+                  title={`${s.platform === 'shopee' ? 'Shopee' : 'TikTok'} · ${s.label}`}>
+                  {s.platform === 'shopee' ? '🟠' : '⬛'} {s.label}
+                </button>
+              );
+            })}
+          </div>
 
           <select value={replyFilter} onChange={e => { setReplyFilter(e.target.value); setPage(1); }}
             style={{ padding: '8px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.82rem', fontFamily: 'inherit', color: '#0f172a', background: '#fff', cursor: 'pointer' }}>
@@ -833,6 +1093,19 @@ export default function ReviewsTab() {
             <option value="da_sua_5">Đã sửa 5★</option>
           </select>
 
+          <select value={prodNameFilter} onChange={e => { setProdNameFilter(e.target.value); setPage(1); }}
+            style={{ padding: '8px 12px', borderRadius: 8, border: `1.5px solid ${prodNameFilter !== 'all' ? '#ff6a2c' : '#e5e7eb'}`, fontSize: '0.82rem', fontFamily: 'inherit', color: prodNameFilter !== 'all' ? '#ff6a2c' : '#0f172a', background: prodNameFilter !== 'all' ? '#fff7ed' : '#fff', cursor: 'pointer', maxWidth: 240, fontWeight: prodNameFilter !== 'all' ? 700 : 400 }}>
+            <option value="all">Sản phẩm: Tất cả</option>
+            {prodList.filter(p => p !== 'all').map(p => <option key={p} value={p}>{truncate(p, 60)}</option>)}
+          </select>
+
+          <select value={catFilter} onChange={e => { setCatFilter(e.target.value); setPage(1); }}
+            style={{ padding: '8px 12px', borderRadius: 8, border: `1.5px solid ${catFilter !== 'all' ? '#ff6a2c' : '#e5e7eb'}`, fontSize: '0.82rem', fontFamily: 'inherit', color: catFilter !== 'all' ? '#ff6a2c' : '#0f172a', background: catFilter !== 'all' ? '#fff7ed' : '#fff', cursor: 'pointer', maxWidth: 240, fontWeight: catFilter !== 'all' ? 700 : 400 }}>
+            <option value="all">Phân loại SP: Tất cả</option>
+            {catList.map(([c, n]) => <option key={c} value={c}>{truncate(c, 40)} ({n})</option>)}
+            <option value="(chưa phân loại)">— Chưa phân loại —</option>
+          </select>
+
           <select value={sortBy} onChange={e => setSortBy(e.target.value)}
             style={{ padding: '8px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.82rem', fontFamily: 'inherit', color: '#0f172a', background: '#fff', cursor: 'pointer' }}>
             <option value="date_desc">Mới nhất</option>
@@ -858,6 +1131,7 @@ export default function ReviewsTab() {
                   <th style={{ ...thStyle, width: 50, textAlign: 'center' }}>Sao</th>
                   <th style={{ ...thStyle, minWidth: 200 }}>Nội dung</th>
                   <th style={{ ...thStyle, width: 100 }}>Người dùng</th>
+                  <th style={{ ...thStyle, width: 120 }}>Mã đơn</th>
                   <th style={{ ...thStyle, width: 90, textAlign: 'center' }}>Ngày</th>
                   <th style={{ ...thStyle, width: 55, textAlign: 'center' }}>Reply</th>
                   <th style={{ ...thStyle, width: 190 }}>🏷️ CSKH xử lý</th>
@@ -941,6 +1215,9 @@ export default function ReviewsTab() {
                         {r.images?.length > 0 && <span style={{ marginLeft: 6, color: '#ff6a2c', fontSize: '0.72rem', fontWeight: 700, fontStyle: 'normal', whiteSpace: 'nowrap' }} title={`${r.images.length} ảnh`}>📷{r.images.length}</span>}
                       </td>
                       <td style={{ ...tdStyle, fontSize: '0.78rem', fontWeight: 600 }}>{r.userName}</td>
+                      <td style={{ ...tdStyle, fontSize: '0.72rem', fontFamily: 'monospace', color: '#475569' }} onClick={e => e.stopPropagation()}>
+                        {r.orderCode ? <span style={{ userSelect: 'all' }} title="Bấm giữ để copy">{r.orderCode}</span> : <span style={{ color: '#cbd5e1' }}>—</span>}
+                      </td>
                       <td style={{ ...tdStyle, textAlign: 'center', fontSize: '0.76rem', color: '#64748b' }}>{fmtDate(r.date)}</td>
                       <td style={{ ...tdStyle, textAlign: 'center' }}>
                         {r.hasReply
@@ -959,6 +1236,20 @@ export default function ReviewsTab() {
                                 style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: '0.72rem', fontFamily: 'inherit', background: '#fff', cursor: 'pointer' }}>
                                 <option value="">— Phân loại lý do —</option>
                                 {REASON_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                              </select>
+                              {/* Chưa có CS chọn thì hiện GỢI Ý tự động (chữ nghiêng xám) — CS chọn là ghi đè + lưu */}
+                              <select value={meta.product_category || r.autoCat || ''} onChange={e => updateMeta(r, { product_category: e.target.value || null })}
+                                style={{
+                                  padding: '4px 6px', borderRadius: 6, fontSize: '0.72rem', fontFamily: 'inherit', cursor: 'pointer',
+                                  border: `1px solid ${meta.product_category ? '#c7d2fe' : '#e5e7eb'}`,
+                                  background: meta.product_category ? '#eef2ff' : '#fff',
+                                  color: meta.product_category ? '#1e3a8a' : '#94a3b8',
+                                  fontStyle: meta.product_category ? 'normal' : 'italic',
+                                  fontWeight: meta.product_category ? 700 : 400,
+                                }}
+                                title={meta.product_category ? 'CS đã chọn' : (r.autoCat ? 'Gợi ý tự động từ tên SP — chọn lại nếu sai' : 'CS tự phân loại sản phẩm')}>
+                                <option value="">— Phân loại SP —</option>
+                                {PRODUCT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                               </select>
                               <div style={{ display: 'flex', gap: 5 }}>
                                 <button onClick={() => updateMeta(r, handled ? { handle_status: 'chua_xu_ly', handled_at: null } : { handle_status: 'da_xu_ly', handled_at: new Date().toISOString() })}

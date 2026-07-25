@@ -105,11 +105,22 @@ function BookingStaffReportTab({ currentUser } = {}) {
   }, [range]);
   useEffect(() => { load(); }, [load]);
 
-  const allStaff = useMemo(() => rows.map(r => r.ten_nhansu), [rows]);
-  const filtered = useMemo(() => rows.filter(r =>
+  // ── GIỚI HẠN QUYỀN XEM (Khánh 22/7): mỗi tài khoản CHỈ xem báo cáo của CHÍNH MÌNH.
+  // Admin xem hết. Account có `staff` (booking_staff, ecom Đan…) → chỉ thấy đúng dòng tên mình.
+  // Lọc ngay từ gốc nên áp cho TẤT CẢ: bảng, tổng KPI, biểu đồ, và panel chi tiết bên dưới.
+  const onlyMe = currentUser?.role !== 'admin' && !!currentUser?.staff;
+  const myName = (currentUser?.staff || '').trim();
+  const scopeRows = useCallback((rs) => onlyMe
+    ? (rs || []).filter(x => (x.ten_nhansu || '').trim() === myName)
+    : (rs || []), [onlyMe, myName]);
+  const rowsV = useMemo(() => scopeRows(rows), [rows, scopeRows]);
+  const prevRowsV = useMemo(() => scopeRows(prevRows), [prevRows, scopeRows]);
+
+  const allStaff = useMemo(() => rowsV.map(r => r.ten_nhansu), [rowsV]);
+  const filtered = useMemo(() => rowsV.filter(r =>
     (!selStaff || r.ten_nhansu === selStaff) &&
     (!fProduct || (r.top_product || '').toLowerCase().includes(fProduct.toLowerCase()))
-  ), [rows, selStaff, fProduct]);
+  ), [rowsV, selStaff, fProduct]);
   // Nhân sự đang xem chi tiết: theo dòng đã bấm, mặc định dòng đầu (GMV cao nhất) → luôn hiện chi tiết bên dưới.
   const selectedRow = useMemo(() => filtered.find(r => r.nhansu_id === selectedId) || filtered[0] || null, [filtered, selectedId]);
 
@@ -119,7 +130,7 @@ function BookingStaffReportTab({ currentUser } = {}) {
     cast: a.cast + num(r.cast_used), budget: a.budget + BUDGET(r.aff_gmv), chiphi: a.chiphi + num(r.chi_phi_mau),
   }), { don: 0, mau: 0, koc: 0, gmv: 0, video: 0, view: 0, cast: 0, budget: 0, chiphi: 0 });
   const T = useMemo(() => sumRows(filtered), [filtered]);
-  const P = useMemo(() => sumRows(prevRows), [prevRows]);
+  const P = useMemo(() => sumRows(prevRowsV), [prevRowsV]);
   // Tổng ngân sách (theo hàm chung) — cho KPI "CAST còn lại" khớp Tạm đối chiếu.
   const budgetTot = useMemo(() => filtered.reduce((a, r) => {
     const b = budgetByStaff[r.ten_nhansu]; return { conLai: a.conLai + (b?.conLai || 0), dmThuc: a.dmThuc + (b?.dmThuc || 0) };
@@ -144,7 +155,7 @@ function BookingStaffReportTab({ currentUser } = {}) {
   const KPIS = [
     { label: 'Tổng đơn gửi', val: fmt(T.don), d: delta(T.don, P.don), sub: `${fmt(T.mau)} mẫu`, icon: '📦', color: '#f97316' },
     { label: 'Chi phí mẫu', val: fmtVnd(T.chiphi) + ' đ', d: delta(T.chiphi, P.chiphi), sub: `${T.mau > 0 ? fmtVnd(T.chiphi / T.mau) : 0}/mẫu`, icon: '🧾', color: '#e11d48' },
-    { label: 'KOC đã gắn', val: fmt(T.koc), d: delta(T.koc, P.koc), sub: `${rows.length} nhân sự`, icon: '🏷️', color: '#9333ea' },
+    { label: 'KOC đã gắn', val: fmt(T.koc), d: delta(T.koc, P.koc), sub: `${rowsV.length} nhân sự`, icon: '🏷️', color: '#9333ea' },
     { label: 'GMV (KOC gắn)', val: fmtVnd(T.gmv) + ' đ', d: delta(T.gmv, P.gmv), sub: `ROAS ${castTot > 0 ? (T.gmv / castTot).toFixed(1) : '∞'}x`, icon: '💰', color: '#16a34a' },
     { label: 'Video', val: fmt(T.video), d: delta(T.video, P.video), sub: `${fmtView(T.view)} view`, icon: '🎬', color: '#7c3aed' },
     { label: 'View', val: fmtView(T.view), d: delta(T.view, P.view), sub: `${T.video > 0 ? fmtView(T.view / T.video) : 0}/video`, icon: '👁️', color: '#0891b2' },
@@ -212,7 +223,7 @@ function BookingStaffReportTab({ currentUser } = {}) {
                 <span style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, background: `linear-gradient(135deg, ${k.color}, ${k.color}bb)`, boxShadow: `0 5px 12px ${k.color}66, inset 0 1px 1px rgba(255,255,255,0.45)`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.95rem' }}>{k.icon}</span>
                 <span style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k.label}</span>
               </div>
-              {k.d !== null && Number.isFinite(k.d) && prevRows.length > 0 && (
+              {k.d !== null && Number.isFinite(k.d) && prevRowsV.length > 0 && (
                 <span style={{ fontSize: '0.68rem', fontWeight: 800, color: k.d >= 0 ? '#16a34a' : '#dc2626', background: k.d >= 0 ? '#dcfce7' : '#fef2f2', padding: '2px 8px', borderRadius: 20, whiteSpace: 'nowrap' }}>{k.d >= 0 ? '▲' : '▼'} {Math.abs(k.d).toFixed(0)}%</span>
               )}
             </div>
@@ -307,7 +318,7 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
   const [det, setDet] = useState(null);
   const [loadingDet, setLoadingDet] = useState(true);
   // ── TỰ GỠ TAG (Khánh 15/7): mỗi account chỉ được tự gỡ KOC của ĐÚNG tên mình (r.ten_nhansu === currentUser.staff).
-  //    seeAll (Thu Thảo/Minh Thảo/Hoàng Vy) coi được panel người khác nhưng KHÔNG gỡ được — chỉ gỡ của chính mình.
+  //    (Khánh 23/7: Thu Thảo/Minh Thảo/Hoàng Vy đã bỏ seeAll -> giới hạn như booking khác, chỉ thấy & gỡ của mình.)
   //    admin gỡ được mọi nơi. Video/GMV đã tính trước đó GIỮ NGUYÊN — gỡ chỉ ngưng theo dõi từ giờ về sau.
   const canRemove = currentUser?.role === 'admin' || (currentUser?.staff && currentUser.staff.trim() === (r.ten_nhansu || '').trim());
   const [removingKey, setRemovingKey] = useState(null);
@@ -356,48 +367,81 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
             () => { if (alive) setCurTags(new Set()); });
     return () => { alive = false; };
   }, [r.nhansu_id]);
-  // ── Link air của nhân sự (mấy bạn đã điền ở Quản lý link air) — HIỆN FULL từ trước tới giờ, KHÔNG theo kỳ ──
-  // Phân trang + tìm kiếm PHÍA SERVER (né trần 1000 rows của Supabase; NS có thể có vài chục nghìn link)
-  const [airRows, setAirRows] = useState(null);   // rows trang hiện tại (null = đang tải)
-  const [airTotal, setAirTotal] = useState(0);
-  const [airSearch, setAirSearch] = useState('');
-  const [airQ, setAirQ] = useState('');            // từ khoá đã debounce
-  const [airPage, setAirPage] = useState(1);
-  const AIR_PER = 20;
-  useEffect(() => { const t = setTimeout(() => { setAirQ(airSearch.trim()); setAirPage(1); }, 400); return () => clearTimeout(t); }, [airSearch]);
-  useEffect(() => { setAirPage(1); setOtFilter('all'); }, [r.nhansu_id]);
+  // ── BẢNG GỘP "Link & Video của nhân sự" = Link air + Link air có cast + Video theo tag (1 bảng, lọc theo LOẠI) ──
+  // Phân trang + tìm kiếm PHÍA SERVER (RPC staff_all_records). Link air = toàn bộ từ trước tới nay; Video theo tag = trong kỳ.
+  const [allRows, setAllRows] = useState(null);
+  const [allTotal, setAllTotal] = useState(0);
+  const [allLoai, setAllLoai] = useState('');       // '' = tất cả | 'air' | 'cast' | 'tag'
+  const [allSearch, setAllSearch] = useState('');
+  const [allQ, setAllQ] = useState('');
+  const [allPage, setAllPage] = useState(1);
+  const [allBusy, setAllBusy] = useState(false);    // đang xuất Excel
+  const [allProg, setAllProg] = useState(0);        // số dòng đã kéo được khi xuất
+  const [allErr, setAllErr] = useState('');         // lỗi tải (hiện rõ, KHÔNG im lặng báo 0 dòng)
+  const ALL_PER = 25;
+  const LOAI_LABEL = { air: '🔗 Link air', cast: '💸 Link air có cast', tag: '🎬 Video theo tag', pay: '💸 Đã trả cast (chưa có link air)' };
+  useEffect(() => { const t = setTimeout(() => { setAllQ(allSearch.trim()); setAllPage(1); }, 400); return () => clearTimeout(t); }, [allSearch]);
+  useEffect(() => { setAllPage(1); setOtFilter('all'); }, [r.nhansu_id]);
+  useEffect(() => { setAllPage(1); }, [allLoai]);
   useEffect(() => {
-    let alive = true; setAirRows(null);
-    supabase.rpc('staff_air_links', { p_nhansu_id: r.nhansu_id, p_search: airQ || null, p_limit: AIR_PER, p_offset: (airPage - 1) * AIR_PER })
-      .then(({ data }) => { if (!alive) return; setAirRows(data || []); setAirTotal(data && data.length ? Number(data[0].total) : 0); },
-            () => { if (alive) { setAirRows([]); setAirTotal(0); } });
+    let alive = true; setAllRows(null);
+    supabase.rpc('staff_all_records', { p_nhansu_id: r.nhansu_id, p_from: range.start, p_to: range.end, p_loai: allLoai || null, p_search: allQ || null, p_limit: ALL_PER, p_offset: (allPage - 1) * ALL_PER })
+      .then(({ data, error }) => {
+        if (!alive) return;
+        if (error) { setAllErr(error.message || 'Lỗi tải dữ liệu'); setAllRows([]); setAllTotal(0); return; }
+        setAllErr(''); setAllRows(data || []); setAllTotal(data && data.length ? Number(data[0].total) : 0);
+      }, (e) => { if (alive) { setAllErr(e?.message || 'Lỗi tải dữ liệu'); setAllRows([]); setAllTotal(0); } });
     return () => { alive = false; };
-  }, [r.nhansu_id, airQ, airPage]);
-  const airTotalPages = Math.max(1, Math.ceil(airTotal / AIR_PER));
-  const airPageC = Math.min(airPage, airTotalPages);
-  // ── Video TỰ ĐỘNG ghi nhận theo TAG (tenure) — video air trong lúc NS đang giữ tag KOC, hệ thống tự tính (không cần điền link air) ──
-  // Lọc theo KỲ đang chọn (video air trong kỳ). View/GMV = trong kỳ. Để mấy bạn tự soi video nào được credit qua tag.
-  const [tenVids, setTenVids] = useState(null);   // null = đang tải
-  const [tenSearch, setTenSearch] = useState('');
-  const [tenPage, setTenPage] = useState(1);
-  const TEN_PER = 20;
+  }, [r.nhansu_id, range.start, range.end, allLoai, allQ, allPage]);
+  const allTotalPages = Math.max(1, Math.ceil(allTotal / ALL_PER));
+  const allPageC = Math.min(allPage, allTotalPages);
+  // Xuất Excel TOÀN BỘ dòng đang lọc — kéo NHIỀU LƯỢT cho tới hết (Supabase cắt ~1000 dòng/lần)
+  const exportAll = async () => {
+    if (!allTotal) return;
+    setAllBusy(true); setAllProg(0);
+    try {
+      const CHUNK = 1000;
+      const rows = [];
+      let off = 0;
+      while (off < allTotal) {
+        const { data, error } = await supabase.rpc('staff_all_records', { p_nhansu_id: r.nhansu_id, p_from: range.start, p_to: range.end, p_loai: allLoai || null, p_search: allQ || null, p_limit: CHUNK, p_offset: off });
+        if (error) throw error;
+        const batch = data || [];
+        if (!batch.length) break;                 // hết dữ liệu
+        rows.push(...batch);
+        off += batch.length;                      // nhích theo số dòng THẬT nhận được (né mọi mức cắt của server)
+        setAllProg(rows.length);
+      }
+      const XLSX = await import('xlsx').then(m => m.default || m);
+      const aoa = [
+        ['STT', 'Loại', 'Kênh / KOC', 'Brand', 'Sản phẩm', 'Ngày air', 'CAST (đ)', 'View (kỳ)', 'GMV (kỳ)', 'Trạng thái', 'Link'],
+        ...rows.map((v, i) => [i + 1, LOAI_LABEL[v.loai] || v.loai, v.koc || '', v.brand || '', v.san_pham || '',
+          v.ngay_air ? new Date(v.ngay_air).toLocaleDateString('vi-VN') : '', num(v.cast_amount), num(v.view_ky), num(v.gmv_ky), v.trang_thai || '', v.link || '']),
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = [{ wch: 5 }, { wch: 18 }, { wch: 20 }, { wch: 14 }, { wch: 22 }, { wch: 11 }, { wch: 13 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 52 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Link-Video');
+      XLSX.writeFile(wb, `link-video_${String(r.ten_nhansu || 'NS').replace(/\s+/g, '-')}_${range.start}_${range.end}.xlsx`);
+      if (rows.length < allTotal) alert(`⚠️ Chỉ lấy được ${fmt(rows.length)}/${fmt(allTotal)} dòng — server ngắt giữa chừng. Thử xuất lại hoặc lọc bớt theo loại.`);
+    } catch (e) { alert('Lỗi xuất Excel: ' + e.message); }
+    finally { setAllBusy(false); setAllProg(0); }
+  };
+  // ── KOC của tôi BỊ GỠ (90 ngày) — để nhân sự biết KOC nào bị gỡ (nhất là auto-gỡ), phân biệt đã-gắn-lại hay còn-gỡ ──
+  const [rmKocs, setRmKocs] = useState(null);
+  const [rmOnlyOff, setRmOnlyOff] = useState(false);   // chỉ hiện KOC còn đang bị gỡ (chưa gắn lại)
+  const [rmSearch, setRmSearch] = useState('');        // tìm KOC / brand
   useEffect(() => {
-    let alive = true; setTenVids(null); setTenPage(1);
-    supabase.rpc('staff_tenure_videos', { p_nhansu_id: r.nhansu_id, p_from: range.start, p_to: range.end })
-      .then(({ data }) => { if (alive) setTenVids(data || []); }, () => { if (alive) setTenVids([]); });
+    let alive = true; setRmKocs(null);
+    supabase.rpc('staff_removed_kocs', { p_nhansu_id: r.nhansu_id })
+      .then(({ data }) => { if (alive) setRmKocs(data || []); }, () => { if (alive) setRmKocs([]); });
     return () => { alive = false; };
-  }, [r.nhansu_id, range.start, range.end]);
-  useEffect(() => { setTenPage(1); }, [tenSearch]);
-  const tenFiltered = (tenVids || []).filter(v => {
-    const q = tenSearch.trim().toLowerCase();
-    if (!q) return true;
-    return (v.kenh || '').toLowerCase().includes(q) || (v.brand || '').toLowerCase().includes(q) || String(v.content_id || '').toLowerCase().includes(q);
-  });
-  const tenTotalPages = Math.max(1, Math.ceil(tenFiltered.length / TEN_PER));
-  const tenPageC = Math.min(tenPage, tenTotalPages);
-  const tenPageRows = tenFiltered.slice((tenPageC - 1) * TEN_PER, tenPageC * TEN_PER);
-  const tenView = tenFiltered.reduce((s, v) => s + num(v.view_period), 0);
-  const tenGmv = tenFiltered.reduce((s, v) => s + num(v.gmv_period), 0);
+  }, [r.nhansu_id]);
+  const rmQ = rmSearch.trim().toLowerCase();
+  const rmList = (rmKocs || []).filter(k =>
+    (!rmOnlyOff || !k.dang_gan_lai) &&
+    (!rmQ || (k.koc || '').toLowerCase().includes(rmQ) || (k.brand || '').toLowerCase().includes(rmQ)));
+  const rmConGo = (rmKocs || []).filter(k => !k.dang_gan_lai).length;
   const daily = Array.isArray(det?.daily) ? det.daily : [];
   const kocs = Array.isArray(det?.kocs) ? det.kocs : [];
 
@@ -493,6 +537,11 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
   const chartLoading = (h) => <div style={{ height: h, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>⏳ Đang tải biểu đồ...</div>;
   const chartEmpty = (h, msg) => <div style={{ height: h, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>{msg}</div>;
 
+  // ── Thanh tiến độ tải: đếm số phần dữ liệu đã xong, để mấy bạn biết còn phải đợi bao lâu ──
+  const loadFlags = [!loadingDet, castVids !== null, orderTags !== null, curTags !== null, allRows !== null, rmKocs !== null];
+  const loadDone = loadFlags.filter(Boolean).length;
+  const loadPct = Math.round((loadDone / loadFlags.length) * 100);
+
   return (
     <div style={{ ...card, marginTop: 18, overflow: 'hidden' }}>
         {/* header */}
@@ -505,6 +554,18 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
             <span style={{ background: '#fff', color: b.color, fontWeight: 800, fontSize: '0.8rem', padding: '5px 14px', borderRadius: 20 }}>{b.label}</span>
           </div>
         </div>
+        {/* Thanh % tải — chỉ hiện khi chưa xong */}
+        {loadPct < 100 && (
+          <div style={{ padding: '10px 24px 12px', background: '#fff7ed', borderBottom: '1px solid #fed7aa' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 700, color: '#9a3412', marginBottom: 6 }}>
+              <span>⏳ Đang tải báo cáo... ({loadDone}/{loadFlags.length} phần)</span>
+              <span>{loadPct}%</span>
+            </div>
+            <div style={{ height: 7, borderRadius: 20, background: '#fed7aa', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${loadPct}%`, background: 'linear-gradient(90deg,#fb923c,#ea580c)', borderRadius: 20, transition: 'width .35s ease' }} />
+            </div>
+          </div>
+        )}
 
         <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18, background: '#f8fafc' }}>
 
@@ -841,107 +902,127 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
             </div>
           </Section>
 
-          {/* ═══ LINK AIR CỦA NHÂN SỰ ═══ (không có cột cast/cms/đã order) */}
-          <Section icon="🔗" title={<>Link air của nhân sự: <span style={{ padding: '2px 11px', borderRadius: 20, background: '#1d4ed8', color: '#fff', fontSize: '0.85rem', fontWeight: 800, marginLeft: 4 }}>👤 {r.ten_nhansu}</span></>} hint={airRows == null ? 'đang tải…' : `${fmt(airTotal)} link${airQ ? ' (khớp tìm kiếm)' : ' · toàn bộ từ trước tới nay'}`} accent={{ bg: '#eff6ff', fg: '#1d4ed8' }}>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              <input value={airSearch} onChange={e => setAirSearch(e.target.value)} placeholder="🔎 Tìm ID kênh / video / SP / brand... (tìm trong TẤT CẢ link)" style={{ ...ctrl, flex: '1 1 260px' }} />
+          {/* ═══ LINK & VIDEO CỦA NHÂN SỰ (GỘP 3 BẢNG) ═══ link air + link air có cast + video theo tag; lọc theo loại + xuất Excel */}
+          <Section icon="🔗" title={<>Link &amp; Video của nhân sự: <span style={{ padding: '2px 11px', borderRadius: 20, background: '#1d4ed8', color: '#fff', fontSize: '0.85rem', fontWeight: 800, marginLeft: 4 }}>👤 {r.ten_nhansu}</span></>} hint={allRows == null ? 'đang tải…' : `${fmt(allTotal)} dòng${allLoai ? ' · ' + LOAI_LABEL[allLoai] : ''}`} accent={{ bg: '#eff6ff', fg: '#1d4ed8' }}>
+            <div style={{ fontSize: '0.8rem', color: '#475569', marginBottom: 4, lineHeight: 1.55, background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 10, padding: '8px 12px' }}>
+              Gộp 3 nguồn: <b>🔗 Link air</b> (bạn tự điền — toàn bộ từ trước tới nay) · <b>💸 Link air có cast</b> (có tiền cast — chỉ để BIẾT, <b>không</b> tính vào số KOC quản lý) · <b>🎬 Video theo tag</b> (hệ thống tự ghi nhận vì bạn giữ tag lúc video lên — trong kỳ đang chọn). Bấm nút để lọc từng loại, hoặc <b>Xuất Excel</b> để dò offline.
             </div>
-            {airRows == null ? (
-              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>⏳ Đang tải link air...</div>
-            ) : airTotal === 0 ? (
-              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>{airQ ? 'Không tìm thấy link khớp.' : 'Nhân sự này chưa có link air nào.'}</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              {[['', 'Tất cả'], ['air', '🔗 Link air'], ['cast', '💸 Có cast'], ['tag', '🎬 Video theo tag']].map(([v, lb]) => (
+                <button key={v} onClick={() => setAllLoai(v)} style={{ padding: '5px 12px', borderRadius: 7, border: `1px solid ${allLoai === v ? '#1d4ed8' : '#cbd5e1'}`, background: allLoai === v ? '#1d4ed8' : '#fff', color: allLoai === v ? '#fff' : '#475569', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>{lb}</button>
+              ))}
+              <input value={allSearch} onChange={e => setAllSearch(e.target.value)} placeholder="🔎 Tìm KOC / brand / SP / ID video / dán nguyên link air..." style={{ ...ctrl, flex: '1 1 220px', minWidth: 180 }} />
+              <button onClick={exportAll} disabled={!allTotal || allBusy} style={{ ...ctrl, background: allTotal ? '#16a34a' : '#e2e8f0', color: '#fff', border: 'none', fontWeight: 700, cursor: allTotal && !allBusy ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>{allBusy ? `⏳ Đang xuất ${fmt(allProg)}/${fmt(allTotal)}...` : `📊 Xuất Excel${allTotal ? ` (${fmt(allTotal)})` : ''}`}</button>
+            </div>
+            {allRows == null ? (
+              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>⏳ Đang tải...</div>
+            ) : allErr ? (
+              <div style={{ color: '#b91c1c', fontSize: '0.86rem', padding: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10 }}>
+                ⚠️ <b>Lỗi tải dữ liệu:</b> {allErr}<br />
+                <span style={{ color: '#7f1d1d' }}>Thử tải lại trang; nếu vẫn lỗi thì báo admin (kèm dòng lỗi này).</span>
+              </div>
+            ) : allTotal === 0 ? (
+              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>{allQ ? 'Không tìm thấy dòng khớp.' : 'Chưa có link air hoặc video nào.'}</div>
             ) : (
               <>
                 <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #f1f5f9' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 820 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1040 }}>
                     <thead>
                       <tr style={{ background: '#f8fafc' }}>
-                        {['STT', 'LINK AIR', 'ID KÊNH', 'ID VIDEO', 'BRAND', 'SẢN PHẨM', 'NGÀY AIR', 'TRẠNG THÁI'].map((h, i) => (
-                          <th key={i} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: '2px solid #e2e8f0' }}>{h}</th>
+                        {['STT', 'LOẠI', 'KÊNH / KOC', 'BRAND', 'SẢN PHẨM', 'NGÀY AIR', 'CAST', 'VIEW (KỲ)', 'GMV (KỲ)', 'TRẠNG THÁI', 'LINK'].map((h, i) => (
+                          <th key={i} style={{ padding: '10px 12px', textAlign: (i >= 6 && i <= 8) ? 'right' : 'left', fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: '2px solid #e2e8f0' }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {(airRows || []).map((a, i) => (
-                        <tr key={a.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#94a3b8' }}>{(airPageC - 1) * AIR_PER + i + 1}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', maxWidth: 210 }}>
-                            {a.link_air_koc ? <a href={a.link_air_koc} target="_blank" rel="noreferrer" style={{ color: '#f97316', fontWeight: 700, textDecoration: 'none', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.link_air_koc}</a> : '—'}
-                          </td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 600, color: '#334155' }}>{a.id_kenh || '—'}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.78rem', color: '#64748b' }}>{a.id_video || '—'}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155' }}>{a.ten_brand || '—'}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.san_pham || ''}>{a.san_pham || '—'}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155', whiteSpace: 'nowrap' }}>{a.ngay_air ? new Date(a.ngay_air).toLocaleDateString('vi-VN') : '—'}</td>
+                      {(allRows || []).map((a, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid #f1f5f9', background: a.loai === 'cast' ? '#fffbf5' : a.loai === 'tag' ? '#f8fefb' : '#fff' }}>
+                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#94a3b8' }}>{(allPageC - 1) * ALL_PER + i + 1}</td>
                           <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
-                            <span style={{ fontSize: '0.74rem', fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: a.status === 'Đã On-air' ? '#dcfce7' : '#fef9c3', color: a.status === 'Đã On-air' ? '#166534' : '#a16207' }}>
-                              {a.status === 'Đã On-air' ? '🟢 Đã On-air' : '🟡 Chưa air'}
-                            </span>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '3px 9px', borderRadius: 20, background: a.loai === 'cast' ? '#fff7ed' : a.loai === 'tag' ? '#f0fdf4' : '#eff6ff', color: a.loai === 'cast' ? '#c2410c' : a.loai === 'tag' ? '#15803d' : '#1d4ed8' }}>{LOAI_LABEL[a.loai] || a.loai}</span>
+                          </td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{a.koc || '—'}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155' }}>{a.brand || '—'}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155', maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.san_pham || ''}>{a.san_pham || '—'}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155', whiteSpace: 'nowrap' }}>{a.ngay_air ? new Date(a.ngay_air).toLocaleDateString('vi-VN') : '—'}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 800, color: num(a.cast_amount) > 0 ? '#ea580c' : '#cbd5e1', textAlign: 'right', whiteSpace: 'nowrap' }}>{num(a.cast_amount) > 0 ? fmtVnd(a.cast_amount) + 'đ' : '—'}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 700, color: '#0f766e', textAlign: 'right' }}>{fmt(a.view_ky)}</td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 700, color: '#b45309', textAlign: 'right' }}>{fmtVnd(a.gmv_ky)}</td>
+                          <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: '0.74rem', fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: a.trang_thai === 'Đã On-air' ? '#dcfce7' : '#fef9c3', color: a.trang_thai === 'Đã On-air' ? '#166534' : '#a16207' }}>{a.trang_thai === 'Đã On-air' ? '🟢 Đã On-air' : '🟡 Chưa air'}</span>
+                          </td>
+                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
+                            {a.link ? <a href={a.link} target="_blank" rel="noreferrer" style={{ color: '#f97316', fontWeight: 700, textDecoration: 'none' }}>Xem ▸</a> : '—'}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-                {airTotalPages > 1 && (
+                {allTotalPages > 1 && (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 6 }}>
-                    <button onClick={() => setAirPage(p => Math.max(1, p - 1))} disabled={airPageC <= 1} style={{ ...ctrl, cursor: airPageC <= 1 ? 'default' : 'pointer', opacity: airPageC <= 1 ? 0.5 : 1 }}>‹ Trước</button>
-                    <span style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 700 }}>Trang {airPageC}/{airTotalPages}</span>
-                    <button onClick={() => setAirPage(p => Math.min(airTotalPages, p + 1))} disabled={airPageC >= airTotalPages} style={{ ...ctrl, cursor: airPageC >= airTotalPages ? 'default' : 'pointer', opacity: airPageC >= airTotalPages ? 0.5 : 1 }}>Sau ›</button>
+                    <button onClick={() => setAllPage(p => Math.max(1, p - 1))} disabled={allPageC <= 1} style={{ ...ctrl, cursor: allPageC <= 1 ? 'default' : 'pointer', opacity: allPageC <= 1 ? 0.5 : 1 }}>‹ Trước</button>
+                    <span style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 700 }}>Trang {allPageC}/{allTotalPages}</span>
+                    <button onClick={() => setAllPage(p => Math.min(allTotalPages, p + 1))} disabled={allPageC >= allTotalPages} style={{ ...ctrl, cursor: allPageC >= allTotalPages ? 'default' : 'pointer', opacity: allPageC >= allTotalPages ? 0.5 : 1 }}>Sau ›</button>
                   </div>
                 )}
               </>
             )}
           </Section>
 
-          {/* ═══ VIDEO TỰ ĐỘNG GHI NHẬN THEO TAG (tenure) ═══ để nhân sự TỰ CHECK video nào được credit qua tag */}
-          <Section icon="🎬" title={<>Video tự động ghi nhận theo tag: <span style={{ padding: '2px 11px', borderRadius: 20, background: '#15803d', color: '#fff', fontSize: '0.85rem', fontWeight: 800, marginLeft: 4 }}>👤 {r.ten_nhansu}</span></>} hint={tenVids == null ? 'đang tải…' : `${fmt(tenFiltered.length)} video · ${fmtView(tenView)} view · ${fmtVnd(tenGmv)}đ GMV — trong kỳ`} accent={{ bg: '#f0fdf4', fg: '#15803d' }}>
-            <div style={{ fontSize: '0.8rem', color: '#475569', marginBottom: 4, lineHeight: 1.55, background: '#f0fdf4', border: '1px solid #dcfce7', borderRadius: 10, padding: '8px 12px' }}>
-              🎯 Đây là các video hệ thống <b>TỰ ĐỘNG ghi nhận</b> cho bạn vì bạn <b>đang giữ tag KOC lúc video lên</b> — <b>không cần điền link air</b>. Chỉ tính video air <b>trong kỳ đang chọn</b>; View &amp; GMV cũng tính trong kỳ. (Video air trước khi bạn gắn tag hoặc sau khi gỡ tag sẽ không nằm ở đây.)
+          {/* ═══ KOC CỦA TÔI BỊ GỠ ═══ để nhân sự biết KOC nào bị gỡ (nhất là auto-gỡ), 90 ngày gần nhất */}
+          <Section icon="🗑️" title={<>KOC của bạn bị gỡ (90 ngày): <span style={{ padding: '2px 11px', borderRadius: 20, background: '#b91c1c', color: '#fff', fontSize: '0.85rem', fontWeight: 800, marginLeft: 4 }}>👤 {r.ten_nhansu}</span></>} hint={rmKocs == null ? 'đang tải…' : `${fmt((rmKocs || []).length)} lần gỡ · ${fmt(rmConGo)} còn đang gỡ`} accent={{ bg: '#fef2f2', fg: '#b91c1c' }}>
+            <div style={{ fontSize: '0.8rem', color: '#7f1d1d', marginBottom: 4, lineHeight: 1.55, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '8px 12px' }}>
+              🗑️ KOC của bạn <b>bị gỡ tag</b> trong 90 ngày. <b>Luật:</b> quá <b>45 ngày không ra clip CHO ĐÚNG BRAND đó</b> (hoặc nợ clip quá 30 ngày sau khi order) thì tự gỡ tag brand đó — <b>kể cả khi KOC vẫn chạy brand khác</b>.<br />
+              👉 Cột <b>"Air cho brand này"</b> mới là <b>lý do bị gỡ</b> (ghi <i>CHƯA BAO GIỜ</i> = KOC chưa từng làm clip brand này). Cột <b>"Air brand khác"</b> = KOC có làm clip cho <b>brand khác CỦA MÌNH</b> hay không — <b>có ghi rõ air brand nào</b> (eHerb VN/HCM · Bodymiss · Milaganics · MOAW · Healmi · Real Steel) — chỉ để biết <b>KOC còn sống hay nghỉ hẳn</b>, <b>không cứu được tag</b>. <i>(Clip KOC làm cho công ty khác thì hệ thống không thấy — TikTok chỉ cho xem shop của mình.)</i> Trạng thái: <b>🟢 Đã gắn lại</b> = đã khôi phục; <b>🔴 Còn gỡ</b> = hiện không còn tag.
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              <input value={tenSearch} onChange={e => setTenSearch(e.target.value)} placeholder="🔎 Tìm kênh KOC / brand / ID video..." style={{ ...ctrl, flex: '1 1 260px' }} />
+              <button onClick={() => setRmOnlyOff(v => !v)} style={{ padding: '5px 12px', borderRadius: 7, border: `1px solid ${rmOnlyOff ? '#dc2626' : '#fecaca'}`, background: rmOnlyOff ? '#dc2626' : '#fff', color: rmOnlyOff ? '#fff' : '#dc2626', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>🔴 Chỉ KOC còn đang gỡ ({rmConGo}){rmOnlyOff ? ' ✕' : ''}</button>
+              <input value={rmSearch} onChange={e => setRmSearch(e.target.value)} placeholder="🔎 Tìm ID kênh KOC / brand..." style={{ ...ctrl, flex: '1 1 220px', minWidth: 180 }} />
             </div>
-            {tenVids == null ? (
-              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>⏳ Đang tải video...</div>
-            ) : tenFiltered.length === 0 ? (
-              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>{tenSearch ? 'Không tìm thấy video khớp.' : 'Chưa có video nào được tự động ghi nhận theo tag trong kỳ này.'}</div>
+            {rmKocs == null ? (
+              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>⏳ Đang tải...</div>
+            ) : rmList.length === 0 ? (
+              <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>{rmQ ? 'Không tìm thấy KOC khớp.' : rmOnlyOff ? 'Không còn KOC nào đang bị gỡ. 🎉' : 'Chưa có KOC nào bị gỡ trong 90 ngày.'}</div>
             ) : (
-              <>
-                <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #f1f5f9' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
-                    <thead>
-                      <tr style={{ background: '#f8fafc' }}>
-                        {['STT', 'KÊNH / KOC', 'BRAND', 'NGÀY AIR', 'VIEW (KỲ)', 'GMV (KỲ)', 'LINK'].map((h, i) => (
-                          <th key={i} style={{ padding: '10px 12px', textAlign: i === 4 || i === 5 ? 'right' : 'left', fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: '2px solid #e2e8f0' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {tenPageRows.map((v, i) => (
-                        <tr key={v.content_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#94a3b8' }}>{(tenPageC - 1) * TEN_PER + i + 1}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{v.kenh || '—'}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155' }}>{v.brand || '—'}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155', whiteSpace: 'nowrap' }}>{v.air_date ? new Date(v.air_date).toLocaleDateString('vi-VN') : '—'}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 700, color: '#0f766e', textAlign: 'right' }}>{fmt(v.view_period)}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 700, color: '#b45309', textAlign: 'right' }}>{fmtVnd(v.gmv_period)}</td>
-                          <td style={{ padding: '9px 12px', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
-                            <a href={`https://www.tiktok.com/${v.kenh || ''}/video/${v.content_id}`} target="_blank" rel="noreferrer" style={{ color: '#f97316', fontWeight: 700, textDecoration: 'none' }}>Xem ▸</a>
-                          </td>
-                        </tr>
+              <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #f1f5f9' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
+                  <thead>
+                    <tr style={{ background: '#fef2f2' }}>
+                      {['STT', 'KÊNH / KOC', 'BRAND', 'NGÀY GỠ', 'LÝ DO', 'AIR CHO BRAND NÀY', 'AIR BRAND KHÁC', 'TRẠNG THÁI'].map((h, i) => (
+                        <th key={i} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '0.72rem', fontWeight: 800, color: '#991b1b', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: '2px solid #fecaca' }}>{h}</th>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
-                {tenTotalPages > 1 && (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 6 }}>
-                    <button onClick={() => setTenPage(p => Math.max(1, p - 1))} disabled={tenPageC <= 1} style={{ ...ctrl, cursor: tenPageC <= 1 ? 'default' : 'pointer', opacity: tenPageC <= 1 ? 0.5 : 1 }}>‹ Trước</button>
-                    <span style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 700 }}>Trang {tenPageC}/{tenTotalPages}</span>
-                    <button onClick={() => setTenPage(p => Math.min(tenTotalPages, p + 1))} disabled={tenPageC >= tenTotalPages} style={{ ...ctrl, cursor: tenPageC >= tenTotalPages ? 'default' : 'pointer', opacity: tenPageC >= tenTotalPages ? 0.5 : 1 }}>Sau ›</button>
-                  </div>
-                )}
-              </>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rmList.map((k, i) => (
+                      <tr key={(k.koc || '') + (k.brand || '') + i} style={{ borderBottom: '1px solid #f1f5f9', background: k.dang_gan_lai ? '#fff' : '#fff5f5' }}>
+                        <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#94a3b8' }}>{i + 1}</td>
+                        <td style={{ padding: '9px 12px', fontSize: '0.82rem', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{k.koc || '—'}</td>
+                        <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155' }}>{k.brand || '—'}</td>
+                        <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155', whiteSpace: 'nowrap' }}>{k.ngay_go ? new Date(k.ngay_go).toLocaleDateString('vi-VN') : '—'}</td>
+                        <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: '#334155', whiteSpace: 'nowrap' }}>{k.ly_do || '—'}</td>
+                        <td style={{ padding: '9px 12px', fontSize: '0.8rem', fontWeight: 700, color: k.last_air ? '#b45309' : '#b91c1c', whiteSpace: 'nowrap' }}>
+                          {k.last_air ? new Date(k.last_air).toLocaleDateString('vi-VN') : 'CHƯA BAO GIỜ'}
+                        </td>
+                        <td style={{ padding: '9px 12px', fontSize: '0.8rem', color: k.last_air_khac ? '#0891b2' : '#cbd5e1', whiteSpace: 'nowrap' }}>
+                          {k.last_air_khac ? (
+                            <>
+                              {new Date(k.last_air_khac).toLocaleDateString('vi-VN')}
+                              {k.brand_khac && <span style={{ marginLeft: 6, fontSize: '0.71rem', fontWeight: 800, padding: '2px 8px', borderRadius: 20, background: '#e0f2fe', color: '#075985' }}>{k.brand_khac}</span>}
+                            </>
+                          ) : '—'}
+                        </td>
+                        <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontSize: '0.74rem', fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: k.dang_gan_lai ? '#dcfce7' : '#fee2e2', color: k.dang_gan_lai ? '#166534' : '#b91c1c' }}>
+                            {k.dang_gan_lai ? '🟢 Đã gắn lại' : '🔴 Còn gỡ'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </Section>
 

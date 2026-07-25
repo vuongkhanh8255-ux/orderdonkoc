@@ -666,11 +666,23 @@ export const AppDataProvider = ({ children }) => {
     if (window.confirm(`⚠️ CHỐT: Xóa vĩnh viễn đơn hàng #${orderId}?\n(Dữ liệu sẽ mất không thể khôi phục)`)) {
       setIsLoading(true);
       try {
+        // Lấy ID kênh TRƯỚC khi xoá để còn dọn tag mà đơn này đã tạo/refresh.
+        let kocChannel = (typeof donHang === 'object' && donHang.koc_id_kenh) ? donHang.koc_id_kenh : null;
+        if (!kocChannel) {
+          const { data: od } = await supabase.from('donguis').select('koc_id_kenh').eq('id', orderId).maybeSingle();
+          kocChannel = od?.koc_id_kenh || null;
+        }
         await supabase.from('bookings').delete().ilike('ghi_chu', `%Đơn hàng #${orderId}%`);
         const { error: errCT } = await supabase.from('chitiettonguis').delete().eq('dongui_id', orderId);
         if (errCT) throw new Error("Lỗi xóa chi tiết (Con): " + errCT.message);
         const { error: errDon } = await supabase.from('donguis').delete().eq('id', orderId);
         if (errDon) throw new Error("Lỗi xóa đơn gốc (Cha): " + errDon.message);
+        // HOÀN TÁC tag: đơn vừa xoá đã tự gắn tag/khoá nợ clip → dọn để order lại được ngay.
+        // Gỡ tag auto-order mồ côi (chưa air) + rollback last_order_at về đơn còn lại trong tenure.
+        if (kocChannel) {
+          try { await supabase.rpc('resync_koc_order_tags', { p_channel: kocChannel }); }
+          catch (e) { console.warn('resync_koc_order_tags sau khi xoa don loi (khong chan):', e); }
+        }
         alert("🗑️ Đã xóa thành công!");
         setDonHangs(prev => prev.filter(item => item.id !== orderId));
         setTotalOrderCount(prev => prev - 1);

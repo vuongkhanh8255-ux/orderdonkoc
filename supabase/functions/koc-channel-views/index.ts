@@ -65,8 +65,15 @@ async function tikhubPosts(username: string): Promise<{ ok: boolean; videos: any
       dbg.code = j?.code; dbg.msg = j?.detail || j?.message || j?.msg || '';
       const data = j?.data ?? j;
       dbg.dataKeys = Object.keys(data || {}).slice(0, 14);
-      const arr = data?.aweme_list || data?.videos || data?.itemList || data?.aweme_details || data?.data?.aweme_list || [];
-      dbg.n = Array.isArray(arr) ? arr.length : 'notarr';
+      // CHỈ coi là mảng video khi TikTok THỰC SỰ trả về key danh sách. Nếu vắng HẲN (chỉ có
+      // log_pb/status_code/version) => TikTok báo lỗi user (không resolve được unique_id), KHÔNG
+      // phải "kênh trống" => arr=null => trả ok:false để RỚT về tikwm/follower thay vì báo "kênh ko tồn tại".
+      let arr: any = null;
+      for (const k of ['aweme_list', 'videos', 'itemList', 'aweme_details']) {
+        if (Array.isArray(data?.[k])) { arr = data[k]; break; }
+      }
+      if (arr === null && Array.isArray(data?.data?.aweme_list)) arr = data.data.aweme_list;
+      dbg.n = Array.isArray(arr) ? arr.length : 'no-list';
       dbg.item0 = Object.keys((Array.isArray(arr) ? arr[0] : {}) || {}).slice(0, 16);
       if ((j?.code === 200 || j?.code === 0) && Array.isArray(arr)) {
         return { ok: true, videos: arr.map(normVid).filter((v: any) => v), dbg };

@@ -1,0 +1,15 @@
+-- 23/7/2026 — FIX: video ĐÃ TRẢ CAST không hiện cast + KHÔNG được tính GMV/view (Tường Vi báo)
+-- TRIỆU CHỨNG: Tường Vi gửi 8 video "đã điền thanh toán" nhưng web hiện "Link air no cast",
+--   3 video còn không có trong mục link air. Trúc Quỳnh thấy hụt GMV.
+-- GỐC: cast chỉ đọc từ ô `air_links."cast"` (gõ tay), KHÔNG đọc `koc_payments.cast_net` (file Thanh toán).
+--   Nặng hơn: `staff_booking_report.vu_all` chỉ gồm tenure + air_links -> video trả cast mà CHƯA điền
+--   link air thì KHÔNG được tính GMV/view cho ai cả. Đo: Trúc Quỳnh 12 video = 108.688.833đ GMV bị bỏ;
+--   Tú Trần 11 video = 27.048.375đ; Minh Thảo 16 = 4.9M; Thu Thảo 9 = 1.2M; Hữu Đan 22 = 696K.
+-- FIX 1 (staff_all_records): CTE `pay` bóc /video/(id) từ koc_payments.air_link của NS (cast_net>0);
+--   cast_amount = GREATEST(ô gõ tay, tiền thanh toán); thêm nhánh `pay_only` = video đã trả cast mà
+--   CHƯA có link air & chưa nằm ở video-theo-tag -> vẫn hiện (loai='pay'); tenure rows cũng merge cast.
+--   Bộ lọc 'cast' đổi thành cast_amount>0 (mọi nguồn) thay vì so loai.
+-- FIX 2 (staff_booking_report): thêm `vu_pay` (video có koc_payments cast_net>0, khớp staff) vào `vu_all`
+--   với pri=3 (tenure 1 > air-link 2 > trả-cast 3) -> video book cast TÍNH cho bạn đó.
+--   Kết quả: Trúc Quỳnh 660.6M -> 790.1M (+129.5M); Minh Thảo 611 -> 682.5M; Thu Thảo 390 -> 442.4M.
+-- Kèm: thêm 27 link air REAL STEEL cho Thu Thảo (3 video có cast 9.700.000đ tự map).

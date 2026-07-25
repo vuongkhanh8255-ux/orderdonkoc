@@ -1,0 +1,16 @@
+-- 22/7/2026 — FIX auto-gỡ tag OAN + bảng "KOC của tôi bị gỡ"
+-- LỖI: cron auto_remove_overdue_assignments lấy last_air TỪ koc_video_unit (bị TRỄ/thiếu video mới)
+--   -> KOC air video mới <45 ngày bị coi là "lâu chưa air" -> auto-gỡ OAN.
+--   Đo 7 ngày: 419 auto-gỡ, 275 (66%) air trong 45 ngày = gỡ oan; 145 do koc_video_unit thiếu.
+-- XỬ LÝ:
+--   1) TẮT cờ ngay: app_flags 'auto_remove_overdue'=false (chặn máu chảy).
+--   2) SỬA hàm auto_remove_overdue_assignments: last_air = MAX 3 nguồn (tiktok_affiliate_orders +
+--      tiktok_shop_videos + koc_video_unit) theo (shop,uname) -> tươi, không gỡ oan nữa.
+--      + history insert kèm tag_since (khỏi mất tenure khi auto-gỡ). (migration auto_remove_overdue_fresh_lastair)
+--   3) KHÔI PHỤC 273 KOC gỡ oan (air thật trong 45 ngày, chưa gắn lại): re-insert koc_brand_assignments
+--      approved, assigned_at=now (qua trigger zombie), approved_at=tag_since gốc (giữ tenure liên tục
+--      -> phủ cả khoảng hở), actor 'khoi-phuc-go-oan-auto-22-7'. 144 ca quá hạn THẬT để yên.
+--   4) RPC staff_removed_kocs(nhansu): KOC của NS bị gỡ 90 ngày (koc, brand, ngày gỡ, lý do auto/blacklist/
+--      tay, đã-gắn-lại?, last_air) -> bảng "KOC của bạn bị gỡ" ở Báo cáo NS (frontend).
+-- LƯU Ý: auto-gỡ đang TẮT — bật lại bằng nút ở Hiệu suất KOC (hoặc set app_flags true) sau khi verify.
+-- cron: 'auto-remove-overdue-hourly' 41 * * * * (vẫn còn, nhưng cờ tắt nên return sớm).

@@ -1,0 +1,15 @@
+-- 22/7/2026 — FIX BUG "gỡ tag rồi GẮN LẠI làm mất tenure gốc" (re-tag reset ngày gắn)
+-- Ca thật: Nguyên Bảo @hibesdung MOAW — assign 16/06 -> remove 20/07 -> anh Khuê assign lại 22/07.
+--   koc_brand_assignments.approved_at = 22/07 (lần gắn lại) -> sa_cur tenure = [22/07, ∞].
+--   Tenure GỐC [16/06 -> 20/07] nằm ở sa_past NHƯNG bị điều kiện `not exists (đang gắn tag approved)`
+--   LOẠI (vì KOC giờ đang được gắn lại) -> video air 16/6-20/7 (trong tenure gốc) MẤT HẾT.
+--   Nguyên Bảo mất 5 video / 27.258 view / 4.163.780 GMV. Toàn hệ thống: 6 ca re-tag / 5 nhân sự dính.
+-- FIX: BỎ điều kiện `and not exists (... a2.status='approved' ...)` trong sa_past (report) và
+--   `where not exists (select 1 from cur c ...)` trong past (detail + tenure_videos).
+--   -> KOC bị gỡ-rồi-gắn-lại giữ CẢ 2 khoảng: tenure gốc [gắn gốc -> gỡ] + tenure mới [gắn lại -> ∞].
+--   Video air trong khoảng nào cũng của bạn đó (đúng luật "air lúc giữ tag = vĩnh viễn").
+--   Không đếm đôi: vu_asg group theo (nhansu,content_id) min(tag_date)/max(end_d) -> 1 video 1 lần.
+--   Khoảng "hở" giữa gỡ và gắn-lại (thường vài ngày) được dedup toàn cục bảo vệ (ai tag muộn hơn thắng).
+-- Áp qua Supabase migrations: staff_booking_report_keep_retag_tenure,
+--   staff_booking_detail_keep_retag_tenure, staff_tenure_videos_keep_retag.
+-- Verify: Nguyên Bảo @hibesdung MOAW -> ngày gắn về 16/06, view 0->27.258, video 0->5. Data live ngay.

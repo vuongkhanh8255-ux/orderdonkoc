@@ -103,14 +103,19 @@ function App() {
   // ── AUTH STATE — ưu tiên localStorage (ghi nhớ), fallback sessionStorage ──
   const [user, setUser] = useState(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem(SESSION_KEY))
-          || JSON.parse(sessionStorage.getItem(SESSION_KEY));
+      const inLocal = localStorage.getItem(SESSION_KEY);
+      const saved = JSON.parse(inLocal) || JSON.parse(sessionStorage.getItem(SESSION_KEY));
       if (!saved) return null;
-      // Đồng bộ lại role/name từ ACCOUNTS theo username — role có thể đã được nâng cấp
-      // sau lần đăng nhập trước (vd: thêm quyền 'đề xuất gán' cho ecom). Không bắt đăng nhập lại.
+      // Đồng bộ lại role/name/staff từ ACCOUNTS theo username — quyền có thể đã được nâng cấp
+      // sau lần đăng nhập trước (vd: thêm 'staff' cho ecom Đan). Không bắt đăng nhập lại.
       const fresh = ACCOUNTS.find(a => a.username === saved.username);
       // Account bị VÔ HIỆU/xoá khỏi ACCOUNTS (vd 'booking' chung) → phiên cũ hết hiệu lực, bắt đăng nhập lại.
-      return fresh ? { ...saved, role: fresh.role, name: fresh.name, staff: fresh.staff, seeAll: fresh.seeAll } : null;
+      if (!fresh) return null;
+      const merged = { ...saved, role: fresh.role, name: fresh.name, staff: fresh.staff, seeAll: fresh.seeAll };
+      // GHI LẠI session đã đồng bộ vào ĐÚNG storage → component đọc sk_session trực tiếp (vd KocPerformanceTab)
+      // thấy đúng field mới (staff) mà KHÔNG cần đăng nhập lại.
+      (inLocal ? localStorage : sessionStorage).setItem(SESSION_KEY, JSON.stringify(merged));
+      return merged;
     } catch { return null; }
   });
 

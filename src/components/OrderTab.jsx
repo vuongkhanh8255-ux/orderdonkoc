@@ -434,7 +434,7 @@ const OrderTab = ({ currentUser } = {}) => {
     } = useAppData();
 
     // ── KHÓA NHÂN SỰ theo account (Khánh 14/7): account cá nhân chỉ order + coi đơn dưới TÊN MÌNH.
-    //    Trừ 3 sếp nhóm có seeAll (Thu Thảo/Minh Thảo/Hoàng Vy) → coi HẾT + chọn tên bất kỳ như cũ.
+    //    Chỉ account có cờ seeAll mới coi HẾT + chọn tên bất kỳ (Khánh 23/7: không còn account nào bật cờ này).
     const lockedStaff = (currentUser?.staff && !currentUser?.seeAll) ? currentUser.staff : null;
     const lockedStaffId = useMemo(() => {
         if (!lockedStaff) return null;
@@ -787,6 +787,14 @@ const OrderTab = ({ currentUser } = {}) => {
             const detailInserts = previewList.map(item => ({ dongui_id: newOrderId, sanpham_id: item.id, so_luong: item.so_luong }));
             const { error: detailError } = await supabase.from('chitiettonguis').insert(detailInserts);
             if (detailError) throw detailError;
+
+            // GẮN TAG NGAY khi vừa tạo đơn (đừng đợi cron chạy phút :11 → trễ tới ~1 tiếng).
+            // Trong khoảng trễ đó tag chưa có nên 2 lá chắn chống trùng đều tê liệt: nhân sự khác
+            // gửi trùng brand cho cùng kênh vẫn lọt, rồi cron lấy đơn GẦN NHẤT → người order trước mất tag.
+            // Hàm này idempotent (chạy lại không nhân đôi), cron vẫn giữ làm lưới vét.
+            try {
+                await supabase.rpc('sync_order_tags', { p_days: 1 });
+            } catch (tagErr) { console.warn('sync_order_tags ngay sau khi tao don loi (cron se vet lai):', tagErr); }
 
             const bookingPromises = [];
             previewList.forEach(item => {
