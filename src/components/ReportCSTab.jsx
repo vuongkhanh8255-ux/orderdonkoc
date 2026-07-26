@@ -90,8 +90,46 @@ export default function ReportCSTab() {
     sp_tra_hang_hoan_tien: 'sp_ti_le_tra_hang',
   };
 
+  // ── TỰ ĐỘNG LẤY TỪ SÀN (RPC report_cs_auto) ──
+  // Chỉ điền các chỉ số TÍNH ĐƯỢC từ đơn đã đồng bộ. Chỉ số cần Chat API / SLA giao hàng /
+  // điểm sức khoẻ tài khoản thì KHÔNG đụng vào → CS vẫn tự điền (thà thiếu hơn điền sai).
+  const [autoBusy, setAutoBusy] = useState(false);
+  const [autoMsg, setAutoMsg] = useState('');
+  const [autoKeys, setAutoKeys] = useState(() => new Set());
+
+  const autoFill = async () => {
+    if (!selectedBrand) return;
+    setAutoBusy(true); setAutoMsg('');
+    const to = reportDate || today();
+    const d = new Date(to + 'T00:00:00'); d.setDate(d.getDate() - 29);
+    const from = d.toISOString().slice(0, 10);
+    const { data, error } = await supabase.rpc('report_cs_auto', { p_brand: selectedBrand, p_from: from, p_to: to });
+    setAutoBusy(false);
+    if (error) { setAutoMsg('⚠️ ' + error.message); return; }
+    const sp = data?.shopee || {}, tt = data?.tiktok || {};
+    const patch = {}, marked = new Set(autoKeys);
+    const put = (k, v) => { if (v !== null && v !== undefined) { patch[k] = `${v}%`; marked.add(k); } };
+    put('sp_huy_don', sp.sp_huy_don);
+    put('sp_tra_hang_hoan_tien', sp.sp_tra_hang_hoan_tien);
+    put('sp_don_hang_khong_tc', sp.sp_don_hang_khong_tc);
+    put('tt_tra_hang_hoan_tien', tt.tt_tra_hang_hoan_tien);
+    if (!Object.keys(patch).length) { setAutoMsg('⚠️ Không có đơn nào của brand này trong 30 ngày.'); return; }
+    setPerf(p => ({ ...p, ...patch }));
+    setForm(f => {
+      const nf = { ...f };
+      Object.entries(patch).forEach(([k, v]) => { if (PERF_TO_FORM[k]) nf[PERF_TO_FORM[k]] = v; });
+      return nf;
+    });
+    setAutoKeys(marked);
+    // Cảnh báo dữ liệu đáng ngờ: gian nhiều đơn mà tỷ lệ hủy gần 0 → sync sót đơn hủy
+    const nghiNgo = Number(sp.tong_don) > 500 && sp.sp_huy_don !== null && Number(sp.sp_huy_don) < 1;
+    setAutoMsg(`✅ Đã điền ${Object.keys(patch).length} chỉ số (${from} → ${to}, Shopee ${sp.tong_don || 0} đơn · TikTok ${tt.tong_don || 0} đơn).`
+      + (nghiNgo ? ' ⚠️ Tỷ lệ hủy đơn Shopee gần 0 — dữ liệu đơn hủy của gian này có thể sync thiếu, nên đối chiếu Seller Center trước khi chốt.' : ''));
+  };
+
   const updatePerf = (key, val) => {
     setPerf(p => ({ ...p, [key]: val }));
+    setAutoKeys(s => { if (!s.has(key)) return s; const n = new Set(s); n.delete(key); return n; }); // CS sửa tay → bỏ nhãn tự động
     // Auto-sync to form if mapped
     if (PERF_TO_FORM[key]) {
       setForm(f => ({ ...f, [PERF_TO_FORM[key]]: val }));
@@ -236,7 +274,10 @@ export default function ReportCSTab() {
                 <td style={{ padding: '8px 10px', textAlign: 'center', fontSize: 12, color: '#888' }}>{item.target}</td>
                 <td style={{ padding: '4px 6px' }}>
                   <input
-                    style={cellInputStyle}
+                    style={autoKeys.has(item.key)
+                      ? { ...cellInputStyle, background: '#ecfdf5', border: '1px solid #34d399', color: '#065f46' }
+                      : cellInputStyle}
+                    title={autoKeys.has(item.key) ? '🔄 Tự động lấy từ đơn đã đồng bộ — sửa tay được' : ''}
                     value={perf[item.key] || ''}
                     onChange={e => updatePerf(item.key, e.target.value)}
                     placeholder="—"
@@ -286,11 +327,28 @@ export default function ReportCSTab() {
           </h2>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={autoFill} disabled={autoBusy}
+            title="Tự tính từ đơn hàng đã đồng bộ 30 ngày gần nhất: tỷ lệ hủy đơn, trả hàng/hoàn tiền, đơn không thành công"
+            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: autoBusy ? '#94a3b8' : '#0891b2', color: '#fff', fontSize: 13, fontWeight: 800, cursor: autoBusy ? 'wait' : 'pointer' }}>
+            {autoBusy ? '⏳ Đang lấy...' : '🔄 Lấy tự động từ sàn'}
+          </button>
           <label style={labelStyle}>Ngày báo cáo:</label>
           <input type="date" value={reportDate} onChange={e => setReportDate(e.target.value)}
             style={{ padding: '8px 12px', borderRadius: 8, border: '2px solid #ff7a30', fontSize: 14, fontWeight: 600, background: '#fff' }} />
         </div>
       </div>
+
+      {autoMsg && (
+        <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 9, fontSize: 13, fontWeight: 600, lineHeight: 1.5,
+          background: autoMsg.startsWith('⚠️') ? '#fef2f2' : '#ecfdf5', color: autoMsg.startsWith('⚠️') ? '#dc2626' : '#065f46',
+          border: `1px solid ${autoMsg.startsWith('⚠️') ? '#fecaca' : '#a7f3d0'}` }}>
+          {autoMsg}
+          <div style={{ fontWeight: 500, color: '#64748b', marginTop: 4, fontSize: 12 }}>
+            Ô nền xanh = số tự động. Các chỉ số chat (tỷ lệ/thời gian phản hồi, số cuộc trò chuyện), giao hàng nhanh/trễ,
+            điểm tình trạng tài khoản và đánh giá shop <b>chưa có API</b> → vẫn điền tay.
+          </div>
+        </div>
+      )}
 
       {loading && <div style={{ textAlign: 'center', padding: 20, color: '#888' }}>Đang tải báo cáo...</div>}
 
