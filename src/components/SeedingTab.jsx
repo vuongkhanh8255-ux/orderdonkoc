@@ -9,7 +9,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
-import { useAppData } from '../context/AppDataContext';
 
 const ACCENT = '#ff6a2c';
 const CONTENT_TYPES = ['Seeding TikTok', 'Review sản phẩm', 'Livestream', 'Affiliate campaign', 'Khác'];
@@ -47,7 +46,6 @@ const card = { background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb'
 const Field = ({ label, children, span }) => (<div style={span ? { gridColumn: `span ${span}` } : undefined}><label style={labelStyle}>{label}</label>{children}</div>);
 
 export default function SeedingTab({ currentUser }) {
-  const { nhanSus } = useAppData();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [month, setMonth] = useState(curYm());
@@ -55,6 +53,7 @@ export default function SeedingTab({ currentUser }) {
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState(null);   // object đang sửa/thêm, null = đóng form
   const [authed, setAuthed] = useState(false);     // đã nhập mật khẩu duyệt trong phiên
+  const [budgets, setBudgets] = useState({});      // { 'YYYY-MM': số tiền } — ngân sách ĐẶT TAY theo tháng
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -64,6 +63,29 @@ export default function SeedingTab({ currentUser }) {
     setRows(data || []); setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // Ngân sách đặt tay theo tháng (bảng seeding_budgets)
+  const loadBudgets = useCallback(async () => {
+    const { data } = await supabase.from('seeding_budgets').select('ym, amount');
+    const m = {}; (data || []).forEach(b => { m[b.ym] = Number(b.amount) || 0; });
+    setBudgets(m);
+  }, []);
+  useEffect(() => { loadBudgets(); }, [loadBudgets]);
+
+  const setBudget = async () => {
+    if (month === 'all') { alert('Chọn 1 tháng cụ thể rồi mới đặt ngân sách nha.'); return; }
+    const cur = budgets[month] || 0;
+    const raw = window.prompt(`Ngân sách seeding tháng ${month} (VNĐ):`, cur ? String(cur) : '');
+    if (raw === null) return;
+    const amount = Number(String(raw).replace(/[^\d]/g, '')) || 0;
+    const { error } = await supabase.from('seeding_budgets')
+      .upsert({ ym: month, amount, updated_by: currentUser?.username || '', updated_at: new Date().toISOString() }, { onConflict: 'ym' });
+    if (error) { alert('Lưu ngân sách không được: ' + error.message); return; }
+    setBudgets(b => ({ ...b, [month]: amount }));
+  };
+
+  // Tên CS đã dùng → gợi ý cho ô "Người tạo" (thay danh sách nhân sự booking)
+  const csNames = useMemo(() => [...new Set(rows.map(r => r.staff).filter(Boolean))].sort(), [rows]);
 
   const requirePw = () => {
     if (authed) return true;
@@ -115,10 +137,14 @@ export default function SeedingTab({ currentUser }) {
   }), [rows, month, statusFilter, search, start, end]);
 
   const kpi = useMemo(() => {
-    let budget = 0, paid = 0, pending = 0;
-    filtered.forEach(r => { const t = num(r.total); budget += t; if (r.status === 'paid') paid += t; else if (r.status !== 'rejected') pending += t; });
-    return { budget, paid, pending, debt: budget - paid };
-  }, [filtered]);
+    let spend = 0, paid = 0, pending = 0;
+    filtered.forEach(r => { const t = num(r.total); spend += t; if (r.status === 'paid') paid += t; else if (r.status !== 'rejected') pending += t; });
+    // Ngân sách = số ĐẶT TAY của tháng đang chọn (xem "all" thì cộng hết các tháng đã đặt).
+    const budget = month === 'all'
+      ? Object.values(budgets).reduce((a, b) => a + (Number(b) || 0), 0)
+      : (Number(budgets[month]) || 0);
+    return { budget, spend, paid, pending, remain: budget - paid, hasBudget: budget > 0 };
+  }, [filtered, budgets, month]);
 
   const months = useMemo(() => {
     const set = new Set(rows.map(r => (r.pay_date || '').slice(0, 7)).filter(Boolean));
@@ -153,6 +179,7 @@ export default function SeedingTab({ currentUser }) {
           <select value={month} onChange={e => setMonth(e.target.value)} style={{ ...inputStyle, width: 'auto', cursor: 'pointer', fontWeight: 700 }}>
             {months.map(m => <option key={m} value={m}>{m === 'all' ? '📅 Tất cả tháng' : `📅 ${m}`}</option>)}
           </select>
+          <button onClick={setBudget} title="Đặt ngân sách seeding cho tháng đang chọn" style={{ padding: '9px 16px', borderRadius: 9, border: '1.5px solid #c7d2fe', background: '#eef2ff', color: '#4f46e5', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>💰 Đặt ngân sách</button>
           <button onClick={exportXlsx} style={{ padding: '9px 16px', borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>📥 Xuất Excel</button>
           <button onClick={() => setEditing({ ...EMPTY, staff: currentUser?.username || '' })} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer', boxShadow: '0 4px 12px rgba(255,106,44,0.25)' }}>+ Thêm phiếu</button>
         </div>
@@ -161,10 +188,10 @@ export default function SeedingTab({ currentUser }) {
       {/* KPI */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 20 }}>
         {[
-          { label: 'Tổng ngân sách', value: kpi.budget, color: '#6366f1' },
+          { label: kpi.hasBudget ? 'Ngân sách tháng' : 'Ngân sách (chưa đặt)', value: kpi.budget, color: '#6366f1' },
           { label: 'Đã thanh toán', value: kpi.paid, color: '#16a34a' },
           { label: 'Chờ thanh toán', value: kpi.pending, color: '#d97706' },
-          { label: 'Công nợ còn lại', value: kpi.debt, color: '#dc2626' },
+          { label: kpi.hasBudget ? 'Ngân sách còn lại' : 'Tổng đã lên phiếu', value: kpi.hasBudget ? kpi.remain : kpi.spend, color: kpi.hasBudget && kpi.remain < 0 ? '#dc2626' : '#dc2626' },
         ].map((c, i) => (
           <div key={i} style={{ ...card, borderTop: `3px solid ${c.color}` }}>
             <div style={labelStyle}>{c.label}</div>
@@ -254,11 +281,11 @@ export default function SeedingTab({ currentUser }) {
             <h2 style={{ margin: '0 0 18px', fontSize: '1.15rem', fontWeight: 900, color: '#0f172a' }}>{editing.id ? '✏️ Sửa phiếu seeding' : '🌱 Thêm phiếu seeding'}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
               <Field label="Ngày"><input type="date" value={editing.pay_date || ''} onChange={e => setEditing({ ...editing, pay_date: e.target.value })} style={inputStyle} /></Field>
-              <Field label="Người tạo">
-                <select value={editing.staff || ''} onChange={e => setEditing({ ...editing, staff: e.target.value })} style={inputStyle}>
-                  <option value="">— chọn —</option>
-                  {(nhanSus || []).map(n => <option key={n.id} value={n.ten_nhansu}>{n.ten_nhansu}</option>)}
-                </select>
+              {/* Người tạo = TÊN CS (trước đây đổ nhầm danh sách nhân sự booking).
+                  Gõ tự do + gợi ý các tên CS đã dùng trước đó → CS tự thêm tên mình, khỏi chờ khai báo. */}
+              <Field label="Người tạo (CS)">
+                <input list="cs-staff-list" value={editing.staff || ''} onChange={e => setEditing({ ...editing, staff: e.target.value })} style={inputStyle} placeholder="Tên CS tạo phiếu" />
+                <datalist id="cs-staff-list">{csNames.map(n => <option key={n} value={n} />)}</datalist>
               </Field>
               <Field label="Họ tên seeder *"><input value={editing.seeder_name || ''} onChange={e => setEditing({ ...editing, seeder_name: e.target.value })} style={inputStyle} placeholder="Tên người nhận" /></Field>
               <Field label="Nội dung">

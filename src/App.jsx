@@ -48,7 +48,8 @@ const TopPicksTab = lazy(() => import('./components/TopPicksTab'));
 const ReviewsTab = lazy(() => import('./components/ReviewsTab'));
 const SeedingTab = lazy(() => import('./components/SeedingTab'));
 const PromoCheckTab = lazy(() => import('./components/PromoCheckTab'));
-const CasesTab = lazy(() => import('./components/CasesTab'));
+const ReturnsTab = lazy(() => import('./components/ReturnsTab'));       // M2 — thống kê trả hàng (thay CasesTab)
+const ComplaintsTab = lazy(() => import('./components/ComplaintsTab')); // M3 — khiếu nại (CS lên đơn)
 const VoucherTab = lazy(() => import('./components/VoucherTab'));
 const DefectTab = lazy(() => import('./components/DefectTab'));
 const DailyReportTab = lazy(() => import('./components/DailyReportTab'));
@@ -321,13 +322,15 @@ function AppMain({ user, onLogout, allowedViews }) {
                 { view: 'crm', icon: '👥', name: 'CRM' },
               ]},
               { key: 'cskh', label: '📋 CSKH', emoji: '📋', items: [
-                { view: 'cskh', icon: '📋', name: 'Module 1: CSKH' },
-                { view: 'reviews', icon: '⭐', name: 'Module 2: Đánh giá sàn' },
-                { view: 'seeding', icon: '🌱', name: 'Module 3: Chi phí seeding' },
-                { view: 'promo_check', icon: '🎯', name: 'Module 4: Đơn sai KM' },
-                { view: 'cases', icon: '↩️', name: 'Module 5: Trả hàng & khiếu nại' },
-                { view: 'vouchers', icon: '🎫', name: 'Module 6: Voucher' },
-                { view: 'defects', icon: '🔧', name: 'Module 7: Sản phẩm lỗi' },
+                // Đánh số + thứ tự BÁM ĐÚNG brief "ĐỀ XUẤT TỐI ƯU QUY TRÌNH CSKH & VẬN HÀNH"
+                { view: 'cskh', icon: '📋', name: 'Module 1: Đánh giá CSKH' },
+                { view: 'reviews', icon: '⭐', name: 'Module 1B: Đánh giá sàn' },
+                { view: 'returns', icon: '↩️', name: 'Module 2: Trả hàng/Hoàn hàng' },
+                { view: 'complaints', icon: '⚠️', name: 'Module 3: Khiếu nại' },
+                { view: 'defects', icon: '🔧', name: 'Module 4: Sản phẩm lỗi' },
+                { view: 'promo_check', icon: '🎯', name: 'Module 5: Đơn sai KM' },
+                { view: 'seeding', icon: '🌱', name: 'Module 6: Chi phí seeding' },
+                { view: 'vouchers', icon: '🎫', name: 'Module 7: Voucher hỗ trợ' },
                 { view: 'daily_report', icon: '📊', name: 'Module 8: Daily Report' },
               ]},
               { key: 'livestream', label: '🎬 Livestream', emoji: '🎬', items: [
@@ -492,7 +495,8 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'reviews' && <ReviewsTab />}
           {currentView === 'seeding' && <SeedingTab currentUser={user} />}
           {currentView === 'promo_check' && <PromoCheckTab currentUser={user} />}
-          {currentView === 'cases' && <CasesTab currentUser={user} />}
+          {currentView === 'returns' && <ReturnsTab currentUser={user} />}
+          {currentView === 'complaints' && <ComplaintsTab currentUser={user} />}
           {currentView === 'vouchers' && <VoucherTab currentUser={user} />}
           {currentView === 'defects' && <DefectTab currentUser={user} />}
           {currentView === 'daily_report' && <DailyReportTab currentUser={user} />}
