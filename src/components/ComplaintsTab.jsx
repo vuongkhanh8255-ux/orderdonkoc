@@ -8,6 +8,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
+import { SHOPS } from '../constants/shops';
 
 const ACCENT = '#ff6a2c';
 const TABLE = 'cs_cases';
@@ -39,10 +40,14 @@ const card = { background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb'
 const miniBtn = (color) => ({ padding: '4px 9px', borderRadius: 7, border: 'none', background: color + '18', color, fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer' });
 
 const EMPTY = {
-  case_type: 'complaint', platform: 'shopee', order_sn: '', shop_name: '', buyer_name: '', buyer_phone: '',
+  case_type: 'complaint', platform: 'shopee', order_sn: '', shop_name: '', buyer_name: '', buyer_phone: '', buyer_address: '',
   product_summary: '', reason_category: '', reason: '', status: 'new', assigned_to: '',
   evidence_links: '', compensation_items: '', compensation_tracking: '', note: '', source: 'manual',
 };
+const ymdOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const daysAgoYmd = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return ymdOf(d); };
+const isImg = (u) => /\.(jpe?g|png|gif|webp|bmp|heic)(\?|$)/i.test(u);
+const isVid = (u) => /\.(mp4|mov|webm|avi|mkv)(\?|$)/i.test(u) || /(youtube|youtu\.be|tiktok\.com|drive\.google\.com\/file)/i.test(u);
 
 export default function ComplaintsTab({ currentUser }) {
   const [rows, setRows] = useState([]);
@@ -51,7 +56,12 @@ export default function ComplaintsTab({ currentUser }) {
   const [statusF, setStatusF] = useState('open');
   const [platF, setPlatF] = useState('all');
   const [reasonF, setReasonF] = useState('all');
+  const [shopF, setShopF] = useState('all');
+  const [fromF, setFromF] = useState(daysAgoYmd(90));
+  const [toF, setToF] = useState(ymdOf(new Date()));
   const [search, setSearch] = useState('');
+  const [view, setView] = useState('list');    // list | library
+  const [lightbox, setLightbox] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,6 +78,7 @@ export default function ComplaintsTab({ currentUser }) {
     const payload = {
       case_type: 'complaint', platform: r.platform || null, order_sn: r.order_sn?.trim() || null,
       shop_name: r.shop_name || null, buyer_name: r.buyer_name || null, buyer_phone: r.buyer_phone || null,
+      buyer_address: r.buyer_address || null,
       product_summary: r.product_summary || null, reason: r.reason || null, reason_category: r.reason_category || null,
       status: r.status || 'new', assigned_to: r.assigned_to || null, evidence_links: r.evidence_links || null,
       compensation_items: r.compensation_items || null, compensation_tracking: r.compensation_tracking || null,
@@ -92,16 +103,27 @@ export default function ComplaintsTab({ currentUser }) {
   const del = async (row) => { if (!confirm('Xoá hồ sơ khiếu nại này?')) return; await supabase.from(TABLE).delete().eq('id', row.id); load(); };
 
   const filtered = useMemo(() => rows.filter(r => {
+    const d = (r.created_at || '').slice(0, 10);
+    if (fromF && d && d < fromF) return false;
+    if (toF && d && d > toF) return false;
     if (statusF === 'open' && (r.status === 'done' || r.status === 'closed')) return false;
     if (statusF !== 'all' && statusF !== 'open' && r.status !== statusF) return false;
     if (platF !== 'all' && r.platform !== platF) return false;
+    if (shopF !== 'all' && r.shop_name !== shopF) return false;
     if (reasonF !== 'all' && r.reason_category !== reasonF) return false;
     if (search) {
       const q = search.toLowerCase();
       if (![r.order_sn, r.buyer_name, r.buyer_phone, r.product_summary, r.reason, r.note].some(v => v && String(v).toLowerCase().includes(q))) return false;
     }
     return true;
-  }), [rows, statusF, platF, reasonF, search]);
+  }), [rows, statusF, platF, shopF, reasonF, search, fromF, toF]);
+
+  // Thư viện ảnh/video từ bằng chứng khiếu nại
+  const library = useMemo(() => {
+    const out = [];
+    filtered.forEach(r => (r.evidence_links || '').split('\n').map(s => s.trim()).filter(Boolean).forEach(u => out.push({ url: u, row: r })));
+    return out;
+  }, [filtered]);
 
   const kpi = useMemo(() => {
     const c = { new: 0, processing: 0, awaiting_gift: 0, done: 0, overdue: 0 };
@@ -185,9 +207,15 @@ export default function ComplaintsTab({ currentUser }) {
         </div>
       )}
 
-      {/* FILTER */}
+      {/* FILTER — có thời gian + gian hàng */}
       <div style={{ ...card, marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <input type="text" placeholder="🔍 Tìm mã đơn, khách, SĐT, SP..." value={search} onChange={e => setSearch(e.target.value)} style={{ ...inputStyle, width: 260 }} />
+        <input type="date" value={fromF} onChange={e => setFromF(e.target.value)} style={{ ...inputStyle, width: 'auto' }} />
+        <span style={{ color: '#94a3b8' }}>→</span>
+        <input type="date" value={toF} onChange={e => setToF(e.target.value)} style={{ ...inputStyle, width: 'auto' }} />
+        {[[7, '7N'], [30, '30N'], [90, '90N'], [365, '1 năm']].map(([n, l]) => (
+          <button key={n} onClick={() => { setFromF(daysAgoYmd(n)); setToF(ymdOf(new Date())); }} style={{ padding: '6px 11px', borderRadius: 8, border: '1.5px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer' }}>{l}</button>
+        ))}
+        <input type="text" placeholder="🔍 Tìm mã đơn, khách, SĐT, SP..." value={search} onChange={e => setSearch(e.target.value)} style={{ ...inputStyle, width: 230 }} />
         <select value={statusF} onChange={e => setStatusF(e.target.value)} style={{ ...inputStyle, width: 'auto', cursor: 'pointer' }}>
           <option value="open">Chưa hoàn tất</option><option value="all">Tất cả trạng thái</option>
           {FLOW.map(s => <option key={s} value={s}>{STATUS[s].label}</option>)}
@@ -195,13 +223,59 @@ export default function ComplaintsTab({ currentUser }) {
         <select value={reasonF} onChange={e => setReasonF(e.target.value)} style={{ ...inputStyle, width: 'auto', cursor: 'pointer' }}>
           <option value="all">Nguyên nhân: Tất cả</option>{REASONS.map(x => <option key={x} value={x}>{x}</option>)}
         </select>
-        <select value={platF} onChange={e => setPlatF(e.target.value)} style={{ ...inputStyle, width: 'auto', cursor: 'pointer' }}>
+        <select value={platF} onChange={e => { setPlatF(e.target.value); setShopF('all'); }} style={{ ...inputStyle, width: 'auto', cursor: 'pointer' }}>
           <option value="all">Sàn: Tất cả</option><option value="shopee">Shopee</option><option value="tiktok">TikTok</option>
+        </select>
+        <select value={shopF} onChange={e => setShopF(e.target.value)} style={{ ...inputStyle, width: 'auto', cursor: 'pointer' }}>
+          <option value="all">Gian: Tất cả</option>
+          {SHOPS.filter(s => platF === 'all' || s.san === platF).map(s => <option key={s.san + s.name} value={s.name}>{s.name}</option>)}
         </select>
         <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>{fmtN(filtered.length)} hồ sơ</span>
       </div>
 
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        {[['list', '📋 Danh sách'], ['library', `🖼️ Thư viện ảnh/video (${library.length})`]].map(([v, l]) => (
+          <button key={v} onClick={() => setView(v)} style={{ padding: '8px 16px', borderRadius: 9, border: `1.5px solid ${view === v ? ACCENT : '#e5e7eb'}`, background: view === v ? '#fff7ed' : '#fff', color: view === v ? '#e85518' : '#64748b', fontWeight: 800, fontSize: '0.83rem', cursor: 'pointer' }}>{l}</button>
+        ))}
+      </div>
+
+      {/* THƯ VIỆN ẢNH/VIDEO */}
+      {view === 'library' && (
+        <div style={card}>
+          {library.length === 0 ? <div style={{ color: '#94a3b8', fontSize: '0.85rem', padding: 20, textAlign: 'center' }}>Chưa có ảnh/video bằng chứng nào trong kỳ.</div> : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 12 }}>
+              {library.map((m, i) => (
+                <div key={i} style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden', background: '#f8fafc' }}>
+                  <div onClick={() => setLightbox(m)} style={{ height: 130, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: '#0f172a08' }}>
+                    {isImg(m.url)
+                      ? <img src={m.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; e.target.parentNode.innerHTML = '<span style="font-size:2rem">🖼️</span>'; }} />
+                      : <span style={{ fontSize: '2rem' }}>{isVid(m.url) ? '🎬' : '📎'}</span>}
+                  </div>
+                  <div style={{ padding: '7px 9px', fontSize: '0.72rem' }}>
+                    <div style={{ fontWeight: 700, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={m.row.product_summary}>{m.row.buyer_name || m.row.order_sn || '—'}</div>
+                    <div style={{ color: '#94a3b8' }}>{fmtDate(m.row.created_at)} · {m.row.reason_category || '—'}</div>
+                    <a href={m.url} target="_blank" rel="noreferrer" style={{ color: '#0891b2', fontWeight: 700 }}>Mở gốc ↗</a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {lightbox && (
+        <div onClick={() => setLightbox(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: 24 }}>
+          <div onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
+            {isImg(lightbox.url)
+              ? <img src={lightbox.url} alt="" style={{ maxWidth: '86vw', maxHeight: '76vh', borderRadius: 12, background: '#fff' }} />
+              : <div style={{ background: '#fff', borderRadius: 12, padding: 40 }}><div style={{ fontSize: '3rem', marginBottom: 12 }}>{isVid(lightbox.url) ? '🎬' : '📎'}</div><a href={lightbox.url} target="_blank" rel="noreferrer" style={{ color: '#0891b2', fontWeight: 800 }}>Mở link ↗</a></div>}
+            <div style={{ color: '#fff', marginTop: 12, fontSize: '0.85rem' }}><b>{lightbox.row?.buyer_name}</b> · {lightbox.row?.reason_category} · {fmtDate(lightbox.row?.created_at)}</div>
+          </div>
+        </div>
+      )}
+
       {/* TABLE */}
+      {view === 'list' && (
       <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -242,6 +316,7 @@ export default function ComplaintsTab({ currentUser }) {
           </table>
         </div>
       </div>
+      )}
 
       {/* FORM */}
       {editing && (
@@ -250,7 +325,13 @@ export default function ComplaintsTab({ currentUser }) {
             <h2 style={{ margin: '0 0 16px', fontSize: '1.1rem', fontWeight: 900 }}>{editing.id ? '⚠️ Hồ sơ khiếu nại' : '➕ Lên đơn khiếu nại'}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
               <div><label style={labelStyle}>Sàn</label><select value={editing.platform || ''} onChange={e => setEditing({ ...editing, platform: e.target.value })} style={inputStyle}><option value="">—</option><option value="shopee">Shopee</option><option value="tiktok">TikTok</option></select></div>
-              <div><label style={labelStyle}>Gian hàng</label><input value={editing.shop_name || ''} onChange={e => setEditing({ ...editing, shop_name: e.target.value })} style={inputStyle} placeholder="VD: Bodymiss Việt Nam" /></div>
+              <div><label style={labelStyle}>Gian hàng</label>
+                <select value={editing.shop_name || ''} onChange={e => { const sh = SHOPS.find(s => s.name === e.target.value); setEditing({ ...editing, shop_name: e.target.value, platform: sh ? sh.san : editing.platform }); }} style={inputStyle}>
+                  <option value="">— chọn gian —</option>
+                  <optgroup label="Shopee">{SHOPS.filter(s => s.san === 'shopee').map(s => <option key={'c-sp' + s.name} value={s.name}>Shopee · {s.name}</option>)}</optgroup>
+                  <optgroup label="TikTok">{SHOPS.filter(s => s.san === 'tiktok').map(s => <option key={'c-tt' + s.name} value={s.name}>TikTok · {s.name}</option>)}</optgroup>
+                </select>
+              </div>
               <div><label style={labelStyle}>Mã đơn hàng</label><input value={editing.order_sn || ''} onChange={e => setEditing({ ...editing, order_sn: e.target.value })} style={inputStyle} /></div>
               <div><label style={labelStyle}>Tên khách</label><input value={editing.buyer_name || ''} onChange={e => setEditing({ ...editing, buyer_name: e.target.value })} style={inputStyle} /></div>
               <div><label style={labelStyle}>SĐT khách</label><input value={editing.buyer_phone || ''} onChange={e => setEditing({ ...editing, buyer_phone: e.target.value })} style={inputStyle} /></div>
@@ -264,6 +345,7 @@ export default function ComplaintsTab({ currentUser }) {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div><label style={labelStyle}>Sản phẩm + số lượng gửi bù</label><input value={editing.compensation_items || ''} onChange={e => setEditing({ ...editing, compensation_items: e.target.value })} style={inputStyle} placeholder="VD: Gel nha đam 250ml x1" /></div>
                   <div><label style={labelStyle}>Mã vận đơn gửi bù</label><input value={editing.compensation_tracking || ''} onChange={e => setEditing({ ...editing, compensation_tracking: e.target.value })} style={inputStyle} /></div>
+                  <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>📍 Địa chỉ nhận hàng gửi bù</label><textarea value={editing.buyer_address || ''} onChange={e => setEditing({ ...editing, buyer_address: e.target.value })} style={{ ...inputStyle, minHeight: 46, resize: 'vertical' }} placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/TP" /></div>
                 </div>
               </div>
               <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>Link ảnh/video bằng chứng (mỗi dòng 1 link)</label><textarea value={editing.evidence_links || ''} onChange={e => setEditing({ ...editing, evidence_links: e.target.value })} style={{ ...inputStyle, minHeight: 52, resize: 'vertical' }} placeholder="https://..." /></div>
