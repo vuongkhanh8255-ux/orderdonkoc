@@ -4,11 +4,19 @@ import { supabase } from '../supabaseClient';
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwl0bImCEVCdWA8rSM6SxJH1Go9YuKxmcysQiH2ZxRl6jnCSS6Rdna3ztKYnx5nbr9A6A/exec';
 const TOKEN = 'stella2026';
 
-const BRANDS = ['Bodymiss', 'Milaganics', 'Moaw Moaws', 'eHerb', 'Real Steel', 'Masube', 'Healmi'];
+// eHerb có 2 GIAN mỗi sàn (VN + HCM) → tách 2 thẻ báo cáo riêng theo yêu cầu CS.
+// Giữ nguyên key 'eHerb' cho gian VN để KHÔNG mất 27 báo cáo đã lưu; thêm key mới 'eHerb HCM'.
+const BRANDS = ['Bodymiss', 'Milaganics', 'Moaw Moaws', 'eHerb', 'eHerb HCM', 'Real Steel', 'Masube', 'Healmi'];
+
+// Tên gian hiển thị trên đầu 2 bảng Shopee/TikTok của từng thẻ
+const BRAND_SHOP = {
+  'eHerb': 'EHERB VN', 'eHerb HCM': 'EHERB HCM',
+};
+const BRAND_LABEL = { 'eHerb': 'eHerb VN' };
 
 const BRAND_COLORS = {
   'Bodymiss': '#3b82f6', 'Milaganics': '#10b981', 'Moaw Moaws': '#ff7a30',
-  'eHerb': '#eab308', 'Real Steel': '#8b5cf6', 'Masube': '#ec4899', 'Healmi': '#06b6d4',
+  'eHerb': '#eab308', 'eHerb HCM': '#f59e0b', 'Real Steel': '#8b5cf6', 'Masube': '#ec4899', 'Healmi': '#06b6d4',
 };
 
 // Generate unique keys for each metric row
@@ -54,7 +62,8 @@ const normBrand = (b) => {
   if (n.includes('BODYMISS')) return 'Bodymiss';
   if (n.includes('MILAGANICS') || n.includes('MILA')) return 'Milaganics';
   if (n.includes('MOAW')) return 'Moaw Moaws';
-  if (n.includes('EHERB')) return 'eHerb';
+  // eHerb: tách HCM ra brand riêng (gian eHerb Hồ Chí Minh), còn lại = eHerb VN
+  if (n.includes('EHERB')) return (n.includes('HCM') || n.includes('HOCHIMINH')) ? 'eHerb HCM' : 'eHerb';
   if (n.includes('REALSTEEL') || n.includes('REAL')) return 'Real Steel';
   if (n.includes('MASUBE')) return 'Masube';
   if (n.includes('HEALMI')) return 'Healmi';
@@ -201,7 +210,7 @@ export default function ReportCSTab() {
   const renderPerfTable = (platform, metrics, brandName) => (
     <div style={platform === 'shopee' ? { borderRight: '2px solid #fca5a5' } : {}}>
       <div style={{ background: '#dc2626', color: '#fff', padding: '10px 16px', fontSize: 13, fontWeight: 800, textAlign: 'center', letterSpacing: 1 }}>
-        {platform === 'shopee' ? 'SHOPEE' : 'TIKTOK'} {brandName.toUpperCase()}
+        {platform === 'shopee' ? 'SHOPEE' : 'TIKTOK'} {(BRAND_SHOP[brandName] || brandName).toUpperCase()}
       </div>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
         <thead>
@@ -210,7 +219,7 @@ export default function ReportCSTab() {
             <th style={{ ...thStyle, textAlign: 'left', color: '#dc2626' }}>Chỉ số</th>
             <th style={{ ...thStyle, textAlign: 'center', color: '#dc2626', width: '14%' }}>Chỉ tiêu</th>
             <th style={{ ...thStyle, textAlign: 'center', color: '#dc2626', width: '20%' }}>
-              {platform === 'shopee' ? 'SHOPEE' : 'TIKTOK'} {brandName.toUpperCase()}
+              {platform === 'shopee' ? 'SHOPEE' : 'TIKTOK'} {(BRAND_SHOP[brandName] || brandName).toUpperCase()}
             </th>
           </tr>
         </thead>
@@ -255,7 +264,7 @@ export default function ReportCSTab() {
               onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)'; }}
             >
               <div style={{ fontSize: 32, marginBottom: 8 }}>📊</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: BRAND_COLORS[brand] }}>{brand}</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: BRAND_COLORS[brand] }}>{BRAND_LABEL[brand] || brand}</div>
             </div>
           ))}
         </div>
@@ -273,7 +282,7 @@ export default function ReportCSTab() {
             ← Chọn brand khác
           </button>
           <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: BRAND_COLORS[selectedBrand] }}>
-            📝 REPORT CS — {selectedBrand.toUpperCase()}
+            📝 REPORT CS — {(BRAND_LABEL[selectedBrand] || selectedBrand).toUpperCase()}
           </h2>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
