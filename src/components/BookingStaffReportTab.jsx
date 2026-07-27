@@ -395,6 +395,15 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
   }, [r.nhansu_id, range.start, range.end, allLoai, allQ, allPage]);
   const allTotalPages = Math.max(1, Math.ceil(allTotal / ALL_PER));
   const allPageC = Math.min(allPage, allTotalPages);
+  // ── ⚠️ KOC SẮP BỊ GỠ TAG (Khánh 27/7): trước đây tag auto-gỡ mà nhân sự KHÔNG được báo gì
+  //    (chuông chỉ admin thấy) → mất KOC lúc nào không hay. Nay gỡ 2 bước có 3 ngày đệm → báo ngay đây.
+  const [pendRm, setPendRm] = useState([]);
+  useEffect(() => {
+    let alive = true; setPendRm([]);
+    supabase.rpc('staff_pending_removals', { p_staff: r.ten_nhansu })
+      .then(({ data }) => { if (alive) setPendRm(data || []); }, () => {});
+    return () => { alive = false; };
+  }, [r.ten_nhansu]);
   // Xuất Excel TOÀN BỘ dòng đang lọc — kéo NHIỀU LƯỢT cho tới hết (Supabase cắt ~1000 dòng/lần)
   const exportAll = async () => {
     if (!allTotal) return;
@@ -554,6 +563,32 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
             <span style={{ background: '#fff', color: b.color, fontWeight: 800, fontSize: '0.8rem', padding: '5px 14px', borderRadius: 20 }}>{b.label}</span>
           </div>
         </div>
+        {/* ⚠️ CẢNH BÁO KOC SẮP BỊ GỠ TAG — nhân sự thấy NGAY khi mở báo cáo, còn kịp giục KOC lên clip */}
+        {pendRm.length > 0 && (
+          <div style={{ padding: '12px 24px', background: '#fef2f2', borderBottom: '2px solid #fecaca' }}>
+            <div style={{ fontWeight: 800, color: '#b91c1c', fontSize: '0.92rem', marginBottom: 6 }}>
+              ⚠️ {pendRm.length} KOC SẮP BỊ GỠ TAG — giục lên clip gấp!
+            </div>
+            <div style={{ fontSize: '0.76rem', color: '#7f1d1d', marginBottom: 8 }}>
+              Quá hạn không air clip. KOC nào <b>lên clip trước khi hết hạn</b> thì hệ thống <b>tự giữ tag lại</b>, khỏi làm gì thêm.
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {pendRm.map((p, i) => {
+                const d = Number(p.con_lai_ngay) || 0;
+                return (
+                  <a key={i} href={`https://www.tiktok.com/@${p.koc_id}`} target="_blank" rel="noreferrer"
+                    title={p.last_air ? `Air gần nhất: ${dateLabel(p.last_air)}` : 'Chưa air lần nào'}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 999,
+                      background: '#fff', border: `1px solid ${d <= 1 ? '#dc2626' : '#fecaca'}`, color: '#b91c1c',
+                      fontWeight: 700, fontSize: '0.74rem', textDecoration: 'none' }}>
+                    @{p.koc_id} <span style={{ color: '#64748b', fontWeight: 600 }}>· {p.brand_name}</span>
+                    <b style={{ color: d <= 1 ? '#dc2626' : '#ea580c' }}>{d > 0 ? `còn ${d}d` : 'gỡ hôm nay'}</b>
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+        )}
         {/* Thanh % tải — chỉ hiện khi chưa xong */}
         {loadPct < 100 && (
           <div style={{ padding: '10px 24px 12px', background: '#fff7ed', borderBottom: '1px solid #fed7aa' }}>
