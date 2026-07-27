@@ -1715,35 +1715,13 @@ function TikTokReviewsTab() {
 }
 
 // Wrapper with tabs
-const TABS = [
-  { key: 'danh_gia', label: '📋 Quản lý đánh giá' },
-  { key: 'report_cs', label: '📝 Report CS' },
-  { key: 'tiktok_health', label: '🔴 Điểm TK TikTok' },
-];
-
+// Module 1 = REPORT CS (CS chốt 26/7): bỏ tab "Quản lý đánh giá" (đã có Module 1B Đánh giá sàn)
+// và bỏ tab "Điểm TK TikTok". Chỉ còn đúng 1 màn Report CS nên không cần thanh tab nữa.
+// DanhGiaTab / TikTokReviewsTab / TikTokHealthTab giữ lại trong file phòng khi cần bật lại.
 export default function CSKHTab() {
-  const [tab, setTab] = useState('danh_gia');
   return (
     <div style={{ fontFamily: "'Outfit', sans-serif" }}>
-      {/* Tab bar */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: '#f3f4f6', borderRadius: 12, padding: 4, width: 'fit-content', flexWrap: 'wrap' }}>
-        {TABS.map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)}
-            style={{
-              padding: '10px 24px', borderRadius: 10, border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer',
-              fontFamily: 'system-ui, sans-serif', transition: 'all 0.2s',
-              background: tab === t.key ? 'linear-gradient(135deg, #ff7a30, #ef4444)' : 'transparent',
-              color: tab === t.key ? '#fff' : '#666',
-              boxShadow: tab === t.key ? '0 2px 8px rgba(249,115,22,0.3)' : 'none',
-            }}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-      {tab === 'danh_gia' && <DanhGiaTab />}
-      {tab === 'tiktok_reviews' && <TikTokReviewsTab />}
-      {tab === 'report_cs' && <ReportCSTab />}
-      {tab === 'tiktok_health' && <TikTokHealthTab />}
+      <ReportCSTab />
     </div>
   );
 }

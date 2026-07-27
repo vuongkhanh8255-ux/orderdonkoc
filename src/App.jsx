@@ -52,7 +52,6 @@ const ReturnsTab = lazy(() => import('./components/ReturnsTab'));       // M2 �
 const ComplaintsTab = lazy(() => import('./components/ComplaintsTab')); // M3 — khiếu nại (CS lên đơn)
 const VoucherTab = lazy(() => import('./components/VoucherTab'));
 const DefectTab = lazy(() => import('./components/DefectTab'));
-const DailyReportTab = lazy(() => import('./components/DailyReportTab'));
 const ShopeeAdsDashboard = lazy(() => import('./components/ShopeeAdsDashboard'));
 const ShopeeAutoReplyTab = lazy(() => import('./components/ShopeeAutoReplyTab'));
 
@@ -323,7 +322,7 @@ function AppMain({ user, onLogout, allowedViews }) {
               ]},
               { key: 'cskh', label: '📋 CSKH', emoji: '📋', items: [
                 // Đánh số + thứ tự BÁM ĐÚNG brief "ĐỀ XUẤT TỐI ƯU QUY TRÌNH CSKH & VẬN HÀNH"
-                { view: 'cskh', icon: '📋', name: 'Module 1: Đánh giá CSKH' },
+                { view: 'cskh', icon: '📝', name: 'Module 1: Report CS' },
                 { view: 'reviews', icon: '⭐', name: 'Module 1B: Đánh giá sàn' },
                 { view: 'returns', icon: '↩️', name: 'Module 2: Trả hàng/Hoàn hàng' },
                 { view: 'complaints', icon: '⚠️', name: 'Module 3: Khiếu nại' },
@@ -331,7 +330,6 @@ function AppMain({ user, onLogout, allowedViews }) {
                 { view: 'promo_check', icon: '🎯', name: 'Module 5: Đơn sai KM' },
                 { view: 'seeding', icon: '🌱', name: 'Module 6: Chi phí seeding' },
                 { view: 'vouchers', icon: '🎫', name: 'Module 7: Voucher hỗ trợ' },
-                { view: 'daily_report', icon: '📊', name: 'Module 8: Daily Report' },
               ]},
               { key: 'livestream', label: '🎬 Livestream', emoji: '🎬', items: [
                 { view: 'livestream', icon: '🎬', name: 'Livestream' },
@@ -499,7 +497,6 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'complaints' && <ComplaintsTab currentUser={user} />}
           {currentView === 'vouchers' && <VoucherTab currentUser={user} />}
           {currentView === 'defects' && <DefectTab currentUser={user} />}
-          {currentView === 'daily_report' && <DailyReportTab currentUser={user} />}
           {currentView === 'shopee_livestream' && (
             <ComingSoonPlaceholder icon="📺" title="Shopee Livestream" description="Quản lý phiên livestream, theo dõi GMV, đơn hàng, người xem trực tiếp" />
           )}

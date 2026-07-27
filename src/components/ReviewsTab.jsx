@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
+import { PRODUCT_CATEGORIES, noAccent, autoProductCategory } from '../constants/productCategories';
 
 const STAR_COLORS = { 5: '#22c55e', 4: '#84cc16', 3: '#eab308', 2: '#ff7a30', 1: '#ef4444' };
 const PAGE_SIZE = 20;
@@ -8,22 +9,6 @@ const PAGE_SIZE = 20;
 // ── Module 1 CSKH: phân loại lý do + trạng thái xử lý + đã sửa đánh giá (lưu ở bảng review_cs_meta) ──
 const REASON_CATEGORIES = ['Chê sản phẩm', 'Lỗi sản phẩm', 'Kích ứng / Dị ứng', 'Không hiệu quả', 'Giao hàng chậm', 'Sai hàng', 'Thiếu hàng', 'Đóng gói', 'Shipper', 'Spam', 'Hiểu nhầm', 'Không nhận xét'];
 const FIXED_OPTIONS = [{ v: 'chua_sua', l: 'Chưa sửa' }, { v: 'da_sua_4', l: 'Đã sửa 4★' }, { v: 'da_sua_5', l: 'Đã sửa 5★' }];
-// PHÂN LOẠI SẢN PHẨM — danh sách CS gửi 22/7 (lưu vào review_cs_meta.product_category).
-// >>> Thêm/bớt/sửa phân loại thì CHỈ cần sửa mảng này, không đụng chỗ nào khác. <<<
-const PRODUCT_CATEGORIES = [
-  'DARK NIGHT', 'BE LOVER', 'BLINDED LOVE', 'LOVE WINS', 'SUNSET', 'HIDE N SEEK', 'STOP N STARE',
-  'FUNKY FRESH', 'PARADISE', 'ĐỘC LẬP', 'TỰ DO', 'HẠNH PHÚC', 'CARE FREE', 'IRICH', 'TALK2MUCH',
-  'MONEY HONEY', 'PHÊFAIRY', 'SAYDERELLA', 'MÊMAND', 'AURA TEARS', 'BLACK QUEEN', 'DARK VELVET',
-  'GAME ON', 'FREE FLOW', 'SWIFT MOVE', 'FRIEND ZONE', 'LOFI', 'SHAYMEN', '18 ANOTHER TOUCH',
-  '18 SCANDAL LUST', 'LOTION REALSTEEL', 'SERUM STANDARD', 'SERUM ULTRA', 'NƯỚC HOA REVOLT',
-  'NƯỚC HOA SILENT', 'LIPCERIN BLOOM', 'LIPCERIN VITA', 'MẶT NẠ ĐẬU NÀNH', 'MẶT NẠ ĐẬU ĐỎ',
-  'SCRUB MÔI MASUBE', 'GOOD CARE', 'GOOD MOOD', 'GOOD HUG', 'MUỐI TINH THẦN', 'MUỐI TÀI LỘC',
-  'MUỐI TÌNH YÊU', 'GEL NHA ĐAM B5', 'GEL NHA ĐAM', 'SCRUB NÁCH DÂU TẰM', 'SCRUB NÁCH HẠNH NHÂN',
-  'LOVE OIL', 'CHILL OIL', 'SCRUB HẠNH NHÂN', 'DẦU OLIU BHA', 'BỘT Ủ TRẮNG', 'XỊT BƯỞI',
-  'TONER HOA CÚC NEW', 'TẨY TRANG', 'SRM HOA CÚC', 'SUNKISSED', 'SERUM SACHI', 'SCRUB MUỐI HỒNG',
-  'SCRUB AHA - BHA', 'MẶT NẠ TRÀM TRÀ', 'MẶT NẠ HOA CÚC', 'GỘI BƯỞI', 'XẢ BƯỞI', 'BỘT MẶT NẠ',
-  'BODY OIL', 'SON DƯỠNG', 'Ủ BƯỞI',
-];
 
 // (21/7/2026) SỬA MAP SAI: 341325550 + 831509831 trước đây bị ghi nhầm là "Milaganics FBS/SPA",
 // thực tế là 2 gian eHerb (đối chiếu shop_name trong shopee_orders: "eHerb Việt Nam" 29k đơn,
@@ -55,7 +40,6 @@ const BRAND_KEYS = [
   ['REAL STEEL', 'REAL STEEL'], ['REALSTEEL', 'REAL STEEL'],
   ['MASUBE', 'MASUBE'],
 ];
-const noAccent = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toUpperCase();
 const brandOfProduct = (productName, fallbackShop) => {
   const s = noAccent(productName);
   for (const [key, brand] of BRAND_KEYS) if (s.includes(key)) return brand;
@@ -63,32 +47,6 @@ const brandOfProduct = (productName, fallbackShop) => {
   return fb && fb !== '—' ? noAccent(fb) : '(không rõ)';
 };
 
-// TỰ GỢI Ý phân loại SP từ tên SP + phân loại/mẫu (SKU) — để CS khỏi phải điền tay hàng ngàn dòng.
-// CS chọn tay thì giá trị CS LUÔN được ưu tiên hơn gợi ý này.
-// Chuẩn hoá: bỏ dấu, "&"/"and" -> "N" (sàn ghi "HIDE & SEEK", CS ghi "HIDE N SEEK"),
-// mọi ký tự lạ -> khoảng trắng (nên "SCRUB AHA - BHA" khớp được "Scrub AHA/BHA").
-const catNorm = (s) => noAccent(s || '')
-  .replace(/&/g, ' N ').replace(/\bAND\b/g, ' N ')
-  .replace(/[^A-Z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
-// Tên khác của cùng 1 SP mà sàn hay đặt (trái phải: tên trên sàn -> phân loại của CS)
-const CAT_ALIASES = [['GEL LO HOI', 'GEL NHA ĐAM']];
-// Vòng 1: khớp NGUYÊN CỤM (dài trước, nên "GEL NHA ĐAM B5" không bị "GEL NHA ĐAM" nuốt)
-const CAT_PHRASE = [
-  ...PRODUCT_CATEGORIES.map(c => [catNorm(c), c]),
-  ...CAT_ALIASES.map(([a, c]) => [catNorm(a), c]),
-].sort((a, b) => b[0].length - a[0].length);
-// Vòng 2: khớp ĐỦ TỪ dù nằm rời nhau ("Dầu oliu dưỡng da BHA" -> DẦU OLIU BHA).
-// Chỉ nhận phân loại từ 2 chữ trở lên và mỗi chữ >= 3 ký tự, tránh "TỰ DO"/"Ủ BƯỞI" khớp bừa.
-const CAT_TOKENS = PRODUCT_CATEGORIES
-  .map(c => [c, catNorm(c).split(' ')])
-  .filter(([, t]) => t.length >= 2 && t.every(w => w.length >= 3))
-  .sort((a, b) => b[1].length - a[1].length);
-const autoProductCategory = (productName, sku) => {
-  const s = ` ${catNorm(`${productName || ''} ${sku || ''}`)} `;
-  for (const [needle, cat] of CAT_PHRASE) if (s.includes(` ${needle} `)) return cat;
-  for (const [cat, tokens] of CAT_TOKENS) if (tokens.every(w => s.includes(` ${w} `))) return cat;
-  return '';
-};
 
 function fmtDate(iso) {
   if (!iso) return '—';

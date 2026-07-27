@@ -15,6 +15,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { SHOPS } from '../constants/shops';
+import { PRODUCT_CATEGORIES, autoProductCategory } from '../constants/productCategories';
 
 const ACCENT = '#ff6a2c';
 const card = { background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' };
@@ -61,7 +62,11 @@ export default function ReturnsTab() {
   const [shopF, setShopF] = useState('all');
   const [reasonF, setReasonF] = useState('all');
   const [statusF, setStatusF] = useState('all');
+  const [catF, setCatF] = useState('all');           // lọc theo PHÂN LOẠI SP (danh sách CS)
   const [search, setSearch] = useState('');
+
+  // Phân loại SP: CS chọn tay LUÔN thắng gợi ý tự động đoán từ tên SP (dùng chung với Đánh giá sàn)
+  const catOf = (r) => r.product_category || autoProductCategory(r.product_summary || '') || '';
 
   // Phân tích nguyên nhân: chọn NHIỀU THÁNG + gian
   const [rsShop, setRsShop] = useState('all');
@@ -111,9 +116,10 @@ export default function ReturnsTab() {
     if (shopF !== 'all' && r.shop_name !== shopF) return false;
     if (reasonF !== 'all' && (r.reason_category || '') !== reasonF) return false;
     if (statusF !== 'all' && (r.status || 'new') !== statusF) return false;
-    if (search) { const q = search.toLowerCase(); if (![r.order_sn, r.buyer_name, r.product_summary, r.reason].some(v => v && String(v).toLowerCase().includes(q))) return false; }
+    if (catF !== 'all' && (catOf(r) || '(chưa phân loại)') !== catF) return false;
+    if (search) { const q = search.toLowerCase(); if (![r.order_sn, r.buyer_name, r.koc_username, r.product_summary, r.reason].some(v => v && String(v).toLowerCase().includes(q))) return false; }
     return true;
-  }), [cases, inRange, sanF, shopF, reasonF, statusF, search]);
+  }), [cases, inRange, sanF, shopF, reasonF, statusF, catF, search]);       // eslint-disable-line react-hooks/exhaustive-deps
 
   const thhtRows = useMemo(() => filterCases('thht'), [filterCases]);
   const refundRows = useMemo(() => filterCases('refund_only'), [filterCases]);
@@ -157,6 +163,29 @@ export default function ReturnsTab() {
 
   const toggleMonth = (m) => setRsMonths(prev => (prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]));
 
+  // ── TỶ LỆ TRẢ THEO PHÂN LOẠI SP (CS cần: "phân loại rõ từng mùi" như trang Đánh giá sàn) ──
+  // Dùng chung phạm vi lọc với bảng "theo nguyên nhân" (gian + nhiều tháng / khoảng ngày).
+  const catStats = useMemo(() => {
+    const src = cases.filter(r => {
+      if ((r.return_type || 'thht') !== 'thht') return false;
+      if (rsShop !== 'all' && r.shop_name !== rsShop) return false;
+      if (rsMonths.length && !rsMonths.includes((r.created_at || '').slice(0, 7))) return false;
+      if (!rsMonths.length && !inRange(r)) return false;
+      return true;
+    });
+    const m = {};
+    src.forEach(r => { const k = catOf(r) || '(chưa phân loại)'; m[k] = (m[k] || 0) + 1; });
+    const tong = src.length;
+    return { tong, rows: Object.entries(m).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ sp: k, n: v, pct: tong ? (100 * v / tong) : 0 })) };
+  }, [cases, rsShop, rsMonths, inRange]);                                    // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Danh sách phân loại có thật trong kỳ (kèm số đơn) cho ô lọc
+  const catList = useMemo(() => {
+    const m = {};
+    cases.forEach(r => { if (inRange(r)) { const k = catOf(r); if (k) m[k] = (m[k] || 0) + 1; } });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  }, [cases, inRange]);                                                      // eslint-disable-line react-hooks/exhaustive-deps
+
   const xuatExcel = () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(shops.map(s => ({
@@ -166,9 +195,13 @@ export default function ReturnsTab() {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(reasonStats.rows.map(r => ({
       'LÝ DO': r.ly_do, 'SỐ ĐƠN': r.n, 'TỶ LỆ (%)': Number(r.pct.toFixed(1)),
     }))), 'Ty le theo nguyen nhan');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(catStats.rows.map(r => ({
+      'PHÂN LOẠI SP': r.sp, 'SỐ ĐƠN': r.n, 'TỶ LỆ (%)': Number(r.pct.toFixed(1)),
+    }))), 'Ty le theo phan loai SP');
     const dump = (rows) => rows.map(r => ({
       'NGÀY': fmtDate(r.created_at), 'SÀN': r.platform, 'GIAN': r.shop_name || '', 'MÃ ĐƠN': r.order_sn || '',
-      'KHÁCH': r.buyer_name || '', 'SẢN PHẨM': r.product_summary || '', 'LÝ DO': r.reason_category || '',
+      'KHÁCH': r.buyer_name || '', 'KOC': r.koc_username || '', 'SĐT': r.buyer_phone || '', 'TỈNH/TP': r.buyer_province || '',
+      'SẢN PHẨM': r.product_summary || '', 'PHÂN LOẠI SP': catOf(r), 'LÝ DO': r.reason_category || '',
       'TRẠNG THÁI': RSTATUS[r.status]?.label || r.status || '', 'HOÀN 1 PHẦN': PARTIAL[r.partial_refund_status]?.label || '',
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dump(thhtRows)), 'Don THHT');
@@ -186,23 +219,48 @@ export default function ReturnsTab() {
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr>
-            <th style={th}>Ngày</th><th style={th}>Sàn · Gian</th><th style={th}>Mã đơn</th><th style={th}>Khách</th>
+            <th style={th}>Ngày</th><th style={th}>Sàn · Gian</th><th style={th}>Mã đơn</th>
+            <th style={th}>Khách</th><th style={th}>KOC</th>
             <th style={{ ...th, minWidth: 220 }}>Sản phẩm</th>
+            <th style={{ ...th, width: 150 }}>Phân loại SP</th>
             <th style={{ ...th, width: 165 }}>Lý do</th>
             <th style={{ ...th, width: 175 }}>Trạng thái</th>
             <th style={{ ...th, width: 175 }}>Hoàn tiền 1 phần</th>
             <th style={{ ...th, width: 120 }}>Loại đơn</th>
           </tr></thead>
           <tbody>
-            {loadingCases ? <tr><td colSpan={9} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải...</td></tr>
-              : rows.length === 0 ? <tr><td colSpan={9} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>Không có đơn nào khớp bộ lọc.</td></tr>
+            {loadingCases ? <tr><td colSpan={11} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải...</td></tr>
+              : rows.length === 0 ? <tr><td colSpan={11} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>Không có đơn nào khớp bộ lọc.</td></tr>
                 : rows.slice(0, 500).map(r => (
                   <tr key={r.id}>
                     <td style={{ ...td, fontSize: '0.76rem', color: '#64748b' }}>{fmtDate(r.created_at)}</td>
                     <td style={{ ...td, fontSize: '0.76rem' }}>{r.platform === 'shopee' ? '🟠' : '⬛'} {r.shop_name || '—'}</td>
                     <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.73rem' }}>{r.order_sn || '—'}</td>
-                    <td style={{ ...td, fontSize: '0.78rem' }}>{r.buyer_name || '—'}</td>
+                    {/* Khách THẬT (Shopee: tên người nhận). TikTok affiliate KHÔNG trả thông tin
+                        người mua nên để trống — tên creator nằm ở cột KOC bên cạnh. */}
+                    <td style={{ ...td, fontSize: '0.78rem' }}>
+                      {r.buyer_name || <span style={{ color: '#cbd5e1' }} title={r.platform === 'tiktok' ? 'TikTok affiliate không trả thông tin người mua' : ''}>—</span>}
+                    </td>
+                    <td style={{ ...td, fontSize: '0.76rem', color: '#7c3aed' }}>{r.koc_username ? '@' + r.koc_username : '—'}</td>
                     <td style={{ ...td, whiteSpace: 'normal', maxWidth: 300, fontSize: '0.78rem' }}>{r.product_summary || '—'}</td>
+                    <td style={td}>
+                      {(() => {
+                        const auto = autoProductCategory(r.product_summary || '');
+                        const chosen = r.product_category || '';
+                        return (
+                          <select value={chosen || auto || ''} onChange={e => patch(r, { product_category: e.target.value || null })}
+                            style={{
+                              ...inputStyle, padding: '4px 7px', fontSize: '0.72rem', width: '100%', cursor: 'pointer',
+                              background: chosen ? '#eef2ff' : '#fff', color: chosen ? '#1e3a8a' : '#94a3b8',
+                              fontStyle: chosen ? 'normal' : 'italic', fontWeight: chosen ? 700 : 400,
+                            }}
+                            title={chosen ? 'CS đã chọn' : (auto ? 'Gợi ý tự động từ tên SP — chọn lại nếu sai' : 'CS tự phân loại')}>
+                            <option value="">— Phân loại SP —</option>
+                            {PRODUCT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        );
+                      })()}
+                    </td>
                     <td style={td}>
                       <select value={r.reason_category || ''} onChange={e => patch(r, { reason_category: e.target.value || null })}
                         style={{ ...inputStyle, padding: '4px 7px', fontSize: '0.74rem', width: '100%', cursor: 'pointer', background: r.reason_category ? '#fff' : '#fffbeb' }}>
@@ -326,6 +384,24 @@ export default function ReturnsTab() {
             ))}
           </div>
 
+          {/* TỶ LỆ TRẢ THEO PHÂN LOẠI SP — CS cần "phân loại rõ từng mùi" như trang Đánh giá sàn */}
+          <div style={{ ...card, marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+              <b style={{ fontSize: '0.92rem', color: '#0f172a' }}>🧴 Tỷ lệ trả theo PHÂN LOẠI SẢN PHẨM</b>
+              <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>(dùng chung bộ lọc gian + tháng ở trên)</span>
+              <span style={{ marginLeft: 'auto', fontSize: '0.8rem', fontWeight: 800, color: '#0f172a' }}>{fmtN(catStats.tong)} đơn</span>
+            </div>
+            {catStats.rows.length === 0 ? <div style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Không có đơn trong phạm vi đã chọn.</div> : catStats.rows.slice(0, 15).map(r => (
+              <div key={r.sp} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 7 }}>
+                <span style={{ fontSize: '0.82rem', color: r.sp === '(chưa phân loại)' ? '#cbd5e1' : '#475569', width: 190, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.sp}>{r.sp}</span>
+                <div style={{ flex: 1, height: 10, background: '#f1f5f9', borderRadius: 5, overflow: 'hidden' }}>
+                  <div style={{ width: `${r.pct}%`, height: '100%', background: r.sp === '(chưa phân loại)' ? '#cbd5e1' : '#7c3aed' }} />
+                </div>
+                <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#0f172a', width: 92, textAlign: 'right' }}>{r.pct.toFixed(0)}% ({fmtN(r.n)})</span>
+              </div>
+            ))}
+          </div>
+
           <div style={{ ...card, marginBottom: 16 }}>
             <div style={{ fontWeight: 800, color: '#0f172a', marginBottom: 10, fontSize: '0.92rem' }}>📈 Xu hướng đơn trả theo ngày</div>
             <div style={{ width: '100%', height: 210 }}>
@@ -415,6 +491,12 @@ export default function ReturnsTab() {
               <option value="all">Trạng thái: Tất cả</option>
               {Object.keys(RSTATUS).map(s => <option key={s} value={s}>{RSTATUS[s].label}</option>)}
             </select>
+            <select value={catF} onChange={e => setCatF(e.target.value)}
+              style={{ ...inputStyle, cursor: 'pointer', maxWidth: 230, borderColor: catF !== 'all' ? ACCENT : '#e5e7eb', color: catF !== 'all' ? '#e85518' : '#1f2937', fontWeight: catF !== 'all' ? 700 : 400 }}>
+              <option value="all">Phân loại SP: Tất cả</option>
+              {catList.map(([c, n]) => <option key={c} value={c}>{c} ({n})</option>)}
+              <option value="(chưa phân loại)">— Chưa phân loại —</option>
+            </select>
             <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>
               {fmtN((tab === 'thht' ? thhtRows : refundRows).length)} đơn
             </span>
@@ -424,8 +506,12 @@ export default function ReturnsTab() {
       )}
 
       <p style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: 12 }}>
-        * Thống kê lấy từ đơn đã đồng bộ (Shopee TO_RETURN · TikTok fully_return). Đơn trả tự kéo về mỗi giờ.
-        Lý do trả hàng do CS gắn (API lý do của sàn chưa nối) — gắn xong là bảng “Tỷ lệ THHT theo nguyên nhân” tự lên số.
+        * Thống kê lấy từ đơn đã đồng bộ (Shopee TO_RETURN · TikTok fully_return). Đơn trả tự kéo về mỗi giờ.<br />
+        * <b>Khách</b>: Shopee lấy tên người nhận thật. Đơn TikTok là báo cáo affiliate — sàn KHÔNG trả thông tin người mua,
+        nên cột Khách để trống và tên creator nằm ở cột <b>KOC</b>.<br />
+        * <b>Đơn TikTok đã hoàn tiền</b> vào thẳng “Hoàn tất” (sàn hoàn xong, CS không phải thao tác).<br />
+        * <b>Phân loại SP</b> máy tự đoán từ tên sản phẩm (chữ nghiêng xám) — CS chọn lại thì lưu đè (chữ xanh đậm).<br />
+        * <b>Lý do</b> hiện do CS gắn — lý do trả hàng do SÀN ghi nhận chưa có trong data, cần nối thêm API của sàn.
       </p>
     </div>
   );
