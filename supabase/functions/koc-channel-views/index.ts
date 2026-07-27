@@ -183,10 +183,13 @@ Deno.serve(async (req) => {
     let tikhubDbg: any = null;
 
     // 1) ƯU TIÊN nguồn TRẢ PHÍ TikHub nếu đã cắm key (ổn định, 1 phát ra video).
+    //    CHỈ tin khi CÓ video. TikHub thi thoảng trả "thành công mà RỖNG" (chỉ log_pb/status_code — không
+    //    resolve nổi unique_id, vd vunaykhac02 18.8K follower) → phải coi như CHƯA cào được để còn rớt
+    //    xuống tikwm + cứu bằng follower, KHÔNG được kết luận "kênh không tồn tại" (chặn oan).
     if (TIKHUB_KEY) {
       const th = await tikhubPosts(username);
       tikhubDbg = th.dbg;
-      if (th.ok) { vids = th.videos; serverBusy = false; }
+      if (th.ok && th.videos.length) { vids = th.videos; serverBusy = false; }
     }
 
     // 2) Chưa có key / TikHub lỗi -> tikwm FREE (cào posts 3 lần song song + cào follower cứu cánh CÙNG LÚC).
@@ -205,9 +208,11 @@ Deno.serve(async (req) => {
       // Cào posts KHÔNG NỔI. Dùng FOLLOWER (đã cào song song sẵn) làm cứu cánh.
       // Kênh nhiều follower (>= FOLLOWER_DAT) chắc chắn là kênh thật/xịn -> coi như ĐẠT,
       // khỏi chặn oan (vd hoangson71gym 48k follower nhưng tikwm cào posts fail 100%).
-      const follower = serverBusy ? info.follower : 0;
-      const existed = serverBusy ? info.exists : false;
-      if (serverBusy && existed && follower >= FOLLOWER_DAT) {
+      // DÙNG follower đã cào ở bước 2 BẤT KỂ serverBusy (trước đây gán 0 khi !serverBusy → vứt mất tín hiệu
+      // kênh thật, dẫn tới chặn oan kênh mà tikwm trả danh sách rỗng dù có hàng chục nghìn follower).
+      const follower = info.follower;
+      const existed = info.exists;
+      if (existed && follower >= FOLLOWER_DAT) {
         row = { username, total_view: 0, video_count: 0, dat: true, videos: [], videos_all: [],
           busy: false, follower_count: follower, by_follower: true, err: null, checked_at: new Date().toISOString() };
         shouldCache = true;   // kênh thật + nhiều follower -> cache bình thường
