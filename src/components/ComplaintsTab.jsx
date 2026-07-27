@@ -9,6 +9,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { SHOPS } from '../constants/shops';
+import { PRODUCT_CATEGORIES } from '../constants/productCategories';
+import AddressPicker from './AddressPicker';
+import EvidenceUploader from './EvidenceUploader';
 
 const ACCENT = '#ff6a2c';
 const TABLE = 'cs_cases';
@@ -25,8 +28,10 @@ const STATUS = {
   closed:             { label: 'Đã đóng hồ sơ',     color: '#475569', bg: '#f1f5f9' },
 };
 const FLOW = ['new', 'verifying', 'processing', 'awaiting_gift', 'awaiting_customer', 'done', 'closed'];
-// Phân loại nguyên nhân theo brief
-const REASONS = ['Thiếu hàng', 'Hư hỏng', 'Sai sản phẩm', 'Chất lượng sản phẩm', 'Vận chuyển', 'Dịch vụ khách hàng', 'Không nhận được hàng', 'Khác'];
+// Phân loại nguyên nhân theo brief + 5 lý do CS bổ sung 27/7
+const REASONS = ['Thiếu hàng', 'Hư hỏng', 'Sai sản phẩm', 'Chất lượng sản phẩm', 'Vận chuyển',
+  'Dịch vụ khách hàng', 'Không nhận được hàng',
+  'Lỗi hệ thống không hiện quà', 'Lỗi vòi', 'Hết hàng', 'Hiểu nhầm chương trình', 'ĐVVC', 'Khác'];
 
 const fmtDate = (s) => { if (!s) return ''; const d = new Date(s); return isNaN(d) ? '' : d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }); };
 const daysSince = (s) => (s ? Math.floor((Date.now() - new Date(s).getTime()) / 86400000) : 0);
@@ -318,9 +323,10 @@ export default function ComplaintsTab({ currentUser }) {
       </div>
       )}
 
-      {/* FORM */}
+      {/* FORM — CS 27/7: TRƯỚC bấm trúng nền là form đóng cái rụp, mất sạch đồ đang nhập ("di chuột là
+          out, điền lại từ đầu"). Giờ bấm nền KHÔNG đóng, muốn thoát phải bấm nút Đóng và xác nhận. */}
       {editing && (
-        <div onClick={() => setEditing(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', zIndex: 1000, overflowY: 'auto' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', zIndex: 1000, overflowY: 'auto' }}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 24, width: '100%', maxWidth: 680 }}>
             <h2 style={{ margin: '0 0 16px', fontSize: '1.1rem', fontWeight: 900 }}>{editing.id ? '⚠️ Hồ sơ khiếu nại' : '➕ Lên đơn khiếu nại'}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
@@ -336,7 +342,17 @@ export default function ComplaintsTab({ currentUser }) {
               <div><label style={labelStyle}>Tên khách</label><input value={editing.buyer_name || ''} onChange={e => setEditing({ ...editing, buyer_name: e.target.value })} style={inputStyle} /></div>
               <div><label style={labelStyle}>SĐT khách</label><input value={editing.buyer_phone || ''} onChange={e => setEditing({ ...editing, buyer_phone: e.target.value })} style={inputStyle} /></div>
               <div><label style={labelStyle}>Người xử lý (CS)</label><input value={editing.assigned_to || ''} onChange={e => setEditing({ ...editing, assigned_to: e.target.value })} style={inputStyle} /></div>
-              <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>Sản phẩm liên quan</label><input value={editing.product_summary || ''} onChange={e => setEditing({ ...editing, product_summary: e.target.value })} style={inputStyle} /></div>
+              {/* CS 27/7: chọn dropdown thay vì gõ tay, dùng CHUNG list phân loại với Đánh giá sàn
+                  → thống kê khiếu nại theo mùi/loại SP khớp được với bên đánh giá. */}
+              <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>Sản phẩm liên quan</label>
+                <select value={editing.product_summary || ''} onChange={e => setEditing({ ...editing, product_summary: e.target.value })} style={inputStyle}>
+                  <option value="">— chọn sản phẩm —</option>
+                  {PRODUCT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  {/* hồ sơ cũ gõ tay tên khác list → vẫn giữ nguyên, không bị mất khi mở lại */}
+                  {editing.product_summary && !PRODUCT_CATEGORIES.includes(editing.product_summary) &&
+                    <option value={editing.product_summary}>{editing.product_summary} (nhập cũ)</option>}
+                </select>
+              </div>
               <div><label style={labelStyle}>Phân loại nguyên nhân</label><select value={editing.reason_category || ''} onChange={e => setEditing({ ...editing, reason_category: e.target.value })} style={inputStyle}><option value="">— chọn —</option>{REASONS.map(x => <option key={x} value={x}>{x}</option>)}</select></div>
               <div><label style={labelStyle}>Trạng thái</label><select value={editing.status} onChange={e => setEditing({ ...editing, status: e.target.value })} style={inputStyle}>{FLOW.map(s => <option key={s} value={s}>{STATUS[s].label}</option>)}</select></div>
               <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>Nội dung khiếu nại</label><textarea value={editing.reason || ''} onChange={e => setEditing({ ...editing, reason: e.target.value })} style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }} placeholder="Khách phản ánh cụ thể điều gì..." /></div>
@@ -345,17 +361,25 @@ export default function ComplaintsTab({ currentUser }) {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div><label style={labelStyle}>Sản phẩm + số lượng gửi bù</label><input value={editing.compensation_items || ''} onChange={e => setEditing({ ...editing, compensation_items: e.target.value })} style={inputStyle} placeholder="VD: Gel nha đam 250ml x1" /></div>
                   <div><label style={labelStyle}>Mã vận đơn gửi bù</label><input value={editing.compensation_tracking || ''} onChange={e => setEditing({ ...editing, compensation_tracking: e.target.value })} style={inputStyle} /></div>
-                  <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>📍 Địa chỉ nhận hàng gửi bù</label><textarea value={editing.buyer_address || ''} onChange={e => setEditing({ ...editing, buyer_address: e.target.value })} style={{ ...inputStyle, minHeight: 46, resize: 'vertical' }} placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/TP" /></div>
+                  {/* CS 27/7: địa chỉ chọn dropdown giống Booking/Order (34 tỉnh + phường mới 2025) */}
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={labelStyle}>📍 Địa chỉ nhận hàng gửi bù</label>
+                    <AddressPicker value={editing.buyer_address || ''} label={null} compact
+                      onChange={v => setEditing(p => ({ ...p, buyer_address: v }))} />
+                  </div>
                 </div>
               </div>
-              <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>Link ảnh/video bằng chứng (mỗi dòng 1 link)</label><textarea value={editing.evidence_links || ''} onChange={e => setEditing({ ...editing, evidence_links: e.target.value })} style={{ ...inputStyle, minHeight: 52, resize: 'vertical' }} placeholder="https://..." /></div>
+              <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>Ảnh / video bằng chứng</label>
+                <EvidenceUploader folder="khieu-nai" value={editing.evidence_links || ''}
+                  onChange={v => setEditing(p => ({ ...p, evidence_links: v }))} />
+              </div>
               <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>Ghi chú / lịch sử xử lý</label><textarea value={editing.note || ''} onChange={e => setEditing({ ...editing, note: e.target.value })} style={{ ...inputStyle, minHeight: 52, resize: 'vertical' }} /></div>
               {editing.id && <div style={{ gridColumn: 'span 2', fontSize: '0.74rem', color: '#94a3b8' }}>Tạo: {fmtDate(editing.created_at)} · Cập nhật: {fmtDate(editing.updated_at)}</div>}
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 20 }}>
               {editing.id ? <button onClick={() => { del(editing); setEditing(null); }} style={{ padding: '9px 16px', borderRadius: 9, border: '1.5px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, cursor: 'pointer' }}>Xoá</button> : <span />}
               <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => setEditing(null)} style={{ padding: '9px 20px', borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, cursor: 'pointer' }}>Đóng</button>
+                <button onClick={() => { if (window.confirm('Đóng mà chưa Lưu thì mất phần đang nhập. Đóng luôn?')) setEditing(null); }} style={{ padding: '9px 20px', borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, cursor: 'pointer' }}>Đóng</button>
                 <button onClick={save} style={{ padding: '9px 24px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontWeight: 800, cursor: 'pointer' }}>💾 Lưu</button>
               </div>
             </div>

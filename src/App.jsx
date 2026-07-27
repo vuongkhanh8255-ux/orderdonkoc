@@ -47,7 +47,6 @@ const FlashSaleTab = lazy(() => import('./components/FlashSaleTab'));
 const TopPicksTab = lazy(() => import('./components/TopPicksTab'));
 const ReviewsTab = lazy(() => import('./components/ReviewsTab'));
 const SeedingTab = lazy(() => import('./components/SeedingTab'));
-const PromoCheckTab = lazy(() => import('./components/PromoCheckTab'));
 const ReturnsTab = lazy(() => import('./components/ReturnsTab'));       // M2 — thống kê trả hàng (thay CasesTab)
 const ComplaintsTab = lazy(() => import('./components/ComplaintsTab')); // M3 — khiếu nại (CS lên đơn)
 const VoucherTab = lazy(() => import('./components/VoucherTab'));
@@ -327,7 +326,7 @@ function AppMain({ user, onLogout, allowedViews }) {
                 { view: 'returns', icon: '↩️', name: 'Module 2: Trả hàng/Hoàn hàng' },
                 { view: 'complaints', icon: '⚠️', name: 'Module 3: Khiếu nại' },
                 { view: 'defects', icon: '🔧', name: 'Module 4: Sản phẩm lỗi' },
-                { view: 'promo_check', icon: '🎯', name: 'Module 5: Đơn sai KM' },
+                // Module 5 "Đơn sai KM" đã BỎ theo feedback CS 27/7 (không dùng tới).
                 { view: 'seeding', icon: '🌱', name: 'Module 6: Chi phí seeding' },
                 { view: 'vouchers', icon: '🎫', name: 'Module 7: Voucher hỗ trợ' },
               ]},
@@ -492,7 +491,6 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'top_picks' && <TopPicksTab />}
           {currentView === 'reviews' && <ReviewsTab />}
           {currentView === 'seeding' && <SeedingTab currentUser={user} />}
-          {currentView === 'promo_check' && <PromoCheckTab currentUser={user} />}
           {currentView === 'returns' && <ReturnsTab currentUser={user} />}
           {currentView === 'complaints' && <ComplaintsTab currentUser={user} />}
           {currentView === 'vouchers' && <VoucherTab currentUser={user} />}

@@ -13,9 +13,15 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
 import { SHOPS, BRANDS, sanLabel, brandOfShop } from '../constants/shops';
+import EvidenceUploader from './EvidenceUploader';
 
 const ACCENT = '#ff6a2c';
-const DEFECT_TYPES = ['Rò rỉ', 'Móp méo', 'Hư hỏng bao bì', 'Thiếu sản phẩm', 'Sai sản phẩm', 'Lỗi chất lượng', 'Hết hạn/cận date', 'Khác'];
+const DEFECT_TYPES = ['Rò rỉ', 'Móp méo', 'Hư hỏng bao bì', 'Thiếu sản phẩm', 'Sai sản phẩm', 'Lỗi chất lượng',
+  'Chê mùi', 'Lỗi sản phẩm', 'Hết hạn/cận date', 'Khác'];   // + 2 loại CS bổ sung 27/7
+
+// Brand cho Module 4: BỎ "EHERB" theo feedback CS 27/7 — eHerb là GIAN HÀNG bán sản phẩm của các brand
+// khác (Bodymiss/Milaganics...), nên hàng lỗi luôn thuộc về 1 brand thật, chọn "EHERB" là sai chỗ.
+const DEFECT_BRANDS = BRANDS.filter(b => b !== 'EHERB');
 const SEVERITY = { nhe: { label: 'Nhẹ', color: '#16a34a', bg: '#dcfce7' }, trung_binh: { label: 'Trung bình', color: '#b45309', bg: '#fef3c7' }, nang: { label: 'Nặng', color: '#dc2626', bg: '#fee2e2' } };
 const STATUS = { new: { label: 'Mới', color: '#b45309', bg: '#fef3c7' }, reviewing: { label: 'Đang xử lý', color: '#1d4ed8', bg: '#dbeafe' }, resolved: { label: 'Đã xử lý', color: '#15803d', bg: '#dcfce7' } };
 
@@ -78,6 +84,8 @@ export default function DefectTab({ currentUser }) {
       order_sn: r.order_sn || null, defect_type: r.defect_type || null, severity: r.severity || 'trung_binh',
       lot_code: r.lot_code || null, production_date: r.production_date || null,
       description: r.description || null, media_links: r.media_links || null,
+      condition_detail: r.condition_detail || null,
+      onset_days: (r.onset_days === '' || r.onset_days == null) ? null : Number(r.onset_days),
       status: r.status || 'new', staff: r.staff || (currentUser?.name || currentUser?.username || ''), note: r.note || null,
     };
     const { error } = r.id ? await supabase.from('defect_products').update(payload).eq('id', r.id) : await supabase.from('defect_products').insert(payload);
@@ -101,7 +109,7 @@ export default function DefectTab({ currentUser }) {
     if (statusF !== 'all' && r.status !== statusF) return false;
     if (shopF !== 'all' && r.shop_name !== shopF) return false;
     if (brandF !== 'all' && (r.brand || brandOfShop(r.shop_name)) !== brandF) return false;
-    if (search) { const q = search.toLowerCase(); if (![r.product_name, r.lot_code, r.order_sn, r.description, r.note, r.shop_name].some(v => v && String(v).toLowerCase().includes(q))) return false; }
+    if (search) { const q = search.toLowerCase(); if (![r.product_name, r.lot_code, r.order_sn, r.description, r.condition_detail, r.note, r.shop_name].some(v => v && String(v).toLowerCase().includes(q))) return false; }
     return true;
   }), [rows, typeF, statusF, brandF, shopF, fromF, toF, search]);
 
@@ -146,7 +154,8 @@ export default function DefectTab({ currentUser }) {
     const data = filtered.map((r, i) => ({
       STT: i + 1, Ngày: fmtDate(r.report_date), 'Sàn': sanLabel(r.platform), 'Gian hàng': r.shop_name || '', 'Brand': r.brand || brandOfShop(r.shop_name) || '',
       'Sản phẩm': r.product_name, 'Loại lỗi': r.defect_type, 'Mức độ': SEVERITY[r.severity]?.label, 'Lot': r.lot_code, 'Mã đơn': r.order_sn,
-      'Mô tả': r.description, 'Trạng thái': STATUS[r.status]?.label, 'NV': r.staff,
+      'Mô tả': r.description, 'Mô tả tình trạng': r.condition_detail,
+      'Dùng mấy ngày thì bị': r.onset_days ?? '', 'Trạng thái': STATUS[r.status]?.label, 'NV': r.staff,
     }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'SP loi');
@@ -194,7 +203,7 @@ export default function DefectTab({ currentUser }) {
           <optgroup label="TikTok">{SHOPS.filter(s => s.san === 'tiktok').map(s => <option key={'tt' + s.name} value={s.name}>{s.name}</option>)}</optgroup>
         </select>
         <select value={brandF} onChange={e => setBrandF(e.target.value)} style={{ ...inputStyle, width: 'auto', cursor: 'pointer' }}>
-          <option value="all">Brand: Tất cả</option>{BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
+          <option value="all">Brand: Tất cả</option>{DEFECT_BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
         </select>
         <select value={typeF} onChange={e => setTypeF(e.target.value)} style={{ ...inputStyle, width: 'auto', cursor: 'pointer' }}><option value="all">Loại lỗi: Tất cả</option>{DEFECT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select>
         <select value={statusF} onChange={e => setStatusF(e.target.value)} style={{ ...inputStyle, width: 'auto', cursor: 'pointer' }}><option value="all">Trạng thái: Tất cả</option>{Object.keys(STATUS).map(s => <option key={s} value={s}>{STATUS[s].label}</option>)}</select>
@@ -226,12 +235,12 @@ export default function DefectTab({ currentUser }) {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead><tr>
                   <th style={th}>Ngày</th><th style={th}>Gian hàng</th><th style={th}>Brand</th><th style={{ ...th, minWidth: 180 }}>Sản phẩm</th>
-                  <th style={th}>Loại lỗi</th><th style={{ ...th, textAlign: 'center' }}>Mức độ</th><th style={th}>Lot</th>
+                  <th style={th}>Loại lỗi</th><th style={{ ...th, minWidth: 200 }}>Tình trạng</th><th style={{ ...th, textAlign: 'center' }}>Mức độ</th><th style={th}>Lot</th>
                   <th style={{ ...th, textAlign: 'center' }}>Ảnh</th><th style={{ ...th, textAlign: 'center' }}>Trạng thái</th><th style={{ ...th, textAlign: 'center', width: 130 }}>Hành động</th>
                 </tr></thead>
                 <tbody>
-                  {loading ? <tr><td colSpan={10} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải...</td></tr>
-                    : filtered.length === 0 ? <tr><td colSpan={10} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>Không có hồ sơ trong kỳ — đổi bộ lọc hoặc bấm “+ Tạo hồ sơ lỗi”</td></tr>
+                  {loading ? <tr><td colSpan={11} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải...</td></tr>
+                    : filtered.length === 0 ? <tr><td colSpan={11} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>Không có hồ sơ trong kỳ — đổi bộ lọc hoặc bấm “+ Tạo hồ sơ lỗi”</td></tr>
                       : filtered.map(r => { const sv = SEVERITY[r.severity] || SEVERITY.trung_binh; const media = mediaOf(r); return (
                         <tr key={r.id}>
                           <td style={td}>{fmtDate(r.report_date)}</td>
@@ -239,6 +248,10 @@ export default function DefectTab({ currentUser }) {
                           <td style={{ ...td, fontSize: '0.76rem', fontWeight: 700, color: '#7c3aed' }}>{r.brand || brandOfShop(r.shop_name) || '—'}</td>
                           <td style={{ ...td, fontWeight: 600, whiteSpace: 'normal', maxWidth: 240 }}>{r.product_name}</td>
                           <td style={td}>{r.defect_type || '—'}</td>
+                          <td style={{ ...td, whiteSpace: 'normal', maxWidth: 260, fontSize: '0.78rem' }}>
+                            {r.condition_detail || <span style={{ color: '#cbd5e1' }}>—</span>}
+                            {r.onset_days != null && <div style={{ color: '#b45309', fontWeight: 700, fontSize: '0.72rem', marginTop: 2 }}>⏱ dùng {r.onset_days} ngày thì bị</div>}
+                          </td>
                           <td style={{ ...td, textAlign: 'center' }}><span style={{ padding: '2px 8px', borderRadius: 20, fontSize: '0.7rem', fontWeight: 700, background: sv.bg, color: sv.color }}>{sv.label}</span></td>
                           <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.76rem' }}>{r.lot_code || '—'}</td>
                           <td style={{ ...td, textAlign: 'center' }}>{media.length ? <button onClick={() => setLightbox({ list: media, i: 0, row: r })} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.95rem' }} title={`${media.length} ảnh/video`}>🖼️{media.length > 1 ? media.length : ''}</button> : <span style={{ color: '#cbd5e1' }}>—</span>}</td>
@@ -337,9 +350,10 @@ export default function DefectTab({ currentUser }) {
         </div>
       )}
 
-      {/* FORM */}
+      {/* FORM — CS 27/7: TRƯỚC bấm trúng nền là form đóng, mất sạch đồ đang nhập ("quá nhạy, di chuột
+          là out, điền lại từ đầu"). Giờ bấm nền KHÔNG đóng, muốn thoát phải bấm Huỷ và xác nhận. */}
       {editing && (
-        <div onClick={() => setEditing(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', zIndex: 1000, overflowY: 'auto' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', zIndex: 1000, overflowY: 'auto' }}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 24, width: '100%', maxWidth: 640 }}>
             <h2 style={{ margin: '0 0 16px', fontSize: '1.1rem', fontWeight: 900 }}>{editing.id ? '✏️ Sửa hồ sơ lỗi' : '🔧 Tạo hồ sơ lỗi'}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
@@ -354,7 +368,7 @@ export default function DefectTab({ currentUser }) {
               </div>
               <div><label style={labelStyle}>Brand</label>
                 <select value={editing.brand || ''} onChange={e => setEditing({ ...editing, brand: e.target.value })} style={inputStyle}>
-                  <option value="">— chọn —</option>{BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
+                  <option value="">— chọn —</option>{DEFECT_BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
                 </select>
               </div>
               <div><label style={labelStyle}>Loại lỗi</label><select value={editing.defect_type || ''} onChange={e => setEditing({ ...editing, defect_type: e.target.value })} style={inputStyle}>{DEFECT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
@@ -364,10 +378,22 @@ export default function DefectTab({ currentUser }) {
               <div><label style={labelStyle}>Mã đơn</label><input value={editing.order_sn || ''} onChange={e => setEditing({ ...editing, order_sn: e.target.value })} style={inputStyle} /></div>
               <div><label style={labelStyle}>Nhân viên (CS)</label><input value={editing.staff || ''} onChange={e => setEditing({ ...editing, staff: e.target.value })} style={inputStyle} placeholder="Tên CS ghi nhận" /></div>
               <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>Mô tả lỗi</label><textarea value={editing.description || ''} onChange={e => setEditing({ ...editing, description: e.target.value })} style={{ ...inputStyle, minHeight: 52, resize: 'vertical' }} /></div>
-              <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>Link ảnh/video (mỗi dòng 1 link — hiện ở tab Thư viện)</label><textarea value={editing.media_links || ''} onChange={e => setEditing({ ...editing, media_links: e.target.value })} style={{ ...inputStyle, minHeight: 52, resize: 'vertical' }} placeholder="https://..." /></div>
+              {/* CS 27/7: lỗi kích ứng phải ghi RÕ bị sao + dùng mấy ngày mới bị, để còn quy trách nhiệm lô hàng */}
+              <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>Mô tả tình trạng (kích ứng cụ thể ra sao)</label>
+                <textarea value={editing.condition_detail || ''} onChange={e => setEditing({ ...editing, condition_detail: e.target.value })}
+                  style={{ ...inputStyle, minHeight: 52, resize: 'vertical' }}
+                  placeholder="VD: nổi mẩn đỏ + ngứa rát vùng cổ, bôi buổi tối hôm sau dậy thấy sưng" /></div>
+              <div><label style={labelStyle}>Dùng mấy ngày thì bị</label>
+                <input type="number" min="0" value={editing.onset_days ?? ''} onChange={e => setEditing({ ...editing, onset_days: e.target.value === '' ? null : Number(e.target.value) })}
+                  style={inputStyle} placeholder="VD: 3" /></div>
+              <div />
+              <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>Ảnh / video (hiện ở tab Thư viện)</label>
+                <EvidenceUploader folder="sp-loi" value={editing.media_links || ''}
+                  onChange={v => setEditing(p => ({ ...p, media_links: v }))} />
+              </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
-              <button onClick={() => setEditing(null)} style={{ padding: '9px 20px', borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, cursor: 'pointer' }}>Huỷ</button>
+              <button onClick={() => { if (window.confirm('Huỷ thì mất phần đang nhập. Huỷ luôn?')) setEditing(null); }} style={{ padding: '9px 20px', borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, cursor: 'pointer' }}>Huỷ</button>
               <button onClick={save} style={{ padding: '9px 24px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontWeight: 800, cursor: 'pointer' }}>💾 Lưu</button>
             </div>
           </div>
