@@ -306,21 +306,32 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
   const [proofUrl, setProofUrl] = useState('');   // ảnh tin nhắn chứng minh (non-admin gắn tag)
   const [upBusy, setUpBusy] = useState(false);
   const [isOld, setIsOld] = useState(true);       // KOC CŨ (có video/đơn HOẶC từng bị gỡ) → bắt ảnh CM. Mặc định true = an toàn.
+  const [rmCnt, setRmCnt] = useState(0);          // số lần KOC này ĐÃ BỊ GỠ tag ở brand này (Rule B)
 
-  // Khi quản lý sàn (non-admin) mở modal: xác định KOC "cũ" = (a) đã có video/clip HOẶC (b) từng bị gỡ.
-  // KOC cũ → bắt ảnh chứng minh. KOC mới (chưa data, chưa từng gỡ) → luồng đề xuất thường (koc có đơn thì tự auto-tag).
+  // Khi mở modal: (a) xác định KOC "cũ" = đã có video/clip HOẶC từng bị gỡ → bắt ảnh chứng minh;
+  // (b) ĐẾM số lần bị gỡ ở brand này — Rule B (Khánh 27/7): gỡ→gắn lại QUÁ 2 LẦN thì KHÓA,
+  //     chỉ admin mới được đụng (ecom/quản lý sàn không tự gắn lại được nữa).
   useEffect(() => {
-    if (!open || isAdmin) return;
+    if (!open) return;
     let alive = true;
     (async () => {
-      const [{ data: vid }, { data: rm }] = await Promise.all([
+      const [{ data: vid }, { data: rmAll }, { data: cycles }] = await Promise.all([
         supabase.from('koc_video_unit').select('uname').eq('uname', username).limit(1),                       // (a) đã có video/clip
-        supabase.from(HIST_TABLE).select('action').eq('koc_id', username).eq('action', 'remove').limit(1),   // (b) từng bị gỡ
+        supabase.from(HIST_TABLE).select('action').eq('koc_id', username).eq('action', 'remove').limit(1),   // (b) từng bị gỡ (mọi brand)
+        // Rule B: đếm CHU KỲ "gỡ → gắn lại" THẬT ở brand này (RPC lọc bỏ nhiễu script purge/cleanup,
+        // vì đếm thô dòng 'remove' có KOC tới 70 lần do script chạy lặp → khóa oan).
+        supabase.rpc('koc_retag_cycles', { p_koc: username, p_brand: brand }),
       ]);
-      if (alive) setIsOld((vid?.length > 0) || (rm?.length > 0));
+      if (!alive) return;
+      setIsOld((vid?.length > 0) || (rmAll?.length > 0));
+      setRmCnt(Number(cycles) || 0);
     })();
     return () => { alive = false; };
-  }, [open, isAdmin, username]);
+  }, [open, username, brand]);
+  // Rule B (Khánh 27/7): gỡ→gắn lại từ 2 lần = cảnh báo; QUÁ 2 lần (>=3) = KHÓA, chỉ admin được gắn lại.
+  const retagWarn = rmCnt >= 2;
+  const retagLocked = rmCnt >= 3;
+  const blockedByRetag = retagLocked && !isAdmin;
 
   const status = assignment?.status; // 'proposed' | 'approved' | undefined
   const color = status === 'approved' ? '#16a34a' : status === 'proposed' ? '#d97706' : '#64748b';
@@ -351,6 +362,11 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
 
   const save = async () => {
     const sn = (staff || '').trim(); if (!sn) return;
+    // Rule B (Khánh 27/7): KOC đã bị gỡ >= 2 lần ở brand này → CHỈ admin được gắn lại.
+    if (blockedByRetag) {
+      alert(`🚫 KOC @${username} đã bị GỠ TAG ${rmCnt} lần ở brand ${brand}.\n\nGỡ–gắn lại quá 2 lần = dấu hiệu KOC không uy tín → phải ADMIN xem xét mới gắn lại được.\nBáo admin duyệt giúp nha.`);
+      return;
+    }
     // Quản lý sàn (non-admin) gắn tag KOC CŨ (a/b): BẮT BUỘC có ảnh tin nhắn chứng minh → duyệt THẲNG, admin khỏi duyệt.
     const needProof = !isAdmin && isOld;
     if (needProof && !proofUrl) { alert('⚠️ KOC cũ — phải đính ẢNH chụp tin nhắn chứng minh rõ ràng mới gắn tag được.'); return; }
@@ -447,6 +463,17 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
                   : <>🟢 Đang gán <b>{assignment.staff_name}</b> từ {assignment.approved_at ? new Date(assignment.approved_at).toLocaleDateString('vi-VN') : '—'}</>}
               </div>
             )}
+            {/* Rule B (Khánh 27/7): gỡ–gắn lại QUÁ 2 LẦN → KOC không uy tín, chỉ ADMIN được gắn lại. */}
+            {retagWarn && (
+              <div style={{ fontSize: '0.76rem', fontWeight: 700, color: blockedByRetag ? '#b91c1c' : '#b45309', background: blockedByRetag ? '#fef2f2' : '#fffbeb', border: `1px solid ${blockedByRetag ? '#fecaca' : '#fde68a'}`, borderRadius: 8, padding: '8px 10px', marginBottom: 12 }}>
+                ⚠️ KOC này đã <b>bị gỡ rồi gắn lại {rmCnt} lần</b> ở brand {brand} — dấu hiệu <b>KOC không uy tín</b>.
+                {blockedByRetag
+                  ? <><br />🔒 Quá 2 lần → <b>chỉ ADMIN được gắn lại</b>. Bạn không thao tác được, báo admin xem xét.</>
+                  : retagLocked
+                    ? <><br />Quá 2 lần — admin cân nhắc thật kỹ trước khi gắn lại.</>
+                    : <><br />Gắn lại thêm 1 lần nữa là sẽ bị KHÓA (chỉ admin gắn được).</>}
+              </div>
+            )}
             <div style={{ marginBottom: 12 }}>
               <button onClick={loadHist} style={{ background: 'none', border: 'none', color: '#0891b2', fontWeight: 700, fontSize: '0.76rem', cursor: 'pointer', padding: 0 }}>🕘 {hist === null ? 'Xem lịch sử định danh' : 'Tải lại lịch sử'}</button>
               {hist !== null && (
@@ -462,7 +489,7 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
               )}
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button onClick={save} disabled={busy || !staff || (!isAdmin && isOld && !proofUrl)} style={{ flex: 1, padding: '9px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer', opacity: (busy || !staff || (!isAdmin && isOld && !proofUrl)) ? 0.6 : 1 }}>{isAdmin ? (status === 'proposed' ? 'Duyệt + lưu' : 'Lưu gán') : (isOld ? (proofUrl ? 'Lưu gán (có ảnh CM)' : 'Cần ảnh CM') : 'Gửi đề xuất')}</button>
+              <button onClick={save} disabled={busy || !staff || blockedByRetag || (!isAdmin && isOld && !proofUrl)} style={{ flex: 1, padding: '9px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer', opacity: (busy || !staff || blockedByRetag || (!isAdmin && isOld && !proofUrl)) ? 0.6 : 1 }}>{blockedByRetag ? '🔒 Cần admin duyệt' : isAdmin ? (status === 'proposed' ? 'Duyệt + lưu' : 'Lưu gán') : (isOld ? (proofUrl ? 'Lưu gán (có ảnh CM)' : 'Cần ảnh CM') : 'Gửi đề xuất')}</button>
               {isAdmin && status === 'proposed' && <button onClick={approve} disabled={busy} style={{ padding: '9px 12px', borderRadius: 9, border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#16a34a', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer' }}>✓ Duyệt</button>}
               {canRemove && <button onClick={remove} disabled={busy} style={{ padding: '9px 12px', borderRadius: 9, border: '1px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer' }}>Loại</button>}
               <button onClick={() => setOpen(false)} style={{ padding: '9px 12px', borderRadius: 9, border: '1px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, fontSize: '0.84rem', cursor: 'pointer' }}>Đóng</button>
@@ -890,8 +917,17 @@ export default function KocPerformanceTab() {
     let base = (data?.creators || []).filter(c => !q || (c.username || '').toLowerCase().includes(q));
     if (q && base.length === 0 && serverHits.length) base = serverHits;   // dùng kết quả server cho KOC ngoài top-1000
     const cs = base.map(c => ({ ...c, roas: roasOf(c.gmv, c.commission, c.cast, c.sample_cost) }));
+    // SEARCH cũng phải thấy KOC ĐÃ GẮN TAG brand này dù chưa phát sinh đơn/GMV ở kỳ (không nằm trong
+    // data.creators) — trước đây search xong ra rỗng, tưởng "KOC không tồn tại" dù panel vẫn hiện tag.
+    if (q) {
+      const has = new Set(cs.map(c => (c.username || '').toLowerCase().replace(/^@/, '')));
+      for (const [u, arr] of Object.entries(assignMap)) {
+        if (has.has(u) || !u.includes(q)) continue;
+        if ((arr || []).some(a => a.brand_name === brand && a.staff_name)) cs.push({ username: u, gmv: 0, vperiod: 0 });
+      }
+    }
     return [...cs].sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0));
-  }, [data, sortKey, search, serverHits]);
+  }, [data, sortKey, search, serverHits, assignMap, brand]);
   // Phân trang bảng KOC (mặc định 20 dòng/trang) — khỏi kéo dài cả 1000 dòng
   const [kocPage, setKocPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
