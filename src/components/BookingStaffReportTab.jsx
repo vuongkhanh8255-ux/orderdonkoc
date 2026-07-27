@@ -327,10 +327,15 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
     if (!window.confirm(`Tự gỡ tag @${k.uname} (${k.brand}) khỏi danh sách bạn quản lý?\n\nVideo/GMV đã ghi nhận trước đó vẫn giữ nguyên, chỉ ngưng theo dõi KOC này từ giờ.`)) return;
     const key = k.uname + '|' + (k.brand || '');
     setRemovingKey(key);
-    const { data, error } = await supabase.rpc('koc_remove_assignment', { p_koc: k.uname, p_brand: k.brand, p_actor: currentUser?.username || r.ten_nhansu });
+    // Dùng RPC "tự gỡ" — SERVER bắt buộc khớp CHỦ SỞ HỮU (chỉ xoá tag mang đúng tên nhân sự này),
+    // thay cho koc_remove_assignment cũ (xoá theo koc+brand nên gỡ trúng tag người khác — đã lọt 1 ca).
+    // RPC cũng khớp brand rút gọn ở báo cáo (MOAW ↔ 'MOAW MOAWS', REALSTEEL ↔ 'REAL STEEL').
+    const { data, error } = await supabase.rpc('koc_self_remove_assignment', {
+      p_koc: k.uname, p_brand: k.brand, p_staff: r.ten_nhansu, p_actor: currentUser?.username || r.ten_nhansu,
+    });
     setRemovingKey(null);
     if (error) { alert('Lỗi gỡ tag: ' + error.message); return; }
-    if (!data || Number(data) === 0) { alert('⚠️ Không gỡ được tag này (hệ thống không tìm thấy). Thử tải lại trang rồi gỡ lại.'); return; }
+    if (!data || Number(data) === 0) { alert('⚠️ Không gỡ được — tag này không mang tên bạn (hoặc đã được gỡ trước đó).'); return; }
     setDet(d => d ? { ...d, kocs: (d.kocs || []).filter(x => !(x.uname === k.uname && x.brand === k.brand)) } : d);
   }, [canRemove, currentUser, r.ten_nhansu]);
   const [sendMetric, setSendMetric] = useState('mau');   // tần suất gửi: don | mau
