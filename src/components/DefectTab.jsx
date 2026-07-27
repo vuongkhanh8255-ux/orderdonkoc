@@ -19,9 +19,12 @@ const ACCENT = '#ff6a2c';
 const DEFECT_TYPES = ['Rò rỉ', 'Móp méo', 'Hư hỏng bao bì', 'Thiếu sản phẩm', 'Sai sản phẩm', 'Lỗi chất lượng',
   'Chê mùi', 'Lỗi sản phẩm', 'Hết hạn/cận date', 'Khác'];   // + 2 loại CS bổ sung 27/7
 
-// Brand cho Module 4: BỎ "EHERB" theo feedback CS 27/7 — eHerb là GIAN HÀNG bán sản phẩm của các brand
-// khác (Bodymiss/Milaganics...), nên hàng lỗi luôn thuộc về 1 brand thật, chọn "EHERB" là sai chỗ.
-const DEFECT_BRANDS = BRANDS.filter(b => b !== 'EHERB');
+// Brand cho Module 4: BỎ "EHERB" + "EHERB HCM" theo feedback CS 27/7 — eHerb là GIAN HÀNG bán sản phẩm
+// của các brand khác (Bodymiss/Milaganics...), nên hàng lỗi luôn thuộc về 1 brand thật, chọn eHerb là sai chỗ.
+const isEherbBrand = (b) => /^EHERB/i.test(String(b || '').trim());
+const DEFECT_BRANDS = BRANDS.filter(b => !isEherbBrand(b));
+// Brand của 1 hồ sơ: ưu tiên brand CS chọn, chưa chọn thì đoán theo gian hàng — trừ gian eHerb (xem trên).
+const brandOf = (r) => r.brand || (isEherbBrand(brandOfShop(r.shop_name)) ? '' : brandOfShop(r.shop_name)) || '';
 const SEVERITY = { nhe: { label: 'Nhẹ', color: '#16a34a', bg: '#dcfce7' }, trung_binh: { label: 'Trung bình', color: '#b45309', bg: '#fef3c7' }, nang: { label: 'Nặng', color: '#dc2626', bg: '#fee2e2' } };
 const STATUS = { new: { label: 'Mới', color: '#b45309', bg: '#fef3c7' }, reviewing: { label: 'Đang xử lý', color: '#1d4ed8', bg: '#dbeafe' }, resolved: { label: 'Đã xử lý', color: '#15803d', bg: '#dcfce7' } };
 
@@ -80,7 +83,10 @@ export default function DefectTab({ currentUser }) {
     if (!r.product_name?.trim()) { alert('Thiếu Tên sản phẩm'); return; }
     const payload = {
       report_date: r.report_date || todayYmd(), product_name: r.product_name.trim(),
-      platform: r.platform || null, shop_name: r.shop_name || null, brand: r.brand || brandOfShop(r.shop_name) || null,
+      platform: r.platform || null, shop_name: r.shop_name || null,
+      // Bỏ trống brand thì đoán theo gian hàng — NHƯNG gian eHerb thì để trống, đừng tự điền lại
+      // "EHERB" (brand vừa bỏ); CS phải chọn brand thật của sản phẩm lỗi.
+      brand: brandOf(r) || null,
       order_sn: r.order_sn || null, defect_type: r.defect_type || null, severity: r.severity || 'trung_binh',
       lot_code: r.lot_code || null, production_date: r.production_date || null,
       description: r.description || null, media_links: r.media_links || null,
@@ -95,10 +101,12 @@ export default function DefectTab({ currentUser }) {
   const del = async (r) => { if (!confirm(`Xoá hồ sơ lỗi "${r.product_name}"?`)) return; await supabase.from('defect_products').delete().eq('id', r.id); load(); };
   const patch = async (r, p) => { setRows(prev => prev.map(x => (x.id === r.id ? { ...x, ...p } : x))); await supabase.from('defect_products').update(p).eq('id', r.id); };
 
-  // Chọn gian → tự điền sàn + brand
+  // Chọn gian → tự điền sàn + brand. Gian eHerb thì ĐỂ TRỐNG brand (eHerb bán đồ của brand khác,
+  // xem ghi chú DEFECT_BRANDS) → bắt CS chọn đúng brand thật của sản phẩm lỗi.
   const pickShop = (name) => {
     const sh = SHOPS.find(s => s.name === name);
-    setEditing(e => ({ ...e, shop_name: name, platform: sh ? sh.san : e.platform, brand: sh ? sh.brand : e.brand }));
+    const b = sh ? (isEherbBrand(sh.brand) ? '' : sh.brand) : null;
+    setEditing(e => ({ ...e, shop_name: name, platform: sh ? sh.san : e.platform, brand: sh ? b : e.brand }));
   };
 
   const filtered = useMemo(() => rows.filter(r => {
@@ -108,7 +116,7 @@ export default function DefectTab({ currentUser }) {
     if (typeF !== 'all' && r.defect_type !== typeF) return false;
     if (statusF !== 'all' && r.status !== statusF) return false;
     if (shopF !== 'all' && r.shop_name !== shopF) return false;
-    if (brandF !== 'all' && (r.brand || brandOfShop(r.shop_name)) !== brandF) return false;
+    if (brandF !== 'all' && brandOf(r) !== brandF) return false;
     if (search) { const q = search.toLowerCase(); if (![r.product_name, r.lot_code, r.order_sn, r.description, r.condition_detail, r.note, r.shop_name].some(v => v && String(v).toLowerCase().includes(q))) return false; }
     return true;
   }), [rows, typeF, statusF, brandF, shopF, fromF, toF, search]);
@@ -120,7 +128,7 @@ export default function DefectTab({ currentUser }) {
     nang: filtered.filter(r => r.severity === 'nang').length,
   }), [filtered]);
 
-  const topBy = (key) => { const m = {}; filtered.forEach(r => { const k = (key === 'brand' ? (r.brand || brandOfShop(r.shop_name)) : r[key]) || '—'; m[k] = (m[k] || 0) + 1; }); return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 8); };
+  const topBy = (key) => { const m = {}; filtered.forEach(r => { const k = (key === 'brand' ? brandOf(r) : r[key]) || '—'; m[k] = (m[k] || 0) + 1; }); return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 8); };
   const topProducts = useMemo(() => topBy('product_name'), [filtered]);
   const topLots = useMemo(() => topBy('lot_code').filter(([k]) => k && k !== '—'), [filtered]);
 
@@ -129,7 +137,7 @@ export default function DefectTab({ currentUser }) {
     const m = {};
     filtered.forEach(r => {
       const p = periodOf(r.report_date, periodMode);
-      const b = (r.brand || brandOfShop(r.shop_name)) || '—';
+      const b = brandOf(r) || '—';
       const key = p + '||' + b;
       if (!m[key]) m[key] = { period: p, brand: b, total: 0, nang: 0, unresolved: 0, types: {} };
       const it = m[key];
@@ -152,7 +160,7 @@ export default function DefectTab({ currentUser }) {
 
   const exportXlsx = () => {
     const data = filtered.map((r, i) => ({
-      STT: i + 1, Ngày: fmtDate(r.report_date), 'Sàn': sanLabel(r.platform), 'Gian hàng': r.shop_name || '', 'Brand': r.brand || brandOfShop(r.shop_name) || '',
+      STT: i + 1, Ngày: fmtDate(r.report_date), 'Sàn': sanLabel(r.platform), 'Gian hàng': r.shop_name || '', 'Brand': brandOf(r) || '',
       'Sản phẩm': r.product_name, 'Loại lỗi': r.defect_type, 'Mức độ': SEVERITY[r.severity]?.label, 'Lot': r.lot_code, 'Mã đơn': r.order_sn,
       'Mô tả': r.description, 'Mô tả tình trạng': r.condition_detail,
       'Dùng mấy ngày thì bị': r.onset_days ?? '', 'Trạng thái': STATUS[r.status]?.label, 'NV': r.staff,
@@ -245,7 +253,7 @@ export default function DefectTab({ currentUser }) {
                         <tr key={r.id}>
                           <td style={td}>{fmtDate(r.report_date)}</td>
                           <td style={{ ...td, fontSize: '0.78rem' }}>{r.shop_name ? <>{r.platform === 'shopee' ? '🟠' : '⬛'} {r.shop_name}</> : <span style={{ color: '#cbd5e1' }}>{sanLabel(r.platform) || '—'}</span>}</td>
-                          <td style={{ ...td, fontSize: '0.76rem', fontWeight: 700, color: '#7c3aed' }}>{r.brand || brandOfShop(r.shop_name) || '—'}</td>
+                          <td style={{ ...td, fontSize: '0.76rem', fontWeight: 700, color: '#7c3aed' }}>{brandOf(r) || '—'}</td>
                           <td style={{ ...td, fontWeight: 600, whiteSpace: 'normal', maxWidth: 240 }}>{r.product_name}</td>
                           <td style={td}>{r.defect_type || '—'}</td>
                           <td style={{ ...td, whiteSpace: 'normal', maxWidth: 260, fontSize: '0.78rem' }}>
