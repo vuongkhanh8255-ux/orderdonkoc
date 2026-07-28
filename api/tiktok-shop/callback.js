@@ -98,6 +98,32 @@ export default async function handler(req, res) {
   const state       = reqUrl.searchParams.get('state');
   const callbackErr = reqUrl.searchParams.get('error') || reqUrl.searchParams.get('error_description');
 
+  // ── CHẾ ĐỘ ỦY QUYỀN: /api/tiktok-shop/callback?authorize=orders → nhảy thẳng trang ủy quyền
+  //    TikTok, khỏi phải mò link trong Partner Center (làm giống /api/shopee/auth).
+  //    Gộp vào file này vì Vercel đang KỊCH TRẦN 12 serverless function — thêm file mới là hỏng deploy.
+  //    app_key KHÔNG phải khoá bí mật (nằm công khai ngay trên URL ủy quyền); app_secret không đụng tới.
+  const authorize = reqUrl.searchParams.get('authorize');
+  if (authorize) {
+    const AUTH_APPS = {
+      orders:    { envKey: 'TIKTOK_SHOP_APP_KEY',      label: 'TikTok Shop — Đơn hàng' },
+      analytics: { envKey: 'TIKTOK_ANALYTICS_APP_KEY', label: 'TikTok Shop — Analytics' },
+      reviews:   { envKey: 'TIKTOK_REVIEWS_APP_KEY',   label: 'TikTok Shop — Đánh giá' },
+      creator:   { envKey: 'TIKTOK_CREATOR_APP_KEY',   label: 'TikTok Shop — Creator' },
+    };
+    const target = AUTH_APPS[authorize === '1' ? 'orders' : authorize];
+    if (!target) {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      return res.status(400).end(JSON.stringify({ error: `app "${authorize}" không hợp lệ`, available: Object.keys(AUTH_APPS) }));
+    }
+    const appKey = process.env[target.envKey]?.trim();
+    if (!appKey) {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      return res.status(500).end(JSON.stringify({ error: `${target.envKey} chưa set trên Vercel`, app: target.label }));
+    }
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    return res.redirect(302, `https://services.tiktokshop.com/open/authorize?service_id=${appKey}`);
+  }
+
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   if (callbackErr) {

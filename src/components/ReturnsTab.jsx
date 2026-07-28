@@ -272,6 +272,16 @@ export default function ReturnsTab() {
                       </div>
                     );
                   })()}
+                  {/* Tìm mã đơn TikTok mà không ra thì 90% là đơn KHÔNG qua link KOC — giải thích tại chỗ
+                      để CS khỏi tưởng hỏng ô tìm kiếm (Khánh dặn note lý do lên trang 28/7). */}
+                  {search && /^\d{12,}$/.test(search.trim()) && (
+                    <div style={{ marginTop: 14, textAlign: 'left', maxWidth: 620, marginLeft: 'auto', marginRight: 'auto', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', color: '#92400e', fontSize: '0.78rem', lineHeight: 1.55 }}>
+                      <b>Vì sao có đơn TikTok tìm không ra?</b><br />
+                      Hệ thống hiện chỉ kéo được <b>đơn TikTok đi qua link KOC (affiliate)</b>. Khách vào shop
+                      mua thẳng thì TikTok không trả đơn đó về, nên tìm mã sẽ không thấy — <u>không phải lỗi ô tìm kiếm</u>.
+                      <br />Đơn <b>Shopee thì đủ hết</b>. Đang chờ nối lại API TikTok Shop để kéo trọn đơn.
+                    </div>
+                  )}
                 </td></tr>
                 : rows.slice(0, 500).map(r => (
                   <tr key={r.id}>
