@@ -287,8 +287,11 @@ export default function ReturnsTab() {
                     <td style={{ ...td, whiteSpace: 'normal', maxWidth: 300, fontSize: '0.78rem' }}>
                       {/* Nhãn FBS + cảnh báo đơn chưa tới khách / sàn đã xử lý xong */}
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 3 }}>
+                        {/* FBS = Shopee giữ kho & giao · MP (marketplace) = shop tự giao — CS gọi theo 2 chữ này */}
                         {r.fulfillment_flag === 'fulfilled_by_shopee' &&
-                          <span style={{ fontSize: '0.66rem', fontWeight: 800, padding: '1px 6px', borderRadius: 20, background: '#ede9fe', color: '#6d28d9' }}>📦 FBS</span>}
+                          <span title="Shopee giữ kho & giao" style={{ fontSize: '0.66rem', fontWeight: 800, padding: '1px 6px', borderRadius: 20, background: '#ede9fe', color: '#6d28d9' }}>📦 FBS</span>}
+                        {r.fulfillment_flag && r.fulfillment_flag !== 'fulfilled_by_shopee' &&
+                          <span title="Marketplace — shop tự giữ hàng, tự giao" style={{ fontSize: '0.66rem', fontWeight: 800, padding: '1px 6px', borderRadius: 20, background: '#f1f5f9', color: '#475569' }}>🏠 MP</span>}
                         {r.delivered === false &&
                           <span title="Đơn chưa tới tay khách mà đã đòi trả — khách hủy giữa đường / giao thất bại"
                             style={{ fontSize: '0.66rem', fontWeight: 800, padding: '1px 6px', borderRadius: 20, background: '#fee2e2', color: '#b91c1c' }}>⚠ chưa giao tới khách</span>}
@@ -558,9 +561,9 @@ export default function ReturnsTab() {
             {/* CS 28/7: lọc riêng đơn FBS (Shopee xử lý) */}
             <select value={fbsF} onChange={e => setFbsF(e.target.value)}
               style={{ ...inputStyle, cursor: 'pointer', borderColor: fbsF !== 'all' ? ACCENT : '#e5e7eb', color: fbsF !== 'all' ? '#e85518' : '#1f2937', fontWeight: fbsF !== 'all' ? 700 : 400 }}>
-              <option value="all">Kiểu giao: Tất cả</option>
-              <option value="fbs">📦 FBS — Shopee xử lý</option>
-              <option value="seller">🏠 Shop tự giao</option>
+              <option value="all">Kiểu đơn: Tất cả</option>
+              <option value="fbs">📦 FBS — Shopee giữ kho &amp; giao</option>
+              <option value="seller">🏠 MP — shop tự giao</option>
             </select>
             {/* CS 28/7: bỏ đơn khách yêu cầu HỦY = đơn CHƯA giao tới khách (giao thất bại / mới lấy hàng) */}
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', fontWeight: 700, color: hideUndelivered ? '#e85518' : '#64748b', cursor: 'pointer' }}
