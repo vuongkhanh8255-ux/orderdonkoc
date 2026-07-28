@@ -8,12 +8,16 @@ const PAGE_SIZE = 20;
 
 // ── Module 1 CSKH: phân loại lý do + trạng thái xử lý + đã sửa đánh giá (lưu ở bảng review_cs_meta) ──
 const REASON_CATEGORIES = ['Chê sản phẩm', 'Lỗi sản phẩm', 'Kích ứng / Dị ứng', 'Không hiệu quả', 'Giao hàng chậm', 'Sai hàng', 'Thiếu hàng', 'Đóng gói', 'Shipper', 'Spam', 'Hiểu nhầm', 'Không nhận xét'];
-const FIXED_OPTIONS = [{ v: 'chua_sua', l: 'Chưa sửa' }, { v: 'da_sua_4', l: 'Đã sửa 4★' }, { v: 'da_sua_5', l: 'Đã sửa 5★' }];
-// Ô xử lý: thêm "Đã xóa" (CS 28/7) — đánh giá đã được gỡ khỏi sàn, khỏi phải theo dõi tiếp.
+// "Đã xóa" nằm CHUNG ô với đã-sửa-4/5★ (CS chốt 28/7: gắn tag rồi lọc đơn để report).
+const FIXED_OPTIONS = [
+  { v: 'chua_sua', l: 'Chưa sửa' },
+  { v: 'da_sua_4', l: 'Đã sửa 4★' },
+  { v: 'da_sua_5', l: 'Đã sửa 5★' },
+  { v: 'da_xoa',   l: '🗑️ Đã xóa' },   // đánh giá đã được gỡ khỏi sàn
+];
 const HANDLE_OPTIONS = [
   { v: 'chua_xu_ly', l: '○ Chưa xử lý', color: '#64748b', bg: '#f1f5f9' },
   { v: 'da_xu_ly',   l: '✅ Đã xử lý',  color: '#fff',    bg: '#16a34a' },
-  { v: 'da_xoa',     l: '🗑️ Đã xóa',   color: '#fff',    bg: '#7c3aed' },
 ];
 
 // (21/7/2026) SỬA MAP SAI: 341325550 + 831509831 trước đây bị ghi nhầm là "Milaganics FBS/SPA",
@@ -1051,6 +1055,8 @@ export default function ReviewsTab() {
           <select value={reasonFilter} onChange={e => { setReasonFilter(e.target.value); setPage(1); }}
             style={{ padding: '8px 12px', borderRadius: 8, border: `1.5px solid ${reasonFilter !== 'all' ? '#ff6a2c' : '#e5e7eb'}`, fontSize: '0.82rem', fontFamily: 'inherit', color: reasonFilter !== 'all' ? '#ff6a2c' : '#0f172a', background: reasonFilter !== 'all' ? '#fff7ed' : '#fff', cursor: 'pointer', fontWeight: reasonFilter !== 'all' ? 700 : 400 }}>
             <option value="all">Lý do: Tất cả</option>
+            {/* CS 28/7: cần lọc ra đơn CHƯA ai gắn lý do, không thì điền sót mà không biết */}
+            <option value="">⚠️ Chưa gắn lý do</option>
             {REASON_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
 
@@ -1059,15 +1065,12 @@ export default function ReviewsTab() {
             <option value="all">Xử lý: Tất cả</option>
             <option value="chua_xu_ly">Chưa xử lý</option>
             <option value="da_xu_ly">Đã xử lý</option>
-            <option value="da_xoa">Đã xóa</option>
           </select>
 
           <select value={fixedFilter} onChange={e => { setFixedFilter(e.target.value); setPage(1); }}
             style={{ padding: '8px 12px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.82rem', fontFamily: 'inherit', color: '#0f172a', background: '#fff', cursor: 'pointer' }}>
             <option value="all">Đã sửa: Tất cả</option>
-            <option value="chua_sua">Chưa sửa</option>
-            <option value="da_sua_4">Đã sửa 4★</option>
-            <option value="da_sua_5">Đã sửa 5★</option>
+            {FIXED_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
           </select>
 
           <select value={prodNameFilter} onChange={e => { setProdNameFilter(e.target.value); setPage(1); }}

@@ -227,7 +227,7 @@ export default function ReturnsTab() {
     }))), 'Ty le theo phan loai SP');
     const dump = (rows) => rows.map(r => ({
       'NGÀY': fmtDate(r.created_at), 'SÀN': r.platform, 'GIAN': r.shop_name || '', 'MÃ ĐƠN': r.order_sn || '',
-      'KHÁCH': r.buyer_name || '', 'KOC': r.koc_username || '', 'SĐT': r.buyer_phone || '', 'TỈNH/TP': r.buyer_province || '',
+      'KOC': r.koc_username || '', 'SĐT': r.buyer_phone || '', 'TỈNH/TP': r.buyer_province || '',
       'SẢN PHẨM': r.product_summary || '', 'PHÂN LOẠI SP': catOf(r), 'LÝ DO': r.reason_category || '',
       'TRẠNG THÁI': RSTATUS[r.status]?.label || r.status || '', 'HOÀN 1 PHẦN': PARTIAL[r.partial_refund_status]?.label || '',
     }));
@@ -247,7 +247,7 @@ export default function ReturnsTab() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr>
             <th style={th}>Ngày</th><th style={th}>Sàn · Gian</th><th style={th}>Mã đơn</th>
-            <th style={th}>Khách</th><th style={th}>KOC</th>
+            <th style={th}>KOC</th>
             <th style={{ ...th, minWidth: 220 }}>Sản phẩm</th>
             <th style={{ ...th, width: 150 }}>Phân loại SP</th>
             <th style={{ ...th, width: 165 }}>Lý do</th>
@@ -256,8 +256,8 @@ export default function ReturnsTab() {
             <th style={{ ...th, width: 120 }}>Loại đơn</th>
           </tr></thead>
           <tbody>
-            {loadingCases ? <tr><td colSpan={11} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải...</td></tr>
-              : rows.length === 0 ? <tr><td colSpan={11} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>
+            {loadingCases ? <tr><td colSpan={10} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải...</td></tr>
+              : rows.length === 0 ? <tr><td colSpan={10} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>
                   Không có đơn nào khớp bộ lọc.
                   {/* Đơn nằm ở TAB KIA là ca hay làm CS tưởng "search không ra" — chỉ luôn chỗ có nó. */}
                   {search && (() => {
@@ -278,11 +278,6 @@ export default function ReturnsTab() {
                     <td style={{ ...td, fontSize: '0.76rem', color: '#64748b' }}>{fmtDate(r.created_at)}</td>
                     <td style={{ ...td, fontSize: '0.76rem' }}>{r.platform === 'shopee' ? '🟠' : '⬛'} {r.shop_name || '—'}</td>
                     <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.73rem' }}>{r.order_sn || '—'}</td>
-                    {/* Khách THẬT (Shopee: tên người nhận). TikTok affiliate KHÔNG trả thông tin
-                        người mua nên để trống — tên creator nằm ở cột KOC bên cạnh. */}
-                    <td style={{ ...td, fontSize: '0.78rem' }}>
-                      {r.buyer_name || <span style={{ color: '#cbd5e1' }} title={r.platform === 'tiktok' ? 'TikTok affiliate không trả thông tin người mua' : ''}>—</span>}
-                    </td>
                     <td style={{ ...td, fontSize: '0.76rem', color: '#7c3aed' }}>{r.koc_username ? '@' + r.koc_username : '—'}</td>
                     <td style={{ ...td, whiteSpace: 'normal', maxWidth: 300, fontSize: '0.78rem' }}>
                       {/* Nhãn FBS + cảnh báo đơn chưa tới khách / sàn đã xử lý xong */}
@@ -299,9 +294,15 @@ export default function ReturnsTab() {
                           <span title={`Bên sàn đơn này giờ là ${r.platform_status} — yêu cầu trả đã xử lý xong`}
                             style={{ fontSize: '0.66rem', fontWeight: 800, padding: '1px 6px', borderRadius: 20, background: '#dcfce7', color: '#15803d' }}>✓ sàn đã xong</span>}
                       </div>
-                      {r.product_summary || '—'}
-                      {/* mẫu trên sàn (chứa tên mùi) + số lượng — CS cần để đối chiếu đơn nhiều SP */}
-                      {r.product_sku && <div style={{ color: '#7c3aed', fontSize: '0.72rem', marginTop: 2 }}>🏷️ {r.product_sku}</div>}
+                      {/* CS 28/7: đơn combo hiện tên link chương trình dài thòng mà không thấy khách chọn
+                          MÙI nào → đưa PHÂN LOẠI lên TRƯỚC, tên link thu nhỏ xuống dưới cho dễ nhìn. */}
+                      {r.product_sku
+                        ? <div style={{ color: '#6d28d9', fontWeight: 700, fontSize: '0.8rem' }}>🏷️ {r.product_sku}</div>
+                        : <div style={{ color: '#b91c1c', fontSize: '0.72rem', fontStyle: 'italic' }}
+                            title="Sàn không trả tên phân loại cho đơn này — CS chọn tay ở ô Phân loại SP bên cạnh">
+                            ⚠ sàn không trả phân loại
+                          </div>}
+                      <div style={{ color: '#94a3b8', fontSize: '0.72rem', marginTop: 2 }}>{r.product_summary || '—'}</div>
                       {r.product_qty > 0 && <div style={{ color: '#b45309', fontSize: '0.72rem', fontWeight: 700, marginTop: 1 }}>× {r.product_qty} sản phẩm</div>}
                     </td>
                     <td style={td}>

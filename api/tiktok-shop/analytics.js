@@ -901,6 +901,10 @@ const affRowsFromOrder = (order, shop_id) => (order.skus || []).map(s => ({
   order_id: String(order.id || ''),
   sku_id: String(s.sku_id || ''),
   product_id: String(s.product_id || ''),
+  // Tên PHÂN LOẠI khách đặt (mùi) — CS 28/7: đơn combo chỉ hiện tên link chương trình nên không
+  // biết khách chọn mùi nào. Tên field tuỳ phiên bản API nên dò vài kiểu; không có thì để trống.
+  sku_name: s.sku_name || s.sku_title || s.seller_sku || '',
+  product_name: s.product_name || s.product_title || '',
   creator_username: s.creator_username || '',
   content_id: String(s.content_id || ''),
   content_type: s.content_type || '',
