@@ -102,26 +102,39 @@ export default async function handler(req, res) {
   //    TikTok, khỏi phải mò link trong Partner Center (làm giống /api/shopee/auth).
   //    Gộp vào file này vì Vercel đang KỊCH TRẦN 12 serverless function — thêm file mới là hỏng deploy.
   //    app_key KHÔNG phải khoá bí mật (nằm công khai ngay trên URL ủy quyền); app_secret không đụng tới.
+  // ⚠️ Trang ủy quyền dùng SERVICE ID, KHÔNG phải App Key — 2 mã KHÁC NHAU. Đưa App Key vào
+  //    thì TikTok báo "This service does not exist" (đã dính 28/7). Service ID lấy ở
+  //    Partner Center → Manage apps → chọn app → mục "Service ID".
+  //    Service ID KHÔNG phải khoá bí mật (nó nằm công khai ngay trên URL ủy quyền).
   const authorize = reqUrl.searchParams.get('authorize');
   if (authorize) {
     const AUTH_APPS = {
-      orders:    { envKey: 'TIKTOK_SHOP_APP_KEY',      label: 'TikTok Shop — Đơn hàng' },
-      analytics: { envKey: 'TIKTOK_ANALYTICS_APP_KEY', label: 'TikTok Shop — Analytics' },
-      reviews:   { envKey: 'TIKTOK_REVIEWS_APP_KEY',   label: 'TikTok Shop — Đánh giá' },
-      creator:   { envKey: 'TIKTOK_CREATOR_APP_KEY',   label: 'TikTok Shop — Creator' },
+      orders:    { env: 'TIKTOK_SHOP_SERVICE_ID',      known: '',              label: 'TikTok Shop — Đơn hàng' },
+      analytics: { env: 'TIKTOK_ANALYTICS_SERVICE_ID', known: '6k2of554me0j9', label: 'TikTok Shop — Analytics' },
+      reviews:   { env: 'TIKTOK_REVIEWS_SERVICE_ID',   known: '',              label: 'TikTok Shop — Đánh giá' },
+      creator:   { env: 'TIKTOK_CREATOR_SERVICE_ID',   known: '',              label: 'TikTok Shop — Creator' },
     };
-    const target = AUTH_APPS[authorize === '1' ? 'orders' : authorize];
+    const type = authorize === '1' ? 'orders' : authorize;
+    const target = AUTH_APPS[type];
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
     if (!target) {
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
       return res.status(400).end(JSON.stringify({ error: `app "${authorize}" không hợp lệ`, available: Object.keys(AUTH_APPS) }));
     }
-    const appKey = process.env[target.envKey]?.trim();
-    if (!appKey) {
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      return res.status(500).end(JSON.stringify({ error: `${target.envKey} chưa set trên Vercel`, app: target.label }));
+    const serviceId = process.env[target.env]?.trim() || target.known;
+    if (!serviceId) {
+      return res.status(500).end(JSON.stringify({
+        loi: `Chưa có Service ID cho app "${target.label}"`,
+        can_lam: [
+          '1. Vào TikTok Shop Partner Center → Manage apps → chọn app dùng cho ĐƠN HÀNG',
+          '2. Copy mục "Service ID" (KHÁC App Key)',
+          `3. Thêm biến ${target.env} = <service id> vào Vercel → Settings → Environment Variables`,
+          '4. Redeploy rồi mở lại link này',
+        ],
+        luu_y: 'Hoặc bấm thẳng nút Authorize ngay trong Partner Center cũng ra đúng trang đó.',
+      }, null, 2));
     }
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
-    return res.redirect(302, `https://services.tiktokshop.com/open/authorize?service_id=${appKey}`);
+    return res.redirect(302, `https://services.tiktokshop.com/open/authorize?service_id=${serviceId}`);
   }
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
