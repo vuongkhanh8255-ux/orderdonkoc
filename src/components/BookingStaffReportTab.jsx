@@ -482,11 +482,16 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
     // (case @xdao.riviu: order 16/6, air 23/6+3/7, tag duyệt 7/7 → clip vô hình → nợ oan 12d).
     const lastAir = k.last_air_any ? new Date(k.last_air_any) : (k.last_air ? new Date(k.last_air) : null);
     const lastOrder = k.last_order ? new Date(k.last_order) : null;
+    const since = k.since ? new Date(k.since) : null;
     const owes = lastOrder && (!lastAir || lastAir < lastOrder);   // đang nợ clip mới sau order
-    const base = owes ? lastOrder : (lastAir || (k.since ? new Date(k.since) : null));
-    if (!base) return { txt: '—', color: '#cbd5e1', warn: false };
-    const days = owes ? 30 : 45;
-    const deadline = new Date(base.getTime() + days * 86400000);
+    // LUẬT DEADLINE thống nhất (Khánh chốt 27/7, khớp auto-gỡ + đề xuất gỡ):
+    //  · Nợ order → ORDER + 30 (ưu tiên, đè mốc 45-từ-air)
+    //  · Chưa air → NGÀY GẮN + 45
+    //  · Có air   → MAX(air gần nhất + 45, ngày gắn + 10)  ← gắn khi clip đã quá hạn = được 10 ngày
+    let deadline;
+    if (owes) deadline = new Date(lastOrder.getTime() + 30 * 86400000);
+    else if (!lastAir) { if (!since) return { txt: '—', color: '#cbd5e1', warn: false }; deadline = new Date(since.getTime() + 45 * 86400000); }
+    else deadline = new Date(Math.max(lastAir.getTime() + 45 * 86400000, since ? since.getTime() + 10 * 86400000 : 0));
     const daysLeft = Math.ceil((deadline - Date.now()) / 86400000);
     if (daysLeft < 0) return { txt: owes ? `⚠️ Nợ clip quá ${-daysLeft}d · nghi ôm mẫu` : `⚠️ Quá hạn ${dateLabel(deadline)} · nên gỡ`, color: '#dc2626', warn: true };
     return { txt: owes ? `⏳ Chờ clip · còn ${daysLeft}d` : `${dateLabel(deadline)} · còn ${daysLeft}d`, color: owes ? '#d97706' : '#16a34a', warn: false };
