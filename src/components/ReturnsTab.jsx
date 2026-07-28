@@ -24,13 +24,27 @@ const td = { padding: '8px 10px', fontSize: '0.82rem', color: '#0f172a', borderT
 const inputStyle = { padding: '8px 11px', borderRadius: 9, border: '1px solid #e5e7eb', background: '#fff', fontSize: '0.85rem', color: '#1f2937', fontFamily: 'inherit' };
 
 // Lý do THHT (CS chọn) — gồm các ví dụ CS đưa: Không còn nhu cầu / Chê sản phẩm / Kích ứng
-const REASONS = ['Không còn nhu cầu', 'Chê sản phẩm', 'Kích ứng', 'Giao hàng chậm', 'Sai sản phẩm', 'Thiếu hàng', 'Hư hỏng vận chuyển', 'Không nhận được hàng', 'Đổi ý', 'Khác'];
+const REASONS = ['Không còn nhu cầu', 'Chê sản phẩm', 'Kích ứng', 'Giao hàng chậm', 'Sai sản phẩm',
+  'Thiếu hàng', 'Hư hỏng vận chuyển', 'Không nhận được hàng', 'Đổi ý',
+  // CS bổ sung 28/7
+  'Lỗi hệ thống không hiện quà', 'Lỗi vòi', 'Hết hàng', 'Hiểu nhầm chương trình', 'ĐVVC', 'Hàng giả/nhái',
+  'Khác'];
 const RSTATUS = {
   new: { label: 'Mới', color: '#b45309', bg: '#fef3c7' },
   processing: { label: 'Đang xử lý', color: '#1d4ed8', bg: '#dbeafe' },
   complaint_won: { label: 'Khiếu nại thành công', color: '#7c3aed', bg: '#ede9fe' },
+  complaint_lost: { label: 'Khiếu nại thất bại', color: '#dc2626', bg: '#fee2e2' },      // CS 28/7
+  shopee_rejected: { label: 'Shopee từ chối yêu cầu', color: '#b91c1c', bg: '#fee2e2' }, // CS 28/7
   done: { label: 'Hoàn tất', color: '#15803d', bg: '#dcfce7' },
 };
+// Loại đơn — CS 28/7 tách "hoàn tiền nguyên đơn" vs "hoàn tiền 1 phần".
+// Giữ mã cũ 'refund_only' = nguyên đơn để đơn đã lưu trước đó không bị lệch.
+const RETURN_TYPES = [
+  { v: 'thht', l: 'Trả hàng' },
+  { v: 'refund_only', l: 'Hoàn tiền nguyên đơn' },
+  { v: 'refund_partial', l: 'Hoàn tiền 1 phần' },
+];
+const REFUND_TYPES = ['refund_only', 'refund_partial'];   // 2 loại nằm chung tab "Hoàn tiền"
 // Đề xuất hoàn tiền 1 phần
 const PARTIAL = {
   accepted: { label: 'Khách chấp nhận', color: '#15803d' },
@@ -65,8 +79,10 @@ export default function ReturnsTab() {
   const [catF, setCatF] = useState('all');           // lọc theo PHÂN LOẠI SP (danh sách CS)
   const [search, setSearch] = useState('');
 
-  // Phân loại SP: CS chọn tay LUÔN thắng gợi ý tự động đoán từ tên SP (dùng chung với Đánh giá sàn)
-  const catOf = (r) => r.product_category || autoProductCategory(r.product_summary || '') || '';
+  // Phân loại SP: CS chọn tay LUÔN thắng gợi ý tự động (dùng chung với Đánh giá sàn).
+  // Phải đưa CẢ product_sku (mẫu trên sàn, vd "SUNSET,105ML") vào — tên SP thường KHÔNG chứa tên mùi,
+  // đó là lý do trước đây cột phân loại để trống trong khi Đánh giá sàn hiện đủ (CS báo 28/7).
+  const catOf = (r) => r.product_category || autoProductCategory(r.product_summary || '', r.product_sku || '') || '';
 
   // Phân tích nguyên nhân: chọn NHIỀU THÁNG + gian
   const [rsShop, setRsShop] = useState('all');
@@ -110,19 +126,22 @@ export default function ReturnsTab() {
   }, [from, to]);
 
   const filterCases = useCallback((type) => cases.filter(r => {
-    if ((r.return_type || 'thht') !== type) return false;
-    if (!inRange(r)) return false;
+    const rt = r.return_type || 'thht';
+    if (type === 'refund' ? !REFUND_TYPES.includes(rt) : rt !== type) return false;
+    // ĐANG TÌM MÃ ĐƠN thì bỏ qua khoảng ngày: CS than "search ID lúc được lúc không" — đơn nằm
+    // ngoài khoảng ngày đang chọn thì tìm hoài không ra dù đơn có trong hệ thống.
+    if (!search && !inRange(r)) return false;
     if (sanF !== 'all' && r.platform !== sanF) return false;
     if (shopF !== 'all' && r.shop_name !== shopF) return false;
     if (reasonF !== 'all' && (r.reason_category || '') !== reasonF) return false;
     if (statusF !== 'all' && (r.status || 'new') !== statusF) return false;
     if (catF !== 'all' && (catOf(r) || '(chưa phân loại)') !== catF) return false;
-    if (search) { const q = search.toLowerCase(); if (![r.order_sn, r.buyer_name, r.koc_username, r.product_summary, r.reason].some(v => v && String(v).toLowerCase().includes(q))) return false; }
+    if (search) { const q = search.trim().toLowerCase(); if (![r.order_sn, r.buyer_name, r.koc_username, r.product_summary, r.product_sku, r.reason].some(v => v && String(v).toLowerCase().includes(q))) return false; }
     return true;
   }), [cases, inRange, sanF, shopF, reasonF, statusF, catF, search]);       // eslint-disable-line react-hooks/exhaustive-deps
 
   const thhtRows = useMemo(() => filterCases('thht'), [filterCases]);
-  const refundRows = useMemo(() => filterCases('refund_only'), [filterCases]);
+  const refundRows = useMemo(() => filterCases('refund'), [filterCases]);
 
   // ── Thống kê tự đổ (RPC) ──
   const shops = useMemo(() => {
@@ -214,7 +233,7 @@ export default function ReturnsTab() {
   );
 
   // Bảng đơn dùng chung cho tab THHT và tab Hoàn tiền
-  const renderCaseTable = (rows, type) => (
+  const renderCaseTable = (rows, kind) => (
     <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -230,7 +249,22 @@ export default function ReturnsTab() {
           </tr></thead>
           <tbody>
             {loadingCases ? <tr><td colSpan={11} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải...</td></tr>
-              : rows.length === 0 ? <tr><td colSpan={11} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>Không có đơn nào khớp bộ lọc.</td></tr>
+              : rows.length === 0 ? <tr><td colSpan={11} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>
+                  Không có đơn nào khớp bộ lọc.
+                  {/* Đơn nằm ở TAB KIA là ca hay làm CS tưởng "search không ra" — chỉ luôn chỗ có nó. */}
+                  {search && (() => {
+                    const other = kind === 'thht' ? refundRows : thhtRows;
+                    if (!other.length) return null;
+                    return (
+                      <div style={{ marginTop: 10 }}>
+                        <button onClick={() => setTab(kind === 'thht' ? 'refund' : 'thht')}
+                          style={{ padding: '7px 16px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer' }}>
+                          👉 Tìm thấy {other.length} đơn ở tab “{kind === 'thht' ? 'Hoàn tiền' : 'Đơn THHT'}” — bấm để xem
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </td></tr>
                 : rows.slice(0, 500).map(r => (
                   <tr key={r.id}>
                     <td style={{ ...td, fontSize: '0.76rem', color: '#64748b' }}>{fmtDate(r.created_at)}</td>
@@ -242,10 +276,15 @@ export default function ReturnsTab() {
                       {r.buyer_name || <span style={{ color: '#cbd5e1' }} title={r.platform === 'tiktok' ? 'TikTok affiliate không trả thông tin người mua' : ''}>—</span>}
                     </td>
                     <td style={{ ...td, fontSize: '0.76rem', color: '#7c3aed' }}>{r.koc_username ? '@' + r.koc_username : '—'}</td>
-                    <td style={{ ...td, whiteSpace: 'normal', maxWidth: 300, fontSize: '0.78rem' }}>{r.product_summary || '—'}</td>
+                    <td style={{ ...td, whiteSpace: 'normal', maxWidth: 300, fontSize: '0.78rem' }}>
+                      {r.product_summary || '—'}
+                      {/* mẫu trên sàn (chứa tên mùi) + số lượng — CS cần để đối chiếu đơn nhiều SP */}
+                      {r.product_sku && <div style={{ color: '#7c3aed', fontSize: '0.72rem', marginTop: 2 }}>🏷️ {r.product_sku}</div>}
+                      {r.product_qty > 0 && <div style={{ color: '#b45309', fontSize: '0.72rem', fontWeight: 700, marginTop: 1 }}>× {r.product_qty} sản phẩm</div>}
+                    </td>
                     <td style={td}>
                       {(() => {
-                        const auto = autoProductCategory(r.product_summary || '');
+                        const auto = autoProductCategory(r.product_summary || '', r.product_sku || '');
                         const chosen = r.product_category || '';
                         return (
                           <select value={chosen || auto || ''} onChange={e => patch(r, { product_category: e.target.value || null })}
@@ -282,7 +321,7 @@ export default function ReturnsTab() {
                     <td style={td}>
                       <select value={r.return_type || 'thht'} onChange={e => patch(r, { return_type: e.target.value })}
                         style={{ ...inputStyle, padding: '4px 7px', fontSize: '0.74rem', width: '100%', cursor: 'pointer' }}>
-                        <option value="thht">Trả hàng</option><option value="refund_only">Hoàn tiền</option>
+                        {RETURN_TYPES.map(t => <option key={t.v} value={t.v}>{t.l}</option>)}
                       </select>
                     </td>
                   </tr>
@@ -292,7 +331,7 @@ export default function ReturnsTab() {
       </div>
       {rows.length > 500 && <div style={{ padding: '8px 14px', fontSize: '0.76rem', color: '#94a3b8' }}>Hiện 500/{fmtN(rows.length)} đơn — thu hẹp bộ lọc để xem tiếp.</div>}
       <div style={{ padding: '9px 14px', fontSize: '0.74rem', color: '#94a3b8', borderTop: '1px solid #f1f5f9' }}>
-        {type === 'thht'
+        {kind === 'thht'
           ? 'Đơn trả hàng + hoàn tiền. Đổi ô "Loại đơn" sang Hoàn tiền nếu khách được hoàn mà KHÔNG trả hàng.'
           : 'Đơn hoàn tiền KHÔNG trả hàng — lọc theo mã đơn / lý do / sản phẩm như tab THHT.'}
       </div>
