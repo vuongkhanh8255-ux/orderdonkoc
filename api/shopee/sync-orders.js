@@ -262,9 +262,14 @@ export default async function handler(req, res) {
   // ── LẤP NGƯỢC CHI TIẾT cho đơn ĐÃ CÓ trong DB (fulfillment_flag / trạng thái giao / lý do hủy) ──
   //    Sync thường chỉ kéo chi tiết đơn MỚI, nên đơn cũ không tự có mấy trường thêm 28/7.
   //    ?refresh_detail=1  [&only_status=TO_RETURN] [&limit=1500]
-  if (url.searchParams.get('refresh_detail') === '1') {
-    const onlyStatus = url.searchParams.get('only_status') || '';
+  // ?refresh_status=1 → làm TƯƠI lại đơn đang ở trạng thái CHƯA CHỐT (kể cả đã có fulfillment_flag).
+  //   Đo 28/7: 245/280 đơn DB ghi TO_RETURN thì bên sàn đã COMPLETED từ đời nào → Module 2 hiện đơn ma.
+  //   Sync thường chỉ quét kỹ 7 ngày gần nhất nên đơn cũ đổi trạng thái không ai biết.
+  const refreshStatus = url.searchParams.get('refresh_status') === '1';
+  if (url.searchParams.get('refresh_detail') === '1' || refreshStatus) {
+    const onlyStatus = url.searchParams.get('only_status') || (refreshStatus ? '' : '');
     const lim = Math.min(Number(url.searchParams.get('limit')) || 1500, 5000);
+    const OPEN_STATUSES = ['TO_RETURN', 'TO_CONFIRM_RECEIVE', 'SHIPPED', 'PROCESSED', 'READY_TO_SHIP', 'IN_CANCEL'];
     const results = [];
     for (const shop of shops) {
       const r = { shop_id: shop.shop_id, shop_name: shop.shop_name, updated: 0, scanned: 0, partial: false, error: null };
@@ -273,8 +278,12 @@ export default async function handler(req, res) {
         const token = await refreshIfNeeded(supabase, shop);
         const sid = Number(shop.shop_id);
         let q = supabase.from('shopee_orders').select('order_sn')
-          .eq('shop_id', String(shop.shop_id)).is('fulfillment_flag', null)
+          .eq('shop_id', String(shop.shop_id))
           .order('create_time', { ascending: false });
+        // refresh_status: quét MỌI đơn chưa chốt (dù đã có chi tiết) để cập nhật trạng thái mới nhất.
+        // refresh_detail: chỉ đơn còn THIẾU chi tiết → chạy lại không tốn quota vô ích.
+        if (refreshStatus) q = q.in('order_status', OPEN_STATUSES);
+        else q = q.is('fulfillment_flag', null);
         if (onlyStatus) q = q.eq('order_status', onlyStatus);
         const { data: rows } = await q.limit(lim);
         const sns = (rows || []).map(x => x.order_sn);
@@ -291,7 +300,7 @@ export default async function handler(req, res) {
       } catch (err) { r.error = err.message; }
       results.push(r);
     }
-    return res.json({ ok: true, mode: 'refresh_detail', only_status: onlyStatus || '(tat ca)', results });
+    return res.json({ ok: true, mode: refreshStatus ? 'refresh_status' : 'refresh_detail', only_status: onlyStatus || '(tat ca)', results });
   }
 
   // ── BACKFILL CÓ CHỦ ĐÍCH: lấp đúng khoảng [from_ts, to_ts] (vd lỗ hổng sync giữa kỳ) ──

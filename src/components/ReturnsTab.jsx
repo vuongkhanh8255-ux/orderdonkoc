@@ -78,6 +78,10 @@ export default function ReturnsTab() {
   const [statusF, setStatusF] = useState('all');
   const [catF, setCatF] = useState('all');           // lọc theo PHÂN LOẠI SP (danh sách CS)
   const [search, setSearch] = useState('');
+  const [fbsF, setFbsF] = useState('all');           // all | fbs | seller — CS 28/7
+  // Mặc định ẨN đơn chưa giao tới khách: đó là đơn khách hủy giữa đường / giao thất bại, CS không tính
+  // vào tỉ lệ trả hàng. Bỏ tick nếu muốn xem lại đủ.
+  const [hideUndelivered, setHideUndelivered] = useState(true);
 
   // Phân loại SP: CS chọn tay LUÔN thắng gợi ý tự động (dùng chung với Đánh giá sàn).
   // Phải đưa CẢ product_sku (mẫu trên sàn, vd "SUNSET,105ML") vào — tên SP thường KHÔNG chứa tên mùi,
@@ -136,9 +140,13 @@ export default function ReturnsTab() {
     if (reasonF !== 'all' && (r.reason_category || '') !== reasonF) return false;
     if (statusF !== 'all' && (r.status || 'new') !== statusF) return false;
     if (catF !== 'all' && (catOf(r) || '(chưa phân loại)') !== catF) return false;
+    if (fbsF === 'fbs' && r.fulfillment_flag !== 'fulfilled_by_shopee') return false;
+    if (fbsF === 'seller' && !(r.fulfillment_flag && r.fulfillment_flag !== 'fulfilled_by_shopee')) return false;
+    // chỉ loại đơn BIẾT CHẮC là chưa giao (delivered=false); đơn chưa rõ (null) vẫn giữ để khỏi mất data
+    if (hideUndelivered && r.delivered === false) return false;
     if (search) { const q = search.trim().toLowerCase(); if (![r.order_sn, r.buyer_name, r.koc_username, r.product_summary, r.product_sku, r.reason].some(v => v && String(v).toLowerCase().includes(q))) return false; }
     return true;
-  }), [cases, inRange, sanF, shopF, reasonF, statusF, catF, search]);       // eslint-disable-line react-hooks/exhaustive-deps
+  }), [cases, inRange, sanF, shopF, reasonF, statusF, catF, search, fbsF, hideUndelivered]);       // eslint-disable-line react-hooks/exhaustive-deps
 
   const thhtRows = useMemo(() => filterCases('thht'), [filterCases]);
   const refundRows = useMemo(() => filterCases('refund'), [filterCases]);
@@ -277,6 +285,17 @@ export default function ReturnsTab() {
                     </td>
                     <td style={{ ...td, fontSize: '0.76rem', color: '#7c3aed' }}>{r.koc_username ? '@' + r.koc_username : '—'}</td>
                     <td style={{ ...td, whiteSpace: 'normal', maxWidth: 300, fontSize: '0.78rem' }}>
+                      {/* Nhãn FBS + cảnh báo đơn chưa tới khách / sàn đã xử lý xong */}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 3 }}>
+                        {r.fulfillment_flag === 'fulfilled_by_shopee' &&
+                          <span style={{ fontSize: '0.66rem', fontWeight: 800, padding: '1px 6px', borderRadius: 20, background: '#ede9fe', color: '#6d28d9' }}>📦 FBS</span>}
+                        {r.delivered === false &&
+                          <span title="Đơn chưa tới tay khách mà đã đòi trả — khách hủy giữa đường / giao thất bại"
+                            style={{ fontSize: '0.66rem', fontWeight: 800, padding: '1px 6px', borderRadius: 20, background: '#fee2e2', color: '#b91c1c' }}>⚠ chưa giao tới khách</span>}
+                        {r.platform_status && r.platform_status !== 'TO_RETURN' &&
+                          <span title={`Bên sàn đơn này giờ là ${r.platform_status} — yêu cầu trả đã xử lý xong`}
+                            style={{ fontSize: '0.66rem', fontWeight: 800, padding: '1px 6px', borderRadius: 20, background: '#dcfce7', color: '#15803d' }}>✓ sàn đã xong</span>}
+                      </div>
                       {r.product_summary || '—'}
                       {/* mẫu trên sàn (chứa tên mùi) + số lượng — CS cần để đối chiếu đơn nhiều SP */}
                       {r.product_sku && <div style={{ color: '#7c3aed', fontSize: '0.72rem', marginTop: 2 }}>🏷️ {r.product_sku}</div>}
@@ -536,6 +555,19 @@ export default function ReturnsTab() {
               {catList.map(([c, n]) => <option key={c} value={c}>{c} ({n})</option>)}
               <option value="(chưa phân loại)">— Chưa phân loại —</option>
             </select>
+            {/* CS 28/7: lọc riêng đơn FBS (Shopee xử lý) */}
+            <select value={fbsF} onChange={e => setFbsF(e.target.value)}
+              style={{ ...inputStyle, cursor: 'pointer', borderColor: fbsF !== 'all' ? ACCENT : '#e5e7eb', color: fbsF !== 'all' ? '#e85518' : '#1f2937', fontWeight: fbsF !== 'all' ? 700 : 400 }}>
+              <option value="all">Kiểu giao: Tất cả</option>
+              <option value="fbs">📦 FBS — Shopee xử lý</option>
+              <option value="seller">🏠 Shop tự giao</option>
+            </select>
+            {/* CS 28/7: bỏ đơn khách yêu cầu HỦY = đơn CHƯA giao tới khách (giao thất bại / mới lấy hàng) */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', fontWeight: 700, color: hideUndelivered ? '#e85518' : '#64748b', cursor: 'pointer' }}
+              title="Đơn chưa tới tay khách mà đã đòi trả = khách hủy giữa đường / bom hàng, không phải trả hàng thật">
+              <input type="checkbox" checked={hideUndelivered} onChange={e => setHideUndelivered(e.target.checked)} />
+              Ẩn đơn chưa giao tới khách
+            </label>
             <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>
               {fmtN((tab === 'thht' ? thhtRows : refundRows).length)} đơn
             </span>
