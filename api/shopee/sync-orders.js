@@ -67,8 +67,18 @@ async function refreshIfNeeded(supabase, tokenRow) {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+// Các trường CHI TIẾT đơn cần lấy. Thêm 28/7 (CS cần lọc đơn FBS + bỏ đơn khách yêu cầu HỦY):
+//   fulfillment_flag  → ai giao: Shopee (FBS) hay shop tự giao
+//   package_list      → trạng thái vận chuyển từng kiện (biết đã GIAO TỚI KHÁCH chưa)
+//   cancel_by/cancel_reason/buyer_cancel_reason → phân biệt đơn KHÁCH YÊU CẦU HỦY
+const DETAIL_FIELDS = 'buyer_username,recipient_address,item_list,actual_shipping_fee,total_amount,pay_time,'
+  + 'payment_method,checkout_shipping_carrier,fulfillment_flag,package_list,cancel_by,cancel_reason,buyer_cancel_reason';
+
 async function fetchOrderList(partnerKey, accessToken, shopId, timeFrom, timeTo, deadline = Infinity) {
-  const STATUSES = ['READY_TO_SHIP', 'PROCESSED', 'SHIPPED', 'COMPLETED', 'IN_CANCEL', 'CANCELLED'];
+  // Thêm TO_RETURN / TO_CONFIRM_RECEIVE / UNPAID (28/7): thiếu 3 trạng thái này thì đơn chuyển sang
+  // "khách đòi trả" sau khi tạo sẽ KHÔNG được quét lại → Module 2 sót đơn, CS tìm mã đơn không ra.
+  const STATUSES = ['UNPAID', 'READY_TO_SHIP', 'PROCESSED', 'SHIPPED', 'TO_CONFIRM_RECEIVE',
+    'COMPLETED', 'IN_CANCEL', 'CANCELLED', 'TO_RETURN'];
   const allSns = [];
 
   for (const status of STATUSES) {
@@ -115,7 +125,7 @@ async function fetchOrderDetails(partnerKey, accessToken, shopId, orderSns, dead
     const batch = orderSns.slice(i, i + BATCH);
     const res = await shopeeApi(partnerKey, 'GET', '/api/v2/order/get_order_detail', accessToken, shopId, {
       order_sn_list: batch.join(','),
-      response_optional_fields: 'buyer_username,recipient_address,item_list,actual_shipping_fee,total_amount,pay_time,payment_method,checkout_shipping_carrier',
+      response_optional_fields: DETAIL_FIELDS,
     });
     if (res.response?.order_list) details.push(...res.response.order_list);
     await sleep(120);
@@ -133,6 +143,10 @@ function transformOrders(orders, shopId, shopName) {
     }));
     // GMV ("Doanh số" Shopee) = Σ(giá bán item × SL) — KHÁC total_amount (tiền khách trả sau voucher/giảm).
     const gmv = items.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.qty) || 0), 0);
+    // Trạng thái vận chuyển: 1 đơn có thể tách nhiều kiện → coi là ĐÃ GIAO khi MỌI kiện đã giao xong.
+    const pkgs = Array.isArray(o.package_list) ? o.package_list : [];
+    const pkgStatuses = pkgs.map(p => p.logistics_status || p.fulfillment_status || '').filter(Boolean);
+    const delivered = pkgStatuses.length > 0 && pkgStatuses.every(s => /DELIVERY_DONE|DELIVERED/i.test(s));
     return {
       order_sn: o.order_sn, shop_id: shopId.toString(), shop_name: shopName,
       order_status: o.order_status, create_time: o.create_time,
@@ -147,6 +161,11 @@ function transformOrders(orders, shopId, shopName) {
       recipient_name: addr.name || '', recipient_phone: addr.phone || '',
       recipient_province: addr.state || addr.region || '',
       recipient_city: addr.city || addr.district || '',
+      fulfillment_flag: o.fulfillment_flag || null,
+      logistics_status: pkgStatuses[0] || null,
+      delivered: pkgStatuses.length ? delivered : null,   // null = chưa biết (đơn cũ chưa kéo lại)
+      cancel_by: o.cancel_by || null,
+      cancel_reason: o.cancel_reason || o.buyer_cancel_reason || null,
       updated_at: new Date().toISOString(),
     };
   });
@@ -176,6 +195,29 @@ export default async function handler(req, res) {
   const { data: shops, error: dbErr } = await query;
   if (dbErr) return res.status(500).json({ error: dbErr.message });
   if (!shops?.length) return res.json({ success: true, message: 'No shops found', results: [] });
+
+  // ── TEST: soi CHI TIẾT 1 đơn (xem thật fulfillment_flag / package_list ra sao, đừng đoán)
+  //    → ?detail_test=<order_sn>&shop_id=<id> ──
+  const detailTest = url.searchParams.get('detail_test');
+  if (detailTest) {
+    const shop = shops[0];
+    const token = await refreshIfNeeded(supabase, shop);
+    const r = await shopeeApi(partnerKey, 'GET', '/api/v2/order/get_order_detail', token.access_token, Number(shop.shop_id), {
+      order_sn_list: detailTest, response_optional_fields: DETAIL_FIELDS,
+    });
+    const o = r?.response?.order_list?.[0] || null;
+    return res.json({
+      ok: !!o, shop: shop.shop_name, error: r?.error || null, message: r?.message || null,
+      tom_tat: o ? {
+        order_sn: o.order_sn, order_status: o.order_status,
+        fulfillment_flag: o.fulfillment_flag ?? '(khong tra ve)',
+        cancel_by: o.cancel_by ?? null, cancel_reason: o.cancel_reason ?? null,
+        buyer_cancel_reason: o.buyer_cancel_reason ?? null,
+        package_list: o.package_list ?? '(khong tra ve)',
+      } : null,
+      raw_keys: o ? Object.keys(o) : null,
+    });
+  }
 
   // ── TEST: soi escrow 1 đơn để biết field "trợ giá" → ?escrow_test=<order_sn>&shop_id=<id> ──
   const escrowTest = url.searchParams.get('escrow_test');
@@ -215,6 +257,41 @@ export default async function handler(req, res) {
       results.push(r);
     }
     return res.json({ ok: true, mode: 'fill_subsidy', results });
+  }
+
+  // ── LẤP NGƯỢC CHI TIẾT cho đơn ĐÃ CÓ trong DB (fulfillment_flag / trạng thái giao / lý do hủy) ──
+  //    Sync thường chỉ kéo chi tiết đơn MỚI, nên đơn cũ không tự có mấy trường thêm 28/7.
+  //    ?refresh_detail=1  [&only_status=TO_RETURN] [&limit=1500]
+  if (url.searchParams.get('refresh_detail') === '1') {
+    const onlyStatus = url.searchParams.get('only_status') || '';
+    const lim = Math.min(Number(url.searchParams.get('limit')) || 1500, 5000);
+    const results = [];
+    for (const shop of shops) {
+      const r = { shop_id: shop.shop_id, shop_name: shop.shop_name, updated: 0, scanned: 0, partial: false, error: null };
+      if (Date.now() > deadline) { r.partial = true; r.error = 'skipped (het thoi gian)'; results.push(r); continue; }
+      try {
+        const token = await refreshIfNeeded(supabase, shop);
+        const sid = Number(shop.shop_id);
+        let q = supabase.from('shopee_orders').select('order_sn')
+          .eq('shop_id', String(shop.shop_id)).is('fulfillment_flag', null)
+          .order('create_time', { ascending: false });
+        if (onlyStatus) q = q.eq('order_status', onlyStatus);
+        const { data: rows } = await q.limit(lim);
+        const sns = (rows || []).map(x => x.order_sn);
+        r.scanned = sns.length;
+        for (let i = 0; i < sns.length; i += 50) {
+          if (Date.now() > deadline) { r.partial = true; break; }
+          const details = await fetchOrderDetails(partnerKey, token.access_token, sid, sns.slice(i, i + 50), deadline);
+          const records = transformOrders(details, shop.shop_id, shop.shop_name);
+          if (records.length) {
+            const { error } = await supabase.from('shopee_orders').upsert(records, { onConflict: 'order_sn' });
+            if (!error) r.updated += records.length;
+          }
+        }
+      } catch (err) { r.error = err.message; }
+      results.push(r);
+    }
+    return res.json({ ok: true, mode: 'refresh_detail', only_status: onlyStatus || '(tat ca)', results });
   }
 
   // ── BACKFILL CÓ CHỦ ĐÍCH: lấp đúng khoảng [from_ts, to_ts] (vd lỗ hổng sync giữa kỳ) ──
