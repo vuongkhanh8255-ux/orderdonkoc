@@ -289,11 +289,8 @@ const KocIdentityOverview = ({ data = [], brandHeaders = [], formatNumber, staff
         persistAssignments(nextAssignments);
         setAssignModal(null);
 
-        const { error } = await supabase
-            .from(KOC_ASSIGNMENTS_TABLE)
-            .delete()
-            .eq('koc_id', assignModal.kocId)
-            .eq('brand_name', assignModal.brandName);
+        // 28/7: gỡ qua RPC (DB đã chặn DELETE thẳng bảng sau sự cố mất tag hàng loạt) — RPC tự ghi lịch sử.
+        const { error } = await supabase.rpc('koc_remove_assignment', { p_koc: assignModal.kocId, p_brand: assignModal.brandName, p_actor: username || 'admin' });
         if (error) console.warn('Cannot remove KOC brand assignment from Supabase', error);
     };
 
@@ -308,11 +305,8 @@ const KocIdentityOverview = ({ data = [], brandHeaders = [], formatNumber, staff
         persistAssignments(nextAssignments);
         setAssignModal(null);
 
-        const { error } = await supabase
-            .from(KOC_ASSIGNMENTS_TABLE)
-            .delete()
-            .eq('koc_id', assignModal.kocId)
-            .eq('brand_name', assignModal.brandName);
+        // 28/7: hủy đề xuất cũng đi qua RPC (DELETE thẳng bảng đã bị chặn).
+        const { error } = await supabase.rpc('koc_remove_assignment', { p_koc: assignModal.kocId, p_brand: assignModal.brandName, p_actor: (username || '') + ' (hủy đề xuất)' });
         if (error) console.warn('Cannot cancel proposal', error);
     };
 

@@ -400,8 +400,9 @@ function KocAssignCell({ username, brand, assignments, staffNames, currentUser, 
   const remove = async () => {
     setBusy(true);
     if (isAdmin) {
-      await supabase.from(ASSIGN_TABLE).delete().eq('koc_id', username).eq('brand_name', brand);
-      logHistory('remove', assignment?.staff_name);
+      // 28/7: hết xoá thẳng bảng (DB đã thu quyền DELETE của anon sau sự cố mất ~580 tag không log) — mọi gỡ đi qua RPC.
+      const { data, error } = await supabase.rpc('koc_remove_assignment', { p_koc: username, p_brand: brand, p_actor: me });
+      if (error || !data || Number(data) === 0) { alert('⚠️ Không gỡ được tag này. Tải lại trang rồi gỡ lại.'); setBusy(false); return; }
     } else {
       // ecom (Đan) gỡ tag: qua RPC → chắc chắn (canon brand), tự lưu ngày gắn (tag_since) + ghi lịch sử.
       const { data, error } = await supabase.rpc('koc_remove_assignment', { p_koc: username, p_brand: brand, p_actor: me });
@@ -858,8 +859,8 @@ export default function KocPerformanceTab() {
     refreshAssign();
   };
   const rejectProposal = async (p) => {
-    await supabase.from(ASSIGN_TABLE).delete().eq('koc_id', p.koc).eq('brand_name', brand);
-    supabase.from(HIST_TABLE).insert({ koc_id: p.koc, brand_name: brand, staff_name: p.staff_name, action: 'remove', actor: (currentUser?.username || '') + ' (từ chối)' }).then(() => {}, () => {});
+    // 28/7: gỡ qua RPC (DB đã chặn DELETE thẳng bảng) — RPC tự ghi lịch sử với actor bên dưới.
+    await supabase.rpc('koc_remove_assignment', { p_koc: p.koc, p_brand: brand, p_actor: (currentUser?.username || '') + ' (từ chối)' });
     refreshAssign();
   };
   // Duyệt / từ chối theo ĐÚNG brand của đề xuất (dùng cho bảng thông báo đầu trang — gom mọi brand)
@@ -870,8 +871,8 @@ export default function KocPerformanceTab() {
     refreshAssign();
   };
   const rejectProposalAny = async (p) => {
-    await supabase.from(ASSIGN_TABLE).delete().eq('koc_id', p.koc).eq('brand_name', p.brand_name);
-    supabase.from(HIST_TABLE).insert({ koc_id: p.koc, brand_name: p.brand_name, staff_name: p.staff_name, action: 'remove', actor: (currentUser?.username || '') + ' (từ chối)' }).then(() => {}, () => {});
+    // 28/7: gỡ qua RPC (DB đã chặn DELETE thẳng bảng) — RPC tự ghi lịch sử với actor bên dưới.
+    await supabase.rpc('koc_remove_assignment', { p_koc: p.koc, p_brand: p.brand_name, p_actor: (currentUser?.username || '') + ' (từ chối)' });
     refreshAssign();
   };
 
