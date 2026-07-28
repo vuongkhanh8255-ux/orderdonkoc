@@ -12,7 +12,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
-import { SHOPS, BRANDS, sanLabel, brandOfShop } from '../constants/shops';
+import { SHOPS, BRANDS, sanLabel, brandOfShop, shopKey, findShopByKey } from '../constants/shops';
 import EvidenceUploader from './EvidenceUploader';
 
 const ACCENT = '#ff6a2c';
@@ -103,10 +103,12 @@ export default function DefectTab({ currentUser }) {
 
   // Chọn gian → tự điền sàn + brand. Gian eHerb thì ĐỂ TRỐNG brand (eHerb bán đồ của brand khác,
   // xem ghi chú DEFECT_BRANDS) → bắt CS chọn đúng brand thật của sản phẩm lỗi.
-  const pickShop = (name) => {
-    const sh = SHOPS.find(s => s.name === name);
+  // Nhận shopKey (sàn|tên) chứ KHÔNG phải tên — "eHerb Hồ Chí Minh" có ở cả 2 sàn, tra theo tên
+  // sẽ luôn ra Shopee (CS 28/7: chọn TikTok eHerb HCM bị nhảy thành Shopee eHerb HCM).
+  const pickShop = (key) => {
+    const sh = findShopByKey(key);
     const b = sh ? (isEherbBrand(sh.brand) ? '' : sh.brand) : null;
-    setEditing(e => ({ ...e, shop_name: name, platform: sh ? sh.san : e.platform, brand: sh ? b : e.brand }));
+    setEditing(e => ({ ...e, shop_name: sh ? sh.name : '', platform: sh ? sh.san : e.platform, brand: sh ? b : e.brand }));
   };
 
   const filtered = useMemo(() => rows.filter(r => {
@@ -129,7 +131,21 @@ export default function DefectTab({ currentUser }) {
   }), [filtered]);
 
   const topBy = (key) => { const m = {}; filtered.forEach(r => { const k = (key === 'brand' ? brandOf(r) : r[key]) || '—'; m[k] = (m[k] || 0) + 1; }); return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 8); };
-  const topProducts = useMemo(() => topBy('product_name'), [filtered]);
+  // Top SP lỗi: CS 28/7 "chưa thống kê sản phẩm đó bị lỗi gì (chỉ có tên sp và số lượng)"
+  // → mỗi sản phẩm kèm luôn danh sách loại lỗi + số lần, xếp loại nhiều nhất lên trước.
+  const topProducts = useMemo(() => {
+    const m = {};
+    filtered.forEach(r => {
+      const n = r.product_name || '—';
+      if (!m[n]) m[n] = { name: n, total: 0, types: {} };
+      m[n].total++;
+      const t = r.defect_type || 'Chưa phân loại';
+      m[n].types[t] = (m[n].types[t] || 0) + 1;
+    });
+    return Object.values(m)
+      .map(p => ({ ...p, typeList: Object.entries(p.types).sort((a, b) => b[1] - a[1]) }))
+      .sort((a, b) => b.total - a.total).slice(0, 8);
+  }, [filtered]);
   const topLots = useMemo(() => topBy('lot_code').filter(([k]) => k && k !== '—'), [filtered]);
 
   // ── BÁO CÁO CHẤT LƯỢNG theo kỳ (tuần/tháng) ──
@@ -229,8 +245,18 @@ export default function DefectTab({ currentUser }) {
         <>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 16 }}>
             <div style={card}><div style={{ ...labelStyle, marginBottom: 10 }}>🏆 Top sản phẩm lỗi</div>
-              {topProducts.length === 0 ? <div style={{ fontSize: '0.82rem', color: '#94a3b8' }}>Chưa có data</div> : topProducts.map(([n, c]) => (
-                <div key={n} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: '0.82rem', borderBottom: '1px solid #f8fafc' }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 260 }} title={n}>{n}</span><b style={{ color: ACCENT }}>{c}</b></div>))}
+              {topProducts.length === 0 ? <div style={{ fontSize: '0.82rem', color: '#94a3b8' }}>Chưa có data</div> : topProducts.map(p => (
+                <div key={p.name} style={{ padding: '6px 0', borderBottom: '1px solid #f8fafc' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: '0.82rem' }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.name}>{p.name}</span>
+                    <b style={{ color: ACCENT, whiteSpace: 'nowrap' }}>{p.total}</b>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 3 }}>
+                    {p.typeList.map(([t, c]) => (
+                      <span key={t} style={{ fontSize: '0.68rem', fontWeight: 700, padding: '1px 7px', borderRadius: 20, background: '#fef3c7', color: '#b45309' }}>{t} · {c}</span>
+                    ))}
+                  </div>
+                </div>))}
             </div>
             <div style={card}><div style={{ ...labelStyle, marginBottom: 10 }}>📦 Theo lot sản xuất</div>
               {topLots.length === 0 ? <div style={{ fontSize: '0.82rem', color: '#94a3b8' }}>Chưa nhập lot nào</div> : topLots.map(([n, c]) => (
@@ -368,10 +394,10 @@ export default function DefectTab({ currentUser }) {
               <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>Tên sản phẩm *</label><input value={editing.product_name || ''} onChange={e => setEditing({ ...editing, product_name: e.target.value })} style={inputStyle} /></div>
               <div><label style={labelStyle}>Ngày ghi nhận</label><input type="date" value={editing.report_date || ''} onChange={e => setEditing({ ...editing, report_date: e.target.value })} style={inputStyle} /></div>
               <div><label style={labelStyle}>Gian hàng (sàn cụ thể)</label>
-                <select value={editing.shop_name || ''} onChange={e => pickShop(e.target.value)} style={inputStyle}>
+                <select value={editing.shop_name ? `${editing.platform}|${editing.shop_name}` : ''} onChange={e => pickShop(e.target.value)} style={inputStyle}>
                   <option value="">— chọn gian —</option>
-                  <optgroup label="Shopee">{SHOPS.filter(s => s.san === 'shopee').map(s => <option key={'f-sp' + s.name} value={s.name}>Shopee · {s.name}</option>)}</optgroup>
-                  <optgroup label="TikTok">{SHOPS.filter(s => s.san === 'tiktok').map(s => <option key={'f-tt' + s.name} value={s.name}>TikTok · {s.name}</option>)}</optgroup>
+                  <optgroup label="Shopee">{SHOPS.filter(s => s.san === 'shopee').map(s => <option key={shopKey(s)} value={shopKey(s)}>Shopee · {s.name}</option>)}</optgroup>
+                  <optgroup label="TikTok">{SHOPS.filter(s => s.san === 'tiktok').map(s => <option key={shopKey(s)} value={shopKey(s)}>TikTok · {s.name}</option>)}</optgroup>
                 </select>
               </div>
               <div><label style={labelStyle}>Brand</label>

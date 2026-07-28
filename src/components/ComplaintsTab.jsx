@@ -8,7 +8,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
-import { SHOPS } from '../constants/shops';
+import { SHOPS, shopKey, findShopByKey } from '../constants/shops';
 import { PRODUCT_CATEGORIES } from '../constants/productCategories';
 import AddressPicker from './AddressPicker';
 import EvidenceUploader from './EvidenceUploader';
@@ -332,10 +332,13 @@ export default function ComplaintsTab({ currentUser }) {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
               <div><label style={labelStyle}>Sàn</label><select value={editing.platform || ''} onChange={e => setEditing({ ...editing, platform: e.target.value })} style={inputStyle}><option value="">—</option><option value="shopee">Shopee</option><option value="tiktok">TikTok</option></select></div>
               <div><label style={labelStyle}>Gian hàng</label>
-                <select value={editing.shop_name || ''} onChange={e => { const sh = SHOPS.find(s => s.name === e.target.value); setEditing({ ...editing, shop_name: e.target.value, platform: sh ? sh.san : editing.platform }); }} style={inputStyle}>
+                {/* value = shopKey (sàn|tên): "eHerb Hồ Chí Minh" có ở CẢ 2 sàn, tra theo mỗi tên
+                    sẽ luôn ra Shopee → chọn gian TikTok bị nhảy sàn (CS 28/7). */}
+                <select value={editing.shop_name ? `${editing.platform}|${editing.shop_name}` : ''}
+                  onChange={e => { const sh = findShopByKey(e.target.value); setEditing({ ...editing, shop_name: sh ? sh.name : '', platform: sh ? sh.san : editing.platform }); }} style={inputStyle}>
                   <option value="">— chọn gian —</option>
-                  <optgroup label="Shopee">{SHOPS.filter(s => s.san === 'shopee').map(s => <option key={'c-sp' + s.name} value={s.name}>Shopee · {s.name}</option>)}</optgroup>
-                  <optgroup label="TikTok">{SHOPS.filter(s => s.san === 'tiktok').map(s => <option key={'c-tt' + s.name} value={s.name}>TikTok · {s.name}</option>)}</optgroup>
+                  <optgroup label="Shopee">{SHOPS.filter(s => s.san === 'shopee').map(s => <option key={shopKey(s)} value={shopKey(s)}>Shopee · {s.name}</option>)}</optgroup>
+                  <optgroup label="TikTok">{SHOPS.filter(s => s.san === 'tiktok').map(s => <option key={shopKey(s)} value={shopKey(s)}>TikTok · {s.name}</option>)}</optgroup>
                 </select>
               </div>
               <div><label style={labelStyle}>Mã đơn hàng</label><input value={editing.order_sn || ''} onChange={e => setEditing({ ...editing, order_sn: e.target.value })} style={inputStyle} /></div>

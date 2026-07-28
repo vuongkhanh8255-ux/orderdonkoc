@@ -9,6 +9,12 @@ const PAGE_SIZE = 20;
 // ── Module 1 CSKH: phân loại lý do + trạng thái xử lý + đã sửa đánh giá (lưu ở bảng review_cs_meta) ──
 const REASON_CATEGORIES = ['Chê sản phẩm', 'Lỗi sản phẩm', 'Kích ứng / Dị ứng', 'Không hiệu quả', 'Giao hàng chậm', 'Sai hàng', 'Thiếu hàng', 'Đóng gói', 'Shipper', 'Spam', 'Hiểu nhầm', 'Không nhận xét'];
 const FIXED_OPTIONS = [{ v: 'chua_sua', l: 'Chưa sửa' }, { v: 'da_sua_4', l: 'Đã sửa 4★' }, { v: 'da_sua_5', l: 'Đã sửa 5★' }];
+// Ô xử lý: thêm "Đã xóa" (CS 28/7) — đánh giá đã được gỡ khỏi sàn, khỏi phải theo dõi tiếp.
+const HANDLE_OPTIONS = [
+  { v: 'chua_xu_ly', l: '○ Chưa xử lý', color: '#64748b', bg: '#f1f5f9' },
+  { v: 'da_xu_ly',   l: '✅ Đã xử lý',  color: '#fff',    bg: '#16a34a' },
+  { v: 'da_xoa',     l: '🗑️ Đã xóa',   color: '#fff',    bg: '#7c3aed' },
+];
 
 // (21/7/2026) SỬA MAP SAI: 341325550 + 831509831 trước đây bị ghi nhầm là "Milaganics FBS/SPA",
 // thực tế là 2 gian eHerb (đối chiếu shop_name trong shopee_orders: "eHerb Việt Nam" 29k đơn,
@@ -279,6 +285,18 @@ export default function ReviewsTab() {
     return true;
   }), [reviews, platform, startDate, endDate]);
 
+  // NỀN của MỌI ô thống kê = scoped + BRAND + GIAN đang chọn.
+  // (CS 28/7: chọn brand MILA mà mấy ô thống kê vẫn ra số TỔNG SÀN; lọc 1 gian thì "chê sản phẩm"
+  //  ở ô thống kê ghi 5 còn bảng chi tiết bên dưới chỉ 4 → lệch.) Bảng chi tiết cũng dựng TỪ nền này
+  //  nên 2 bên không bao giờ lệch nhau nữa.
+  // CỐ Ý không gộp các bộ lọc "đào sâu" (sao / lý do / đã xử lý / tìm kiếm...): gộp vào thì bấm 1 lý do
+  //  trong bảng Top sẽ làm chính bảng đó co lại còn đúng lý do vừa bấm, không so sánh được nữa.
+  const statBase = useMemo(() => scoped.filter(r => {
+    if (brandFilter !== 'all' && r.brand !== brandFilter) return false;
+    if (shopSel.length && !shopSel.includes(r.shopKey)) return false;
+    return true;
+  }), [scoped, brandFilter, shopSel]);
+
   // ── Stats ──
   const stats = useMemo(() => {
     const dist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
@@ -286,7 +304,7 @@ export default function ReviewsTab() {
     let sum = 0, replied = 0, fixedCount = 0, handledCount = 0;
     const shopee = { total: 0, sum: 0, dist: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } };
     const tiktok = { total: 0, sum: 0, dist: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } };
-    for (const r of scoped) {
+    for (const r of statBase) {
       dist[r.star]++;
       sum += r.star;
       if (r.hasReply) replied++;
@@ -297,7 +315,9 @@ export default function ReviewsTab() {
       const p = r.platform === 'shopee' ? shopee : tiktok;
       p.total++; p.sum += r.star; p.dist[r.star]++;
     }
-    const total = reviews.length;
+    // Mẫu số phải là CHÍNH data đang lọc. Trước lấy reviews.length (TẤT CẢ đánh giá đã tải) trong khi
+    // tử số đếm theo data đã lọc → lọc 1 sàn/1 brand là điểm TB + %5 sao + %phản hồi đều bị hụt.
+    const total = statBase.length;
     return {
       total, replied, dist, byReason, fixedCount, handledCount,
       avg: total ? (sum / total).toFixed(1) : '0.0',
@@ -306,12 +326,12 @@ export default function ReviewsTab() {
       shopee: { ...shopee, avg: shopee.total ? (shopee.sum / shopee.total).toFixed(1) : '—' },
       tiktok: { ...tiktok, avg: tiktok.total ? (tiktok.sum / tiktok.total).toFixed(1) : '—' },
     };
-  }, [scoped, metaMap]);
+  }, [statBase, metaMap]);
 
   // ── Product stats ──
   const productStats = useMemo(() => {
     const map = {};
-    for (const r of scoped) {
+    for (const r of statBase) {
       const key = `${r.platform}-${r.productId}`;
       if (!map[key]) {
         map[key] = {
@@ -329,12 +349,12 @@ export default function ReviewsTab() {
     return Object.values(map)
       .map(p => ({ ...p, avg: (p.sum / p.total).toFixed(1) }))
       .sort((a, b) => b.total - a.total);
-  }, [scoped]);
+  }, [statBase]);
 
   // ── Shop stats ──
   const shopStats = useMemo(() => {
     const map = {};
-    for (const r of scoped) {
+    for (const r of statBase) {
       const key = `${r.platform}-${r.sellerId}`;
       if (!map[key]) {
         map[key] = {
@@ -351,7 +371,7 @@ export default function ReviewsTab() {
     return Object.values(map)
       .map(s => ({ ...s, avg: (s.sum / s.total).toFixed(1) }))
       .sort((a, b) => b.total - a.total);
-  }, [scoped]);
+  }, [statBase]);
 
   // Danh sách GIAN tách theo sàn (shopKey duy nhất) — để chọn nhiều gian mà không dính nhầm sàn kia
   const shopList = useMemo(() => {
@@ -368,7 +388,7 @@ export default function ReviewsTab() {
   // ── Brand stats (gom nhiều shop cùng brand) ──
   const brandStats = useMemo(() => {
     const map = {};
-    for (const r of scoped) {
+    for (const r of statBase) {
       const brand = r.brand;
       if (!map[brand]) map[brand] = { brand, total: 0, sum: 0, replied: 0, dist: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, shops: new Set() };
       const m = map[brand];
@@ -377,10 +397,10 @@ export default function ReviewsTab() {
     return Object.values(map)
       .map(b => ({ ...b, avg: (b.sum / b.total).toFixed(1), bad: b.dist[1] + b.dist[2] + b.dist[3], shopCount: b.shops.size }))
       .sort((a, b) => b.total - a.total);
-  }, [scoped]);
+  }, [statBase]);
 
   // Review xấu (1-3★) chưa phản hồi → tồn đọng cần xử lý
-  const needFixCount = useMemo(() => scoped.filter(r => r.star <= 3 && !r.hasReply).length, [scoped]);
+  const needFixCount = useMemo(() => statBase.filter(r => r.star <= 3 && !r.hasReply).length, [statBase]);
 
   // Top sản phẩm bị chê nhiều nhất (1-3★)
   const topBad = useMemo(() => productStats
@@ -396,22 +416,22 @@ export default function ReviewsTab() {
   // và cắt 300 mục: lọc cả tháng có thể ra hàng nghìn mục, render hết sẽ làm đơ trang.
   const topOf = (getKey) => {
     const m = {};
-    scoped.forEach(r => { const k = getKey(r); if (k) m[k] = (m[k] || 0) + 1; });
+    statBase.forEach(r => { const k = getKey(r); if (k) m[k] = (m[k] || 0) + 1; });
     return ['all', ...Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 300).map(([k]) => k)];
   };
-  const prodList = useMemo(() => topOf(r => r.productName), [scoped]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const prodList = useMemo(() => topOf(r => r.productName), [statBase]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Phân loại SP dùng để lọc + thống kê: CS chọn tay LUÔN thắng gợi ý tự động
   const catOf = (r) => metaMap[r.id]?.product_category || r.autoCat || '';
   // Chỉ hiện trong dropdown những phân loại THỰC SỰ có đánh giá trong kỳ (kèm số lượng)
   const catList = useMemo(() => {
     const m = {};
-    scoped.forEach(r => { const k = catOf(r); if (k) m[k] = (m[k] || 0) + 1; });
+    statBase.forEach(r => { const k = catOf(r); if (k) m[k] = (m[k] || 0) + 1; });
     return Object.entries(m).sort((a, b) => b[1] - a[1]);
-  }, [scoped, metaMap]);                                                // eslint-disable-line react-hooks/exhaustive-deps
+  }, [statBase, metaMap]);                                                // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── TOP XẤU (1-3★) — số CS cần để report ──
-  const badScoped = useMemo(() => scoped.filter(r => r.star > 0 && r.star <= 3), [scoped]);
+  const badScoped = useMemo(() => statBase.filter(r => r.star > 0 && r.star <= 3), [statBase]);
   const topBadReasons = useMemo(() => {
     const m = {};
     badScoped.forEach(r => { const k = metaMap[r.id]?.reason_category; if (k) m[k] = (m[k] || 0) + 1; });
@@ -426,9 +446,7 @@ export default function ReviewsTab() {
 
   // ── Filtered reviews ──
   const filtered = useMemo(() => {
-    let result = [...scoped]; // đã lọc sàn + ngày
-    if (brandFilter !== 'all') result = result.filter(r => r.brand === brandFilter);
-    if (shopSel.length) result = result.filter(r => shopSel.includes(r.shopKey));
+    let result = [...statBase]; // đã lọc sàn + ngày + brand + gian (chung nền với ô thống kê)
     if (productFilter) result = result.filter(r => r.productId === productFilter.productId && r.platform === productFilter.platform);
     if (starSel.length) result = result.filter(r => starSel.includes(r.star));
     if (replyFilter === 'replied') result = result.filter(r => r.hasReply);
@@ -458,7 +476,7 @@ export default function ReviewsTab() {
       }
     });
     return result;
-  }, [scoped, brandFilter, shopSel, productFilter, starSel, replyFilter, reasonFilter, handleFilter, fixedFilter, prodNameFilter, catFilter, searchText, sortBy, metaMap]);
+  }, [statBase, brandFilter, shopSel, productFilter, starSel, replyFilter, reasonFilter, handleFilter, fixedFilter, prodNameFilter, catFilter, searchText, sortBy, metaMap]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -538,7 +556,7 @@ export default function ReviewsTab() {
         'Phân loại lý do': meta.reason_category || '',
         'Phân loại SP': meta.product_category || r.autoCat || '',
         'Nguồn phân loại': meta.product_category ? 'CS chọn' : (r.autoCat ? 'Tự động' : ''),
-        'Trạng thái xử lý': meta.handle_status === 'da_xu_ly' ? 'Đã xử lý' : 'Chưa xử lý',
+        'Trạng thái xử lý': (HANDLE_OPTIONS.find(o => o.v === (meta.handle_status || 'chua_xu_ly')) || HANDLE_OPTIONS[0]).l.replace(/^\S+\s/, ''),
         'Đã sửa đánh giá': meta.fixed_status === 'da_sua_5' ? '5 sao' : meta.fixed_status === 'da_sua_4' ? '4 sao' : '',
       };
     });
@@ -1041,6 +1059,7 @@ export default function ReviewsTab() {
             <option value="all">Xử lý: Tất cả</option>
             <option value="chua_xu_ly">Chưa xử lý</option>
             <option value="da_xu_ly">Đã xử lý</option>
+            <option value="da_xoa">Đã xóa</option>
           </select>
 
           <select value={fixedFilter} onChange={e => { setFixedFilter(e.target.value); setPage(1); }}
@@ -1186,7 +1205,6 @@ export default function ReviewsTab() {
                       <td style={tdStyle} onClick={e => e.stopPropagation()}>
                         {(() => {
                           const meta = metaMap[r.id] || {};
-                          const handled = meta.handle_status === 'da_xu_ly';
                           const fixed = meta.fixed_status || 'chua_sua';
                           return (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 170 }}>
@@ -1210,10 +1228,17 @@ export default function ReviewsTab() {
                                 {PRODUCT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                               </select>
                               <div style={{ display: 'flex', gap: 5 }}>
-                                <button onClick={() => updateMeta(r, handled ? { handle_status: 'chua_xu_ly', handled_at: null } : { handle_status: 'da_xu_ly', handled_at: new Date().toISOString() })}
-                                  style={{ flex: 1, padding: '4px 6px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 700, background: handled ? '#16a34a' : '#f1f5f9', color: handled ? '#fff' : '#64748b' }}>
-                                  {handled ? '✅ Đã xử lý' : '○ Xử lý'}
-                                </button>
+                                {(() => {
+                                  const hs = meta.handle_status || 'chua_xu_ly';
+                                  const opt = HANDLE_OPTIONS.find(o => o.v === hs) || HANDLE_OPTIONS[0];
+                                  return (
+                                    <select value={hs}
+                                      onChange={e => updateMeta(r, { handle_status: e.target.value, handled_at: e.target.value === 'chua_xu_ly' ? null : new Date().toISOString() })}
+                                      style={{ flex: 1, padding: '4px 6px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 700, fontFamily: 'inherit', background: opt.bg, color: opt.color }}>
+                                      {HANDLE_OPTIONS.map(o => <option key={o.v} value={o.v} style={{ background: '#fff', color: '#0f172a' }}>{o.l}</option>)}
+                                    </select>
+                                  );
+                                })()}
                                 <select value={fixed} onChange={e => updateMeta(r, { fixed_status: e.target.value })}
                                   style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid #e5e7eb', fontSize: '0.7rem', fontFamily: 'inherit', background: '#fff', cursor: 'pointer', color: (fixed === 'da_sua_4' || fixed === 'da_sua_5') ? '#16a34a' : '#64748b' }}>
                                   {FIXED_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}

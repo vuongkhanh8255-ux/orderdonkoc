@@ -25,6 +25,17 @@ export const SHOPS = [
 
 export const BRANDS = ['BODYMISS', 'MILAGANICS', 'MOAW MOAWS', 'EHERB', 'EHERB HCM', 'HEALMII', 'REAL STEEL', 'MASUBE'];
 
+// ⚠️ CÓ GIAN TRÙNG TÊN Y HỆT Ở 2 SÀN ("eHerb Hồ Chí Minh" có cả bên Shopee lẫn TikTok).
+// Nên KHÔNG được tra gian bằng mỗi cái tên — `SHOPS.find(s => s.name === ...)` luôn vớ phải
+// Shopee (đứng trước), làm chọn "TikTok eHerb Hồ Chí Minh" bị nhảy sang Shopee (CS báo 28/7).
+// Dropdown phải dùng shopKey (sàn|tên) làm value rồi tra bằng findShopByKey.
+export const shopKey = (sh) => `${sh.san}|${sh.name}`;
+export const findShopByKey = (key) => {
+  const [san, ...rest] = String(key || '').split('|');
+  const name = rest.join('|');
+  return SHOPS.find(s => s.san === san && s.name === name) || null;
+};
+
 export const sanLabel = (s) => (s === 'shopee' ? 'Shopee' : s === 'tiktok' ? 'TikTok' : s || '');
 /** Nhãn đầy đủ để CS nhìn phát biết ngay: "Shopee · Milaganics" */
 export const shopLabel = (sh) => `${sanLabel(sh.san)} · ${sh.name}`;
