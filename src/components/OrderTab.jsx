@@ -376,14 +376,22 @@ const OrderTab = ({ currentUser } = {}) => {
     const ORDER_LOCK_ON = true;                      // Bước 3: khóa order KOC đang nợ clip brand đó (đổi false = tắt khóa)
     const [chanView, setChanView] = useState(null);  // { loading, username, total_view, video_count, dat, videos, err, nguong }
     const normKenh = (k) => String(k || '').trim().replace(/^@/, '').replace(/.*tiktok\.com\/@?/i, '').replace(/[/?#].*$/, '').toLowerCase();
-    const checkChannelView = async (raw) => {
+    const checkChannelView = async (raw, opts = {}) => {
+        const { force = false } = opts;
         const u = normKenh(raw);
         if (!u) { setChanView(null); return; }
         setChanView({ loading: true, username: u });
         try {
-            const { data, error } = await supabase.functions.invoke('koc-channel-views', { body: { username: u } });
+            let { data, error } = await supabase.functions.invoke('koc-channel-views', { body: { username: u, force } });
             if (error || !data?.ok) { setChanView({ username: u, err: 'Không kiểm tra được view (thử lại sau)' }); return; }
-            setChanView({ username: u, total_view: data.total_view, video_count: data.video_count, dat: data.dat, videos: data.videos || [], err: data.err, busy: data.busy, by_follower: data.by_follower, follower_count: data.follower_count, nguong: data.nguong || 1500 });
+            // SỐ TƯƠI THEO NGÀY: cache chỉ xài trong 24h. Kết quả cache GIÀ hơn 1 ngày → tự cào lại
+            // realtime ngay (khỏi chờ ai bấm 🔄) — sếp chốt 29/7: "check là phải realtime".
+            const TUOI_CACHE_MS = 24 * 3600 * 1000;
+            if (!force && data.cached && data.checked_at && Date.now() - new Date(data.checked_at).getTime() > TUOI_CACHE_MS) {
+                const r2 = await supabase.functions.invoke('koc-channel-views', { body: { username: u, force: true } });
+                if (!r2.error && r2.data?.ok) data = r2.data;
+            }
+            setChanView({ username: u, total_view: data.total_view, video_count: data.video_count, dat: data.dat, videos: data.videos || [], err: data.err, busy: data.busy, by_follower: data.by_follower, follower_count: data.follower_count, nguong: data.nguong || 1500, checked_at: data.checked_at, cached: !!data.cached });
         } catch (e) { setChanView({ username: u, err: e.message }); }
     };
     useEffect(() => { setChanView(null); }, [idKenh]);  // đổi ID kênh → xoá kết quả cũ
@@ -807,7 +815,7 @@ const OrderTab = ({ currentUser } = {}) => {
                                 )}
                                 {VIEW_GATE_ON && chanView && (
                                     <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, fontSize: '0.8rem', border: '1px solid', ...(chanView.loading ? { background: '#f8fafc', borderColor: '#e2e8f0', color: '#64748b' } : chanView.busy ? { background: '#fffbeb', borderColor: '#fde68a', color: '#b45309' } : (chanView.err || !chanView.dat) ? { background: '#fef2f2', borderColor: '#fecaca', color: '#b91c1c' } : { background: '#f0fdf4', borderColor: '#bbf7d0', color: '#166534' }) }}>
-                                        {chanView.loading ? '⏳ Đang cào view kênh...' : chanView.busy ? <span>⚠️ Dịch vụ cào view đang bận (cào không nổi kênh này lúc này, KHÔNG phải lỗi ID). Bấm <span onClick={() => checkChannelView(idKenh)} style={{ cursor: 'pointer', textDecoration: 'underline', fontWeight: 700 }}>🔄 cào lại</span> — hoặc vẫn có thể bấm Tạo đơn (sẽ hỏi xác nhận).</span> : chanView.err ? <span>🚫 {chanView.err} — <b>ID kênh sai/không tìm thấy → KHÔNG gửi được.</b> Kiểm tra lại ID hoặc <span onClick={() => checkChannelView(idKenh)} style={{ cursor: 'pointer', textDecoration: 'underline', fontWeight: 700 }}>🔄 cào lại</span>.</span> : (
+                                        {chanView.loading ? '⏳ Đang cào view kênh...' : chanView.busy ? <span>⚠️ Dịch vụ cào view đang bận (cào không nổi kênh này lúc này, KHÔNG phải lỗi ID). Bấm <span onClick={() => checkChannelView(idKenh, { force: true })} style={{ cursor: 'pointer', textDecoration: 'underline', fontWeight: 700 }}>🔄 cào lại</span> — hoặc vẫn có thể bấm Tạo đơn (sẽ hỏi xác nhận).</span> : chanView.err ? <span>🚫 {chanView.err} — <b>ID kênh sai/không tìm thấy → KHÔNG gửi được.</b> Kiểm tra lại ID hoặc <span onClick={() => checkChannelView(idKenh, { force: true })} style={{ cursor: 'pointer', textDecoration: 'underline', fontWeight: 700 }}>🔄 cào lại</span>.</span> : (
                                             <>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                                     <b>{chanView.dat ? '✅ ĐẠT' : '🚫 KHÔNG ĐẠT'}</b>
@@ -816,8 +824,16 @@ const OrderTab = ({ currentUser } = {}) => {
                                                         : <span>Tổng view {chanView.video_count} video (bỏ ghim): <b>{Number(chanView.total_view).toLocaleString('vi-VN')}</b> / ngưỡng {Number(chanView.nguong).toLocaleString('vi-VN')}</span>}
                                                     <button type="button" onClick={() => openViewPopup(chanView.username, { big: true, force: true })} title="Phóng to xem ~10 clip gần nhất — bấm vào video coi luôn" style={{ marginLeft: 'auto', border: '1px solid #fed7aa', background: '#fff7ed', color: '#ea580c', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontWeight: 800, fontSize: '0.76rem' }}>🔍 Phóng to</button>
                                                     <a href={`https://www.tiktok.com/@${chanView.username}`} target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>Mở TikTok ↗</a>
-                                                    <span onClick={() => checkChannelView(idKenh)} title="Cào lại" style={{ cursor: 'pointer', fontWeight: 700 }}>🔄</span>
+                                                    <span onClick={() => checkChannelView(idKenh, { force: true })} title="Cào lại số MỚI ngay (bỏ cache)" style={{ cursor: 'pointer', fontWeight: 700 }}>🔄</span>
                                                 </div>
+                                                {/* Tuổi số liệu: mới cào = realtime; từ cache (<24h) thì ghi rõ giờ cào để khỏi tưởng "đếm sai" */}
+                                                {chanView.checked_at && (
+                                                    <div style={{ marginTop: 4, fontSize: '0.7rem', color: '#64748b' }}>
+                                                        🕐 Số cào lúc <b>{new Date(chanView.checked_at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}</b>
+                                                        {chanView.cached ? ' (từ bộ nhớ — bấm 🔄 nếu cần số mới ngay)' : ' (vừa cào realtime)'}
+                                                        {' · '}view = 7 video mới nhất, KHÔNG tính video ghim
+                                                    </div>
+                                                )}
                                                 {chanView.videos?.length > 0 && (
                                                     <div onClick={() => openViewPopup(chanView.username, { big: true, force: true })} title="Bấm để phóng to + xem video" style={{ display: 'flex', gap: 5, marginTop: 6, overflowX: 'auto', cursor: 'pointer' }}>
                                                         {chanView.videos.map((v, i) => (
