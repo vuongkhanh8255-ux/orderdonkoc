@@ -219,6 +219,27 @@ export default async function handler(req, res) {
     });
   }
 
+  // ── TEST: xem app có quyền đọc VOUCHER SHOP TẠO không → ?voucher_test=1[&shop_id=<id>] ──
+  //    CS cần "đồng bộ voucher từ sàn" (Module 7). Dò trước khi dựng để biết có làm được không.
+  if (url.searchParams.get('voucher_test') === '1') {
+    const out = [];
+    for (const shop of shops.slice(0, 2)) {
+      try {
+        const token = await refreshIfNeeded(supabase, shop);
+        const r = await shopeeApi(partnerKey, 'GET', '/api/v2/voucher/get_voucher_list', token.access_token, Number(shop.shop_id), {
+          page_no: 1, page_size: 20, status: 'all',
+        });
+        out.push({
+          shop: shop.shop_name,
+          error: r?.error || null, message: r?.message || null,
+          so_voucher: r?.response?.voucher_list?.length ?? null,
+          vi_du: r?.response?.voucher_list?.[0] || null,
+        });
+      } catch (e) { out.push({ shop: shop.shop_name, error: e.message }); }
+    }
+    return res.json({ ok: true, mode: 'voucher_test', ket_qua: out });
+  }
+
   // ── TEST: soi escrow 1 đơn để biết field "trợ giá" → ?escrow_test=<order_sn>&shop_id=<id> ──
   const escrowTest = url.searchParams.get('escrow_test');
   if (escrowTest) {
