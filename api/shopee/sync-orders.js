@@ -219,25 +219,56 @@ export default async function handler(req, res) {
     });
   }
 
-  // ── TEST: xem app có quyền đọc VOUCHER SHOP TẠO không → ?voucher_test=1[&shop_id=<id>] ──
-  //    CS cần "đồng bộ voucher từ sàn" (Module 7). Dò trước khi dựng để biết có làm được không.
-  if (url.searchParams.get('voucher_test') === '1') {
-    const out = [];
-    for (const shop of shops.slice(0, 2)) {
+  // ── ĐỒNG BỘ VOUCHER SHOP TẠO → bảng shopee_vouchers (Module 7 CSKH) ──
+  //    ?sync_vouchers=1   (thêm &voucher_test=1 để chỉ soi thử, không ghi DB)
+  if (url.searchParams.get('sync_vouchers') === '1' || url.searchParams.get('voucher_test') === '1') {
+    const dryRun = url.searchParams.get('voucher_test') === '1';
+    const results = [];
+    for (const shop of shops) {
+      const r = { shop: shop.shop_name, lay_ve: 0, luu: 0, partial: false, error: null };
+      if (Date.now() > deadline) { r.partial = true; r.error = 'het thoi gian'; results.push(r); continue; }
       try {
         const token = await refreshIfNeeded(supabase, shop);
-        const r = await shopeeApi(partnerKey, 'GET', '/api/v2/voucher/get_voucher_list', token.access_token, Number(shop.shop_id), {
-          page_no: 1, page_size: 20, status: 'all',
-        });
-        out.push({
-          shop: shop.shop_name,
-          error: r?.error || null, message: r?.message || null,
-          so_voucher: r?.response?.voucher_list?.length ?? null,
-          vi_du: r?.response?.voucher_list?.[0] || null,
-        });
-      } catch (e) { out.push({ shop: shop.shop_name, error: e.message }); }
+        const all = [];
+        // Voucher hết hạn/đang chạy/sắp chạy nằm ở các "status" khác nhau → quét đủ 3 để không sót.
+        for (const status of ['upcoming', 'ongoing', 'expired']) {
+          for (let page = 1; page <= 20; page++) {
+            if (Date.now() > deadline) { r.partial = true; break; }
+            const resp = await shopeeApi(partnerKey, 'GET', '/api/v2/voucher/get_voucher_list', token.access_token, Number(shop.shop_id), {
+              page_no: page, page_size: 100, status,
+            });
+            const list = resp?.response?.voucher_list || [];
+            all.push(...list);
+            if (!resp?.response?.more || list.length === 0) break;
+            await sleep(100);
+          }
+        }
+        r.lay_ve = all.length;
+        if (!dryRun && all.length) {
+          // Cùng 1 voucher có thể lặp giữa các status → gộp theo voucher_id trước khi ghi.
+          const byId = new Map();
+          all.forEach(v => byId.set(v.voucher_id, v));
+          const rows = [...byId.values()].map(v => ({
+            voucher_id: v.voucher_id, shop_id: String(shop.shop_id), shop_name: shop.shop_name,
+            voucher_name: v.voucher_name || '', voucher_code: v.voucher_code || '',
+            start_time: v.start_time || null, end_time: v.end_time || null,
+            voucher_type: v.voucher_type ?? null, reward_type: v.reward_type ?? null,
+            percentage: v.percentage ?? null, discount_amount: v.discount_amount ?? null,
+            max_price: v.max_price ?? null, min_basket_price: v.min_basket_price ?? null,
+            usage_quantity: v.usage_quantity ?? null, current_usage: v.current_usage ?? null,
+            is_admin: v.is_admin ?? null, display_channels: v.display_channel_list || null,
+            usecase: v.usecase ?? null, synced_at: new Date().toISOString(),
+          }));
+          for (let i = 0; i < rows.length; i += 200) {
+            const { error } = await supabase.from('shopee_vouchers').upsert(rows.slice(i, i + 200), { onConflict: 'voucher_id' });
+            if (!error) r.luu += rows.slice(i, i + 200).length;
+          }
+        }
+        if (dryRun) r.vi_du = all[0] || null;
+      } catch (e) { r.error = e.message; }
+      results.push(r);
     }
-    return res.json({ ok: true, mode: 'voucher_test', ket_qua: out });
+    return res.json({ ok: true, mode: dryRun ? 'voucher_test' : 'sync_vouchers', results });
   }
 
   // ── TEST: soi escrow 1 đơn để biết field "trợ giá" → ?escrow_test=<order_sn>&shop_id=<id> ──

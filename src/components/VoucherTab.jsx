@@ -30,8 +30,162 @@ const td = { padding: '8px 10px', fontSize: '0.82rem', color: '#0f172a', whiteSp
 const card = { background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' };
 const EMPTY = { issue_date: todayYmd(), platform: 'shopee', order_sn: '', customer_name: '', reason_category: 'Sản phẩm lỗi', voucher_code: '', amount: 0, use_status: 'unused', staff: '', accountant_checked: false, expire_date: '', note: '' };
 
+// ── VOUCHER SHOP TẠO (kéo từ sàn) ────────────────────────────────────────────
+// CS 29/7 cần cả 2 loại: voucher CS gửi khách (bảng support_vouchers, nhập tay — phần chính bên dưới)
+// và voucher SHOP TẠO trên sàn (bảng shopee_vouchers, đồng bộ từ Shopee).
+function ShopVouchers() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [shopF, setShopF] = useState('all');
+  const [stateF, setStateF] = useState('all');     // all | ongoing | upcoming | expired
+  const [ownerF, setOwnerF] = useState('shop');    // shop | shopee | all
+  const [search, setSearch] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from('shopee_vouchers').select('*')
+      .order('end_time', { ascending: false }).limit(3000);
+    if (error) alert('Lỗi tải voucher sàn: ' + error.message);
+    setRows(data || []); setLoading(false);
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const runSync = async () => {
+    setSyncing(true); setMsg('⏳ Đang kéo voucher từ Shopee...');
+    try {
+      const r = await fetch('/api/shopee/sync-orders?sync_vouchers=1').then(x => x.json());
+      const tong = (r.results || []).reduce((s, x) => s + (x.luu || 0), 0);
+      setMsg(`✅ Đã đồng bộ ${tong} voucher`); load();
+    } catch (e) { setMsg('⚠️ ' + e.message); }
+    finally { setSyncing(false); }
+  };
+
+  const now = Math.floor(Date.now() / 1000);
+  const stateOf = (v) => (v.start_time > now ? 'upcoming' : v.end_time < now ? 'expired' : 'ongoing');
+  const STATE_LBL = { ongoing: { l: 'Đang chạy', c: '#15803d', bg: '#dcfce7' }, upcoming: { l: 'Sắp chạy', c: '#1d4ed8', bg: '#dbeafe' }, expired: { l: 'Hết hạn', c: '#64748b', bg: '#f1f5f9' } };
+  const shops = useMemo(() => [...new Set(rows.map(r => r.shop_name).filter(Boolean))].sort(), [rows]);
+
+  const filtered = useMemo(() => rows.filter(v => {
+    if (ownerF === 'shop' && v.is_admin) return false;       // chỉ voucher SHOP tự tạo
+    if (ownerF === 'shopee' && !v.is_admin) return false;
+    if (shopF !== 'all' && v.shop_name !== shopF) return false;
+    if (stateF !== 'all' && stateOf(v) !== stateF) return false;
+    if (search) { const q = search.toLowerCase(); if (![v.voucher_name, v.voucher_code].some(x => x && x.toLowerCase().includes(q))) return false; }
+    return true;
+  }), [rows, ownerF, shopF, stateF, search]);                // eslint-disable-line react-hooks/exhaustive-deps
+
+  const kpi = useMemo(() => ({
+    tong: filtered.length,
+    dangChay: filtered.filter(v => stateOf(v) === 'ongoing').length,
+    luotDung: filtered.reduce((s, v) => s + (Number(v.current_usage) || 0), 0),
+    chuaDung: filtered.filter(v => !Number(v.current_usage)).length,
+  }), [filtered]);                                            // eslint-disable-line react-hooks/exhaustive-deps
+
+  const mucGiam = (v) => (v.reward_type === 2
+    ? `${v.percentage || 0}%${v.max_price ? ` (tối đa ${fmtMoney(v.max_price)}đ)` : ''}`
+    : `${fmtMoney(v.discount_amount || v.max_price || 0)}đ`);
+
+  const exportShop = () => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filtered.map((v, i) => ({
+      STT: i + 1, 'GIAN': v.shop_name, 'TÊN VOUCHER': v.voucher_name, 'MÃ': v.voucher_code,
+      'MỨC GIẢM': mucGiam(v), 'ĐƠN TỐI THIỂU': v.min_basket_price || 0,
+      'PHÁT HÀNH': v.usage_quantity || 0, 'ĐÃ DÙNG': v.current_usage || 0,
+      'BẮT ĐẦU': v.start_time ? fmtDate(new Date(v.start_time * 1000).toISOString()) : '',
+      'KẾT THÚC': v.end_time ? fmtDate(new Date(v.end_time * 1000).toISOString()) : '',
+      'TRẠNG THÁI': STATE_LBL[stateOf(v)].l, 'AI TẠO': v.is_admin ? 'Shopee' : 'Shop',
+    }))), 'Voucher shop tạo');
+    XLSX.writeFile(wb, `voucher-shop-tao-${todayYmd()}.xlsx`);
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+        <p style={{ margin: 0, fontSize: 13, color: '#94a3b8' }}>Voucher shop tạo trên Shopee · đồng bộ trực tiếp từ sàn</p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={exportShop} style={{ padding: '9px 16px', borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>📥 Xuất Excel</button>
+          <button onClick={runSync} disabled={syncing} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: syncing ? '#d1d5db' : ACCENT, color: '#fff', fontWeight: 800, fontSize: 13, cursor: syncing ? 'default' : 'pointer' }}>
+            {syncing ? '⏳ Đang kéo...' : '🔄 Đồng bộ từ sàn'}
+          </button>
+        </div>
+      </div>
+      {msg && <div style={{ ...card, marginBottom: 12, fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>{msg}</div>}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 16 }}>
+        {[
+          { label: 'Tổng voucher', v: kpi.tong, color: '#6366f1' },
+          { label: 'Đang chạy', v: kpi.dangChay, color: '#15803d' },
+          { label: 'Tổng lượt đã dùng', v: kpi.luotDung, color: '#0891b2' },
+          { label: 'Chưa ai dùng', v: kpi.chuaDung, color: '#dc2626' },
+        ].map((c, i) => (
+          <div key={i} style={{ ...card, borderTop: `3px solid ${c.color}` }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 900, color: c.color }}>{fmtMoney(c.v)}</div>
+            <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700 }}>{c.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ ...card, marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input type="text" placeholder="🔍 Tìm tên / mã voucher..." value={search} onChange={e => setSearch(e.target.value)} style={{ ...inputStyle, width: 240 }} />
+        <select value={ownerF} onChange={e => setOwnerF(e.target.value)} style={{ ...inputStyle, width: 'auto', cursor: 'pointer', fontWeight: 700 }}>
+          <option value="shop">🏪 Shop tự tạo</option>
+          <option value="shopee">🟠 Shopee tạo</option>
+          <option value="all">Tất cả</option>
+        </select>
+        <select value={shopF} onChange={e => setShopF(e.target.value)} style={{ ...inputStyle, width: 'auto', cursor: 'pointer' }}>
+          <option value="all">Gian: Tất cả</option>{shops.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select value={stateF} onChange={e => setStateF(e.target.value)} style={{ ...inputStyle, width: 'auto', cursor: 'pointer' }}>
+          <option value="all">Trạng thái: Tất cả</option>
+          <option value="ongoing">Đang chạy</option><option value="upcoming">Sắp chạy</option><option value="expired">Hết hạn</option>
+        </select>
+        <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>{fmtMoney(filtered.length)} voucher</span>
+      </div>
+
+      <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead><tr>
+              <th style={th}>Gian</th><th style={th}>Tên voucher</th><th style={th}>Mã</th>
+              <th style={th}>Mức giảm</th><th style={th}>Đơn tối thiểu</th>
+              <th style={{ ...th, textAlign: 'center' }}>Đã dùng</th>
+              <th style={th}>Thời gian</th><th style={{ ...th, textAlign: 'center' }}>Trạng thái</th>
+            </tr></thead>
+            <tbody>
+              {loading ? <tr><td colSpan={8} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải...</td></tr>
+                : filtered.length === 0 ? <tr><td colSpan={8} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>Chưa có voucher — bấm “🔄 Đồng bộ từ sàn” để kéo về.</td></tr>
+                  : filtered.slice(0, 500).map(v => { const st = STATE_LBL[stateOf(v)]; const used = Number(v.current_usage) || 0; const total = Number(v.usage_quantity) || 0; return (
+                    <tr key={v.voucher_id}>
+                      <td style={{ ...td, fontSize: '0.76rem' }}>🟠 {v.shop_name}</td>
+                      <td style={{ ...td, fontWeight: 600, whiteSpace: 'normal', maxWidth: 240 }}>{v.voucher_name}</td>
+                      <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.76rem' }}>{v.voucher_code || '—'}</td>
+                      <td style={{ ...td, fontWeight: 700, color: '#0891b2' }}>{mucGiam(v)}</td>
+                      <td style={td}>{v.min_basket_price ? fmtMoney(v.min_basket_price) + 'đ' : '—'}</td>
+                      <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: used ? '#15803d' : '#cbd5e1' }}>
+                        {fmtMoney(used)}{total ? <span style={{ color: '#94a3b8', fontWeight: 400 }}>/{fmtMoney(total)}</span> : null}
+                      </td>
+                      <td style={{ ...td, fontSize: '0.74rem', color: '#64748b' }}>
+                        {v.start_time ? fmtDate(new Date(v.start_time * 1000).toISOString()) : '?'} → {v.end_time ? fmtDate(new Date(v.end_time * 1000).toISOString()) : '?'}
+                      </td>
+                      <td style={{ ...td, textAlign: 'center' }}>
+                        <span style={{ padding: '2px 9px', borderRadius: 20, fontSize: '0.7rem', fontWeight: 700, background: st.bg, color: st.c }}>{st.l}</span>
+                      </td>
+                    </tr>
+                  ); })}
+            </tbody>
+          </table>
+        </div>
+        {filtered.length > 500 && <div style={{ padding: '8px 14px', fontSize: '0.76rem', color: '#94a3b8' }}>Hiện 500/{fmtMoney(filtered.length)} — thu hẹp bộ lọc để xem tiếp.</div>}
+      </div>
+    </div>
+  );
+}
+
 export default function VoucherTab({ currentUser }) {
   const { nhanSus } = useAppData();
+  const [mainTab, setMainTab] = useState('cs');   // cs = CS gửi khách · shop = shop tạo trên sàn
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [month, setMonth] = useState(curYm());
@@ -96,14 +250,26 @@ export default function VoucherTab({ currentUser }) {
   return (
     <div style={{ fontFamily: "'Outfit', sans-serif", maxWidth: 1400 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
-        <div><h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 900, color: '#0f172a' }}>🎫 Voucher hỗ trợ khách</h1>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#94a3b8' }}>Sổ voucher CS cấp bù cho khách · theo dõi sử dụng + đối soát kế toán</p></div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div><h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 900, color: '#0f172a' }}>🎫 Voucher</h1>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#94a3b8' }}>Voucher CS cấp bù cho khách · và voucher shop tạo trên sàn</p></div>
+        {mainTab === 'cs' && <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <select value={month} onChange={e => setMonth(e.target.value)} style={{ ...inputStyle, width: 'auto', cursor: 'pointer', fontWeight: 700 }}>{months.map(m => <option key={m} value={m}>{m === 'all' ? '📅 Tất cả' : `📅 ${m}`}</option>)}</select>
           <button onClick={exportXlsx} style={{ padding: '9px 16px', borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>📥 Xuất Excel</button>
           <button onClick={() => setEditing({ ...EMPTY, staff: currentUser?.username || '' })} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>+ Cấp voucher</button>
-        </div>
+        </div>}
       </div>
+
+      {/* CS 29/7 can CA 2 loai voucher */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 18, background: '#f3f4f6', borderRadius: 12, padding: 4, width: 'fit-content' }}>
+        {[{ k: 'cs', l: '🎁 Voucher CS gửi khách' }, { k: 'shop', l: '🏪 Voucher shop tạo (từ sàn)' }].map(t => (
+          <button key={t.k} onClick={() => setMainTab(t.k)}
+            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+              background: mainTab === t.k ? 'linear-gradient(135deg, #ff7a30, #ef4444)' : 'transparent',
+              color: mainTab === t.k ? '#fff' : '#666' }}>{t.l}</button>
+        ))}
+      </div>
+
+      {mainTab === 'shop' ? <ShopVouchers /> : <>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 16 }}>
         {[
@@ -195,6 +361,7 @@ export default function VoucherTab({ currentUser }) {
           </div>
         </div>
       )}
+      </>}
     </div>
   );
 }
