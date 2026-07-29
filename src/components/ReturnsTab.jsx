@@ -43,8 +43,10 @@ const RETURN_TYPES = [
   { v: 'thht', l: 'Trả hàng' },
   { v: 'refund_only', l: 'Hoàn tiền nguyên đơn' },
   { v: 'refund_partial', l: 'Hoàn tiền 1 phần' },
+  { v: 'compensation', l: 'Bồi hoàn' },                   // CS 29/7
 ];
-const REFUND_TYPES = ['refund_only', 'refund_partial'];   // 2 loại nằm chung tab "Hoàn tiền"
+// 3 loại này nằm chung tab "Hoàn tiền" (không phải trả hàng về kho)
+const REFUND_TYPES = ['refund_only', 'refund_partial', 'compensation'];
 // Đề xuất hoàn tiền 1 phần
 const PARTIAL = {
   accepted: { label: 'Khách chấp nhận', color: '#15803d' },
@@ -86,7 +88,16 @@ export default function ReturnsTab() {
   // Phân loại SP: CS chọn tay LUÔN thắng gợi ý tự động (dùng chung với Đánh giá sàn).
   // Phải đưa CẢ product_sku (mẫu trên sàn, vd "SUNSET,105ML") vào — tên SP thường KHÔNG chứa tên mùi,
   // đó là lý do trước đây cột phân loại để trống trong khi Đánh giá sàn hiện đủ (CS báo 28/7).
-  const catOf = (r) => r.product_category || autoProductCategory(r.product_summary || '', r.product_sku || '') || '';
+  // CS 29/7: 1 đơn có thể có 2-3 sản phẩm → cho chọn NHIỀU phân loại.
+  // Lưu chung 1 cột `product_category`, các phân loại cách nhau bằng dấu phẩy → không phải đổi
+  // cấu trúc DB, hồ sơ cũ (1 phân loại) đọc lên vẫn đúng.
+  const catsOf = (r) => {
+    const chosen = String(r.product_category || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (chosen.length) return chosen;                       // CS đã chọn tay → ưu tiên tuyệt đối
+    const auto = autoProductCategory(r.product_summary || '', r.product_sku || '');
+    return auto ? [auto] : [];
+  };
+  const catOf = (r) => catsOf(r)[0] || '';                  // chỗ nào cần đúng 1 giá trị thì lấy cái đầu
 
   // Phân tích nguyên nhân: chọn NHIỀU THÁNG + gian
   const [rsShop, setRsShop] = useState('all');
@@ -139,7 +150,11 @@ export default function ReturnsTab() {
     if (shopF !== 'all' && r.shop_name !== shopF) return false;
     if (reasonF !== 'all' && (r.reason_category || '') !== reasonF) return false;
     if (statusF !== 'all' && (r.status || 'new') !== statusF) return false;
-    if (catF !== 'all' && (catOf(r) || '(chưa phân loại)') !== catF) return false;
+    if (catF !== 'all') {                                   // khớp nếu đơn có BẤT KỲ phân loại nào trùng
+      const cs = catsOf(r);
+      if (catF === '(chưa phân loại)') { if (cs.length) return false; }
+      else if (!cs.includes(catF)) return false;
+    }
     if (fbsF === 'fbs' && r.fulfillment_flag !== 'fulfilled_by_shopee') return false;
     if (fbsF === 'seller' && !(r.fulfillment_flag && r.fulfillment_flag !== 'fulfilled_by_shopee')) return false;
     // chỉ loại đơn BIẾT CHẮC là chưa giao (delivered=false); đơn chưa rõ (null) vẫn giữ để khỏi mất data
@@ -201,7 +216,7 @@ export default function ReturnsTab() {
       return true;
     });
     const m = {};
-    src.forEach(r => { const k = catOf(r) || '(chưa phân loại)'; m[k] = (m[k] || 0) + 1; });
+    src.forEach(r => { const cs = catsOf(r); if (!cs.length) { m['(chưa phân loại)'] = (m['(chưa phân loại)'] || 0) + 1; } else cs.forEach(k => { m[k] = (m[k] || 0) + 1; }); });
     const tong = src.length;
     return { tong, rows: Object.entries(m).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ sp: k, n: v, pct: tong ? (100 * v / tong) : 0 })) };
   }, [cases, rsShop, rsMonths, inRange]);                                    // eslint-disable-line react-hooks/exhaustive-deps
@@ -209,7 +224,7 @@ export default function ReturnsTab() {
   // Danh sách phân loại có thật trong kỳ (kèm số đơn) cho ô lọc
   const catList = useMemo(() => {
     const m = {};
-    cases.forEach(r => { if (inRange(r)) { const k = catOf(r); if (k) m[k] = (m[k] || 0) + 1; } });
+    cases.forEach(r => { if (inRange(r)) catsOf(r).forEach(k => { m[k] = (m[k] || 0) + 1; }); });
     return Object.entries(m).sort((a, b) => b[1] - a[1]);
   }, [cases, inRange]);                                                      // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -228,7 +243,7 @@ export default function ReturnsTab() {
     const dump = (rows) => rows.map(r => ({
       'NGÀY': fmtDate(r.created_at), 'SÀN': r.platform, 'GIAN': r.shop_name || '', 'MÃ ĐƠN': r.order_sn || '',
       'KOC': r.koc_username || '', 'SĐT': r.buyer_phone || '', 'TỈNH/TP': r.buyer_province || '',
-      'SẢN PHẨM': r.product_summary || '', 'PHÂN LOẠI SP': catOf(r), 'LÝ DO': r.reason_category || '',
+      'SẢN PHẨM': r.product_summary || '', 'PHÂN LOẠI SP': catsOf(r).join(', '), 'LÝ DO': r.reason_category || '',
       'TRẠNG THÁI': RSTATUS[r.status]?.label || r.status || '', 'HOÀN 1 PHẦN': PARTIAL[r.partial_refund_status]?.label || '',
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dump(thhtRows)), 'Don THHT');
@@ -306,30 +321,57 @@ export default function ReturnsTab() {
                       </div>
                       {/* CS 28/7: đơn combo hiện tên link chương trình dài thòng mà không thấy khách chọn
                           MÙI nào → đưa PHÂN LOẠI lên TRƯỚC, tên link thu nhỏ xuống dưới cho dễ nhìn. */}
-                      {r.product_sku
-                        ? <div style={{ color: '#6d28d9', fontWeight: 700, fontSize: '0.8rem' }}>🏷️ {r.product_sku}</div>
-                        : <div style={{ color: '#b91c1c', fontSize: '0.72rem', fontStyle: 'italic' }}
+                      {/* CS 29/7: TikTok cũng phải có DÒNG TIÊU ĐỀ phân loại giống Shopee.
+                          Shopee lấy thẳng mẫu sàn trả; TikTok sàn không trả nên lấy phân loại đã
+                          nhận diện/CS chọn — vẫn có tiêu đề để nhìn phát biết, khỏi lệch layout. */}
+                      {(() => {
+                        const skuTitle = r.product_sku || catsOf(r).join(' · ');
+                        if (!skuTitle) return (
+                          <div style={{ color: '#b91c1c', fontSize: '0.72rem', fontStyle: 'italic' }}
                             title="Sàn không trả tên phân loại cho đơn này — CS chọn tay ở ô Phân loại SP bên cạnh">
                             ⚠ sàn không trả phân loại
-                          </div>}
+                          </div>
+                        );
+                        return (
+                          <div style={{ color: '#6d28d9', fontWeight: 700, fontSize: '0.8rem' }}
+                            title={r.product_sku ? 'Phân loại sàn trả về' : 'Sàn không trả — lấy theo phân loại đã gắn'}>
+                            🏷️ {skuTitle}
+                          </div>
+                        );
+                      })()}
                       <div style={{ color: '#94a3b8', fontSize: '0.72rem', marginTop: 2 }}>{r.product_summary || '—'}</div>
                       {r.product_qty > 0 && <div style={{ color: '#b45309', fontSize: '0.72rem', fontWeight: 700, marginTop: 1 }}>× {r.product_qty} sản phẩm</div>}
                     </td>
                     <td style={td}>
                       {(() => {
+                        // CS 29/7: 1 đơn nhiều SP → chọn được NHIỀU phân loại. Chọn thêm ở ô dưới,
+                        // đã chọn thì hiện thành thẻ, bấm × để bỏ. Lưu chung 1 ô, cách nhau dấu phẩy.
+                        const chosen = String(r.product_category || '').split(',').map(s => s.trim()).filter(Boolean);
                         const auto = autoProductCategory(r.product_summary || '', r.product_sku || '');
-                        const chosen = r.product_category || '';
+                        const save = (arr) => patch(r, { product_category: arr.length ? arr.join(', ') : null });
                         return (
-                          <select value={chosen || auto || ''} onChange={e => patch(r, { product_category: e.target.value || null })}
-                            style={{
-                              ...inputStyle, padding: '4px 7px', fontSize: '0.72rem', width: '100%', cursor: 'pointer',
-                              background: chosen ? '#eef2ff' : '#fff', color: chosen ? '#1e3a8a' : '#94a3b8',
-                              fontStyle: chosen ? 'normal' : 'italic', fontWeight: chosen ? 700 : 400,
-                            }}
-                            title={chosen ? 'CS đã chọn' : (auto ? 'Gợi ý tự động từ tên SP — chọn lại nếu sai' : 'CS tự phân loại')}>
-                            <option value="">— Phân loại SP —</option>
-                            {PRODUCT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                          </select>
+                          <div style={{ minWidth: 150 }}>
+                            {chosen.length > 0 && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginBottom: 3 }}>
+                                {chosen.map(c => (
+                                  <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.68rem', fontWeight: 700, padding: '1px 4px 1px 7px', borderRadius: 20, background: '#eef2ff', color: '#1e3a8a' }}>
+                                    {c}
+                                    <button onClick={() => save(chosen.filter(x => x !== c))} title="Bỏ phân loại này"
+                                      style={{ border: 'none', background: 'transparent', color: '#6366f1', cursor: 'pointer', fontSize: '0.85rem', lineHeight: 1, padding: '0 2px' }}>×</button>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            <select value="" onChange={e => { const v = e.target.value; if (v && !chosen.includes(v)) save([...chosen, v]); }}
+                              style={{
+                                ...inputStyle, padding: '4px 7px', fontSize: '0.72rem', width: '100%', cursor: 'pointer',
+                                color: chosen.length ? '#64748b' : '#94a3b8', fontStyle: chosen.length ? 'normal' : 'italic',
+                              }}
+                              title={chosen.length ? 'Chọn thêm phân loại nữa' : (auto ? `Gợi ý tự động: ${auto} — chọn để xác nhận` : 'CS tự phân loại')}>
+                              <option value="">{chosen.length ? '+ thêm phân loại' : (auto ? `${auto} (gợi ý)` : '— Phân loại SP —')}</option>
+                              {PRODUCT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                          </div>
                         );
                       })()}
                     </td>

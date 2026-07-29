@@ -15,6 +15,13 @@ export const PRODUCT_CATEGORIES = [
   'TONER HOA CÚC NEW', 'TẨY TRANG', 'SRM HOA CÚC', 'SUNKISSED', 'SERUM SACHI', 'SCRUB MUỐI HỒNG',
   'SCRUB AHA - BHA', 'MẶT NẠ TRÀM TRÀ', 'MẶT NẠ HOA CÚC', 'GỘI BƯỞI', 'XẢ BƯỞI', 'BỘT MẶT NẠ',
   'BODY OIL', 'SON DƯỠNG', 'Ủ BƯỞI',
+  // CS bổ sung 29/7
+  'BLINDBAG (TÚI MÙ)', 'DẦU OLIVE',
+  // 3 nhũ mới bán theo 2 dung tích — để riêng từng dung tích cho CS thống kê được.
+  // Cụm DÀI khớp trước nên "DARK VELVET 60ML" không bị "DARK VELVET" nuốt mất.
+  'DARK VELVET 60ML', 'DARK VELVET 250ML',
+  'BLACK QUEEN 60ML', 'BLACK QUEEN 250ML',
+  'AURA TEARS 60ML', 'AURA TEARS 250ML',
 ];
 
 export const noAccent = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toUpperCase();
