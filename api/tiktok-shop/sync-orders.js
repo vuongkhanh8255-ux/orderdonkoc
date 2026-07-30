@@ -224,6 +224,38 @@ export default async function handler(req, res) {
   }
 
   // ?full=true → bỏ qua incremental, kéo toàn bộ 60 ngày
+  // ?voucher_test=1 → DÒ API khuyến mãi/voucher TikTok (chỉ đọc). Thử CẢ 2 app vì mỗi app có
+  //   scope riêng — bài học từ vụ Return&Refund (scope nằm ở app Customer Reviews chứ không phải Orders).
+  if (req.query?.voucher_test === '1') {
+    const apps = [
+      { ten: 'Managing Orders', key: process.env.TIKTOK_SHOP_APP_KEY?.trim(), secret: process.env.TIKTOK_SHOP_APP_SECRET?.trim(), bang: 'tiktok_shop_connections' },
+      { ten: 'Customer Reviews', key: process.env.TIKTOK_REVIEWS_APP_KEY?.trim(), secret: process.env.TIKTOK_REVIEWS_APP_SECRET?.trim(), bang: 'tiktok_reviews_connections' },
+    ].filter(a => a.key && a.secret);
+    const paths = [
+      { ten: 'coupons/search',    path: '/promotion/202406/coupons/search' },
+      { ten: 'activities/search', path: '/promotion/202309/activities/search' },
+    ];
+    const ket_qua = [];
+    for (const a of apps) {
+      const { data: cs } = await supabase.from(a.bang)
+        .select('access_token, shop_cipher, shop_id, seller_name, access_token_expires_at')
+        .not('access_token', 'is', null).not('shop_cipher', 'is', null);
+      const c = [...(cs || [])].sort((x, y) => new Date(y.access_token_expires_at) - new Date(x.access_token_expires_at))[0];
+      if (!c) { ket_qua.push({ app: a.ten, loi: 'chưa nối gian nào' }); continue; }
+      for (const p of paths) {
+        const r = await searchReturns({ appKey: a.key, appSecret: a.secret, accessToken: c.access_token, shopCipher: c.shop_cipher, path: p.path, bodyObj: {}, pageSize: '10' });
+        const ds = r?.data?.coupons || r?.data?.activities || [];
+        ket_qua.push({
+          app: a.ten, gian: c.seller_name, thu: p.ten, code: r?.code, message: (r?.message || '').slice(0, 120),
+          so_ban_ghi: Array.isArray(ds) ? ds.length : null,
+          cac_truong: Array.isArray(ds) && ds[0] ? Object.keys(ds[0]) : null,
+          vi_du: Array.isArray(ds) ? ds[0] || null : null,
+        });
+      }
+    }
+    return res.status(200).json({ ok: true, mode: 'voucher_test', ket_qua });
+  }
+
   // ?sync_returns=1 → KÉO ĐƠN TRẢ HÀNG TikTok về bảng tiktok_returns.
   //   Dùng app CUSTOMER REVIEWS (scope Return & Refund nằm ở app đó) → bảng tiktok_reviews_connections.
   //   Nhẹ hơn kéo toàn bộ đơn ~30-50 lần vì sàn đưa thẳng danh sách đơn BỊ TRẢ.
