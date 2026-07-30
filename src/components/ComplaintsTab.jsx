@@ -10,7 +10,6 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
 import { SHOPS, shopKey, findShopByKey, sanLabel } from '../constants/shops';
-import { PRODUCT_CATEGORIES } from '../constants/productCategories';
 import AddressPicker from './AddressPicker';
 import EvidenceUploader from './EvidenceUploader';
 import SearchableDropdown from './SearchableDropdown';
@@ -352,14 +351,16 @@ export default function ComplaintsTab({ currentUser }) {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr>
+              {/* CS 30/7: bỏ cột Sản phẩm, thay bằng MÃ VẬN ĐƠN + NHÂN VIÊN XỬ LÝ
+                  → theo dõi được ngay trên danh sách, khỏi bấm vào từng đơn. */}
               <th style={th}>Sàn</th><th style={th}>Mã đơn</th><th style={th}>Khách</th>
-              <th style={{ ...th, minWidth: 190 }}>Sản phẩm</th><th style={th}>Nguyên nhân</th>
+              <th style={th}>Mã vận đơn</th><th style={th}>NV xử lý</th><th style={th}>Nguyên nhân</th>
               <th style={th}>Gửi bù</th><th style={{ ...th, textAlign: 'center' }}>Ngày</th>
               <th style={{ ...th, textAlign: 'center' }}>Trạng thái</th><th style={{ ...th, textAlign: 'center', width: 210 }}>Hành động</th>
             </tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={9} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải...</td></tr>
-                : filtered.length === 0 ? <tr><td colSpan={9} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>Chưa có khiếu nại nào — bấm “+ Lên đơn khiếu nại”.</td></tr>
+              {loading ? <tr><td colSpan={10} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải...</td></tr>
+                : filtered.length === 0 ? <tr><td colSpan={10} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>Chưa có khiếu nại nào — bấm “+ Lên đơn khiếu nại”.</td></tr>
                   : filtered.map(r => {
                     const st = STATUS[r.status] || STATUS.new;
                     const over = !['done', 'closed'].includes(r.status) && daysSince(r.created_at) >= OVERDUE_DAYS;
@@ -370,7 +371,10 @@ export default function ComplaintsTab({ currentUser }) {
                         <td style={td}>{r.platform === 'shopee' ? '🟠' : r.platform === 'tiktok' ? '⬛' : '—'}</td>
                         <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.74rem' }}>{r.order_sn || '—'}</td>
                         <td style={{ ...td, fontWeight: 600 }}>{r.buyer_name || '—'}{r.buyer_phone && <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{r.buyer_phone}</div>}</td>
-                        <td style={{ ...td, whiteSpace: 'normal', maxWidth: 280 }}>{r.product_summary || '—'}</td>
+                        <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.74rem', color: r.compensation_tracking ? '#7c3aed' : '#cbd5e1' }}>
+                          {r.compensation_tracking || 'chưa có'}
+                        </td>
+                        <td style={{ ...td, fontSize: '0.78rem' }}>{r.assigned_to || <span style={{ color: '#cbd5e1' }}>chưa giao</span>}</td>
                         <td style={td}>{r.reason_category || <span style={{ color: '#cbd5e1' }}>chưa phân loại</span>}</td>
                         <td style={{ ...td, fontSize: '0.74rem' }}>{r.compensation_items ? <span style={{ color: '#7c3aed', fontWeight: 700 }}>🎁 {r.compensation_items}</span> : <span style={{ color: '#cbd5e1' }}>—</span>}</td>
                         <td style={{ ...td, textAlign: 'center', fontSize: '0.76rem', color: over ? '#dc2626' : '#64748b' }}>{fmtDate(r.created_at)}{over && <div style={{ fontSize: '0.66rem', fontWeight: 700 }}>{daysSince(r.created_at)}n</div>}</td>
@@ -414,15 +418,8 @@ export default function ComplaintsTab({ currentUser }) {
               <div><label style={labelStyle}>Người xử lý (CS)</label><input value={editing.assigned_to || ''} onChange={e => setEditing({ ...editing, assigned_to: e.target.value })} style={inputStyle} /></div>
               {/* CS 27/7: chọn dropdown thay vì gõ tay, dùng CHUNG list phân loại với Đánh giá sàn
                   → thống kê khiếu nại theo mùi/loại SP khớp được với bên đánh giá. */}
-              <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>Sản phẩm liên quan</label>
-                <select value={editing.product_summary || ''} onChange={e => setEditing({ ...editing, product_summary: e.target.value })} style={inputStyle}>
-                  <option value="">— chọn sản phẩm —</option>
-                  {PRODUCT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  {/* hồ sơ cũ gõ tay tên khác list → vẫn giữ nguyên, không bị mất khi mở lại */}
-                  {editing.product_summary && !PRODUCT_CATEGORIES.includes(editing.product_summary) &&
-                    <option value={editing.product_summary}>{editing.product_summary} (nhập cũ)</option>}
-                </select>
-              </div>
+              {/* Ô "Sản phẩm liên quan" ĐÃ BỎ theo CS 30/7 — khiếu nại bám theo ĐƠN, không theo SP.
+                  Dữ liệu cũ vẫn nằm trong cột product_summary, không xoá. */}
               <div><label style={labelStyle}>Phân loại nguyên nhân</label><select value={editing.reason_category || ''} onChange={e => setEditing({ ...editing, reason_category: e.target.value })} style={inputStyle}><option value="">— chọn —</option>{REASONS.map(x => <option key={x} value={x}>{x}</option>)}</select></div>
               <div><label style={labelStyle}>Trạng thái</label><select value={editing.status} onChange={e => setEditing({ ...editing, status: e.target.value })} style={inputStyle}>{FLOW.map(s => <option key={s} value={s}>{STATUS[s].label}</option>)}</select></div>
               <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>Nội dung khiếu nại</label><textarea value={editing.reason || ''} onChange={e => setEditing({ ...editing, reason: e.target.value })} style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }} placeholder="Khách phản ánh cụ thể điều gì..." /></div>

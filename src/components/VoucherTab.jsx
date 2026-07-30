@@ -243,6 +243,7 @@ export default function VoucherTab({ currentUser }) {
   const [editing, setEditing] = useState(null);
   const [csView, setCsView] = useState('list');            // list | report (brief mục 8)
   const [importing, setImporting] = useState(false);
+  const [shopFilter, setShopFilter] = useState('all');     // lọc theo GIAN (CS 30/7)
   const [periodMode, setPeriodMode] = useState('month');   // week | month | quarter
 
   const load = useCallback(async () => {
@@ -294,9 +295,17 @@ export default function VoucherTab({ currentUser }) {
     if (month !== 'all') { const d = (r.issue_date || '').slice(0, 10); if (!(d >= start && d < end)) return false; }
     if (statusF !== 'all' && r.use_status !== statusF) return false;
     if (reasonF !== 'all' && r.reason_category !== reasonF) return false;
+    if (shopFilter !== 'all' && (r.shop_name || '(chưa rõ)') !== shopFilter) return false;
     if (search) { const q = search.toLowerCase(); if (![r.customer_name, r.voucher_code, r.order_sn, r.note].some(v => v && String(v).toLowerCase().includes(q))) return false; }
     return true;
-  }), [rows, month, statusF, reasonF, search, start, end]);
+  }), [rows, month, statusF, reasonF, shopFilter, search, start, end]);
+
+  // Danh sách gian có voucher (kèm số lượng) cho ô lọc
+  const shopList = useMemo(() => {
+    const m = {};
+    rows.forEach(r => { const k = r.shop_name || '(chưa rõ)'; if (k !== '(chưa rõ)') m[k] = (m[k] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  }, [rows]);
 
   const kpi = useMemo(() => {
     let total = 0, used = 0, unused = 0, valTotal = 0, valUsed = 0, waitAcc = 0;
@@ -548,6 +557,13 @@ export default function VoucherTab({ currentUser }) {
       <div style={{ ...card, marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <input type="text" placeholder="🔍 Tìm khách, mã voucher, đơn..." value={search} onChange={e => setSearch(e.target.value)} style={{ ...inputStyle, width: 240 }} />
         <select value={statusF} onChange={e => setStatusF(e.target.value)} style={{ ...inputStyle, width: 'auto', cursor: 'pointer' }}><option value="all">Trạng thái: Tất cả</option>{Object.keys(USE_STATUS).map(s => <option key={s} value={s}>{USE_STATUS[s].label}</option>)}</select>
+        {/* CS 30/7 xin lọc theo tên sàn/gian */}
+        <select value={shopFilter} onChange={e => setShopFilter(e.target.value)}
+          style={{ ...inputStyle, width: 'auto', cursor: 'pointer', borderColor: shopFilter !== 'all' ? ACCENT : '#e5e7eb', color: shopFilter !== 'all' ? '#e85518' : '#1f2937', fontWeight: shopFilter !== 'all' ? 700 : 400 }}>
+          <option value="all">Gian: Tất cả</option>
+          {shopList.map(([g, n]) => <option key={g} value={g}>{g} ({n})</option>)}
+          <option value="(chưa rõ)">— Chưa rõ gian —</option>
+        </select>
         {reasonF !== 'all' && <button onClick={() => setReasonF('all')} style={{ padding: '6px 12px', borderRadius: 20, border: '1.5px solid #fed7aa', background: '#fff7ed', color: ACCENT, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{reasonF} ✕</button>}
         <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>{filtered.length} voucher</span>
       </div>
@@ -556,15 +572,18 @@ export default function VoucherTab({ currentUser }) {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr>
-              <th style={th}>Ngày</th><th style={th}>Khách</th><th style={th}>Mã voucher</th><th style={{ ...th, textAlign: 'right' }}>Số tiền</th>
+              <th style={th}>Ngày</th><th style={th}>Sàn · Gian</th><th style={th}>Khách</th><th style={th}>Mã voucher</th><th style={{ ...th, textAlign: 'right' }}>Số tiền</th>
               <th style={th}>Lý do</th><th style={{ ...th, textAlign: 'center' }}>Trạng thái</th><th style={{ ...th, textAlign: 'center' }}>Đối soát KT</th><th style={th}>NV</th><th style={{ ...th, textAlign: 'center', width: 150 }}>Hành động</th>
             </tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={9} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải...</td></tr>
-                : filtered.length === 0 ? <tr><td colSpan={9} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>Chưa có voucher — bấm "+ Cấp voucher"</td></tr>
+              {loading ? <tr><td colSpan={10} style={{ ...td, textAlign: "center", padding: 40, color: "#94a3b8" }}>⏳ Đang tải...</td></tr>
+                : filtered.length === 0 ? <tr><td colSpan={10} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>Chưa có voucher — bấm "+ Cấp voucher"</td></tr>
                 : filtered.map(r => { const st = USE_STATUS[r.use_status] || USE_STATUS.unused; return (
                   <tr key={r.id}>
                     <td style={td}>{fmtDate(r.issue_date)}</td>
+                    <td style={{ ...td, fontSize: '0.78rem' }}>
+                      {r.platform === 'tiktok' ? '⬛' : '🟠'} {r.shop_name || <span style={{ color: '#cbd5e1' }}>chưa rõ gian</span>}
+                    </td>
                     <td style={{ ...td, fontWeight: 600 }}>{r.customer_name || '—'}{r.order_sn && <div style={{ fontSize: '0.66rem', color: '#94a3b8', fontFamily: 'monospace' }}>{r.order_sn}</div>}</td>
                     <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.76rem' }}>{r.voucher_code || '—'}</td>
                     <td style={{ ...td, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(r.amount)}</td>
