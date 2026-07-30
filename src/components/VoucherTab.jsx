@@ -43,12 +43,20 @@ function ShopVouchers() {
   const [ownerF, setOwnerF] = useState('shop');    // shop | shopee | all
   const [search, setSearch] = useState('');
 
+  // ⚠️ Supabase CẮT CỤT 1000 DÒNG mỗi lượt, kể cả khi ghi .limit(3000). Bảng đã 7.389 voucher
+  // ⇒ trước đây chỉ tải về 1.000, KPI (tổng voucher / lượt dùng / giá trị) tính trên 1/7 dữ liệu
+  // mà không báo lỗi gì. Phải kéo từng trang 1000 cho tới hết.
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('shopee_vouchers').select('*')
-      .order('end_time', { ascending: false }).limit(3000);
-    if (error) alert('Lỗi tải voucher sàn: ' + error.message);
-    setRows(data || []); setLoading(false);
+    const all = [];
+    for (let pg = 0; pg < 30; pg++) {                     // trần 30.000 voucher
+      const { data, error } = await supabase.from('shopee_vouchers').select('*')
+        .order('end_time', { ascending: false }).range(pg * 1000, pg * 1000 + 999);
+      if (error) { alert('Lỗi tải voucher sàn: ' + error.message); break; }
+      all.push(...(data || []));
+      if (!data || data.length < 1000) break;
+    }
+    setRows(all); setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
 
