@@ -151,7 +151,11 @@ const normalizeOrder = (order, conn) => {
     line_items: items.map(item => ({
       item_id: item.item_id || item.id,
       sku_id: item.sku_id,
-      product_name: item.product_name || item.sku_name,
+      product_name: item.product_name || '',
+      // TÊN PHÂN LOẠI khách đặt (mùi/dung tích) — GIỮ RIÊNG, đừng gộp vào product_name.
+      // Trước gộp `product_name || sku_name` nên tên SP luôn thắng, mùi không bao giờ hiện ra
+      // → Module 2 không biết khách chọn mùi nào (CS phản ánh 28/7). Dò vài tên field theo phiên bản API.
+      sku_name: item.sku_name || item.sku_title || item.seller_sku || '',
       quantity: item.quantity || 1,
       sale_price: item.sale_price || item.original_price,
       currency: item.currency,
