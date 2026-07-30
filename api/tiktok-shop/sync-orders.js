@@ -223,7 +223,12 @@ export default async function handler(req, res) {
   // ?full=true → bỏ qua incremental, kéo toàn bộ 60 ngày
   // ?return_test=1 → DÒ API trả hàng/hoàn tiền (chỉ đọc, KHÔNG ghi DB). Xem có quyền + có LÝ DO TRẢ không.
   if (req.query?.return_test === '1') {
-    const conn = connections.find(c => new Date(c.access_token_expires_at) > new Date()) || connections[0];
+    // Chọn gian để dò: ưu tiên ?shop_id=..., không có thì lấy gian ỦY QUYỀN GẦN NHẤT
+    // (quyền mới chỉ có hiệu lực với gian vừa ủy quyền lại — gian cũ vẫn bị 105005).
+    const wantShop = (req.query?.shop_id || '').trim();
+    const conn = (wantShop && connections.find(c => String(c.shop_id) === wantShop))
+      || [...connections].sort((a, b) => new Date(b.access_token_expires_at) - new Date(a.access_token_expires_at))[0]
+      || connections[0];
     const now = Math.floor(Date.now() / 1000);
     const ge = now - 30 * 86400;
     const thu = [
