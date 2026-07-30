@@ -135,6 +135,29 @@ const searchOrders = async ({ appKey, appSecret, accessToken, shopCipher, create
   try { return JSON.parse(text); } catch { return { _raw: text }; }
 };
 
+// ── DÒ API TRẢ HÀNG/HOÀN TIỀN — CHỈ ĐỌC, KHÔNG GHI DB ────────────────────────
+// Mục đích: xem app có quyền gọi không, và sàn có trả LÝ DO TRẢ HÀNG không
+// (CS xin từ lâu để đối chiếu với lý do CS tự điền). Dò xong mới quyết làm tiếp.
+const searchReturns = async ({ appKey, appSecret, accessToken, shopCipher, path, bodyObj }) => {
+  const ts = String(Math.floor(Date.now() / 1000));
+  const bodyStr = JSON.stringify(bodyObj || {});
+  const urlParams = { app_key: appKey, timestamp: ts, shop_cipher: shopCipher, page_size: '10' };
+  const sign = buildSign(appSecret, path, urlParams, bodyStr);
+  const url = `${TIKTOK_BASE}${path}?${new URLSearchParams({ ...urlParams, sign })}`;
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), 20_000);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'x-tts-access-token': accessToken, 'content-type': 'application/json' },
+      body: bodyStr, signal: ctrl.signal,
+    });
+    clearTimeout(tid);
+    const text = await res.text();
+    try { return JSON.parse(text); } catch { return { _raw: text.slice(0, 300) }; }
+  } catch (e) { clearTimeout(tid); return { code: -1, message: String(e.message) }; }
+};
+
 // ── Normalize order for Supabase ──────────────────────────────────────────────
 const normalizeOrder = (order, conn) => {
   const items = order.line_items || [];
@@ -198,6 +221,30 @@ export default async function handler(req, res) {
   }
 
   // ?full=true → bỏ qua incremental, kéo toàn bộ 60 ngày
+  // ?return_test=1 → DÒ API trả hàng/hoàn tiền (chỉ đọc, KHÔNG ghi DB). Xem có quyền + có LÝ DO TRẢ không.
+  if (req.query?.return_test === '1') {
+    const conn = connections.find(c => new Date(c.access_token_expires_at) > new Date()) || connections[0];
+    const now = Math.floor(Date.now() / 1000);
+    const ge = now - 30 * 86400;
+    const thu = [
+      { ten: 'returns/search 202309', path: '/return_refund/202309/returns/search', body: { create_time_ge: ge, create_time_lt: now } },
+      { ten: 'returns/search 202502', path: '/return_refund/202502/returns/search', body: { create_time_ge: ge, create_time_lt: now } },
+      { ten: 'cancellations/search',   path: '/return_refund/202309/cancellations/search', body: { create_time_ge: ge, create_time_lt: now } },
+    ];
+    const ket_qua = [];
+    for (const t of thu) {
+      const r = await searchReturns({ appKey, appSecret, accessToken: conn.access_token, shopCipher: conn.shop_cipher, path: t.path, bodyObj: t.body });
+      const ds = r?.data?.return_orders || r?.data?.cancellations || r?.data?.returns || [];
+      ket_qua.push({
+        thu: t.ten, code: r?.code, message: r?.message,
+        so_ban_ghi: Array.isArray(ds) ? ds.length : null,
+        cac_truong: Array.isArray(ds) && ds[0] ? Object.keys(ds[0]) : null,
+        vi_du: Array.isArray(ds) ? ds[0] || null : null,
+      });
+    }
+    return res.status(200).json({ ok: true, mode: 'return_test', gian_thu: conn.seller_name, ket_qua });
+  }
+
   const forceFullSync = req.query?.full === 'true' || req.body?.full === true;
 
   // Direct window params: from_ts / to_ts / shop_id (per-shop per-window từ frontend)
