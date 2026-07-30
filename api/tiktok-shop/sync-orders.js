@@ -138,10 +138,11 @@ const searchOrders = async ({ appKey, appSecret, accessToken, shopCipher, create
 // ── DÒ API TRẢ HÀNG/HOÀN TIỀN — CHỈ ĐỌC, KHÔNG GHI DB ────────────────────────
 // Mục đích: xem app có quyền gọi không, và sàn có trả LÝ DO TRẢ HÀNG không
 // (CS xin từ lâu để đối chiếu với lý do CS tự điền). Dò xong mới quyết làm tiếp.
-const searchReturns = async ({ appKey, appSecret, accessToken, shopCipher, path, bodyObj }) => {
+const searchReturns = async ({ appKey, appSecret, accessToken, shopCipher, path, bodyObj, pageToken, pageSize }) => {
   const ts = String(Math.floor(Date.now() / 1000));
   const bodyStr = JSON.stringify(bodyObj || {});
-  const urlParams = { app_key: appKey, timestamp: ts, shop_cipher: shopCipher, page_size: '10' };
+  const urlParams = { app_key: appKey, timestamp: ts, shop_cipher: shopCipher, page_size: pageSize || '10' };
+  if (pageToken) urlParams.page_token = pageToken;
   const sign = buildSign(appSecret, path, urlParams, bodyStr);
   const url = `${TIKTOK_BASE}${path}?${new URLSearchParams({ ...urlParams, sign })}`;
   const ctrl = new AbortController();
@@ -221,6 +222,71 @@ export default async function handler(req, res) {
   }
 
   // ?full=true → bỏ qua incremental, kéo toàn bộ 60 ngày
+  // ?sync_returns=1 → KÉO ĐƠN TRẢ HÀNG TikTok về bảng tiktok_returns.
+  //   Dùng app CUSTOMER REVIEWS (scope Return & Refund nằm ở app đó) → bảng tiktok_reviews_connections.
+  //   Nhẹ hơn kéo toàn bộ đơn ~30-50 lần vì sàn đưa thẳng danh sách đơn BỊ TRẢ.
+  //   &days=N (mặc định 60) · &shop_id=... (chỉ 1 gian)
+  if (req.query?.sync_returns === '1') {
+    const rKey = process.env.TIKTOK_REVIEWS_APP_KEY?.trim();
+    const rSecret = process.env.TIKTOK_REVIEWS_APP_SECRET?.trim();
+    if (!rKey || !rSecret) return res.status(500).json({ error: 'Thiếu TIKTOK_REVIEWS_APP_KEY/SECRET trên Vercel' });
+    const days = Math.min(Number(req.query?.days) || 60, 180);
+    const onlyShop = (req.query?.shop_id || '').trim();
+    const { data: rConns } = await supabase.from('tiktok_reviews_connections')
+      .select('access_token, shop_cipher, shop_id, seller_name, access_token_expires_at')
+      .not('access_token', 'is', null).not('shop_cipher', 'is', null);
+    const list = (rConns || []).filter(c => !onlyShop || String(c.shop_id) === onlyShop);
+    const t1 = Math.floor(Date.now() / 1000);
+    const t0 = t1 - days * 86400;
+    const DEADLINE = Date.now() + 240_000;         // chừa thời gian trả JSON, khỏi timeout
+    const out = [];
+    for (const c of list) {
+      const r = { gian: c.seller_name, lay_ve: 0, luu: 0, error: null, partial: false };
+      if (new Date(c.access_token_expires_at) <= new Date()) { r.error = 'token het han - can uy quyen lai'; out.push(r); continue; }
+      try {
+        let pageToken = '';
+        for (let page = 0; page < 40; page++) {
+          if (Date.now() > DEADLINE) { r.partial = true; break; }
+          const body = { create_time_ge: t0, create_time_lt: t1 };
+          const resp = await searchReturns({
+            appKey: rKey, appSecret: rSecret, accessToken: c.access_token, shopCipher: c.shop_cipher,
+            path: '/return_refund/202309/returns/search', bodyObj: body, pageToken, pageSize: '50',
+          });
+          if (resp?.code !== 0) { r.error = `code ${resp?.code}: ${resp?.message}`; break; }
+          const items = resp?.data?.return_orders || [];
+          r.lay_ve += items.length;
+          if (items.length) {
+            const rows = items.map(x => {
+              const li = x.return_line_items || [];
+              return {
+                return_id: String(x.return_id), order_id: String(x.order_id || ''),
+                shop_id: String(c.shop_id), shop_name: c.seller_name,
+                return_type: x.return_type || null, return_status: x.return_status || null,
+                return_reason: x.return_reason || null, return_reason_text: x.return_reason_text || null,
+                arbitration_status: x.arbitration_status || null,
+                refund_total: Number(x.refund_amount?.refund_total) || 0,
+                currency: x.refund_amount?.currency || 'VND',
+                product_names: [...new Set(li.map(i => i.product_name).filter(Boolean))].join(' | ').slice(0, 500),
+                sku_names: [...new Set(li.map(i => i.sku_name).filter(Boolean))].join(' | ').slice(0, 300),
+                qty: li.length,
+                create_time: Number(x.create_time) || null, update_time: Number(x.update_time) || null,
+                raw: x, synced_at: new Date().toISOString(),
+              };
+            });
+            for (let i = 0; i < rows.length; i += 200) {
+              const { error } = await supabase.from('tiktok_returns').upsert(rows.slice(i, i + 200), { onConflict: 'return_id' });
+              if (!error) r.luu += rows.slice(i, i + 200).length;
+            }
+          }
+          pageToken = resp?.data?.next_page_token || '';
+          if (!pageToken || items.length === 0) break;
+        }
+      } catch (e) { r.error = e.message; }
+      out.push(r);
+    }
+    return res.status(200).json({ ok: true, mode: 'sync_returns', so_ngay: days, ket_qua: out });
+  }
+
   // ?return_test=1 → DÒ API trả hàng/hoàn tiền (chỉ đọc, KHÔNG ghi DB). Xem có quyền + có LÝ DO TRẢ không.
   if (req.query?.return_test === '1') {
     // Chọn gian để dò: ưu tiên ?shop_id=..., không có thì lấy gian ỦY QUYỀN GẦN NHẤT
