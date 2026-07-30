@@ -219,6 +219,63 @@ export default async function handler(req, res) {
     });
   }
 
+  // ── ĐỒNG BỘ ĐƠN TRẢ HÀNG SHOPEE → bảng shopee_returns ──
+  //    ?sync_returns=1[&days=60][&shop_id=]. Lấy được LÝ DO SÀN + lý do khách tự ghi + ảnh/video.
+  //    ⚠️ Shopee bắt mỗi lần gọi chỉ được khoảng ≤15 ngày → chia cửa sổ 14 ngày cho chắc.
+  if (url.searchParams.get('sync_returns') === '1') {
+    const days = Math.min(Number(url.searchParams.get('days')) || 60, 180);
+    const WIN = 14 * 86400;
+    const results = [];
+    for (const shop of shops) {
+      const r = { gian: shop.shop_name, lay_ve: 0, luu: 0, cua_so: 0, partial: false, error: null };
+      if (Date.now() > deadline) { r.partial = true; r.error = 'het thoi gian'; results.push(r); continue; }
+      try {
+        const token = await refreshIfNeeded(supabase, shop);
+        const sid = Number(shop.shop_id);
+        for (let to = now; to > now - days * 86400; to -= WIN) {
+          if (Date.now() > deadline) { r.partial = true; break; }
+          const from = Math.max(to - WIN, now - days * 86400);
+          for (let page = 0; page < 30; page++) {
+            if (Date.now() > deadline) { r.partial = true; break; }
+            const resp = await shopeeApi(partnerKey, 'GET', '/api/v2/returns/get_return_list', token.access_token, sid, {
+              page_no: page, page_size: 100, create_time_from: from, create_time_to: to,
+            });
+            if (resp?.error) { r.error = `${resp.error}: ${resp.message}`; break; }
+            const items = resp?.response?.return || [];
+            r.lay_ve += items.length;
+            if (items.length) {
+              const rows = items.map(x => ({
+                return_sn: String(x.return_sn), order_sn: x.order_sn || null,
+                shop_id: String(shop.shop_id), shop_name: shop.shop_name,
+                reason: x.reason || null, text_reason: x.text_reason || null,
+                status: x.status || null,
+                refund_amount: Number(x.refund_amount) || 0, currency: x.currency || 'VND',
+                return_refund_type: x.return_refund_type || null, return_solution: x.return_solution || null,
+                negotiation_status: x.negotiation?.negotiation_status || x.negotiation_status || null,
+                seller_proof_status: x.seller_proof_status || null,
+                seller_evidence_deadline: x.seller_evidence_deadline || null,
+                buyer_username: x.user?.username || null,
+                product_names: (x.item || []).map(i => i.name).filter(Boolean).join(' | ').slice(0, 500),
+                images: x.image || null, videos: x.buyer_videos || null,
+                create_time: x.create_time || null, update_time: x.update_time || null,
+                raw: x, synced_at: new Date().toISOString(),
+              }));
+              for (let i = 0; i < rows.length; i += 200) {
+                const { error } = await supabase.from('shopee_returns').upsert(rows.slice(i, i + 200), { onConflict: 'return_sn' });
+                if (!error) r.luu += rows.slice(i, i + 200).length;
+              }
+            }
+            if (!resp?.response?.more || items.length === 0) break;
+            await sleep(120);
+          }
+          r.cua_so++;
+        }
+      } catch (e) { r.error = e.message; }
+      results.push(r);
+    }
+    return res.json({ ok: true, mode: 'sync_returns', so_ngay: days, results });
+  }
+
   // ── DÒ API TRẢ HÀNG SHOPEE (chỉ đọc) → ?return_test=1 ──
   //    Mục tiêu: lấy LÝ DO TRẢ do sàn ghi nhận cho đơn Shopee (TikTok đã có, Shopee còn trống).
   //    Thử vài đường dẫn/tham số vì Shopee đổi tên endpoint theo phiên bản.
