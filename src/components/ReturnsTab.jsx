@@ -44,9 +44,12 @@ const RETURN_TYPES = [
   { v: 'refund_only', l: 'Hoàn tiền nguyên đơn' },
   { v: 'refund_partial', l: 'Hoàn tiền 1 phần' },
   { v: 'compensation', l: 'Bồi hoàn' },                   // CS 29/7
+  { v: 'cancelled', l: 'Đơn hủy' },                       // CS 30/7 — khách hủy, không trả cũng không hoàn
 ];
-// 3 loại này nằm chung tab "Hoàn tiền" (không phải trả hàng về kho)
-const REFUND_TYPES = ['refund_only', 'refund_partial', 'compensation'];
+const TYPE_LABEL = Object.fromEntries(RETURN_TYPES.map(t => [t.v, t.l]));
+// Tab "Đơn THHT" = đúng loại 'thht'. Tab còn lại ôm HẾT các loại khác (hoàn tiền, bồi hoàn, đơn hủy)
+// → thêm loại mới sau này KHÔNG bao giờ làm đơn biến mất khỏi cả 2 tab.
+const isThht = (rt) => (rt || 'thht') === 'thht';
 // Đề xuất hoàn tiền 1 phần
 const PARTIAL = {
   accepted: { label: 'Khách chấp nhận', color: '#15803d' },
@@ -81,6 +84,7 @@ export default function ReturnsTab() {
   const [catF, setCatF] = useState('all');           // lọc theo PHÂN LOẠI SP (danh sách CS)
   const [search, setSearch] = useState('');
   const [fbsF, setFbsF] = useState('all');           // all | fbs | seller — CS 28/7
+  const [typeF, setTypeF] = useState('all');         // lọc LOẠI ĐƠN (hoàn 1 phần / nguyên đơn / đơn hủy…) — CS 30/7
   // Mặc định ẨN đơn chưa giao tới khách: đó là đơn khách hủy giữa đường / giao thất bại, CS không tính
   // vào tỉ lệ trả hàng. Bỏ tick nếu muốn xem lại đủ.
   const [hideUndelivered, setHideUndelivered] = useState(true);
@@ -110,12 +114,21 @@ export default function ReturnsTab() {
     setLoading(false);
   }, [from, to]);
 
+  // ⚠️ Supabase CẮT CỤT 1000 DÒNG mỗi lần gọi, kể cả khi .limit(3000) — phải phân trang.
+  // Ca thật 30/7: đơn trả vượt 1000 → tab "Hoàn tiền" tụt về 0 đơn (đơn hoàn nằm sau dòng
+  // thứ 1000 nên không tải về), CS tưởng mất data. Kéo từng trang 1000 cho tới hết.
   const loadCases = useCallback(async () => {
     setLoadingCases(true);
-    const { data: d, error } = await supabase.from('cs_cases').select('*')
-      .eq('case_type', 'return').order('created_at', { ascending: false }).limit(3000);
-    if (error) alert('Lỗi tải đơn: ' + error.message);
-    setCases(d || []); setLoadingCases(false);
+    const all = [];
+    for (let pg = 0; pg < 10; pg++) {                       // trần 10.000 đơn, quá thì thu hẹp kỳ
+      const { data: d, error } = await supabase.from('cs_cases').select('*')
+        .eq('case_type', 'return').order('created_at', { ascending: false })
+        .range(pg * 1000, pg * 1000 + 999);
+      if (error) { alert('Lỗi tải đơn: ' + error.message); break; }
+      all.push(...(d || []));
+      if (!d || d.length < 1000) break;
+    }
+    setCases(all); setLoadingCases(false);
   }, []);
 
   useEffect(() => { loadStats(); }, [loadStats]);
@@ -140,9 +153,13 @@ export default function ReturnsTab() {
     return (!from || d >= from) && (!to || d <= to);
   }, [from, to]);
 
-  const filterCases = useCallback((type) => cases.filter(r => {
+  // boQuaLoaiDon = true → bỏ qua bộ lọc "Loại đơn" (dùng để ĐẾM số đơn mỗi loại cho ô lọc đó,
+  // nếu không số đếm sẽ tự co lại theo chính lựa chọn đang chọn).
+  const filterCases = useCallback((type, boQuaLoaiDon = false) => cases.filter(r => {
     const rt = r.return_type || 'thht';
-    if (type === 'refund' ? !REFUND_TYPES.includes(rt) : rt !== type) return false;
+    if (type === 'refund' ? isThht(rt) : !isThht(rt)) return false;
+    // Lọc loại đơn chỉ áp cho tab Hoàn tiền (tab THHT chỉ có đúng 1 loại) — khỏi cảnh đổi tab thấy bảng trống.
+    if (type === 'refund' && !boQuaLoaiDon && typeF !== 'all' && rt !== typeF) return false;
     // ĐANG TÌM MÃ ĐƠN thì bỏ qua khoảng ngày: CS than "search ID lúc được lúc không" — đơn nằm
     // ngoài khoảng ngày đang chọn thì tìm hoài không ra dù đơn có trong hệ thống.
     if (!search && !inRange(r)) return false;
@@ -161,10 +178,16 @@ export default function ReturnsTab() {
     if (hideUndelivered && r.delivered === false) return false;
     if (search) { const q = search.trim().toLowerCase(); if (![r.order_sn, r.buyer_name, r.koc_username, r.product_summary, r.product_sku, r.reason].some(v => v && String(v).toLowerCase().includes(q))) return false; }
     return true;
-  }), [cases, inRange, sanF, shopF, reasonF, statusF, catF, search, fbsF, hideUndelivered]);       // eslint-disable-line react-hooks/exhaustive-deps
+  }), [cases, inRange, sanF, shopF, reasonF, statusF, catF, search, fbsF, typeF, hideUndelivered]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const thhtRows = useMemo(() => filterCases('thht'), [filterCases]);
   const refundRows = useMemo(() => filterCases('refund'), [filterCases]);
+  // Số đơn theo từng loại (cho ô lọc "Loại đơn") — đếm trên tập CHƯA lọc theo loại
+  const typeCounts = useMemo(() => {
+    const m = {};
+    filterCases('refund', true).forEach(r => { const k = r.return_type || 'thht'; m[k] = (m[k] || 0) + 1; });
+    return m;
+  }, [filterCases]);
 
   // ── Thống kê tự đổ (RPC) ──
   const shops = useMemo(() => {
@@ -245,6 +268,7 @@ export default function ReturnsTab() {
       'KOC': r.koc_username || '', 'SĐT': r.buyer_phone || '', 'TỈNH/TP': r.buyer_province || '',
       'SẢN PHẨM': r.product_summary || '', 'PHÂN LOẠI SP': catsOf(r).join(', '), 'LÝ DO': r.reason_category || '',
       'TRẠNG THÁI': RSTATUS[r.status]?.label || r.status || '', 'HOÀN 1 PHẦN': PARTIAL[r.partial_refund_status]?.label || '',
+      'LOẠI ĐƠN': TYPE_LABEL[r.return_type || 'thht'] || r.return_type || '',
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dump(thhtRows)), 'Don THHT');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dump(refundRows)), 'Don hoan tien');
@@ -415,7 +439,7 @@ export default function ReturnsTab() {
       <div style={{ padding: '9px 14px', fontSize: '0.74rem', color: '#94a3b8', borderTop: '1px solid #f1f5f9' }}>
         {kind === 'thht'
           ? 'Đơn trả hàng + hoàn tiền. Đổi ô "Loại đơn" sang Hoàn tiền nếu khách được hoàn mà KHÔNG trả hàng.'
-          : 'Đơn hoàn tiền KHÔNG trả hàng — lọc theo mã đơn / lý do / sản phẩm như tab THHT.'}
+          : 'Đơn KHÔNG trả hàng về kho: hoàn tiền nguyên đơn · hoàn tiền 1 phần · bồi hoàn · đơn hủy. Dùng ô “Loại đơn” để tách từng nhóm.'}
       </div>
     </div>
   );
@@ -457,7 +481,7 @@ export default function ReturnsTab() {
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
         <TabBtn id="stats">📊 Thống kê</TabBtn>
         <TabBtn id="thht">📋 Đơn THHT ({fmtN(thhtRows.length)})</TabBtn>
-        <TabBtn id="refund">💸 Hoàn tiền — không trả hàng ({fmtN(refundRows.length)})</TabBtn>
+        <TabBtn id="refund">💸 Hoàn tiền · Đơn hủy ({fmtN(refundRows.length)})</TabBtn>
       </div>
 
       {/* ══ TAB THỐNG KÊ ══ */}
@@ -618,6 +642,17 @@ export default function ReturnsTab() {
               {catList.map(([c, n]) => <option key={c} value={c}>{c} ({n})</option>)}
               <option value="(chưa phân loại)">— Chưa phân loại —</option>
             </select>
+            {/* CS 30/7: lọc LOẠI ĐƠN — tách riêng đơn hoàn 1 phần / hoàn nguyên đơn / đơn hủy.
+                Chỉ hiện ở tab Hoàn tiền vì tab THHT vốn chỉ có mỗi loại "Trả hàng". */}
+            {tab === 'refund' && (
+              <select value={typeF} onChange={e => setTypeF(e.target.value)}
+                style={{ ...inputStyle, cursor: 'pointer', borderColor: typeF !== 'all' ? ACCENT : '#e5e7eb', color: typeF !== 'all' ? '#e85518' : '#1f2937', fontWeight: typeF !== 'all' ? 700 : 400 }}>
+                <option value="all">Loại đơn: Tất cả</option>
+                {RETURN_TYPES.filter(t => t.v !== 'thht').map(t => (
+                  <option key={t.v} value={t.v}>{t.l} ({fmtN(typeCounts[t.v] || 0)})</option>
+                ))}
+              </select>
+            )}
             {/* CS 28/7: lọc riêng đơn FBS (Shopee xử lý) */}
             <select value={fbsF} onChange={e => setFbsF(e.target.value)}
               style={{ ...inputStyle, cursor: 'pointer', borderColor: fbsF !== 'all' ? ACCENT : '#e5e7eb', color: fbsF !== 'all' ? '#e85518' : '#1f2937', fontWeight: fbsF !== 'all' ? 700 : 400 }}>

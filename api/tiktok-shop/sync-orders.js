@@ -22,8 +22,10 @@ const toIso = (v) => {
 };
 
 // ── Auto-refresh access token using refresh_token ─────────────────────────────
-// Gọi API TikTok để lấy access_token mới, cập nhật vào Supabase
-const tryRefreshToken = async ({ appKey, appSecret, conn, supabase }) => {
+// Gọi API TikTok để lấy access_token mới, cập nhật vào Supabase.
+// `table`: mỗi APP có bảng token riêng (Managing Orders = tiktok_shop_connections,
+// Customer Reviews = tiktok_reviews_connections) — truyền đúng bảng kẻo ghi nhầm chỗ.
+const tryRefreshToken = async ({ appKey, appSecret, conn, supabase, table = 'tiktok_shop_connections' }) => {
   if (!conn.refresh_token) return false;
 
   try {
@@ -51,7 +53,7 @@ const tryRefreshToken = async ({ appKey, appSecret, conn, supabase }) => {
 
     // Cập nhật token mới vào Supabase
     const { error } = await supabase
-      .from('tiktok_shop_connections')
+      .from(table)
       .update({
         access_token:             d.access_token,
         refresh_token:            d.refresh_token            || conn.refresh_token,
@@ -233,7 +235,7 @@ export default async function handler(req, res) {
     const days = Math.min(Number(req.query?.days) || 60, 180);
     const onlyShop = (req.query?.shop_id || '').trim();
     const { data: rConns } = await supabase.from('tiktok_reviews_connections')
-      .select('access_token, shop_cipher, shop_id, seller_name, access_token_expires_at')
+      .select('access_token, refresh_token, shop_cipher, shop_id, seller_name, access_token_expires_at')
       .not('access_token', 'is', null).not('shop_cipher', 'is', null);
     const list = (rConns || []).filter(c => !onlyShop || String(c.shop_id) === onlyShop);
     const t1 = Math.floor(Date.now() / 1000);
@@ -242,7 +244,13 @@ export default async function handler(req, res) {
     const out = [];
     for (const c of list) {
       const r = { gian: c.seller_name, lay_ve: 0, luu: 0, error: null, partial: false };
-      if (new Date(c.access_token_expires_at) <= new Date()) { r.error = 'token het han - can uy quyen lai'; out.push(r); continue; }
+      // Token hết hạn thì TỰ XIN TOKEN MỚI bằng refresh_token (hạn tới 2125) — trước đây bỏ luôn gian đó,
+      // Healmi im lặng không có đơn trả nào suốt từ 17/6 mà không ai biết (CS phát hiện 30/7).
+      if (new Date(c.access_token_expires_at) <= new Date()) {
+        const ok = await tryRefreshToken({ appKey: rKey, appSecret: rSecret, conn: c, supabase, table: 'tiktok_reviews_connections' });
+        if (!ok) { r.error = 'token het han + xin moi khong duoc - can uy quyen lai gian nay'; out.push(r); continue; }
+        r.token_da_lam_moi = true;
+      }
       try {
         let pageToken = '';
         for (let page = 0; page < 40; page++) {
