@@ -8,6 +8,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
+import EvidenceUploader from './EvidenceUploader';
 
 const ACCENT = '#ff6a2c';
 const REASONS = ['Sản phẩm lỗi', 'Hàng giao chậm', 'Hư hỏng vận chuyển', 'Khách không hài lòng', 'Hỗ trợ phí ship', 'Chương trình CSKH', 'Khác'];
@@ -28,7 +29,7 @@ const labelStyle = { fontSize: '0.72rem', fontWeight: 800, color: '#64748b', tex
 const th = { padding: '9px 10px', fontSize: '0.68rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.3px', textAlign: 'left', whiteSpace: 'nowrap', background: '#f8fafc', borderBottom: '2px solid #e5e7eb' };
 const td = { padding: '8px 10px', fontSize: '0.82rem', color: '#0f172a', whiteSpace: 'nowrap', borderTop: '1px solid #f1f5f9' };
 const card = { background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' };
-const EMPTY = { issue_date: todayYmd(), platform: 'shopee', order_sn: '', customer_name: '', reason_category: 'Sản phẩm lỗi', voucher_code: '', amount: 0, use_status: 'unused', staff: '', accountant_checked: false, expire_date: '', note: '' };
+const EMPTY = { issue_date: todayYmd(), platform: 'shopee', order_sn: '', customer_name: '', reason_category: 'Sản phẩm lỗi', voucher_code: '', amount: 0, use_status: 'unused', staff: '', accountant_checked: false, expire_date: '', note: '', evidence_links: '' };
 
 // ── VOUCHER SHOP TẠO (kéo từ sàn) ────────────────────────────────────────────
 // CS 29/7 cần cả 2 loại: voucher CS gửi khách (bảng support_vouchers, nhập tay — phần chính bên dưới)
@@ -40,7 +41,8 @@ function ShopVouchers() {
   const [msg, setMsg] = useState('');
   const [shopF, setShopF] = useState('all');
   const [stateF, setStateF] = useState('all');     // all | ongoing | upcoming | expired
-  const [ownerF, setOwnerF] = useState('shop');    // shop | shopee | all
+  const [ownerF, setOwnerF] = useState('shop');
+  const [sanF, setSanF] = useState('all');         // all | shopee | tiktok    // shop | shopee | all
   const [search, setSearch] = useState('');
 
   // ⚠️ Supabase CẮT CỤT 1000 DÒNG mỗi lượt, kể cả khi ghi .limit(3000). Bảng đã 7.389 voucher
@@ -56,14 +58,38 @@ function ShopVouchers() {
       all.push(...(data || []));
       if (!data || data.length < 1000) break;
     }
-    setRows(all); setLoading(false);
+    // Voucher TikTok — đưa về CÙNG dạng field với Shopee để bảng/KPI dùng chung, khỏi viết 2 lần.
+    // LƯU Ý: API danh sách của TikTok KHÔNG trả số lượt ĐÃ DÙNG → current_usage = null (hiện '—').
+    const tt = [];
+    for (let pg = 0; pg < 30; pg++) {
+      const { data } = await supabase.from('tiktok_vouchers').select('*')
+        .order('claim_end', { ascending: false }).range(pg * 1000, pg * 1000 + 999);
+      tt.push(...(data || []));
+      if (!data || data.length < 1000) break;
+    }
+    const ttRows = tt.map(v => ({
+      san: 'tiktok', voucher_id: 'tt-' + v.coupon_id, shop_name: v.shop_name,
+      voucher_name: v.title, voucher_code: '',
+      start_time: v.claim_start, end_time: v.claim_end,
+      reward_type: v.discount_type === 'PERCENT_OFF' ? 2 : 1,
+      percentage: v.discount_percent, discount_amount: v.discount_amount,
+      max_price: null, min_basket_price: null,
+      usage_quantity: v.redemption_limit, current_usage: null,
+      is_admin: v.creation_source !== 'SELLER_CENTER',
+    }));
+    setRows([...all.map(v => ({ ...v, san: 'shopee' })), ...ttRows]);
+    setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
 
   const runSync = async () => {
     setSyncing(true); setMsg('⏳ Đang kéo voucher từ Shopee...');
     try {
-      const r = await fetch('/api/shopee/sync-orders?sync_vouchers=1').then(x => x.json());
+      const [rSp, rTt] = await Promise.all([
+        fetch('/api/shopee/sync-orders?sync_vouchers=1').then(x => x.json()).catch(() => ({})),
+        fetch('/api/tiktok-shop/sync-orders?sync_vouchers=1').then(x => x.json()).catch(() => ({})),
+      ]);
+      const r = { results: [...(rSp.results || []), ...(rTt.ket_qua || []).map(x => ({ luu: x.luu }))] };
       const tong = (r.results || []).reduce((s, x) => s + (x.luu || 0), 0);
       setMsg(`✅ Đã đồng bộ ${tong} voucher`); load();
     } catch (e) { setMsg('⚠️ ' + e.message); }
@@ -76,19 +102,20 @@ function ShopVouchers() {
   const shops = useMemo(() => [...new Set(rows.map(r => r.shop_name).filter(Boolean))].sort(), [rows]);
 
   const filtered = useMemo(() => rows.filter(v => {
+    if (sanF !== 'all' && v.san !== sanF) return false;
     if (ownerF === 'shop' && v.is_admin) return false;       // chỉ voucher SHOP tự tạo
     if (ownerF === 'shopee' && !v.is_admin) return false;
     if (shopF !== 'all' && v.shop_name !== shopF) return false;
     if (stateF !== 'all' && stateOf(v) !== stateF) return false;
     if (search) { const q = search.toLowerCase(); if (![v.voucher_name, v.voucher_code].some(x => x && x.toLowerCase().includes(q))) return false; }
     return true;
-  }), [rows, ownerF, shopF, stateF, search]);                // eslint-disable-line react-hooks/exhaustive-deps
+  }), [rows, sanF, ownerF, shopF, stateF, search]);                // eslint-disable-line react-hooks/exhaustive-deps
 
   const kpi = useMemo(() => ({
     tong: filtered.length,
     dangChay: filtered.filter(v => stateOf(v) === 'ongoing').length,
     luotDung: filtered.reduce((s, v) => s + (Number(v.current_usage) || 0), 0),
-    chuaDung: filtered.filter(v => !Number(v.current_usage)).length,
+    chuaDung: filtered.filter(v => v.current_usage != null && !Number(v.current_usage)).length,
   }), [filtered]);                                            // eslint-disable-line react-hooks/exhaustive-deps
 
   const mucGiam = (v) => (v.reward_type === 2
@@ -137,6 +164,9 @@ function ShopVouchers() {
 
       <div style={{ ...card, marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <input type="text" placeholder="🔍 Tìm tên / mã voucher..." value={search} onChange={e => setSearch(e.target.value)} style={{ ...inputStyle, width: 240 }} />
+        <select value={sanF} onChange={e => setSanF(e.target.value)} style={{ ...inputStyle, width: 'auto', cursor: 'pointer', fontWeight: 700 }}>
+          <option value="all">Sàn: Tất cả</option><option value="shopee">🟠 Shopee</option><option value="tiktok">⬛ TikTok</option>
+        </select>
         <select value={ownerF} onChange={e => setOwnerF(e.target.value)} style={{ ...inputStyle, width: 'auto', cursor: 'pointer', fontWeight: 700 }}>
           <option value="shop">🏪 Shop tự tạo</option>
           <option value="shopee">🟠 Shopee tạo</option>
@@ -166,13 +196,16 @@ function ShopVouchers() {
                 : filtered.length === 0 ? <tr><td colSpan={8} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>Chưa có voucher — bấm “🔄 Đồng bộ từ sàn” để kéo về.</td></tr>
                   : filtered.slice(0, 500).map(v => { const st = STATE_LBL[stateOf(v)]; const used = Number(v.current_usage) || 0; const total = Number(v.usage_quantity) || 0; return (
                     <tr key={v.voucher_id}>
-                      <td style={{ ...td, fontSize: '0.76rem' }}>🟠 {v.shop_name}</td>
+                      <td style={{ ...td, fontSize: '0.76rem' }}>{v.san === 'tiktok' ? '⬛' : '🟠'} {v.shop_name}</td>
                       <td style={{ ...td, fontWeight: 600, whiteSpace: 'normal', maxWidth: 240 }}>{v.voucher_name}</td>
                       <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.76rem' }}>{v.voucher_code || '—'}</td>
                       <td style={{ ...td, fontWeight: 700, color: '#0891b2' }}>{mucGiam(v)}</td>
                       <td style={td}>{v.min_basket_price ? fmtMoney(v.min_basket_price) + 'đ' : '—'}</td>
-                      <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: used ? '#15803d' : '#cbd5e1' }}>
-                        {fmtMoney(used)}{total ? <span style={{ color: '#94a3b8', fontWeight: 400 }}>/{fmtMoney(total)}</span> : null}
+                      <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: v.current_usage == null ? '#cbd5e1' : (used ? '#15803d' : '#dc2626') }}>
+                        {v.current_usage == null
+                          ? <span style={{ color: '#cbd5e1', fontWeight: 400 }} title="TikTok không trả số lượt đã dùng ở API danh sách">—</span>
+                          : fmtMoney(used)}
+                        {total ? <span style={{ color: '#94a3b8', fontWeight: 400 }}>/{fmtMoney(total)}</span> : null}
                       </td>
                       <td style={{ ...td, fontSize: '0.74rem', color: '#64748b' }}>
                         {v.start_time ? fmtDate(new Date(v.start_time * 1000).toISOString()) : '?'} → {v.end_time ? fmtDate(new Date(v.end_time * 1000).toISOString()) : '?'}
@@ -218,7 +251,7 @@ export default function VoucherTab({ currentUser }) {
       customer_name: r.customer_name || null, reason_category: r.reason_category || null, voucher_code: r.voucher_code || null,
       amount: num(r.amount), use_status: r.use_status || 'unused', staff: r.staff || (currentUser?.username || ''),
       accountant_checked: !!r.accountant_checked, expire_date: r.expire_date || null,
-      used_at: r.use_status === 'used' ? (r.used_at || todayYmd()) : null, note: r.note || null,
+      used_at: r.use_status === 'used' ? (r.used_at || todayYmd()) : null, note: r.note || null, evidence_links: r.evidence_links || null,
     };
     const { error } = r.id ? await supabase.from('support_vouchers').update(payload).eq('id', r.id) : await supabase.from('support_vouchers').insert(payload);
     if (error) { alert('Lưu không được: ' + error.message); return; }
@@ -361,6 +394,11 @@ export default function VoucherTab({ currentUser }) {
               <div><label style={labelStyle}>Nhân viên cấp</label><select value={editing.staff || ''} onChange={e => setEditing({ ...editing, staff: e.target.value })} style={inputStyle}><option value="">— chọn —</option>{(nhanSus || []).map(n => <option key={n.id} value={n.ten_nhansu}>{n.ten_nhansu}</option>)}</select></div>
               <div style={{ gridColumn: 'span 2', display: 'flex', alignItems: 'center', gap: 8 }}><input type="checkbox" checked={!!editing.accountant_checked} onChange={e => setEditing({ ...editing, accountant_checked: e.target.checked })} style={{ width: 16, height: 16, cursor: 'pointer' }} /><label style={{ fontSize: '0.84rem', fontWeight: 600 }}>Đã đối soát kế toán</label></div>
               <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>Ghi chú</label><input value={editing.note || ''} onChange={e => setEditing({ ...editing, note: e.target.value })} style={inputStyle} /></div>
+              {/* Brief mục 2: voucher phải lưu HÌNH ẢNH BẰNG CHỨNG — up thẳng lên web, khỏi qua Drive */}
+              <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>📷 Hình ảnh bằng chứng</label>
+                <EvidenceUploader folder="voucher" value={editing.evidence_links || ''}
+                  onChange={v => setEditing(p => ({ ...p, evidence_links: v }))} />
+              </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
               <button onClick={() => setEditing(null)} style={{ padding: '9px 20px', borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, cursor: 'pointer' }}>Huỷ</button>

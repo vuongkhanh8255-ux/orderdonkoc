@@ -256,6 +256,61 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, mode: 'voucher_test', ket_qua });
   }
 
+  // ?sync_vouchers=1 → KÉO VOUCHER SHOP TẠO trên TikTok về bảng tiktok_vouchers (Module 7, brief mục 3).
+  if (req.query?.sync_vouchers === '1') {
+    const aKey = process.env.TIKTOK_SHOP_APP_KEY?.trim();
+    const aSecret = process.env.TIKTOK_SHOP_APP_SECRET?.trim();
+    if (!aKey || !aSecret) return res.status(500).json({ error: 'Thiếu TIKTOK_SHOP_APP_KEY/SECRET' });
+    const onlyShop = (req.query?.shop_id || '').trim();
+    const list = connections.filter(c => !onlyShop || String(c.shop_id) === onlyShop);
+    const DEADLINE = Date.now() + 240_000;
+    const out = [];
+    for (const c of list) {
+      const r = { gian: c.seller_name, lay_ve: 0, luu: 0, bi_bop: 0, error: null, partial: false };
+      try {
+        let pageToken = '';
+        for (let page = 0; page < 40; page++) {
+          if (Date.now() > DEADLINE) { r.partial = true; break; }
+          let resp = null;
+          for (let attempt = 0; attempt < 4; attempt++) {     // chịu được TikTok bóp tốc độ
+            resp = await searchReturns({ appKey: aKey, appSecret: aSecret, accessToken: c.access_token, shopCipher: c.shop_cipher, path: '/promotion/202406/coupons/search', bodyObj: {}, pageToken, pageSize: '50' });
+            if (resp?.code !== 36009002) break;
+            r.bi_bop++;
+            await new Promise(s => setTimeout(s, 1500 * (attempt + 1)));
+          }
+          if (resp?.code !== 0) { r.error = `code ${resp?.code}: ${resp?.message}`; break; }
+          const items = resp?.data?.coupons || [];
+          r.lay_ve += items.length;
+          if (items.length) {
+            const rows = items.map(v => ({
+              coupon_id: String(v.id), shop_id: String(c.shop_id), shop_name: c.seller_name,
+              title: v.title || '', status: v.status || null,
+              discount_type: v.discount?.type || null,
+              discount_amount: Number(v.discount?.reduction_amount?.amount) || null,
+              discount_percent: Number(v.discount?.percentage) || null,
+              product_scope: v.product_scope || null, target_buyer: v.target_buyer_segment || null,
+              creation_source: v.creation_source || null,
+              claim_start: v.claim_duration?.start_time || null, claim_end: v.claim_duration?.end_time || null,
+              redemption_limit: v.usage_limits?.redemption_limit ?? null,
+              per_buyer_limit: v.usage_limits?.single_buyer_claim_limit ?? null,
+              create_time: v.create_time ? Math.floor(Number(v.create_time) / 1000) : null,
+              raw: v, synced_at: new Date().toISOString(),
+            }));
+            for (let i = 0; i < rows.length; i += 200) {
+              const { error } = await supabase.from('tiktok_vouchers').upsert(rows.slice(i, i + 200), { onConflict: 'coupon_id' });
+              if (!error) r.luu += rows.slice(i, i + 200).length;
+            }
+          }
+          pageToken = resp?.data?.next_page_token || '';
+          if (!pageToken || items.length === 0) break;
+          await new Promise(s => setTimeout(s, 250));
+        }
+      } catch (e) { r.error = e.message; }
+      out.push(r);
+    }
+    return res.status(200).json({ ok: true, mode: 'sync_vouchers', ket_qua: out });
+  }
+
   // ?sync_returns=1 → KÉO ĐƠN TRẢ HÀNG TikTok về bảng tiktok_returns.
   //   Dùng app CUSTOMER REVIEWS (scope Return & Refund nằm ở app đó) → bảng tiktok_reviews_connections.
   //   Nhẹ hơn kéo toàn bộ đơn ~30-50 lần vì sàn đưa thẳng danh sách đơn BỊ TRẢ.
