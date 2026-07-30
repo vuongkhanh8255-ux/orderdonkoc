@@ -219,6 +219,35 @@ export default async function handler(req, res) {
     });
   }
 
+  // ── DÒ API TRẢ HÀNG SHOPEE (chỉ đọc) → ?return_test=1 ──
+  //    Mục tiêu: lấy LÝ DO TRẢ do sàn ghi nhận cho đơn Shopee (TikTok đã có, Shopee còn trống).
+  //    Thử vài đường dẫn/tham số vì Shopee đổi tên endpoint theo phiên bản.
+  if (url.searchParams.get('return_test') === '1') {
+    const shop = shops[0];
+    const token = await refreshIfNeeded(supabase, shop);
+    const now2 = Math.floor(Date.now() / 1000);
+    const thu = [
+      { ten: 'returns/get_return_list', path: '/api/v2/returns/get_return_list',
+        params: { page_no: 0, page_size: 20, create_time_from: now2 - 30 * 86400, create_time_to: now2 } },
+      { ten: 'returns/get_return_list (khong loc ngay)', path: '/api/v2/returns/get_return_list',
+        params: { page_no: 0, page_size: 20 } },
+      { ten: 'order/get_order_list TO_RETURN', path: '/api/v2/order/get_order_list',
+        params: { time_range_field: 'create_time', time_from: now2 - 30 * 86400, time_to: now2, page_size: 20, order_status: 'TO_RETURN' } },
+    ];
+    const ket_qua = [];
+    for (const t of thu) {
+      const r = await shopeeApi(partnerKey, 'GET', t.path, token.access_token, Number(shop.shop_id), t.params);
+      const ds = r?.response?.return || r?.response?.return_list || r?.response?.order_list || [];
+      ket_qua.push({
+        thu: t.ten, error: r?.error || null, message: (r?.message || '').slice(0, 140),
+        so_ban_ghi: Array.isArray(ds) ? ds.length : null,
+        cac_truong: Array.isArray(ds) && ds[0] ? Object.keys(ds[0]) : null,
+        vi_du: Array.isArray(ds) ? ds[0] || null : null,
+      });
+    }
+    return res.json({ ok: true, mode: 'return_test', gian: shop.shop_name, ket_qua });
+  }
+
   // ── ĐỒNG BỘ VOUCHER SHOP TẠO → bảng shopee_vouchers (Module 7 CSKH) ──
   //    ?sync_vouchers=1   (thêm &voucher_test=1 để chỉ soi thử, không ghi DB)
   if (url.searchParams.get('sync_vouchers') === '1' || url.searchParams.get('voucher_test') === '1') {
