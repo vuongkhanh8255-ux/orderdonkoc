@@ -1119,9 +1119,10 @@ async function handleAutoFlashSaleAll(supabase, reqUrl, req) {
   // Chạy TUẦN TỰ + ngân sách thời gian (né timeout 60s Vercel). FS idempotent (bỏ khung đã có FS)
   // → lần cron sau tự lấp tiếp shop bị "skip_het_gio". Trước đây chạy Promise.all tất cả shop → quá 60s → fail.
   const startTs = Date.now();
-  // 25s: cron-job.org cắt request ở ~30s → PHẢI trả về trước đó, nếu không nó báo "Failed (timeout)" dù Vercel
-  // vẫn chạy. FS idempotent nên shop bị "skip_het_gio" sẽ được lượt cron sau lấp tiếp. (Trần Vercel là 60s.)
-  const deadline = startTs + 25000;
+  // 20s: cron-job.org cắt request ở ~30s → PHẢI trả về trước đó. Chừa ~10s cho cái tạo-khung cuối còn dở
+  // (mỗi create+add có thể ~2-3s) + độ trễ mạng, để tổng luôn < 30s. FS idempotent nên khung chưa lấp kịp
+  // sẽ được lượt cron sau lấp tiếp (skip_het_gio). (Trần Vercel là 60s, nhưng cron-job.org mới là nút thắt.)
+  const deadline = startTs + 20000;
   const results = [];
   for (const [sid, tmps] of Object.entries(byShop)) {
     if (Date.now() > deadline) { results.push({ shopId: sid, status: 'skip_het_gio' }); continue; }
