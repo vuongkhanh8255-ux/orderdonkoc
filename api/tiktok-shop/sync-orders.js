@@ -226,6 +226,30 @@ export default async function handler(req, res) {
     // Chọn gian để dò: ưu tiên ?shop_id=..., không có thì lấy gian ỦY QUYỀN GẦN NHẤT
     // (quyền mới chỉ có hiệu lực với gian vừa ủy quyền lại — gian cũ vẫn bị 105005).
     const wantShop = (req.query?.shop_id || '').trim();
+    // ?app=reviews → dò bằng app "Customer Reviews": scope Return & Refund nằm ở APP ĐÓ, không phải
+    // app Managing Orders (Khánh phát hiện 30/7). Mỗi app có app_key/secret + BẢNG TOKEN riêng.
+    if ((req.query?.app || '') === 'reviews') {
+      const rKey = process.env.TIKTOK_REVIEWS_APP_KEY?.trim();
+      const rSecret = process.env.TIKTOK_REVIEWS_APP_SECRET?.trim();
+      if (!rKey || !rSecret) return res.status(500).json({ error: 'Thiếu TIKTOK_REVIEWS_APP_KEY/SECRET trên Vercel' });
+      const { data: rConns } = await supabase.from('tiktok_reviews_connections')
+        .select('access_token, shop_cipher, shop_id, seller_name, access_token_expires_at')
+        .not('access_token', 'is', null).not('shop_cipher', 'is', null);
+      const c = (wantShop && (rConns || []).find(x => String(x.shop_id) === wantShop))
+        || [...(rConns || [])].sort((a, b) => new Date(b.access_token_expires_at) - new Date(a.access_token_expires_at))[0];
+      if (!c) return res.status(200).json({ ok: false, error: 'App Customer Reviews chưa nối gian nào' });
+      const t0 = Math.floor(Date.now() / 1000);
+      const out = [];
+      for (const t of [
+        { ten: 'returns/search', path: '/return_refund/202309/returns/search' },
+        { ten: 'cancellations/search', path: '/return_refund/202309/cancellations/search' },
+      ]) {
+        const r = await searchReturns({ appKey: rKey, appSecret: rSecret, accessToken: c.access_token, shopCipher: c.shop_cipher, path: t.path, bodyObj: { create_time_ge: t0 - 30 * 86400, create_time_lt: t0 } });
+        const ds = r?.data?.return_orders || r?.data?.cancellations || r?.data?.returns || [];
+        out.push({ thu: t.ten, code: r?.code, message: r?.message, so_ban_ghi: Array.isArray(ds) ? ds.length : null, cac_truong: Array.isArray(ds) && ds[0] ? Object.keys(ds[0]) : null, vi_du: Array.isArray(ds) ? ds[0] || null : null });
+      }
+      return res.status(200).json({ ok: true, mode: 'return_test', app: 'Customer Reviews', gian_thu: c.seller_name, token_song: new Date(c.access_token_expires_at) > new Date(), ket_qua: out });
+    }
     const conn = (wantShop && connections.find(c => String(c.shop_id) === wantShop))
       || [...connections].sort((a, b) => new Date(b.access_token_expires_at) - new Date(a.access_token_expires_at))[0]
       || connections[0];
