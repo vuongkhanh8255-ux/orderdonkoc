@@ -256,11 +256,20 @@ export default async function handler(req, res) {
         for (let page = 0; page < 40; page++) {
           if (Date.now() > DEADLINE) { r.partial = true; break; }
           const body = { create_time_ge: t0, create_time_lt: t1 };
-          const resp = await searchReturns({
-            appKey: rKey, appSecret: rSecret, accessToken: c.access_token, shopCipher: c.shop_cipher,
-            path: '/return_refund/202309/returns/search', bodyObj: body, pageToken, pageSize: '50',
-          });
+          // TikTok bóp tốc độ (36009002 "Too many requests") → nghỉ rồi thử lại, đừng bỏ dở giữa chừng.
+          // Không có đoạn này thì mỗi đêm cron kéo thiếu mà không ai biết (đã dính 30/7: 3 gian bị cắt).
+          let resp = null;
+          for (let attempt = 0; attempt < 4; attempt++) {
+            resp = await searchReturns({
+              appKey: rKey, appSecret: rSecret, accessToken: c.access_token, shopCipher: c.shop_cipher,
+              path: '/return_refund/202309/returns/search', bodyObj: body, pageToken, pageSize: '50',
+            });
+            if (resp?.code !== 36009002) break;
+            r.bi_bop = (r.bi_bop || 0) + 1;
+            await new Promise(s => setTimeout(s, 1500 * (attempt + 1)));   // 1.5s → 3s → 4.5s
+          }
           if (resp?.code !== 0) { r.error = `code ${resp?.code}: ${resp?.message}`; break; }
+          await new Promise(s => setTimeout(s, 250));                       // giãn nhịp giữa các trang
           const items = resp?.data?.return_orders || [];
           r.lay_ve += items.length;
           if (items.length) {
