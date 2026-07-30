@@ -265,14 +265,14 @@ export default function ReturnsTab() {
             <th style={th}>KOC</th>
             <th style={{ ...th, minWidth: 220 }}>Sản phẩm</th>
             <th style={{ ...th, width: 150 }}>Phân loại SP</th>
-            <th style={{ ...th, width: 165 }}>Lý do</th>
+            <th style={{ ...th, width: 150 }}>Lý do (SÀN ghi)</th><th style={{ ...th, width: 165 }}>Lý do (CS gắn)</th>
             <th style={{ ...th, width: 175 }}>Trạng thái</th>
             <th style={{ ...th, width: 175 }}>Hoàn tiền 1 phần</th>
             <th style={{ ...th, width: 120 }}>Loại đơn</th>
           </tr></thead>
           <tbody>
-            {loadingCases ? <tr><td colSpan={10} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải...</td></tr>
-              : rows.length === 0 ? <tr><td colSpan={10} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>
+            {loadingCases ? <tr><td colSpan={11} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải...</td></tr>
+              : rows.length === 0 ? <tr><td colSpan={11} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>
                   Không có đơn nào khớp bộ lọc.
                   {/* Đơn nằm ở TAB KIA là ca hay làm CS tưởng "search không ra" — chỉ luôn chỗ có nó. */}
                   {search && (() => {
@@ -374,6 +374,13 @@ export default function ReturnsTab() {
                           </div>
                         );
                       })()}
+                    </td>
+                    {/* CS 29/7 xin: lý do SÀN ghi nhận để đối chiếu với lý do CS tự điền (đo tỉ lệ sàn) */}
+                    <td style={{ ...td, fontSize: '0.76rem', whiteSpace: 'normal', maxWidth: 160 }}>
+                      {r.platform_reason
+                        ? <span style={{ color: '#0369a1', fontWeight: 600 }}>{r.platform_reason}</span>
+                        : <span style={{ color: '#cbd5e1' }}>—</span>}
+                      {r.platform_refund > 0 && <div style={{ color: '#15803d', fontSize: '0.7rem', fontWeight: 700 }}>hoàn {fmtN(r.platform_refund)}đ</div>}
                     </td>
                     <td style={td}>
                       <select value={r.reason_category || ''} onChange={e => patch(r, { reason_category: e.target.value || null })}
