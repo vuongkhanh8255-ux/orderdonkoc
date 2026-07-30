@@ -12,7 +12,13 @@ import EvidenceUploader from './EvidenceUploader';
 import { SHOPS, shopKey, findShopByKey } from '../constants/shops';
 
 const ACCENT = '#ff6a2c';
-const REASONS = ['Sản phẩm lỗi', 'Hàng giao chậm', 'Hư hỏng vận chuyển', 'Khách không hài lòng', 'Hỗ trợ phí ship', 'Chương trình CSKH', 'Khác'];
+// 7 nhóm theo brief + 4 nhóm CS thực tế dùng nhiều (soi từ 4.811 voucher đã cấp trên sàn):
+// giao sai/nhầm, giao thiếu, lỗi hệ thống không hiện quà, hết hàng — gộp vào "Khác" thì mất
+// gần 50% dữ liệu phân tích nên tách riêng.
+const REASONS = ['Sản phẩm lỗi', 'Hàng giao chậm', 'Hư hỏng vận chuyển', 'Khách không hài lòng',
+  'Hỗ trợ phí ship', 'Chương trình CSKH',
+  'Giao sai / nhầm hàng', 'Giao thiếu hàng', 'Lỗi hệ thống / không hiện quà', 'Hết hàng',
+  'Khác'];
 const USE_STATUS = {
   unused:    { label: 'Chưa dùng', color: '#b45309', bg: '#fef3c7' },
   used:      { label: 'Đã dùng',   color: '#15803d', bg: '#dcfce7' },
@@ -236,13 +242,23 @@ export default function VoucherTab({ currentUser }) {
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState(null);
   const [csView, setCsView] = useState('list');            // list | report (brief mục 8)
+  const [importing, setImporting] = useState(false);
   const [periodMode, setPeriodMode] = useState('month');   // week | month | quarter
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('support_vouchers').select('*').order('issue_date', { ascending: false }).order('created_at', { ascending: false }).limit(2000);
-    if (error) alert('Lỗi tải: ' + error.message);
-    setRows(data || []); setLoading(false);
+    // ⚠️ Supabase CẮT CỤT 1000 dòng mỗi lượt dù .limit() để cao hơn. Sau khi nhập từ sàn bảng đã
+    // 4.800+ dòng → không phân trang thì KPI/báo cáo tính trên 1/5 dữ liệu mà không báo lỗi gì.
+    const all = [];
+    for (let pg = 0; pg < 30; pg++) {
+      const { data, error } = await supabase.from('support_vouchers').select('*')
+        .order('issue_date', { ascending: false }).order('created_at', { ascending: false })
+        .range(pg * 1000, pg * 1000 + 999);
+      if (error) { alert('Lỗi tải: ' + error.message); break; }
+      all.push(...(data || []));
+      if (!data || data.length < 1000) break;
+    }
+    setRows(all); setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -260,6 +276,15 @@ export default function VoucherTab({ currentUser }) {
     if (error) { alert('Lưu không được: ' + error.message); return; }
     setEditing(null); load();
   };
+  // Nhập voucher hỗ trợ đã cấp trên sàn về (chỉ lấy voucher phát hành ≤5 lượt = cấp riêng cho khách)
+  const runImport = async () => {
+    setImporting(true);
+    const { data: n, error } = await supabase.rpc('import_support_vouchers', { p_max_qty: 5 });
+    setImporting(false);
+    if (error) alert('Nhập không được: ' + error.message);
+    else { alert(n > 0 ? `✅ Đã nhập thêm ${n} voucher từ sàn` : 'Không có voucher mới — đã nhập đủ trước đó'); load(); }
+  };
+
   const del = async (r) => { if (!confirm(`Xoá voucher của "${r.customer_name || r.voucher_code}"?`)) return; await supabase.from('support_vouchers').delete().eq('id', r.id); load(); };
   const patch = async (r, p) => { setRows(prev => prev.map(x => x.id === r.id ? { ...x, ...p } : x)); await supabase.from('support_vouchers').update(p).eq('id', r.id); };
 
@@ -372,6 +397,12 @@ export default function VoucherTab({ currentUser }) {
         {mainTab === 'cs' && <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <select value={month} onChange={e => setMonth(e.target.value)} style={{ ...inputStyle, width: 'auto', cursor: 'pointer', fontWeight: 700 }}>{months.map(m => <option key={m} value={m}>{m === 'all' ? '📅 Tất cả' : `📅 ${m}`}</option>)}</select>
           <button onClick={exportXlsx} style={{ padding: '9px 16px', borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>📥 Xuất Excel</button>
+          {/* Voucher hỗ trợ CS ĐÃ được tạo sẵn trên Shopee, tên chứa "mã đơn - lý do - tiền - NV"
+              → nhập thẳng về, khỏi gõ tay lại hàng nghìn dòng. Chạy lại chỉ lấy voucher CHƯA có. */}
+          <button onClick={runImport} disabled={importing}
+            style={{ padding: '9px 16px', borderRadius: 9, border: '1.5px solid #bbf7d0', background: importing ? '#f1f5f9' : '#f0fdf4', color: '#15803d', fontWeight: 800, fontSize: 13, cursor: importing ? 'default' : 'pointer' }}>
+            {importing ? '⏳ Đang nhập...' : '⬇️ Nhập từ sàn'}
+          </button>
           <button onClick={() => setEditing({ ...EMPTY, staff: currentUser?.username || '' })} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>+ Cấp voucher</button>
         </div>}
       </div>
