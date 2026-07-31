@@ -244,6 +244,7 @@ export default function VoucherTab({ currentUser }) {
   const [csView, setCsView] = useState('list');            // list | report (brief mục 8)
   const [importing, setImporting] = useState(false);
   const [shopFilter, setShopFilter] = useState('all');     // lọc theo GIAN (CS 30/7)
+  const [sanFilter, setSanFilter] = useState('all');       // lọc theo SÀN (CS 31/7)
   const [periodMode, setPeriodMode] = useState('month');   // week | month | quarter
 
   const load = useCallback(async () => {
@@ -295,15 +296,27 @@ export default function VoucherTab({ currentUser }) {
     if (month !== 'all') { const d = (r.issue_date || '').slice(0, 10); if (!(d >= start && d < end)) return false; }
     if (statusF !== 'all' && r.use_status !== statusF) return false;
     if (reasonF !== 'all' && r.reason_category !== reasonF) return false;
+    if (sanFilter !== 'all' && (r.platform || 'shopee') !== sanFilter) return false;
     if (shopFilter !== 'all' && (r.shop_name || '(chưa rõ)') !== shopFilter) return false;
     if (search) { const q = search.toLowerCase(); if (![r.customer_name, r.voucher_code, r.order_sn, r.note].some(v => v && String(v).toLowerCase().includes(q))) return false; }
     return true;
-  }), [rows, month, statusF, reasonF, shopFilter, search, start, end]);
+  }), [rows, month, statusF, reasonF, shopFilter, sanFilter, search, start, end]);
 
-  // Danh sách gian có voucher (kèm số lượng) cho ô lọc
+  // Danh sách gian cho ô lọc — CHỈ hiện gian thuộc SÀN đang chọn (CS 31/7: lọc sàn TikTok
+  // không ra gì vì danh sách gian đang trộn cả 2 sàn).
   const shopList = useMemo(() => {
     const m = {};
-    rows.forEach(r => { const k = r.shop_name || '(chưa rõ)'; if (k !== '(chưa rõ)') m[k] = (m[k] || 0) + 1; });
+    rows.forEach(r => {
+      if (sanFilter !== 'all' && (r.platform || 'shopee') !== sanFilter) return;
+      const k = r.shop_name || '(chưa rõ)'; if (k !== '(chưa rõ)') m[k] = (m[k] || 0) + 1;
+    });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  }, [rows, sanFilter]);
+
+  // Danh sách lý do CÓ THẬT trong data (kèm số lượng) — CS 31/7 xin bộ lọc lý do
+  const reasonList = useMemo(() => {
+    const m = {};
+    rows.forEach(r => { const k = r.reason_category || 'Khác'; m[k] = (m[k] || 0) + 1; });
     return Object.entries(m).sort((a, b) => b[1] - a[1]);
   }, [rows]);
 
@@ -557,6 +570,13 @@ export default function VoucherTab({ currentUser }) {
       <div style={{ ...card, marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <input type="text" placeholder="🔍 Tìm khách, mã voucher, đơn..." value={search} onChange={e => setSearch(e.target.value)} style={{ ...inputStyle, width: 240 }} />
         <select value={statusF} onChange={e => setStatusF(e.target.value)} style={{ ...inputStyle, width: 'auto', cursor: 'pointer' }}><option value="all">Trạng thái: Tất cả</option>{Object.keys(USE_STATUS).map(s => <option key={s} value={s}>{USE_STATUS[s].label}</option>)}</select>
+        {/* CS 31/7: lọc SÀN riêng — đổi sàn thì danh sách gian bên cạnh tự lọc theo */}
+        <select value={sanFilter} onChange={e => { setSanFilter(e.target.value); setShopFilter('all'); }}
+          style={{ ...inputStyle, width: 'auto', cursor: 'pointer', fontWeight: 700, borderColor: sanFilter !== 'all' ? ACCENT : '#e5e7eb', color: sanFilter !== 'all' ? '#e85518' : '#1f2937' }}>
+          <option value="all">Sàn: Tất cả</option>
+          <option value="shopee">🟠 Shopee</option>
+          <option value="tiktok">⬛ TikTok</option>
+        </select>
         {/* CS 30/7 xin lọc theo tên sàn/gian */}
         <select value={shopFilter} onChange={e => setShopFilter(e.target.value)}
           style={{ ...inputStyle, width: 'auto', cursor: 'pointer', borderColor: shopFilter !== 'all' ? ACCENT : '#e5e7eb', color: shopFilter !== 'all' ? '#e85518' : '#1f2937', fontWeight: shopFilter !== 'all' ? 700 : 400 }}>
@@ -564,7 +584,12 @@ export default function VoucherTab({ currentUser }) {
           {shopList.map(([g, n]) => <option key={g} value={g}>{g} ({n})</option>)}
           <option value="(chưa rõ)">— Chưa rõ gian —</option>
         </select>
-        {reasonF !== 'all' && <button onClick={() => setReasonF('all')} style={{ padding: '6px 12px', borderRadius: 20, border: '1.5px solid #fed7aa', background: '#fff7ed', color: ACCENT, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{reasonF} ✕</button>}
+        {/* CS 31/7: bộ lọc LÝ DO TẠO VOUCHER (trước chỉ lọc được bằng cách bấm chip phía trên) */}
+        <select value={reasonF} onChange={e => setReasonF(e.target.value)}
+          style={{ ...inputStyle, width: 'auto', cursor: 'pointer', maxWidth: 260, borderColor: reasonF !== 'all' ? ACCENT : '#e5e7eb', color: reasonF !== 'all' ? '#e85518' : '#1f2937', fontWeight: reasonF !== 'all' ? 700 : 400 }}>
+          <option value="all">Lý do: Tất cả</option>
+          {reasonList.map(([ly, n]) => <option key={ly} value={ly}>{ly} ({n})</option>)}
+        </select>
         <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>{filtered.length} voucher</span>
       </div>
 
