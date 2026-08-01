@@ -7,11 +7,12 @@
 // Bảng: cs_cases (case_type='complaint'). Trả hàng tách sang Module 2 (ReturnsTab).
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
-import { SHOPS, shopKey, findShopByKey } from '../constants/shops';
-import { PRODUCT_CATEGORIES } from '../constants/productCategories';
+import { SHOPS, shopKey, findShopByKey, sanLabel } from '../constants/shops';
 import AddressPicker from './AddressPicker';
 import EvidenceUploader from './EvidenceUploader';
+import SearchableDropdown from './SearchableDropdown';
 
 const ACCENT = '#ff6a2c';
 const TABLE = 'cs_cases';
@@ -54,6 +55,23 @@ const daysAgoYmd = (n) => { const d = new Date(); d.setDate(d.getDate() - n); re
 const isImg = (u) => /\.(jpe?g|png|gif|webp|bmp|heic)(\?|$)/i.test(u);
 const isVid = (u) => /\.(mp4|mov|webm|avi|mkv)(\?|$)/i.test(u) || /(youtube|youtu\.be|tiktok\.com|drive\.google\.com\/file)/i.test(u);
 
+// ── ĐƠN GỬI BÙ (CS 30/7) ─────────────────────────────────────────────────────
+// Kho cần BARCODE + SỐ LƯỢNG tách bạch mới lên đơn được, nên giờ CS chọn SP từ danh mục
+// và lưu vào cột `compensation_json` = [{barcode, ten, sl}].
+// `compensation_items` (chữ) vẫn ghi bản tóm tắt để bảng danh sách + hồ sơ cũ không đổi gì.
+const compLines = (r) => {
+  const j = r?.compensation_json;
+  if (Array.isArray(j) && j.length) return j.map(x => ({ barcode: x.barcode || '', ten: x.ten || '', sl: Number(x.sl) || 1 }));
+  // Hồ sơ CŨ chỉ có chữ tay ("Gel nha đam 250ml x1") → vẫn xuất được, barcode để trống cho kho tra tay.
+  const txt = String(r?.compensation_items || '').trim();
+  if (!txt) return [];
+  return txt.split('|').map(s => s.trim()).filter(Boolean).map(s => {
+    const m = s.match(/^(.*?)\s*[x×]\s*(\d+)\s*$/i);
+    return m ? { barcode: '', ten: m[1].trim(), sl: Number(m[2]) || 1 } : { barcode: '', ten: s, sl: 1 };
+  });
+};
+const compText = (lines) => (lines || []).map(l => `${l.ten} x${l.sl}`).join(' | ');
+
 export default function ComplaintsTab({ currentUser }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -68,14 +86,33 @@ export default function ComplaintsTab({ currentUser }) {
   const [view, setView] = useState('list');    // list | library
   const [lightbox, setLightbox] = useState(null);
 
+  const [prods, setProds] = useState([]);      // danh mục SP (có barcode) để chọn đồ gửi bù
+
+  // Phân trang 1000 — Supabase cắt cụt 1000 dòng dù đặt .limit() cao hơn (bẫy đã dính ở Module 2).
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase.from(TABLE).select('*')
-      .eq('case_type', 'complaint').order('created_at', { ascending: false }).limit(2000);
-    if (error) alert('Lỗi tải: ' + error.message);
-    setRows(data || []); setLoading(false);
+    const all = [];
+    for (let pg = 0; pg < 10; pg++) {
+      const { data, error } = await supabase.from(TABLE).select('*')
+        .eq('case_type', 'complaint').order('created_at', { ascending: false })
+        .range(pg * 1000, pg * 1000 + 999);
+      if (error) { alert('Lỗi tải: ' + error.message); break; }
+      all.push(...(data || []));
+      if (!data || data.length < 1000) break;
+    }
+    setRows(all); setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // Danh mục SP dùng chung với Order (bảng sanphams) — lấy cả barcode để xuất cho kho
+  useEffect(() => {
+    supabase.from('sanphams').select('id, ten_sanpham, barcode').not('an', 'is', true)
+      .order('ten_sanpham').limit(1000)
+      .then(({ data }) => setProds(data || []), () => setProds([]));
+  }, []);
+  const prodOptions = useMemo(() => prods.map(p => ({
+    value: p.id, label: p.barcode ? `${p.ten_sanpham} · ${p.barcode}` : p.ten_sanpham,
+  })), [prods]);
 
   const save = async () => {
     const r = editing;
@@ -87,6 +124,7 @@ export default function ComplaintsTab({ currentUser }) {
       product_summary: r.product_summary || null, reason: r.reason || null, reason_category: r.reason_category || null,
       status: r.status || 'new', assigned_to: r.assigned_to || null, evidence_links: r.evidence_links || null,
       compensation_items: r.compensation_items || null, compensation_tracking: r.compensation_tracking || null,
+      compensation_json: (Array.isArray(r.compensation_json) && r.compensation_json.length) ? r.compensation_json : null,
       compensation_at: r.compensation_items ? (r.compensation_at || new Date().toISOString()) : null,
       note: r.note || null, updated_at: new Date().toISOString(),
       done_at: (r.status === 'done' || r.status === 'closed') ? new Date().toISOString() : null,
@@ -156,6 +194,30 @@ export default function ComplaintsTab({ currentUser }) {
 
   const openNew = () => setEditing({ ...EMPTY, assigned_to: currentUser?.name || currentUser?.username || '' });
 
+  // ── XUẤT EXCEL ĐƠN GỬI BÙ (CS 30/7) — file giao thẳng cho kho lên đơn ──
+  // Mỗi SP gửi bù 1 DÒNG (hồ sơ gửi bù 2 món → 2 dòng, thông tin khách lặp lại) để kho copy thẳng.
+  // Chỉ lấy hồ sơ CÓ đồ gửi bù, trong đúng bộ lọc đang xem.
+  const xuatExcel = () => {
+    const out = [];
+    filtered.forEach(r => compLines(r).forEach(l => out.push({
+      'BARCODE': l.barcode || '',
+      'TÊN SÀN': [sanLabel(r.platform), r.shop_name].filter(Boolean).join(' · '),
+      'SẢN PHẨM GỬI BÙ': l.ten,
+      'SỐ LƯỢNG': l.sl,
+      'TÊN KHÁCH HÀNG': r.buyer_name || '',
+      'SỐ ĐIỆN THOẠI KHÁCH HÀNG': r.buyer_phone || '',
+      'ĐỊA CHỈ KHÁCH HÀNG': r.buyer_address || '',
+    })));
+    if (!out.length) { alert('Không có hồ sơ nào có sản phẩm gửi bù trong bộ lọc đang xem.\nMở hồ sơ → mục "🎁 Đơn gửi bù" chọn sản phẩm rồi xuất lại.'); return; }
+    const thieuBarcode = out.filter(x => !x.BARCODE).length;
+    const ws = XLSX.utils.json_to_sheet(out);
+    ws['!cols'] = [{ wch: 16 }, { wch: 24 }, { wch: 44 }, { wch: 10 }, { wch: 22 }, { wch: 15 }, { wch: 50 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Don gui bu');
+    XLSX.writeFile(wb, `KhieuNai_GuiBu_${fromF}_${toF}.xlsx`);
+    if (thieuBarcode) alert(`✅ Đã xuất ${out.length} dòng.\n⚠️ ${thieuBarcode} dòng CHƯA CÓ BARCODE (hồ sơ cũ ghi tay) — mở hồ sơ chọn lại sản phẩm từ danh mục là có barcode.`);
+  };
+
   return (
     <div style={{ fontFamily: "'Outfit', sans-serif", maxWidth: 1400 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
@@ -163,7 +225,11 @@ export default function ComplaintsTab({ currentUser }) {
           <h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 900, color: '#0f172a' }}>⚠️ Module 3: Khiếu nại khách hàng</h1>
           <p style={{ margin: '4px 0 0', fontSize: 13, color: '#94a3b8' }}>CS lên đơn khiếu nại trên web — lưu hồ sơ, bằng chứng, đơn gửi bù &amp; vòng đời xử lý.</p>
         </div>
-        <button onClick={openNew} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer', boxShadow: '0 4px 12px rgba(255,106,44,0.25)' }}>+ Lên đơn khiếu nại</button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button onClick={xuatExcel} title="Xuất danh sách đồ gửi bù (barcode · số lượng · địa chỉ khách) để kho lên đơn"
+            style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: '#16a34a', color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>📥 Xuất Excel</button>
+          <button onClick={openNew} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer', boxShadow: '0 4px 12px rgba(255,106,44,0.25)' }}>+ Lên đơn khiếu nại</button>
+        </div>
       </div>
 
       {/* KPI theo brief */}
@@ -285,14 +351,16 @@ export default function ComplaintsTab({ currentUser }) {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr>
+              {/* CS 30/7: bỏ cột Sản phẩm, thay bằng MÃ VẬN ĐƠN + NHÂN VIÊN XỬ LÝ
+                  → theo dõi được ngay trên danh sách, khỏi bấm vào từng đơn. */}
               <th style={th}>Sàn</th><th style={th}>Mã đơn</th><th style={th}>Khách</th>
-              <th style={{ ...th, minWidth: 190 }}>Sản phẩm</th><th style={th}>Nguyên nhân</th>
+              <th style={th}>Mã vận đơn</th><th style={th}>NV xử lý</th><th style={th}>Nguyên nhân</th>
               <th style={th}>Gửi bù</th><th style={{ ...th, textAlign: 'center' }}>Ngày</th>
               <th style={{ ...th, textAlign: 'center' }}>Trạng thái</th><th style={{ ...th, textAlign: 'center', width: 210 }}>Hành động</th>
             </tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={9} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải...</td></tr>
-                : filtered.length === 0 ? <tr><td colSpan={9} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>Chưa có khiếu nại nào — bấm “+ Lên đơn khiếu nại”.</td></tr>
+              {loading ? <tr><td colSpan={10} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải...</td></tr>
+                : filtered.length === 0 ? <tr><td colSpan={10} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>Chưa có khiếu nại nào — bấm “+ Lên đơn khiếu nại”.</td></tr>
                   : filtered.map(r => {
                     const st = STATUS[r.status] || STATUS.new;
                     const over = !['done', 'closed'].includes(r.status) && daysSince(r.created_at) >= OVERDUE_DAYS;
@@ -303,7 +371,10 @@ export default function ComplaintsTab({ currentUser }) {
                         <td style={td}>{r.platform === 'shopee' ? '🟠' : r.platform === 'tiktok' ? '⬛' : '—'}</td>
                         <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.74rem' }}>{r.order_sn || '—'}</td>
                         <td style={{ ...td, fontWeight: 600 }}>{r.buyer_name || '—'}{r.buyer_phone && <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{r.buyer_phone}</div>}</td>
-                        <td style={{ ...td, whiteSpace: 'normal', maxWidth: 280 }}>{r.product_summary || '—'}</td>
+                        <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.74rem', color: r.compensation_tracking ? '#7c3aed' : '#cbd5e1' }}>
+                          {r.compensation_tracking || 'chưa có'}
+                        </td>
+                        <td style={{ ...td, fontSize: '0.78rem' }}>{r.assigned_to || <span style={{ color: '#cbd5e1' }}>chưa giao</span>}</td>
                         <td style={td}>{r.reason_category || <span style={{ color: '#cbd5e1' }}>chưa phân loại</span>}</td>
                         <td style={{ ...td, fontSize: '0.74rem' }}>{r.compensation_items ? <span style={{ color: '#7c3aed', fontWeight: 700 }}>🎁 {r.compensation_items}</span> : <span style={{ color: '#cbd5e1' }}>—</span>}</td>
                         <td style={{ ...td, textAlign: 'center', fontSize: '0.76rem', color: over ? '#dc2626' : '#64748b' }}>{fmtDate(r.created_at)}{over && <div style={{ fontSize: '0.66rem', fontWeight: 700 }}>{daysSince(r.created_at)}n</div>}</td>
@@ -347,23 +418,57 @@ export default function ComplaintsTab({ currentUser }) {
               <div><label style={labelStyle}>Người xử lý (CS)</label><input value={editing.assigned_to || ''} onChange={e => setEditing({ ...editing, assigned_to: e.target.value })} style={inputStyle} /></div>
               {/* CS 27/7: chọn dropdown thay vì gõ tay, dùng CHUNG list phân loại với Đánh giá sàn
                   → thống kê khiếu nại theo mùi/loại SP khớp được với bên đánh giá. */}
-              <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>Sản phẩm liên quan</label>
-                <select value={editing.product_summary || ''} onChange={e => setEditing({ ...editing, product_summary: e.target.value })} style={inputStyle}>
-                  <option value="">— chọn sản phẩm —</option>
-                  {PRODUCT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  {/* hồ sơ cũ gõ tay tên khác list → vẫn giữ nguyên, không bị mất khi mở lại */}
-                  {editing.product_summary && !PRODUCT_CATEGORIES.includes(editing.product_summary) &&
-                    <option value={editing.product_summary}>{editing.product_summary} (nhập cũ)</option>}
-                </select>
-              </div>
+              {/* Ô "Sản phẩm liên quan" ĐÃ BỎ theo CS 30/7 — khiếu nại bám theo ĐƠN, không theo SP.
+                  Dữ liệu cũ vẫn nằm trong cột product_summary, không xoá. */}
               <div><label style={labelStyle}>Phân loại nguyên nhân</label><select value={editing.reason_category || ''} onChange={e => setEditing({ ...editing, reason_category: e.target.value })} style={inputStyle}><option value="">— chọn —</option>{REASONS.map(x => <option key={x} value={x}>{x}</option>)}</select></div>
               <div><label style={labelStyle}>Trạng thái</label><select value={editing.status} onChange={e => setEditing({ ...editing, status: e.target.value })} style={inputStyle}>{FLOW.map(s => <option key={s} value={s}>{STATUS[s].label}</option>)}</select></div>
               <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>Nội dung khiếu nại</label><textarea value={editing.reason || ''} onChange={e => setEditing({ ...editing, reason: e.target.value })} style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }} placeholder="Khách phản ánh cụ thể điều gì..." /></div>
               <div style={{ gridColumn: 'span 2', borderTop: '1px dashed #e5e7eb', paddingTop: 12 }}>
                 <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#7c3aed', marginBottom: 8 }}>🎁 Đơn gửi bù (nếu có)</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div><label style={labelStyle}>Sản phẩm + số lượng gửi bù</label><input value={editing.compensation_items || ''} onChange={e => setEditing({ ...editing, compensation_items: e.target.value })} style={inputStyle} placeholder="VD: Gel nha đam 250ml x1" /></div>
-                  <div><label style={labelStyle}>Mã vận đơn gửi bù</label><input value={editing.compensation_tracking || ''} onChange={e => setEditing({ ...editing, compensation_tracking: e.target.value })} style={inputStyle} /></div>
+                  {/* CS 30/7: chọn SP từ DANH MỤC (có barcode) + số lượng riêng → nút "Xuất Excel" đưa
+                      thẳng cho kho lên đơn. Trước chỉ gõ chữ tự do nên kho phải tra barcode tay. */}
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={labelStyle}>🎁 Sản phẩm gửi bù (chọn từ danh mục — có barcode)</label>
+                    {(() => {
+                      const lines = Array.isArray(editing.compensation_json) ? editing.compensation_json : [];
+                      const setLines = (arr) => setEditing(p => ({ ...p, compensation_json: arr, compensation_items: compText(arr) || null }));
+                      const addProd = (id) => {
+                        const sp = prods.find(x => x.id === id);
+                        if (!sp) return;
+                        const i = lines.findIndex(l => l.barcode === sp.barcode && l.ten === sp.ten_sanpham);
+                        if (i >= 0) setLines(lines.map((l, j) => (j === i ? { ...l, sl: (Number(l.sl) || 1) + 1 } : l)));  // chọn lại = cộng thêm 1
+                        else setLines([...lines, { barcode: sp.barcode || '', ten: sp.ten_sanpham, sl: 1 }]);
+                      };
+                      return (
+                        <>
+                          {lines.map((l, i) => (
+                            <div key={`${l.barcode}-${i}`} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 9, padding: '6px 10px' }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#0f172a' }}>{l.ten}</div>
+                                <div style={{ fontSize: '0.68rem', fontFamily: 'monospace', color: l.barcode ? '#94a3b8' : '#dc2626' }}>{l.barcode || '⚠ chưa có barcode — chọn lại từ danh mục'}</div>
+                              </div>
+                              <input type="number" min={1} value={l.sl} title="Số lượng gửi bù"
+                                onChange={e => setLines(lines.map((x, j) => (j === i ? { ...x, sl: Math.max(1, Number(e.target.value) || 1) } : x)))}
+                                style={{ ...inputStyle, width: 66, textAlign: 'center', padding: '5px 6px' }} />
+                              <button onClick={() => setLines(lines.filter((_, j) => j !== i))} title="Bỏ sản phẩm này"
+                                style={{ border: 'none', background: 'transparent', color: '#dc2626', fontWeight: 800, fontSize: '1rem', cursor: 'pointer', padding: '0 4px' }}>✕</button>
+                            </div>
+                          ))}
+                          <SearchableDropdown options={prodOptions} value="" onChange={addProd}
+                            placeholder={lines.length ? '+ Thêm sản phẩm gửi bù nữa...' : '+ Chọn sản phẩm gửi bù...'} />
+                          {/* Hồ sơ CŨ ghi tay: giữ nguyên chữ, nhắc CS chọn lại để có barcode */}
+                          {!lines.length && editing.compensation_items && (
+                            <div style={{ marginTop: 6, fontSize: '0.75rem', color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '6px 10px' }}>
+                              Hồ sơ cũ ghi tay: <b>{editing.compensation_items}</b><br />
+                              Chọn lại sản phẩm ở ô trên để file Excel có barcode cho kho.
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                  <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>Mã vận đơn gửi bù</label><input value={editing.compensation_tracking || ''} onChange={e => setEditing({ ...editing, compensation_tracking: e.target.value })} style={inputStyle} /></div>
                   {/* CS 27/7: địa chỉ chọn dropdown giống Booking/Order (34 tỉnh + phường mới 2025) */}
                   <div style={{ gridColumn: 'span 2' }}>
                     <label style={labelStyle}>📍 Địa chỉ nhận hàng gửi bù</label>

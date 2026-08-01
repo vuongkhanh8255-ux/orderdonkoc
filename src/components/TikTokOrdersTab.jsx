@@ -210,15 +210,23 @@ const TikTokOrdersTab = () => {
         if (batch.length < BATCH) break;
       }
 
-      // Fetch recent orders WITH line_items cho top products (limit 3000)
-      let qItems = supabase.from('tiktok_shop_orders')
-        .select('line_items,order_status,total_amount')
-        .gte('create_time', fromTs)
-        .neq('order_status','CANCELLED')   // top products chỉ tính đơn thành công
-        .limit(3000)
-        .order('create_time', { ascending:false });
-      if (shopId) qItems = qItems.eq('shop_id', shopId);
-      const { data: itemOrders } = await qItems;
+      // Lấy đơn gần nhất KÈM line_items để xếp Top sản phẩm — mẫu 3000 đơn.
+      // ⚠️ .limit(3000) KHÔNG ăn: Supabase cắt cứng 1000 dòng/lượt → trước đây Top SP chỉ dựa
+      // trên 1000 đơn dù chú thích ghi 3000. Phải kéo 3 trang 1000.
+      const itemOrders = [];
+      for (let pg = 0; pg < 3; pg++) {
+        let qItems = supabase.from('tiktok_shop_orders')
+          .select('line_items,order_status,total_amount')
+          .gte('create_time', fromTs)
+          .neq('order_status','CANCELLED')   // top products chỉ tính đơn thành công
+          .order('create_time', { ascending:false })
+          .range(pg * 1000, pg * 1000 + 999);
+        if (shopId) qItems = qItems.eq('shop_id', shopId);
+        const { data: batch } = await qItems;
+        if (!batch || !batch.length) break;
+        itemOrders.push(...batch);
+        if (batch.length < 1000) break;
+      }
 
       if (!baseOrders.length) { setDashLoading(false); return; }
 

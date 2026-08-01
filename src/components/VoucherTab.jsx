@@ -8,9 +8,17 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
+import EvidenceUploader from './EvidenceUploader';
+import { SHOPS, shopKey, findShopByKey } from '../constants/shops';
 
 const ACCENT = '#ff6a2c';
-const REASONS = ['Sản phẩm lỗi', 'Hàng giao chậm', 'Hư hỏng vận chuyển', 'Khách không hài lòng', 'Hỗ trợ phí ship', 'Chương trình CSKH', 'Khác'];
+// 7 nhóm theo brief + 4 nhóm CS thực tế dùng nhiều (soi từ 4.811 voucher đã cấp trên sàn):
+// giao sai/nhầm, giao thiếu, lỗi hệ thống không hiện quà, hết hàng — gộp vào "Khác" thì mất
+// gần 50% dữ liệu phân tích nên tách riêng.
+const REASONS = ['Sản phẩm lỗi', 'Hàng giao chậm', 'Hư hỏng vận chuyển', 'Khách không hài lòng',
+  'Hỗ trợ phí ship', 'Chương trình CSKH',
+  'Giao sai / nhầm hàng', 'Giao thiếu hàng', 'Lỗi hệ thống / không hiện quà', 'Hết hàng',
+  'Khác'];
 const USE_STATUS = {
   unused:    { label: 'Chưa dùng', color: '#b45309', bg: '#fef3c7' },
   used:      { label: 'Đã dùng',   color: '#15803d', bg: '#dcfce7' },
@@ -28,7 +36,7 @@ const labelStyle = { fontSize: '0.72rem', fontWeight: 800, color: '#64748b', tex
 const th = { padding: '9px 10px', fontSize: '0.68rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.3px', textAlign: 'left', whiteSpace: 'nowrap', background: '#f8fafc', borderBottom: '2px solid #e5e7eb' };
 const td = { padding: '8px 10px', fontSize: '0.82rem', color: '#0f172a', whiteSpace: 'nowrap', borderTop: '1px solid #f1f5f9' };
 const card = { background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' };
-const EMPTY = { issue_date: todayYmd(), platform: 'shopee', order_sn: '', customer_name: '', reason_category: 'Sản phẩm lỗi', voucher_code: '', amount: 0, use_status: 'unused', staff: '', accountant_checked: false, expire_date: '', note: '' };
+const EMPTY = { issue_date: todayYmd(), platform: 'shopee', order_sn: '', customer_name: '', reason_category: 'Sản phẩm lỗi', voucher_code: '', amount: 0, use_status: 'unused', staff: '', accountant_checked: false, expire_date: '', note: '', evidence_links: '' };
 
 // ── VOUCHER SHOP TẠO (kéo từ sàn) ────────────────────────────────────────────
 // CS 29/7 cần cả 2 loại: voucher CS gửi khách (bảng support_vouchers, nhập tay — phần chính bên dưới)
@@ -40,22 +48,55 @@ function ShopVouchers() {
   const [msg, setMsg] = useState('');
   const [shopF, setShopF] = useState('all');
   const [stateF, setStateF] = useState('all');     // all | ongoing | upcoming | expired
-  const [ownerF, setOwnerF] = useState('shop');    // shop | shopee | all
+  const [ownerF, setOwnerF] = useState('shop');
+  const [sanF, setSanF] = useState('all');         // all | shopee | tiktok    // shop | shopee | all
   const [search, setSearch] = useState('');
 
+  // ⚠️ Supabase CẮT CỤT 1000 DÒNG mỗi lượt, kể cả khi ghi .limit(3000). Bảng đã 7.389 voucher
+  // ⇒ trước đây chỉ tải về 1.000, KPI (tổng voucher / lượt dùng / giá trị) tính trên 1/7 dữ liệu
+  // mà không báo lỗi gì. Phải kéo từng trang 1000 cho tới hết.
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('shopee_vouchers').select('*')
-      .order('end_time', { ascending: false }).limit(3000);
-    if (error) alert('Lỗi tải voucher sàn: ' + error.message);
-    setRows(data || []); setLoading(false);
+    const all = [];
+    for (let pg = 0; pg < 30; pg++) {                     // trần 30.000 voucher
+      const { data, error } = await supabase.from('shopee_vouchers').select('*')
+        .order('end_time', { ascending: false }).range(pg * 1000, pg * 1000 + 999);
+      if (error) { alert('Lỗi tải voucher sàn: ' + error.message); break; }
+      all.push(...(data || []));
+      if (!data || data.length < 1000) break;
+    }
+    // Voucher TikTok — đưa về CÙNG dạng field với Shopee để bảng/KPI dùng chung, khỏi viết 2 lần.
+    // LƯU Ý: API danh sách của TikTok KHÔNG trả số lượt ĐÃ DÙNG → current_usage = null (hiện '—').
+    const tt = [];
+    for (let pg = 0; pg < 30; pg++) {
+      const { data } = await supabase.from('tiktok_vouchers').select('*')
+        .order('claim_end', { ascending: false }).range(pg * 1000, pg * 1000 + 999);
+      tt.push(...(data || []));
+      if (!data || data.length < 1000) break;
+    }
+    const ttRows = tt.map(v => ({
+      san: 'tiktok', voucher_id: 'tt-' + v.coupon_id, shop_name: v.shop_name,
+      voucher_name: v.title, voucher_code: '',
+      start_time: v.claim_start, end_time: v.claim_end,
+      reward_type: v.discount_type === 'PERCENT_OFF' ? 2 : 1,
+      percentage: v.discount_percent, discount_amount: v.discount_amount,
+      max_price: null, min_basket_price: null,
+      usage_quantity: v.redemption_limit, current_usage: null,
+      is_admin: v.creation_source !== 'SELLER_CENTER',
+    }));
+    setRows([...all.map(v => ({ ...v, san: 'shopee' })), ...ttRows]);
+    setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
 
   const runSync = async () => {
     setSyncing(true); setMsg('⏳ Đang kéo voucher từ Shopee...');
     try {
-      const r = await fetch('/api/shopee/sync-orders?sync_vouchers=1').then(x => x.json());
+      const [rSp, rTt] = await Promise.all([
+        fetch('/api/shopee/sync-orders?sync_vouchers=1').then(x => x.json()).catch(() => ({})),
+        fetch('/api/tiktok-shop/sync-orders?sync_vouchers=1').then(x => x.json()).catch(() => ({})),
+      ]);
+      const r = { results: [...(rSp.results || []), ...(rTt.ket_qua || []).map(x => ({ luu: x.luu }))] };
       const tong = (r.results || []).reduce((s, x) => s + (x.luu || 0), 0);
       setMsg(`✅ Đã đồng bộ ${tong} voucher`); load();
     } catch (e) { setMsg('⚠️ ' + e.message); }
@@ -68,19 +109,20 @@ function ShopVouchers() {
   const shops = useMemo(() => [...new Set(rows.map(r => r.shop_name).filter(Boolean))].sort(), [rows]);
 
   const filtered = useMemo(() => rows.filter(v => {
+    if (sanF !== 'all' && v.san !== sanF) return false;
     if (ownerF === 'shop' && v.is_admin) return false;       // chỉ voucher SHOP tự tạo
     if (ownerF === 'shopee' && !v.is_admin) return false;
     if (shopF !== 'all' && v.shop_name !== shopF) return false;
     if (stateF !== 'all' && stateOf(v) !== stateF) return false;
     if (search) { const q = search.toLowerCase(); if (![v.voucher_name, v.voucher_code].some(x => x && x.toLowerCase().includes(q))) return false; }
     return true;
-  }), [rows, ownerF, shopF, stateF, search]);                // eslint-disable-line react-hooks/exhaustive-deps
+  }), [rows, sanF, ownerF, shopF, stateF, search]);                // eslint-disable-line react-hooks/exhaustive-deps
 
   const kpi = useMemo(() => ({
     tong: filtered.length,
     dangChay: filtered.filter(v => stateOf(v) === 'ongoing').length,
     luotDung: filtered.reduce((s, v) => s + (Number(v.current_usage) || 0), 0),
-    chuaDung: filtered.filter(v => !Number(v.current_usage)).length,
+    chuaDung: filtered.filter(v => v.current_usage != null && !Number(v.current_usage)).length,
   }), [filtered]);                                            // eslint-disable-line react-hooks/exhaustive-deps
 
   const mucGiam = (v) => (v.reward_type === 2
@@ -129,6 +171,9 @@ function ShopVouchers() {
 
       <div style={{ ...card, marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <input type="text" placeholder="🔍 Tìm tên / mã voucher..." value={search} onChange={e => setSearch(e.target.value)} style={{ ...inputStyle, width: 240 }} />
+        <select value={sanF} onChange={e => setSanF(e.target.value)} style={{ ...inputStyle, width: 'auto', cursor: 'pointer', fontWeight: 700 }}>
+          <option value="all">Sàn: Tất cả</option><option value="shopee">🟠 Shopee</option><option value="tiktok">⬛ TikTok</option>
+        </select>
         <select value={ownerF} onChange={e => setOwnerF(e.target.value)} style={{ ...inputStyle, width: 'auto', cursor: 'pointer', fontWeight: 700 }}>
           <option value="shop">🏪 Shop tự tạo</option>
           <option value="shopee">🟠 Shopee tạo</option>
@@ -158,13 +203,16 @@ function ShopVouchers() {
                 : filtered.length === 0 ? <tr><td colSpan={8} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>Chưa có voucher — bấm “🔄 Đồng bộ từ sàn” để kéo về.</td></tr>
                   : filtered.slice(0, 500).map(v => { const st = STATE_LBL[stateOf(v)]; const used = Number(v.current_usage) || 0; const total = Number(v.usage_quantity) || 0; return (
                     <tr key={v.voucher_id}>
-                      <td style={{ ...td, fontSize: '0.76rem' }}>🟠 {v.shop_name}</td>
+                      <td style={{ ...td, fontSize: '0.76rem' }}>{v.san === 'tiktok' ? '⬛' : '🟠'} {v.shop_name}</td>
                       <td style={{ ...td, fontWeight: 600, whiteSpace: 'normal', maxWidth: 240 }}>{v.voucher_name}</td>
                       <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.76rem' }}>{v.voucher_code || '—'}</td>
                       <td style={{ ...td, fontWeight: 700, color: '#0891b2' }}>{mucGiam(v)}</td>
                       <td style={td}>{v.min_basket_price ? fmtMoney(v.min_basket_price) + 'đ' : '—'}</td>
-                      <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: used ? '#15803d' : '#cbd5e1' }}>
-                        {fmtMoney(used)}{total ? <span style={{ color: '#94a3b8', fontWeight: 400 }}>/{fmtMoney(total)}</span> : null}
+                      <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: v.current_usage == null ? '#cbd5e1' : (used ? '#15803d' : '#dc2626') }}>
+                        {v.current_usage == null
+                          ? <span style={{ color: '#cbd5e1', fontWeight: 400 }} title="TikTok không trả số lượt đã dùng ở API danh sách">—</span>
+                          : fmtMoney(used)}
+                        {total ? <span style={{ color: '#94a3b8', fontWeight: 400 }}>/{fmtMoney(total)}</span> : null}
                       </td>
                       <td style={{ ...td, fontSize: '0.74rem', color: '#64748b' }}>
                         {v.start_time ? fmtDate(new Date(v.start_time * 1000).toISOString()) : '?'} → {v.end_time ? fmtDate(new Date(v.end_time * 1000).toISOString()) : '?'}
@@ -193,12 +241,26 @@ export default function VoucherTab({ currentUser }) {
   const [reasonF, setReasonF] = useState('all');
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState(null);
+  const [csView, setCsView] = useState('list');            // list | report (brief mục 8)
+  const [importing, setImporting] = useState(false);
+  const [shopFilter, setShopFilter] = useState('all');     // lọc theo GIAN (CS 30/7)
+  const [sanFilter, setSanFilter] = useState('all');       // lọc theo SÀN (CS 31/7)
+  const [periodMode, setPeriodMode] = useState('month');   // week | month | quarter
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('support_vouchers').select('*').order('issue_date', { ascending: false }).order('created_at', { ascending: false }).limit(2000);
-    if (error) alert('Lỗi tải: ' + error.message);
-    setRows(data || []); setLoading(false);
+    // ⚠️ Supabase CẮT CỤT 1000 dòng mỗi lượt dù .limit() để cao hơn. Sau khi nhập từ sàn bảng đã
+    // 4.800+ dòng → không phân trang thì KPI/báo cáo tính trên 1/5 dữ liệu mà không báo lỗi gì.
+    const all = [];
+    for (let pg = 0; pg < 30; pg++) {
+      const { data, error } = await supabase.from('support_vouchers').select('*')
+        .order('issue_date', { ascending: false }).order('created_at', { ascending: false })
+        .range(pg * 1000, pg * 1000 + 999);
+      if (error) { alert('Lỗi tải: ' + error.message); break; }
+      all.push(...(data || []));
+      if (!data || data.length < 1000) break;
+    }
+    setRows(all); setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -210,12 +272,21 @@ export default function VoucherTab({ currentUser }) {
       customer_name: r.customer_name || null, reason_category: r.reason_category || null, voucher_code: r.voucher_code || null,
       amount: num(r.amount), use_status: r.use_status || 'unused', staff: r.staff || (currentUser?.username || ''),
       accountant_checked: !!r.accountant_checked, expire_date: r.expire_date || null,
-      used_at: r.use_status === 'used' ? (r.used_at || todayYmd()) : null, note: r.note || null,
+      used_at: r.use_status === 'used' ? (r.used_at || todayYmd()) : null, note: r.note || null, evidence_links: r.evidence_links || null,
     };
     const { error } = r.id ? await supabase.from('support_vouchers').update(payload).eq('id', r.id) : await supabase.from('support_vouchers').insert(payload);
     if (error) { alert('Lưu không được: ' + error.message); return; }
     setEditing(null); load();
   };
+  // Nhập voucher hỗ trợ đã cấp trên sàn về (chỉ lấy voucher phát hành ≤5 lượt = cấp riêng cho khách)
+  const runImport = async () => {
+    setImporting(true);
+    const { data: n, error } = await supabase.rpc('import_support_vouchers', { p_max_qty: 5 });
+    setImporting(false);
+    if (error) alert('Nhập không được: ' + error.message);
+    else { alert(n > 0 ? `✅ Đã nhập thêm ${n} voucher từ sàn` : 'Không có voucher mới — đã nhập đủ trước đó'); load(); }
+  };
+
   const del = async (r) => { if (!confirm(`Xoá voucher của "${r.customer_name || r.voucher_code}"?`)) return; await supabase.from('support_vouchers').delete().eq('id', r.id); load(); };
   const patch = async (r, p) => { setRows(prev => prev.map(x => x.id === r.id ? { ...x, ...p } : x)); await supabase.from('support_vouchers').update(p).eq('id', r.id); };
 
@@ -225,9 +296,29 @@ export default function VoucherTab({ currentUser }) {
     if (month !== 'all') { const d = (r.issue_date || '').slice(0, 10); if (!(d >= start && d < end)) return false; }
     if (statusF !== 'all' && r.use_status !== statusF) return false;
     if (reasonF !== 'all' && r.reason_category !== reasonF) return false;
+    if (sanFilter !== 'all' && (r.platform || 'shopee') !== sanFilter) return false;
+    if (shopFilter !== 'all' && (r.shop_name || '(chưa rõ)') !== shopFilter) return false;
     if (search) { const q = search.toLowerCase(); if (![r.customer_name, r.voucher_code, r.order_sn, r.note].some(v => v && String(v).toLowerCase().includes(q))) return false; }
     return true;
-  }), [rows, month, statusF, reasonF, search, start, end]);
+  }), [rows, month, statusF, reasonF, shopFilter, sanFilter, search, start, end]);
+
+  // Danh sách gian cho ô lọc — CHỈ hiện gian thuộc SÀN đang chọn (CS 31/7: lọc sàn TikTok
+  // không ra gì vì danh sách gian đang trộn cả 2 sàn).
+  const shopList = useMemo(() => {
+    const m = {};
+    rows.forEach(r => {
+      if (sanFilter !== 'all' && (r.platform || 'shopee') !== sanFilter) return;
+      const k = r.shop_name || '(chưa rõ)'; if (k !== '(chưa rõ)') m[k] = (m[k] || 0) + 1;
+    });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  }, [rows, sanFilter]);
+
+  // Danh sách lý do CÓ THẬT trong data (kèm số lượng) — CS 31/7 xin bộ lọc lý do
+  const reasonList = useMemo(() => {
+    const m = {};
+    rows.forEach(r => { const k = r.reason_category || 'Khác'; m[k] = (m[k] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  }, [rows]);
 
   const kpi = useMemo(() => {
     let total = 0, used = 0, unused = 0, valTotal = 0, valUsed = 0, waitAcc = 0;
@@ -242,8 +333,81 @@ export default function VoucherTab({ currentUser }) {
 
   const months = useMemo(() => { const s = new Set(rows.map(r => (r.issue_date || '').slice(0, 7)).filter(Boolean)); s.add(curYm()); return ['all', ...Array.from(s).sort().reverse()]; }, [rows]);
 
+  // ══ BÁO CÁO & PHÂN TÍCH — brief mục 4 · 5 · 8 · 9 ═══════════════════════════
+  // Kỳ báo cáo TUẦN / THÁNG / QUÝ (brief mục 8). Trả về chuỗi so sánh được trực tiếp.
+  const periodKey = (ymd, mode) => {
+    if (!ymd) return '—';
+    const d = String(ymd).slice(0, 10);
+    if (mode === 'month') return d.slice(0, 7);
+    if (mode === 'quarter') { const [y, m] = d.split('-').map(Number); return `${y}-Q${Math.floor((m - 1) / 3) + 1}`; }
+    const dt = new Date(d + 'T00:00:00');
+    if (isNaN(dt)) return '—';
+    const t = new Date(dt); t.setDate(dt.getDate() + 4 - (dt.getDay() || 7));   // tuần ISO
+    const y0 = new Date(t.getFullYear(), 0, 1);
+    return `${t.getFullYear()}-T${String(Math.ceil(((t - y0) / 86400000 + 1) / 7)).padStart(2, '0')}`;
+  };
+
+  // Báo cáo tính trên TOÀN BỘ voucher (KHÔNG dính bộ lọc tháng của bảng danh sách) — có vậy mới
+  // so được kỳ này với kỳ trước.
+  const rpt = useMemo(() => {
+    const byPeriod = {}, byShop = {}, byReasonAll = {};
+    rows.forEach(r => {
+      const a = num(r.amount), used = r.use_status === 'used';
+      const pk = periodKey(r.issue_date, periodMode);
+      if (!byPeriod[pk]) byPeriod[pk] = { ky: pk, n: 0, val: 0, used: 0 };
+      byPeriod[pk].n++; byPeriod[pk].val += a; if (used) byPeriod[pk].used++;
+
+      const sk = r.shop_name || (r.platform === 'tiktok' ? 'TikTok (chưa rõ gian)' : 'Shopee (chưa rõ gian)');
+      if (!byShop[sk]) byShop[sk] = { gian: sk, n: 0, val: 0, used: 0 };
+      byShop[sk].n++; byShop[sk].val += a; if (used) byShop[sk].used++;
+
+      const rk = r.reason_category || 'Khác';
+      if (!byReasonAll[rk]) byReasonAll[rk] = { ly_do: rk, n: 0, val: 0, used: 0 };
+      byReasonAll[rk].n++; byReasonAll[rk].val += a; if (used) byReasonAll[rk].used++;
+    });
+    const tong = rows.length || 1;
+    return {
+      periods: Object.values(byPeriod).sort((a, b) => b.ky.localeCompare(a.ky)),
+      shops: Object.values(byShop).sort((a, b) => b.val - a.val),
+      reasons: Object.values(byReasonAll).map(x => ({ ...x, pct: x.n / tong * 100 })).sort((a, b) => b.n - a.n),
+      tong: rows.length,
+    };
+  }, [rows, periodMode]);                                    // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cảnh báo tự động (brief mục 9): so kỳ MỚI NHẤT với kỳ LIỀN TRƯỚC theo ngưỡng.
+  // Cố ý KHÔNG gắn mác "AI" — đây là đếm + so kỳ trước bằng luật, số liệu chính xác và giải thích được.
+  const canhBao = useMemo(() => {
+    const out = [];
+    const congNo = rows.filter(r => !r.accountant_checked).reduce((s, r) => s + num(r.amount), 0);
+    const ps = rpt.periods;
+    if (ps.length >= 2) {
+      const nay = ps[0], truoc = ps[1];
+      const tang = truoc.n ? ((nay.n - truoc.n) / truoc.n * 100) : 0;
+      if (truoc.n >= 3 && tang >= 30) out.push({ muc: 'do', chu: `Voucher hỗ trợ TĂNG ${tang.toFixed(0)}% so với kỳ trước (${nay.n} vs ${truoc.n})` });
+      if (truoc.n >= 3 && tang <= -30) out.push({ muc: 'xanh', chu: `Voucher hỗ trợ GIẢM ${Math.abs(tang).toFixed(0)}% so với kỳ trước — dấu hiệu tốt` });
+      const dem = (ky, ly) => rows.filter(r => periodKey(r.issue_date, periodMode) === ky && (r.reason_category || 'Khác') === ly).length;
+      rpt.reasons.forEach(x => {
+        const a = dem(nay.ky, x.ly_do), b = dem(truoc.ky, x.ly_do);
+        if (a >= 5 && b >= 1 && (a - b) / b >= 0.5) out.push({ muc: 'do', chu: `Voucher do "${x.ly_do}" tăng mạnh: ${b} → ${a} trong kỳ này` });
+      });
+    }
+    const top = rpt.shops[0];
+    if (top && rpt.shops.length > 1 && rpt.tong && top.n / rpt.tong >= 0.5)
+      out.push({ muc: 'vang', chu: `Gian "${top.gian}" chiếm ${(top.n / rpt.tong * 100).toFixed(0)}% tổng voucher — soi lại xem có bất thường không` });
+    if (congNo > 0) out.push({ muc: 'vang', chu: `Còn ${fmtMoney(congNo)}đ voucher CHƯA đối soát kế toán (công nợ voucher)` });
+    return out;
+  }, [rpt, rows, periodMode]);                               // eslint-disable-line react-hooks/exhaustive-deps
+
   const exportXlsx = () => {
-    const data = filtered.map((r, i) => ({ STT: i + 1, Ngày: fmtDate(r.issue_date), Sàn: r.platform, 'Mã đơn': r.order_sn, 'Khách': r.customer_name, 'Mã voucher': r.voucher_code, 'Số tiền': num(r.amount), 'Lý do': r.reason_category, 'Trạng thái': USE_STATUS[r.use_status]?.label, 'Đối soát KT': r.accountant_checked ? 'x' : '', 'NV': r.staff, 'Ghi chú': r.note }));
+    // Đủ trường brief mục 2 + gian (mục 8) + ảnh bằng chứng — kho & kế toán tra thẳng trên file này.
+    const data = filtered.map((r, i) => ({
+      STT: i + 1, 'Ngày tạo': fmtDate(r.issue_date), 'Sàn': r.platform, 'Gian hàng': r.shop_name || '',
+      'Mã đơn': r.order_sn, 'Khách hàng': r.customer_name, 'Mã voucher': r.voucher_code,
+      'Số tiền hỗ trợ': num(r.amount), 'Lý do tạo': r.reason_category,
+      'Trạng thái': USE_STATUS[r.use_status]?.label, 'Ngày dùng': fmtDate(r.used_at), 'Hạn dùng': fmtDate(r.expire_date),
+      'Đối soát KT': r.accountant_checked ? 'x' : '', 'Nhân viên tạo': r.staff,
+      'Ảnh bằng chứng': (r.evidence_links || '').split('\n').filter(Boolean).join(' , '), 'Ghi chú': r.note,
+    }));
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Voucher'); XLSX.writeFile(wb, `Voucher_${month}.xlsx`);
   };
 
@@ -255,6 +419,12 @@ export default function VoucherTab({ currentUser }) {
         {mainTab === 'cs' && <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <select value={month} onChange={e => setMonth(e.target.value)} style={{ ...inputStyle, width: 'auto', cursor: 'pointer', fontWeight: 700 }}>{months.map(m => <option key={m} value={m}>{m === 'all' ? '📅 Tất cả' : `📅 ${m}`}</option>)}</select>
           <button onClick={exportXlsx} style={{ padding: '9px 16px', borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>📥 Xuất Excel</button>
+          {/* Voucher hỗ trợ CS ĐÃ được tạo sẵn trên Shopee, tên chứa "mã đơn - lý do - tiền - NV"
+              → nhập thẳng về, khỏi gõ tay lại hàng nghìn dòng. Chạy lại chỉ lấy voucher CHƯA có. */}
+          <button onClick={runImport} disabled={importing}
+            style={{ padding: '9px 16px', borderRadius: 9, border: '1.5px solid #bbf7d0', background: importing ? '#f1f5f9' : '#f0fdf4', color: '#15803d', fontWeight: 800, fontSize: 13, cursor: importing ? 'default' : 'pointer' }}>
+            {importing ? '⏳ Đang nhập...' : '⬇️ Nhập từ sàn'}
+          </button>
           <button onClick={() => setEditing({ ...EMPTY, staff: currentUser?.username || '' })} style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>+ Cấp voucher</button>
         </div>}
       </div>
@@ -270,6 +440,105 @@ export default function VoucherTab({ currentUser }) {
       </div>
 
       {mainTab === 'shop' ? <ShopVouchers /> : <>
+
+      {/* Chuyển giữa Danh sách và Báo cáo (brief mục 8) */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: '#f8fafc', borderRadius: 10, padding: 3, width: 'fit-content' }}>
+        {[{ k: 'list', l: '📋 Danh sách voucher' }, { k: 'report', l: '📊 Báo cáo & Phân tích' }].map(t => (
+          <button key={t.k} onClick={() => setCsView(t.k)}
+            style={{ padding: '7px 16px', borderRadius: 8, border: 'none', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+              background: csView === t.k ? '#fff' : 'transparent', color: csView === t.k ? ACCENT : '#64748b',
+              boxShadow: csView === t.k ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>{t.l}</button>
+        ))}
+      </div>
+
+      {csView === 'report' ? (
+        <div style={{ display: 'grid', gap: 14 }}>
+          {/* ── Cảnh báo tự động (brief mục 9) ── */}
+          {canhBao.length > 0 && (
+            <div style={card}>
+              <div style={{ ...labelStyle, marginBottom: 10 }}>🔔 Cảnh báo tự động</div>
+              <div style={{ display: 'grid', gap: 7 }}>
+                {canhBao.map((c, i) => {
+                  const mau = c.muc === 'do' ? { bg: '#fef2f2', bd: '#fecaca', tx: '#b91c1c', ic: '⚠️' }
+                    : c.muc === 'xanh' ? { bg: '#f0fdf4', bd: '#bbf7d0', tx: '#15803d', ic: '✅' }
+                      : { bg: '#fffbeb', bd: '#fde68a', tx: '#92400e', ic: '📌' };
+                  return (
+                    <div key={i} style={{ background: mau.bg, border: `1px solid ${mau.bd}`, color: mau.tx, borderRadius: 9, padding: '9px 13px', fontSize: '0.85rem', fontWeight: 600 }}>
+                      {mau.ic} {c.chu}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Báo cáo theo THỜI GIAN: tuần / tháng / quý (brief mục 8) ── */}
+          <div style={card}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+              <div style={labelStyle}>📅 Báo cáo theo thời gian</div>
+              <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
+                {[{ k: 'week', l: 'Tuần' }, { k: 'month', l: 'Tháng' }, { k: 'quarter', l: 'Quý' }].map(m => (
+                  <button key={m.k} onClick={() => setPeriodMode(m.k)}
+                    style={{ padding: '5px 14px', borderRadius: 7, border: `1.5px solid ${periodMode === m.k ? ACCENT : '#e5e7eb'}`, background: periodMode === m.k ? '#fff7ed' : '#fff', color: periodMode === m.k ? ACCENT : '#64748b', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>{m.l}</button>
+                ))}
+              </div>
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead><tr><th style={th}>Kỳ</th><th style={{ ...th, textAlign: 'right' }}>Số voucher</th><th style={{ ...th, textAlign: 'right' }}>Giá trị</th><th style={{ ...th, textAlign: 'right' }}>Đã dùng</th><th style={{ ...th, textAlign: 'right' }}>Tỷ lệ dùng</th></tr></thead>
+              <tbody>
+                {rpt.periods.slice(0, 12).map(p => (
+                  <tr key={p.ky}>
+                    <td style={{ ...td, fontWeight: 700 }}>{p.ky}</td>
+                    <td style={{ ...td, textAlign: 'right' }}>{fmtMoney(p.n)}</td>
+                    <td style={{ ...td, textAlign: 'right', color: '#0891b2', fontWeight: 700 }}>{fmtMoney(p.val)}đ</td>
+                    <td style={{ ...td, textAlign: 'right' }}>{fmtMoney(p.used)}</td>
+                    <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: p.n && p.used / p.n >= 0.5 ? '#15803d' : '#b45309' }}>{p.n ? (p.used / p.n * 100).toFixed(0) : 0}%</td>
+                  </tr>
+                ))}
+                {rpt.periods.length === 0 && <tr><td colSpan={5} style={{ ...td, textAlign: 'center', color: '#94a3b8', padding: 30 }}>Chưa có voucher nào</td></tr>}
+              </tbody>
+            </table>
+          </div>
+
+          {/* ── Theo GIAN (brief mục 8) + tỷ lệ dùng theo sàn (brief mục 5) ── */}
+          <div style={card}>
+            <div style={{ ...labelStyle, marginBottom: 10 }}>🏪 Báo cáo theo gian hàng · tỷ lệ sử dụng từng gian</div>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead><tr><th style={th}>Gian</th><th style={{ ...th, textAlign: 'right' }}>Số voucher</th><th style={{ ...th, textAlign: 'right' }}>Giá trị hỗ trợ</th><th style={{ ...th, textAlign: 'right' }}>Tỷ lệ dùng</th></tr></thead>
+              <tbody>
+                {rpt.shops.map(sh => (
+                  <tr key={sh.gian}>
+                    <td style={{ ...td, fontWeight: 600 }}>{sh.gian}</td>
+                    <td style={{ ...td, textAlign: 'right' }}>{fmtMoney(sh.n)}</td>
+                    <td style={{ ...td, textAlign: 'right', color: '#0891b2', fontWeight: 700 }}>{fmtMoney(sh.val)}đ</td>
+                    <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: sh.n && sh.used / sh.n >= 0.5 ? '#15803d' : '#b45309' }}>{sh.n ? (sh.used / sh.n * 100).toFixed(0) : 0}%</td>
+                  </tr>
+                ))}
+                {rpt.shops.length === 0 && <tr><td colSpan={4} style={{ ...td, textAlign: 'center', color: '#94a3b8', padding: 30 }}>Chưa có data</td></tr>}
+              </tbody>
+            </table>
+          </div>
+
+          {/* ── Nguyên nhân: số lượng · TỶ LỆ % · giá trị (brief mục 4) ── */}
+          <div style={card}>
+            <div style={{ ...labelStyle, marginBottom: 10 }}>🎯 Thống kê lý do tạo voucher</div>
+            {rpt.reasons.map(x => (
+              <div key={x.ly_do} style={{ marginBottom: 9 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.84rem', marginBottom: 3 }}>
+                  <span style={{ flex: 1, fontWeight: 600 }}>{x.ly_do}</span>
+                  <span style={{ fontWeight: 900, color: ACCENT, minWidth: 46, textAlign: 'right' }}>{x.pct.toFixed(0)}%</span>
+                  <span style={{ color: '#64748b', minWidth: 54, textAlign: 'right' }}>{fmtMoney(x.n)} cái</span>
+                  <span style={{ color: '#0891b2', fontWeight: 700, minWidth: 96, textAlign: 'right' }}>{fmtMoney(x.val)}đ</span>
+                </div>
+                <div style={{ height: 7, background: '#f1f5f9', borderRadius: 5, overflow: 'hidden' }}>
+                  <div style={{ width: `${x.pct}%`, height: '100%', background: ACCENT, borderRadius: 5 }} />
+                </div>
+              </div>
+            ))}
+            {rpt.reasons.length === 0 && <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Chưa có data</div>}
+          </div>
+        </div>
+      ) : (<>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 16 }}>
         {[
@@ -301,7 +570,26 @@ export default function VoucherTab({ currentUser }) {
       <div style={{ ...card, marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <input type="text" placeholder="🔍 Tìm khách, mã voucher, đơn..." value={search} onChange={e => setSearch(e.target.value)} style={{ ...inputStyle, width: 240 }} />
         <select value={statusF} onChange={e => setStatusF(e.target.value)} style={{ ...inputStyle, width: 'auto', cursor: 'pointer' }}><option value="all">Trạng thái: Tất cả</option>{Object.keys(USE_STATUS).map(s => <option key={s} value={s}>{USE_STATUS[s].label}</option>)}</select>
-        {reasonF !== 'all' && <button onClick={() => setReasonF('all')} style={{ padding: '6px 12px', borderRadius: 20, border: '1.5px solid #fed7aa', background: '#fff7ed', color: ACCENT, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>{reasonF} ✕</button>}
+        {/* CS 31/7: lọc SÀN riêng — đổi sàn thì danh sách gian bên cạnh tự lọc theo */}
+        <select value={sanFilter} onChange={e => { setSanFilter(e.target.value); setShopFilter('all'); }}
+          style={{ ...inputStyle, width: 'auto', cursor: 'pointer', fontWeight: 700, borderColor: sanFilter !== 'all' ? ACCENT : '#e5e7eb', color: sanFilter !== 'all' ? '#e85518' : '#1f2937' }}>
+          <option value="all">Sàn: Tất cả</option>
+          <option value="shopee">🟠 Shopee</option>
+          <option value="tiktok">⬛ TikTok</option>
+        </select>
+        {/* CS 30/7 xin lọc theo tên sàn/gian */}
+        <select value={shopFilter} onChange={e => setShopFilter(e.target.value)}
+          style={{ ...inputStyle, width: 'auto', cursor: 'pointer', borderColor: shopFilter !== 'all' ? ACCENT : '#e5e7eb', color: shopFilter !== 'all' ? '#e85518' : '#1f2937', fontWeight: shopFilter !== 'all' ? 700 : 400 }}>
+          <option value="all">Gian: Tất cả</option>
+          {shopList.map(([g, n]) => <option key={g} value={g}>{g} ({n})</option>)}
+          <option value="(chưa rõ)">— Chưa rõ gian —</option>
+        </select>
+        {/* CS 31/7: bộ lọc LÝ DO TẠO VOUCHER (trước chỉ lọc được bằng cách bấm chip phía trên) */}
+        <select value={reasonF} onChange={e => setReasonF(e.target.value)}
+          style={{ ...inputStyle, width: 'auto', cursor: 'pointer', maxWidth: 260, borderColor: reasonF !== 'all' ? ACCENT : '#e5e7eb', color: reasonF !== 'all' ? '#e85518' : '#1f2937', fontWeight: reasonF !== 'all' ? 700 : 400 }}>
+          <option value="all">Lý do: Tất cả</option>
+          {reasonList.map(([ly, n]) => <option key={ly} value={ly}>{ly} ({n})</option>)}
+        </select>
         <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>{filtered.length} voucher</span>
       </div>
 
@@ -309,15 +597,18 @@ export default function VoucherTab({ currentUser }) {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr>
-              <th style={th}>Ngày</th><th style={th}>Khách</th><th style={th}>Mã voucher</th><th style={{ ...th, textAlign: 'right' }}>Số tiền</th>
+              <th style={th}>Ngày</th><th style={th}>Sàn · Gian</th><th style={th}>Khách</th><th style={th}>Mã voucher</th><th style={{ ...th, textAlign: 'right' }}>Số tiền</th>
               <th style={th}>Lý do</th><th style={{ ...th, textAlign: 'center' }}>Trạng thái</th><th style={{ ...th, textAlign: 'center' }}>Đối soát KT</th><th style={th}>NV</th><th style={{ ...th, textAlign: 'center', width: 150 }}>Hành động</th>
             </tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={9} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải...</td></tr>
-                : filtered.length === 0 ? <tr><td colSpan={9} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>Chưa có voucher — bấm "+ Cấp voucher"</td></tr>
+              {loading ? <tr><td colSpan={10} style={{ ...td, textAlign: "center", padding: 40, color: "#94a3b8" }}>⏳ Đang tải...</td></tr>
+                : filtered.length === 0 ? <tr><td colSpan={10} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>Chưa có voucher — bấm "+ Cấp voucher"</td></tr>
                 : filtered.map(r => { const st = USE_STATUS[r.use_status] || USE_STATUS.unused; return (
                   <tr key={r.id}>
                     <td style={td}>{fmtDate(r.issue_date)}</td>
+                    <td style={{ ...td, fontSize: '0.78rem' }}>
+                      {r.platform === 'tiktok' ? '⬛' : '🟠'} {r.shop_name || <span style={{ color: '#cbd5e1' }}>chưa rõ gian</span>}
+                    </td>
                     <td style={{ ...td, fontWeight: 600 }}>{r.customer_name || '—'}{r.order_sn && <div style={{ fontSize: '0.66rem', color: '#94a3b8', fontFamily: 'monospace' }}>{r.order_sn}</div>}</td>
                     <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.76rem' }}>{r.voucher_code || '—'}</td>
                     <td style={{ ...td, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(r.amount)}</td>
@@ -335,14 +626,26 @@ export default function VoucherTab({ currentUser }) {
           </table>
         </div>
       </div>
+      </>)}
 
+      {/* Form cấp voucher: nằm NGOÀI phần Danh sách/Báo cáo để mở được ở cả 2 chỗ.
+          Bấm nền KHÔNG đóng — tránh mất data đang nhập (bài học từ Khiếu nại / SP lỗi 27/7). */}
       {editing && (
-        <div onClick={() => setEditing(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', zIndex: 1000, overflowY: 'auto' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', zIndex: 1000, overflowY: 'auto' }}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 24, width: '100%', maxWidth: 600 }}>
             <h2 style={{ margin: '0 0 16px', fontSize: '1.1rem', fontWeight: 900 }}>{editing.id ? '✏️ Sửa voucher' : '🎫 Cấp voucher hỗ trợ'}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
               <div><label style={labelStyle}>Ngày cấp</label><input type="date" value={editing.issue_date || ''} onChange={e => setEditing({ ...editing, issue_date: e.target.value })} style={inputStyle} /></div>
-              <div><label style={labelStyle}>Sàn</label><select value={editing.platform || ''} onChange={e => setEditing({ ...editing, platform: e.target.value })} style={inputStyle}><option value="">—</option><option value="shopee">Shopee</option><option value="tiktok">TikTok</option></select></div>
+              {/* Brief mục 8 cần báo cáo theo TỪNG GIAN → chọn gian, sàn tự suy ra khỏi phải chọn 2 lần */}
+              <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>Sàn · Gian hàng</label>
+                <select value={editing.shop_name ? `${editing.platform}|${editing.shop_name}` : ''}
+                  onChange={e => { const sh = findShopByKey(e.target.value); setEditing({ ...editing, shop_name: sh ? sh.name : '', platform: sh ? sh.san : editing.platform }); }}
+                  style={inputStyle}>
+                  <option value="">— chọn gian —</option>
+                  <optgroup label="Shopee">{SHOPS.filter(s => s.san === 'shopee').map(s => <option key={shopKey(s)} value={shopKey(s)}>Shopee · {s.name}</option>)}</optgroup>
+                  <optgroup label="TikTok">{SHOPS.filter(s => s.san === 'tiktok').map(s => <option key={shopKey(s)} value={shopKey(s)}>TikTok · {s.name}</option>)}</optgroup>
+                </select>
+              </div>
               <div><label style={labelStyle}>Khách hàng</label><input value={editing.customer_name || ''} onChange={e => setEditing({ ...editing, customer_name: e.target.value })} style={inputStyle} /></div>
               <div><label style={labelStyle}>Mã đơn</label><input value={editing.order_sn || ''} onChange={e => setEditing({ ...editing, order_sn: e.target.value })} style={inputStyle} /></div>
               <div><label style={labelStyle}>Mã voucher</label><input value={editing.voucher_code || ''} onChange={e => setEditing({ ...editing, voucher_code: e.target.value })} style={inputStyle} /></div>
@@ -353,9 +656,14 @@ export default function VoucherTab({ currentUser }) {
               <div><label style={labelStyle}>Nhân viên cấp</label><select value={editing.staff || ''} onChange={e => setEditing({ ...editing, staff: e.target.value })} style={inputStyle}><option value="">— chọn —</option>{(nhanSus || []).map(n => <option key={n.id} value={n.ten_nhansu}>{n.ten_nhansu}</option>)}</select></div>
               <div style={{ gridColumn: 'span 2', display: 'flex', alignItems: 'center', gap: 8 }}><input type="checkbox" checked={!!editing.accountant_checked} onChange={e => setEditing({ ...editing, accountant_checked: e.target.checked })} style={{ width: 16, height: 16, cursor: 'pointer' }} /><label style={{ fontSize: '0.84rem', fontWeight: 600 }}>Đã đối soát kế toán</label></div>
               <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>Ghi chú</label><input value={editing.note || ''} onChange={e => setEditing({ ...editing, note: e.target.value })} style={inputStyle} /></div>
+              {/* Brief mục 2: voucher phải lưu HÌNH ẢNH BẰNG CHỨNG — up thẳng lên web, khỏi qua Drive */}
+              <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>📷 Hình ảnh bằng chứng</label>
+                <EvidenceUploader folder="voucher" value={editing.evidence_links || ''}
+                  onChange={v => setEditing(p => ({ ...p, evidence_links: v }))} />
+              </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
-              <button onClick={() => setEditing(null)} style={{ padding: '9px 20px', borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, cursor: 'pointer' }}>Huỷ</button>
+              <button onClick={() => { if (window.confirm('Huỷ thì mất phần đang nhập. Huỷ luôn?')) setEditing(null); }} style={{ padding: '9px 20px', borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, cursor: 'pointer' }}>Huỷ</button>
               <button onClick={save} style={{ padding: '9px 24px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontWeight: 800, cursor: 'pointer' }}>💾 Lưu</button>
             </div>
           </div>

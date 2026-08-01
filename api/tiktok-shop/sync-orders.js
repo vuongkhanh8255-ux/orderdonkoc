@@ -22,8 +22,10 @@ const toIso = (v) => {
 };
 
 // ── Auto-refresh access token using refresh_token ─────────────────────────────
-// Gọi API TikTok để lấy access_token mới, cập nhật vào Supabase
-const tryRefreshToken = async ({ appKey, appSecret, conn, supabase }) => {
+// Gọi API TikTok để lấy access_token mới, cập nhật vào Supabase.
+// `table`: mỗi APP có bảng token riêng (Managing Orders = tiktok_shop_connections,
+// Customer Reviews = tiktok_reviews_connections) — truyền đúng bảng kẻo ghi nhầm chỗ.
+const tryRefreshToken = async ({ appKey, appSecret, conn, supabase, table = 'tiktok_shop_connections' }) => {
   if (!conn.refresh_token) return false;
 
   try {
@@ -51,7 +53,7 @@ const tryRefreshToken = async ({ appKey, appSecret, conn, supabase }) => {
 
     // Cập nhật token mới vào Supabase
     const { error } = await supabase
-      .from('tiktok_shop_connections')
+      .from(table)
       .update({
         access_token:             d.access_token,
         refresh_token:            d.refresh_token            || conn.refresh_token,
@@ -135,6 +137,30 @@ const searchOrders = async ({ appKey, appSecret, accessToken, shopCipher, create
   try { return JSON.parse(text); } catch { return { _raw: text }; }
 };
 
+// ── DÒ API TRẢ HÀNG/HOÀN TIỀN — CHỈ ĐỌC, KHÔNG GHI DB ────────────────────────
+// Mục đích: xem app có quyền gọi không, và sàn có trả LÝ DO TRẢ HÀNG không
+// (CS xin từ lâu để đối chiếu với lý do CS tự điền). Dò xong mới quyết làm tiếp.
+const searchReturns = async ({ appKey, appSecret, accessToken, shopCipher, path, bodyObj, pageToken, pageSize }) => {
+  const ts = String(Math.floor(Date.now() / 1000));
+  const bodyStr = JSON.stringify(bodyObj || {});
+  const urlParams = { app_key: appKey, timestamp: ts, shop_cipher: shopCipher, page_size: pageSize || '10' };
+  if (pageToken) urlParams.page_token = pageToken;
+  const sign = buildSign(appSecret, path, urlParams, bodyStr);
+  const url = `${TIKTOK_BASE}${path}?${new URLSearchParams({ ...urlParams, sign })}`;
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), 20_000);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'x-tts-access-token': accessToken, 'content-type': 'application/json' },
+      body: bodyStr, signal: ctrl.signal,
+    });
+    clearTimeout(tid);
+    const text = await res.text();
+    try { return JSON.parse(text); } catch { return { _raw: text.slice(0, 300) }; }
+  } catch (e) { clearTimeout(tid); return { code: -1, message: String(e.message) }; }
+};
+
 // ── Normalize order for Supabase ──────────────────────────────────────────────
 const normalizeOrder = (order, conn) => {
   const items = order.line_items || [];
@@ -151,7 +177,11 @@ const normalizeOrder = (order, conn) => {
     line_items: items.map(item => ({
       item_id: item.item_id || item.id,
       sku_id: item.sku_id,
-      product_name: item.product_name || item.sku_name,
+      product_name: item.product_name || '',
+      // TÊN PHÂN LOẠI khách đặt (mùi/dung tích) — GIỮ RIÊNG, đừng gộp vào product_name.
+      // Trước gộp `product_name || sku_name` nên tên SP luôn thắng, mùi không bao giờ hiện ra
+      // → Module 2 không biết khách chọn mùi nào (CS phản ánh 28/7). Dò vài tên field theo phiên bản API.
+      sku_name: item.sku_name || item.sku_title || item.seller_sku || '',
       quantity: item.quantity || 1,
       sale_price: item.sale_price || item.original_price,
       currency: item.currency,
@@ -194,6 +224,226 @@ export default async function handler(req, res) {
   }
 
   // ?full=true → bỏ qua incremental, kéo toàn bộ 60 ngày
+  // ?voucher_test=1 → DÒ API khuyến mãi/voucher TikTok (chỉ đọc). Thử CẢ 2 app vì mỗi app có
+  //   scope riêng — bài học từ vụ Return&Refund (scope nằm ở app Customer Reviews chứ không phải Orders).
+  if (req.query?.voucher_test === '1') {
+    const apps = [
+      { ten: 'Managing Orders', key: process.env.TIKTOK_SHOP_APP_KEY?.trim(), secret: process.env.TIKTOK_SHOP_APP_SECRET?.trim(), bang: 'tiktok_shop_connections' },
+      { ten: 'Customer Reviews', key: process.env.TIKTOK_REVIEWS_APP_KEY?.trim(), secret: process.env.TIKTOK_REVIEWS_APP_SECRET?.trim(), bang: 'tiktok_reviews_connections' },
+    ].filter(a => a.key && a.secret);
+    const paths = [
+      { ten: 'coupons/search',    path: '/promotion/202406/coupons/search' },
+      { ten: 'activities/search', path: '/promotion/202309/activities/search' },
+    ];
+    const ket_qua = [];
+    for (const a of apps) {
+      const { data: cs } = await supabase.from(a.bang)
+        .select('access_token, shop_cipher, shop_id, seller_name, access_token_expires_at')
+        .not('access_token', 'is', null).not('shop_cipher', 'is', null);
+      const c = [...(cs || [])].sort((x, y) => new Date(y.access_token_expires_at) - new Date(x.access_token_expires_at))[0];
+      if (!c) { ket_qua.push({ app: a.ten, loi: 'chưa nối gian nào' }); continue; }
+      for (const p of paths) {
+        const r = await searchReturns({ appKey: a.key, appSecret: a.secret, accessToken: c.access_token, shopCipher: c.shop_cipher, path: p.path, bodyObj: {}, pageSize: '10' });
+        const ds = r?.data?.coupons || r?.data?.activities || [];
+        ket_qua.push({
+          app: a.ten, gian: c.seller_name, thu: p.ten, code: r?.code, message: (r?.message || '').slice(0, 120),
+          so_ban_ghi: Array.isArray(ds) ? ds.length : null,
+          cac_truong: Array.isArray(ds) && ds[0] ? Object.keys(ds[0]) : null,
+          vi_du: Array.isArray(ds) ? ds[0] || null : null,
+        });
+      }
+    }
+    return res.status(200).json({ ok: true, mode: 'voucher_test', ket_qua });
+  }
+
+  // ?sync_vouchers=1 → KÉO VOUCHER SHOP TẠO trên TikTok về bảng tiktok_vouchers (Module 7, brief mục 3).
+  if (req.query?.sync_vouchers === '1') {
+    const aKey = process.env.TIKTOK_SHOP_APP_KEY?.trim();
+    const aSecret = process.env.TIKTOK_SHOP_APP_SECRET?.trim();
+    if (!aKey || !aSecret) return res.status(500).json({ error: 'Thiếu TIKTOK_SHOP_APP_KEY/SECRET' });
+    const onlyShop = (req.query?.shop_id || '').trim();
+    const list = connections.filter(c => !onlyShop || String(c.shop_id) === onlyShop);
+    const DEADLINE = Date.now() + 240_000;
+    const out = [];
+    for (const c of list) {
+      const r = { gian: c.seller_name, lay_ve: 0, luu: 0, bi_bop: 0, error: null, partial: false };
+      try {
+        let pageToken = '';
+        for (let page = 0; page < 40; page++) {
+          if (Date.now() > DEADLINE) { r.partial = true; break; }
+          let resp = null;
+          for (let attempt = 0; attempt < 4; attempt++) {     // chịu được TikTok bóp tốc độ
+            resp = await searchReturns({ appKey: aKey, appSecret: aSecret, accessToken: c.access_token, shopCipher: c.shop_cipher, path: '/promotion/202406/coupons/search', bodyObj: {}, pageToken, pageSize: '50' });
+            if (resp?.code !== 36009002) break;
+            r.bi_bop++;
+            await new Promise(s => setTimeout(s, 1500 * (attempt + 1)));
+          }
+          if (resp?.code !== 0) { r.error = `code ${resp?.code}: ${resp?.message}`; break; }
+          const items = resp?.data?.coupons || [];
+          r.lay_ve += items.length;
+          if (items.length) {
+            const rows = items.map(v => ({
+              coupon_id: String(v.id), shop_id: String(c.shop_id), shop_name: c.seller_name,
+              title: v.title || '', status: v.status || null,
+              discount_type: v.discount?.type || null,
+              discount_amount: Number(v.discount?.reduction_amount?.amount) || null,
+              discount_percent: Number(v.discount?.percentage) || null,
+              product_scope: v.product_scope || null, target_buyer: v.target_buyer_segment || null,
+              creation_source: v.creation_source || null,
+              claim_start: v.claim_duration?.start_time || null, claim_end: v.claim_duration?.end_time || null,
+              redemption_limit: v.usage_limits?.redemption_limit ?? null,
+              per_buyer_limit: v.usage_limits?.single_buyer_claim_limit ?? null,
+              create_time: v.create_time ? Math.floor(Number(v.create_time) / 1000) : null,
+              raw: v, synced_at: new Date().toISOString(),
+            }));
+            for (let i = 0; i < rows.length; i += 200) {
+              const { error } = await supabase.from('tiktok_vouchers').upsert(rows.slice(i, i + 200), { onConflict: 'coupon_id' });
+              if (!error) r.luu += rows.slice(i, i + 200).length;
+            }
+          }
+          pageToken = resp?.data?.next_page_token || '';
+          if (!pageToken || items.length === 0) break;
+          await new Promise(s => setTimeout(s, 250));
+        }
+      } catch (e) { r.error = e.message; }
+      out.push(r);
+    }
+    return res.status(200).json({ ok: true, mode: 'sync_vouchers', ket_qua: out });
+  }
+
+  // ?sync_returns=1 → KÉO ĐƠN TRẢ HÀNG TikTok về bảng tiktok_returns.
+  //   Dùng app CUSTOMER REVIEWS (scope Return & Refund nằm ở app đó) → bảng tiktok_reviews_connections.
+  //   Nhẹ hơn kéo toàn bộ đơn ~30-50 lần vì sàn đưa thẳng danh sách đơn BỊ TRẢ.
+  //   &days=N (mặc định 60) · &shop_id=... (chỉ 1 gian)
+  if (req.query?.sync_returns === '1') {
+    const rKey = process.env.TIKTOK_REVIEWS_APP_KEY?.trim();
+    const rSecret = process.env.TIKTOK_REVIEWS_APP_SECRET?.trim();
+    if (!rKey || !rSecret) return res.status(500).json({ error: 'Thiếu TIKTOK_REVIEWS_APP_KEY/SECRET trên Vercel' });
+    const days = Math.min(Number(req.query?.days) || 60, 180);
+    const onlyShop = (req.query?.shop_id || '').trim();
+    const { data: rConns } = await supabase.from('tiktok_reviews_connections')
+      .select('access_token, refresh_token, shop_cipher, shop_id, seller_name, access_token_expires_at')
+      .not('access_token', 'is', null).not('shop_cipher', 'is', null);
+    const list = (rConns || []).filter(c => !onlyShop || String(c.shop_id) === onlyShop);
+    const t1 = Math.floor(Date.now() / 1000);
+    const t0 = t1 - days * 86400;
+    const DEADLINE = Date.now() + 240_000;         // chừa thời gian trả JSON, khỏi timeout
+    const out = [];
+    for (const c of list) {
+      const r = { gian: c.seller_name, lay_ve: 0, luu: 0, error: null, partial: false };
+      // Token hết hạn thì TỰ XIN TOKEN MỚI bằng refresh_token (hạn tới 2125) — trước đây bỏ luôn gian đó,
+      // Healmi im lặng không có đơn trả nào suốt từ 17/6 mà không ai biết (CS phát hiện 30/7).
+      if (new Date(c.access_token_expires_at) <= new Date()) {
+        const ok = await tryRefreshToken({ appKey: rKey, appSecret: rSecret, conn: c, supabase, table: 'tiktok_reviews_connections' });
+        if (!ok) { r.error = 'token het han + xin moi khong duoc - can uy quyen lai gian nay'; out.push(r); continue; }
+        r.token_da_lam_moi = true;
+      }
+      try {
+        let pageToken = '';
+        for (let page = 0; page < 40; page++) {
+          if (Date.now() > DEADLINE) { r.partial = true; break; }
+          const body = { create_time_ge: t0, create_time_lt: t1 };
+          // TikTok bóp tốc độ (36009002 "Too many requests") → nghỉ rồi thử lại, đừng bỏ dở giữa chừng.
+          // Không có đoạn này thì mỗi đêm cron kéo thiếu mà không ai biết (đã dính 30/7: 3 gian bị cắt).
+          let resp = null;
+          for (let attempt = 0; attempt < 4; attempt++) {
+            resp = await searchReturns({
+              appKey: rKey, appSecret: rSecret, accessToken: c.access_token, shopCipher: c.shop_cipher,
+              path: '/return_refund/202309/returns/search', bodyObj: body, pageToken, pageSize: '50',
+            });
+            if (resp?.code !== 36009002) break;
+            r.bi_bop = (r.bi_bop || 0) + 1;
+            await new Promise(s => setTimeout(s, 1500 * (attempt + 1)));   // 1.5s → 3s → 4.5s
+          }
+          if (resp?.code !== 0) { r.error = `code ${resp?.code}: ${resp?.message}`; break; }
+          await new Promise(s => setTimeout(s, 250));                       // giãn nhịp giữa các trang
+          const items = resp?.data?.return_orders || [];
+          r.lay_ve += items.length;
+          if (items.length) {
+            const rows = items.map(x => {
+              const li = x.return_line_items || [];
+              return {
+                return_id: String(x.return_id), order_id: String(x.order_id || ''),
+                shop_id: String(c.shop_id), shop_name: c.seller_name,
+                return_type: x.return_type || null, return_status: x.return_status || null,
+                return_reason: x.return_reason || null, return_reason_text: x.return_reason_text || null,
+                arbitration_status: x.arbitration_status || null,
+                refund_total: Number(x.refund_amount?.refund_total) || 0,
+                currency: x.refund_amount?.currency || 'VND',
+                product_names: [...new Set(li.map(i => i.product_name).filter(Boolean))].join(' | ').slice(0, 500),
+                sku_names: [...new Set(li.map(i => i.sku_name).filter(Boolean))].join(' | ').slice(0, 300),
+                qty: li.length,
+                create_time: Number(x.create_time) || null, update_time: Number(x.update_time) || null,
+                raw: x, synced_at: new Date().toISOString(),
+              };
+            });
+            for (let i = 0; i < rows.length; i += 200) {
+              const { error } = await supabase.from('tiktok_returns').upsert(rows.slice(i, i + 200), { onConflict: 'return_id' });
+              if (!error) r.luu += rows.slice(i, i + 200).length;
+            }
+          }
+          pageToken = resp?.data?.next_page_token || '';
+          if (!pageToken || items.length === 0) break;
+        }
+      } catch (e) { r.error = e.message; }
+      out.push(r);
+    }
+    return res.status(200).json({ ok: true, mode: 'sync_returns', so_ngay: days, ket_qua: out });
+  }
+
+  // ?return_test=1 → DÒ API trả hàng/hoàn tiền (chỉ đọc, KHÔNG ghi DB). Xem có quyền + có LÝ DO TRẢ không.
+  if (req.query?.return_test === '1') {
+    // Chọn gian để dò: ưu tiên ?shop_id=..., không có thì lấy gian ỦY QUYỀN GẦN NHẤT
+    // (quyền mới chỉ có hiệu lực với gian vừa ủy quyền lại — gian cũ vẫn bị 105005).
+    const wantShop = (req.query?.shop_id || '').trim();
+    // ?app=reviews → dò bằng app "Customer Reviews": scope Return & Refund nằm ở APP ĐÓ, không phải
+    // app Managing Orders (Khánh phát hiện 30/7). Mỗi app có app_key/secret + BẢNG TOKEN riêng.
+    if ((req.query?.app || '') === 'reviews') {
+      const rKey = process.env.TIKTOK_REVIEWS_APP_KEY?.trim();
+      const rSecret = process.env.TIKTOK_REVIEWS_APP_SECRET?.trim();
+      if (!rKey || !rSecret) return res.status(500).json({ error: 'Thiếu TIKTOK_REVIEWS_APP_KEY/SECRET trên Vercel' });
+      const { data: rConns } = await supabase.from('tiktok_reviews_connections')
+        .select('access_token, shop_cipher, shop_id, seller_name, access_token_expires_at')
+        .not('access_token', 'is', null).not('shop_cipher', 'is', null);
+      const c = (wantShop && (rConns || []).find(x => String(x.shop_id) === wantShop))
+        || [...(rConns || [])].sort((a, b) => new Date(b.access_token_expires_at) - new Date(a.access_token_expires_at))[0];
+      if (!c) return res.status(200).json({ ok: false, error: 'App Customer Reviews chưa nối gian nào' });
+      const t0 = Math.floor(Date.now() / 1000);
+      const out = [];
+      for (const t of [
+        { ten: 'returns/search', path: '/return_refund/202309/returns/search' },
+        { ten: 'cancellations/search', path: '/return_refund/202309/cancellations/search' },
+      ]) {
+        const r = await searchReturns({ appKey: rKey, appSecret: rSecret, accessToken: c.access_token, shopCipher: c.shop_cipher, path: t.path, bodyObj: { create_time_ge: t0 - 30 * 86400, create_time_lt: t0 } });
+        const ds = r?.data?.return_orders || r?.data?.cancellations || r?.data?.returns || [];
+        out.push({ thu: t.ten, code: r?.code, message: r?.message, so_ban_ghi: Array.isArray(ds) ? ds.length : null, cac_truong: Array.isArray(ds) && ds[0] ? Object.keys(ds[0]) : null, vi_du: Array.isArray(ds) ? ds[0] || null : null });
+      }
+      return res.status(200).json({ ok: true, mode: 'return_test', app: 'Customer Reviews', gian_thu: c.seller_name, token_song: new Date(c.access_token_expires_at) > new Date(), ket_qua: out });
+    }
+    const conn = (wantShop && connections.find(c => String(c.shop_id) === wantShop))
+      || [...connections].sort((a, b) => new Date(b.access_token_expires_at) - new Date(a.access_token_expires_at))[0]
+      || connections[0];
+    const now = Math.floor(Date.now() / 1000);
+    const ge = now - 30 * 86400;
+    const thu = [
+      { ten: 'returns/search 202309', path: '/return_refund/202309/returns/search', body: { create_time_ge: ge, create_time_lt: now } },
+      { ten: 'returns/search 202502', path: '/return_refund/202502/returns/search', body: { create_time_ge: ge, create_time_lt: now } },
+      { ten: 'cancellations/search',   path: '/return_refund/202309/cancellations/search', body: { create_time_ge: ge, create_time_lt: now } },
+    ];
+    const ket_qua = [];
+    for (const t of thu) {
+      const r = await searchReturns({ appKey, appSecret, accessToken: conn.access_token, shopCipher: conn.shop_cipher, path: t.path, bodyObj: t.body });
+      const ds = r?.data?.return_orders || r?.data?.cancellations || r?.data?.returns || [];
+      ket_qua.push({
+        thu: t.ten, code: r?.code, message: r?.message,
+        so_ban_ghi: Array.isArray(ds) ? ds.length : null,
+        cac_truong: Array.isArray(ds) && ds[0] ? Object.keys(ds[0]) : null,
+        vi_du: Array.isArray(ds) ? ds[0] || null : null,
+      });
+    }
+    return res.status(200).json({ ok: true, mode: 'return_test', gian_thu: conn.seller_name, ket_qua });
+  }
+
   const forceFullSync = req.query?.full === 'true' || req.body?.full === true;
 
   // Direct window params: from_ts / to_ts / shop_id (per-shop per-window từ frontend)

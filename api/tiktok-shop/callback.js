@@ -109,9 +109,12 @@ export default async function handler(req, res) {
   const authorize = reqUrl.searchParams.get('authorize');
   if (authorize) {
     const AUTH_APPS = {
-      orders:    { env: 'TIKTOK_SHOP_SERVICE_ID',      known: '',              label: 'TikTok Shop — Đơn hàng' },
+      // App "Managing Orders" dùng CHÍNH ID dài của app làm service_id (khác app Analytics dùng
+      // chuỗi ngắn) — lấy từ Partner Center → Manage apps → Authorization, Khánh xác nhận 29/7.
+      orders:    { env: 'TIKTOK_SHOP_SERVICE_ID',      known: '7638466613974796048', label: 'TikTok Shop — Đơn hàng' },
       analytics: { env: 'TIKTOK_ANALYTICS_SERVICE_ID', known: '6k2of554me0j9', label: 'TikTok Shop — Analytics' },
-      reviews:   { env: 'TIKTOK_REVIEWS_SERVICE_ID',   known: '',              label: 'TikTok Shop — Đánh giá' },
+      // App "Customer Reviews" — chứa scope Return & Refund (Khánh xác nhận 30/7)
+      reviews:   { env: 'TIKTOK_REVIEWS_SERVICE_ID',   known: '7641963005262022417', label: 'TikTok Shop — Đánh giá / CSKH' },
       creator:   { env: 'TIKTOK_CREATOR_SERVICE_ID',   known: '',              label: 'TikTok Shop — Creator' },
     };
     const type = authorize === '1' ? 'orders' : authorize;

@@ -806,7 +806,9 @@ async function handleAddItems(supabase, shopId, body) {
 }
 
 /** 6. List existing Flash Sales — PHÂN TRANG lấy HẾT (không còn cứng 50) */
-async function handleList(supabase, shopId) {
+// type: 0 = tất cả (mặc định, UI cần xem cả khung đã kết thúc); 1 = SẮP DIỄN RA (auto-FS chỉ cần cái này).
+// Auto-FS dùng type=1 để KHÔNG kéo cả nghìn khung đã kết thúc (mỗi shop ~1030 khung cũ) → nhanh + không phí công xoá rác cũ.
+async function handleList(supabase, shopId, type = 0) {
   const creds = await getCredentials(supabase, shopId, 'marketing');
   const all = [];
   let offset = 0; const limit = 100; let total = Infinity;
@@ -815,7 +817,7 @@ async function handleList(supabase, shopId) {
       creds.partnerKey, creds.partnerId,
       '/api/v2/shop_flash_sale/get_shop_flash_sale_list',
       creds.accessToken, creds.shopId,
-      { type: 0, offset, limit },
+      { type, offset, limit },
     );
     if (result.error === 'error_not_found' || result.error === 'error_param'
         || result.error === 'shop_flash_sale_param_error') {
@@ -1002,7 +1004,7 @@ async function runAutoFsForShop(supabase, shopId, templates, maxItems, dryRun, m
 
   let used = new Set();
   try {
-    const lr = await handleList(supabase, shopId);
+    const lr = await handleList(supabase, shopId, 1); // CHỈ khung SẮP DIỄN RA — bỏ qua khung đã kết thúc
     const ld = lr.data;
     const fsList = Array.isArray(ld) ? ld : (ld?.flash_sale_list || ld?.flash_sale || []);
     // Gom FS đang có THEO KHUNG GIỜ (start_time) để phát hiện & DỌN TRÙNG (nhiều FS cùng 1 khung).
@@ -1117,7 +1119,10 @@ async function handleAutoFlashSaleAll(supabase, reqUrl, req) {
   // Chạy TUẦN TỰ + ngân sách thời gian (né timeout 60s Vercel). FS idempotent (bỏ khung đã có FS)
   // → lần cron sau tự lấp tiếp shop bị "skip_het_gio". Trước đây chạy Promise.all tất cả shop → quá 60s → fail.
   const startTs = Date.now();
-  const deadline = startTs + 40000; // 40s: chừa ~20s cho 1 shop đang chạy dở + call cuối (fetch timeout 8s) < trần 60s
+  // 20s: cron-job.org cắt request ở ~30s → PHẢI trả về trước đó. Chừa ~10s cho cái tạo-khung cuối còn dở
+  // (mỗi create+add có thể ~2-3s) + độ trễ mạng, để tổng luôn < 30s. FS idempotent nên khung chưa lấp kịp
+  // sẽ được lượt cron sau lấp tiếp (skip_het_gio). (Trần Vercel là 60s, nhưng cron-job.org mới là nút thắt.)
+  const deadline = startTs + 20000;
   const results = [];
   for (const [sid, tmps] of Object.entries(byShop)) {
     if (Date.now() > deadline) { results.push({ shopId: sid, status: 'skip_het_gio' }); continue; }
