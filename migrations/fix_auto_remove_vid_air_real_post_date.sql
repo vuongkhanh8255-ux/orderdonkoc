@@ -1,0 +1,28 @@
+-- FIX auto-gỡ tag bỏ sót KOC quá hạn (case @thanhshop0509, 1/8/2026).
+--
+-- Triệu chứng: thẻ cảnh báo báo "141/127 ngày kể từ air gần nhất — đề xuất gỡ" (air thật 13/03)
+-- nhưng cron auto_remove_overdue_assignments KHÔNG bao giờ gỡ.
+--
+-- Nguyên nhân: CTE vid_air (nguồn air suy từ đơn affiliate) lấy min(order_date) của video làm
+-- "ngày air". Video CŨ (đăng 28/01-13/03) đến tháng 6-7 mới có người mua qua link → bị coi là
+-- "mới air 15/07" → last_air thổi phồng → days_over luôn < limit → giữ tag vĩnh viễn.
+-- Đối chứng: 5 content_id của thanhshop0509 có đơn đầu 25/06-15/07 nhưng post_date thật 28/01-13/03.
+--
+-- Sửa: vid_air ưu tiên ngày ĐĂNG THẬT (join tiktok_shop_videos.post_date), CHỈ fallback
+-- min(order_date) khi video chưa được cào (video mới air, sync chưa tới — mục đích gốc của nguồn này).
+-- Mọi phần khác giữ nguyên bản live 27/7 (ân hạn pending_remove_at 3 ngày, cờ app_flags, giới hạn
+-- limit_days = greatest(45, (ngày gắn tag - air cuối) + 10)...).
+--
+-- Sau fix: dry-run 104 KOC quá hạn (trước 60) — 44 KOC từng được "cứu sống" bởi ngày air giả.
+-- Đã áp bản LIVE qua MCP apply_migration (fix_auto_remove_vid_air_real_post_date_full).
+-- File này lưu vết thay đổi so với backup_rpc_defs_27-07-2026.sql — xem bản áp thật ở đó + diff vid_air:
+--
+--   vid_air as (
+--     select o.shop_id, lower(regexp_replace(o.creator_username,'^@','')) uname, o.content_id vid,
+--            coalesce(max(v.post_date), min(o.order_date)::date) post_d   -- << FIX (trước: min(o.order_date))
+--       from tiktok_affiliate_orders o
+--       left join tiktok_shop_videos v on v.id = o.content_id             -- << FIX (join mới)
+--      where o.content_type='VIDEO' and coalesce(o.content_id,'')<>''
+--        and o.shop_id in (select shop_id from sc)
+--        and lower(regexp_replace(o.creator_username,'^@','')) in (select u from un)
+--      group by o.shop_id, lower(regexp_replace(o.creator_username,'^@','')), o.content_id),
