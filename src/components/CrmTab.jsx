@@ -237,7 +237,8 @@ const CrmTab = ({ currentUser } = {}) => {
   const [fDateFrom, setFDateFrom] = useState('');
   const [fDateTo,   setFDateTo]   = useState('');
   const [fProvince, setFProvince] = useState('');
-  const [fCustType, setFCustType] = useState('');
+  const [fCustType, setFCustType] = useState('');   // Dashboard: phân loại KH (Mới/Mua lại/VIP)
+  const [fProduct,  setFProduct]  = useState('');   // Dashboard: phân loại sản phẩm
   const [fPerson,   setFPerson]   = useState('');
   const [fBizType,  setFBizType]  = useState('');
   const [fSearch,   setFSearch]   = useState('');
@@ -498,6 +499,29 @@ const CrmTab = ({ currentUser } = {}) => {
     return [...provinceOptions, ...PROVINCES.filter(p => !seen.has(p))];
   }, [provinceOptions]);
 
+  /* ── Bộ lọc "Phân loại sản phẩm" (brief M1) — options lấy từ đơn thật ── */
+  const productOptions = useMemo(() => {
+    const s = new Set();
+    orders.forEach(o => {
+      (Array.isArray(o.products) ? o.products : []).forEach(p => { if (p?.name) s.add(String(p.name).trim()); });
+      if (o.product_name) s.add(String(o.product_name).trim());
+    });
+    return [...s].filter(Boolean).sort();
+  }, [orders]);
+  // SĐT của nhóm KH đang lọc (Mới/Mua lại/VIP) → dùng chung cho KPI, biểu đồ ngày và Top SP
+  // để mọi con số trên Dashboard cùng theo 1 bộ lọc (tránh KPI 1 đơn mà Top SP vẫn 5 sản phẩm).
+  const custTypePhones = useMemo(() => {
+    if (!fCustType) return null;
+    return new Set(enriched.filter(c => c.briefTag === fCustType).map(c => c.phone).filter(Boolean));
+  }, [enriched, fCustType]);
+
+  const orderHasProduct = useCallback((o, name) => {
+    if (!name) return true;
+    const ps = Array.isArray(o.products) ? o.products : [];
+    if (ps.some(p => String(p?.name || '').trim() === name)) return true;
+    return String(o.product_name || '').trim() === name;
+  }, []);
+
   const filteredOrders = useMemo(() => {
     return orders.filter(o => {
       const d = o.order_date || o.created_at?.slice(0,10) || '';
@@ -539,17 +563,21 @@ const CrmTab = ({ currentUser } = {}) => {
     orders.forEach(o => {
       if (fPerson && o.sales_person !== fPerson) return;
       if (fBizType && (custBizByPhone.get(o.recipient_phone) || '') !== fBizType) return;
+      if (fProduct && !orderHasProduct(o, fProduct)) return;
+      if (custTypePhones && !custTypePhones.has(o.recipient_phone)) return;
       if (Number(o.total_amount||0) <= 0) return;
       const d = o.order_date || o.created_at?.slice(0,10) || '';
       if (!d || d < curStart || d > curEnd) return;
-      if (!map[d]) map[d] = { date: d, rev: 0, count: 0 };
+      if (!map[d]) map[d] = { date: d, rev: 0, count: 0, qty: 0 };
       map[d].rev += Number(o.total_amount||0);
       map[d].count += 1;
+      // Sản phẩm bán ra trong ngày (brief: tooltip hiện 3 dòng doanh thu/số đơn/SP bán ra)
+      (Array.isArray(o.products) ? o.products : []).forEach(p => { map[d].qty += Number(p?.quantity || 0); });
     });
     let arr = Object.values(map).sort((a,b) => a.date.localeCompare(b.date));
     if (!hasDate && arr.length > 45) arr = arr.slice(-45); // không lọc ngày → 45 ngày gần nhất cho dễ đọc
     return arr;
-  }, [orders, fPerson, fBizType, fDateFrom, fDateTo, custBizByPhone]);
+  }, [orders, fPerson, fBizType, fProduct, fDateFrom, fDateTo, custBizByPhone, orderHasProduct, custTypePhones]);
 
   // Nhiều Zalo OA: gom theo oa_name, lấy bản ghi mới nhất mỗi OA (zaloOA đã sort report_date desc)
   const zaloOAList = useMemo(() => {
@@ -587,11 +615,16 @@ const CrmTab = ({ currentUser } = {}) => {
       if (fProvince && c.province !== fProvince) return false;
       if (fBizType  && c.business_type !== fBizType) return false;
       if (fPerson   && c.sales_person !== fPerson) return false;
+      if (fCustType && c.briefTag !== fCustType) return false;   // phân loại KH: Mới / Mua lại / VIP
       return true;
     });
     // Apply non-date filters to orders
+    // Lọc "phân loại KH" áp cho cả đơn: chỉ giữ đơn của nhóm KH đang chọn (khớp theo SĐT)
+    const phoneSet = fCustType ? new Set(fc.map(c => c.phone).filter(Boolean)) : null;
     const fo = orders.filter(o => {
       if (fPerson && o.sales_person !== fPerson) return false;
+      if (phoneSet && !phoneSet.has(o.recipient_phone)) return false;
+      if (fProduct && !orderHasProduct(o, fProduct)) return false;   // phân loại sản phẩm
       return true;
     });
 
@@ -659,7 +692,7 @@ const CrmTab = ({ currentUser } = {}) => {
       { label:'KH Mới',                value: fmtNum(newCustCur),       raw: newCustCur,       trend: 0 },
       { label:'Đã liên hệ',            value: fmtNum(contactedCust),    raw: contactedCust,    trend: 0, hint:`Tỷ lệ chốt đơn/đã LH: ${convRate.toFixed(1)}%` },
     ];
-  }, [enriched, orders, fDateFrom, fDateTo, fProvince, fBizType, fPerson]);
+  }, [enriched, orders, fDateFrom, fDateTo, fProvince, fBizType, fPerson, fCustType, fProduct, orderHasProduct]);
 
   /* ── Top sản phẩm bán chạy (brief Module 1) ──────────────────────── */
   // Nguồn: products (json, có số lượng) → fallback product_name (chỉ đếm đơn + doanh thu).
@@ -670,6 +703,8 @@ const CrmTab = ({ currentUser } = {}) => {
     let hasQty = false;
     orders.forEach(o => {
       if (fPerson && o.sales_person !== fPerson) return;
+      if (fProduct && !orderHasProduct(o, fProduct)) return;
+      if (custTypePhones && !custTypePhones.has(o.recipient_phone)) return;
       if (Number(o.total_amount||0) <= 0) return;
       const d = o.order_date || o.created_at?.slice(0,10) || '';
       if (d < curStart || d > curEnd) return;
@@ -691,7 +726,7 @@ const CrmTab = ({ currentUser } = {}) => {
     const list = Object.values(map).sort((a,b) => b.rev - a.rev);
     const totalRev = list.reduce((s,x) => s + x.rev, 0) || 1;
     return { list: list.slice(0,10).map(x => ({ ...x, pct: Math.round(x.rev/totalRev*100) })), hasQty, count: list.length };
-  }, [orders, fDateFrom, fDateTo, fPerson]);
+  }, [orders, fDateFrom, fDateTo, fPerson, fProduct, orderHasProduct, custTypePhones]);
 
   /* ── Chart: customer growth (last 6 months) ─────────────────────────── */
   const growthChart = useMemo(() => {
@@ -941,7 +976,7 @@ const CrmTab = ({ currentUser } = {}) => {
   const resetFilters = () => {
     setFDateFrom(''); setFDateTo(''); setFProvince('');
     setFCustType(''); setFPerson(''); setFSearch(''); setFBizType('');
-    setFContact('');
+    setFContact(''); setFProduct('');
   };
 
   // Preset nhanh cho khoảng ngày (Hôm qua / 7 ngày / 30 ngày)
@@ -1076,6 +1111,21 @@ const CrmTab = ({ currentUser } = {}) => {
         style={{ ...S.select, width:160, padding:'7px 10px' }}>
         <option value=''>Loại hình KD</option>
         {BUSINESS_TYPES.map(b=><option key={b} value={b}>{b}</option>)}
+      </select>
+
+      {/* Phân loại khách hàng (brief M1) */}
+      <select value={fCustType} onChange={e=>setFCustType(e.target.value)}
+        style={{ ...S.select, width:155, padding:'7px 10px' }}>
+        <option value=''>Phân loại KH</option>
+        {['Mới','Mua lại','VIP'].map(t=><option key={t} value={t}>{t}</option>)}
+      </select>
+
+      {/* Phân loại sản phẩm (brief M1) */}
+      <select value={fProduct} onChange={e=>setFProduct(e.target.value)}
+        title={productOptions.length ? '' : 'Đơn chưa có dữ liệu sản phẩm'}
+        style={{ ...S.select, width:170, padding:'7px 10px' }}>
+        <option value=''>{productOptions.length ? 'Phân loại SP' : 'Phân loại SP (chưa có)'}</option>
+        {productOptions.map(p=><option key={p} value={p}>{p}</option>)}
       </select>
 
       <select value={fPerson} onChange={e=>setFPerson(e.target.value)}
@@ -1276,9 +1326,14 @@ const CrmTab = ({ currentUser } = {}) => {
                   <YAxis yAxisId='rev' tick={{ fontSize:11, fill:'#94a3b8' }} axisLine={false} tickLine={false}
                     tickFormatter={v => v>=1e6 ? (v/1e6).toFixed(0)+'tr' : (v/1e3).toFixed(0)+'k'}/>
                   <YAxis yAxisId='cnt' orientation='right' tick={{ fontSize:11, fill:'#94a3b8' }} axisLine={false} tickLine={false} allowDecimals={false}/>
+                  {/* Tooltip theo brief: ngày · doanh thu · số đơn · sản phẩm bán ra */}
                   <Tooltip
-                    labelFormatter={d => `Ngày ${d.slice(8)}/${d.slice(5,7)}/${d.slice(0,4)}`}
-                    formatter={(value, name) => name==='Doanh thu' ? [fmtMoney(value)+'đ', name] : [`${value} đơn`, name]}
+                    labelFormatter={d => `${d.slice(8)}/${d.slice(5,7)}/${d.slice(0,4)}`}
+                    formatter={(value, name, item) => {
+                      if (name === 'Doanh thu') return [fmtMoney(value)+'đ', 'Doanh thu'];
+                      const qty = item?.payload?.qty || 0;
+                      return [`${value} đơn${qty > 0 ? ` · ${fmtNum(qty)} sản phẩm` : ''}`, 'Số đơn'];
+                    }}
                     contentStyle={{ borderRadius:10, border:'1px solid #e5e7eb', boxShadow:'0 4px 12px rgba(0,0,0,0.08)' }}/>
                   <Line yAxisId='rev' type='monotone' dataKey='rev' name='Doanh thu' stroke='#ff6a2c' strokeWidth={2.5} dot={{ r:3, fill:'#ff6a2c' }} activeDot={{ r:6 }}/>
                   <Line yAxisId='cnt' type='monotone' dataKey='count' name='Số đơn' stroke='#2563eb' strokeWidth={2} dot={{ r:2, fill:'#2563eb' }} strokeDasharray='5 5'/>
