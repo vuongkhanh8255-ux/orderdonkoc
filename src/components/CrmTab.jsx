@@ -6,6 +6,8 @@ import {
   ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
+import CrmPricingTab from './CrmPricingTab';   // Module 4: chính sách giá + material
+import CrmCareTab from './CrmCareTab';         // Module 5: quy trình chăm sóc
 
 /* ── Bulk Excel import: parse a (messy) exported sheet → customer rows ──────────
    Tìm dòng tiêu đề (chứa SĐT/TÊN) rồi map cột theo tên (bỏ dấu, không phân biệt hoa thường). */
@@ -57,6 +59,20 @@ const HIDDEN_BIZ_TYPES = ['Sỉ Oil eHerb'];
 const DATA_SOURCES = ['Zalo SPA', 'TT MILA', 'TT MOAW', 'Tiktok eHerb', 'Shopee MP', 'TT eHERB'];
 const ORDER_SOURCES = ['Zalo Group', 'Zalo OA', 'Zalo Sỉ', 'CRM', 'FB Ads', 'Google Ads', 'SMS', 'Đơn Bán Lẻ', 'Quà tặng'];
 const PAY_METHODS   = ['COD', 'Chuyển khoản'];
+// Module 6 — Blacklist (theo brief)
+const BL_REASONS  = ['Không liên hệ được', 'Sai địa chỉ', 'Đổi ý', 'Sản phẩm lỗi', 'Khác'];
+const BL_STATUSES = ['Blacklist', 'Xem xét', 'Loại bỏ'];
+const BL_STATUS_STYLE = {
+  'Blacklist': { bg:'#fef2f2', color:'#dc2626' },
+  'Xem xét':   { bg:'#fff7ed', color:'#ea580c' },
+  'Loại bỏ':   { bg:'#f1f5f9', color:'#64748b' },
+};
+const BL_REASON_COLORS = ['#ef4444', '#3b82f6', '#a855f7', '#f59e0b', '#94a3b8'];
+const EMPTY_BL = {
+  nhanh_id:'', order_date:'', full_name:'', phone:'', source:'', product_name:'',
+  total_amount:'', reason:'Không liên hệ được', shipping_code:'', status:'Blacklist',
+  sales_person:'', address:'',
+};
 const PROVINCES = [
   'An Giang','Bà Rịa–Vũng Tàu','Bắc Giang','Bắc Kạn','Bạc Liêu','Bắc Ninh',
   'Bến Tre','Bình Định','Bình Dương','Bình Phước','Bình Thuận','Cà Mau',
@@ -208,7 +224,7 @@ const S = {
 /* ═══════════════════════════════════════════════════════════════════════════
    CrmTab Component
    ═══════════════════════════════════════════════════════════════════════════ */
-const CrmTab = () => {
+const CrmTab = ({ currentUser } = {}) => {
   const [subTab,    setSubTab]    = useState('dashboard');
   const [customers, setCustomers] = useState([]);
   const [orders,    setOrders]    = useState([]);
@@ -229,9 +245,21 @@ const CrmTab = () => {
   const [fOrderMonth, setFOrderMonth] = useState('');
   const [fOrderBiz,   setFOrderBiz]   = useState('');
   const [fContact,  setFContact]  = useState('');   // '', 'Đã liên hệ', 'Chưa liên hệ'
+  /* ── Module 2: phân loại KH theo brief + phân trang + chi tiết KH ── */
+  const [fBriefTag,  setFBriefTag]  = useState(''); // '', 'Mới', 'Mua lại', 'VIP'
+  const [custPage,   setCustPage]   = useState(1);
+  const [detailCust, setDetailCust] = useState(null);  // KH đang mở chi tiết (null = đóng)
+  const CUST_PER_PAGE = 25;
 
   /* ── Forms ──────────────────────────────────────────────────────────── */
   const [blacklist, setBlacklist] = useState([]);
+  /* ── Module 6: Blacklist — bộ lọc + form ── */
+  const [fBlReason, setFBlReason] = useState('');
+  const [fBlStatus, setFBlStatus] = useState('');
+  const [fBlPerson, setFBlPerson] = useState('');
+  const [fBlSearch, setFBlSearch] = useState('');
+  const [blDays,    setBlDays]    = useState(0);      // 0 = tất cả · 7 · 15 · 30 ngày
+  const [editBl,    setEditBl]    = useState(null);   // bản ghi đang thêm/sửa (null = đóng)
   const [showCustForm, setShowCustForm] = useState(false);
   const [showGroupForm,setShowGroupForm]= useState(false);
   const [showOAForm,   setShowOAForm]   = useState(false);
@@ -310,13 +338,123 @@ const CrmTab = () => {
     setPhoneLoading(false);
   };
 
+  /* ══ Module 6: Blacklist — lọc + thống kê + CRUD ════════════════════ */
+  const blDateOf = (b) => b.order_date || (b.created_at || '').slice(0, 10) || '';
+  const blFiltered = useMemo(() => {
+    const s = fBlSearch.trim().toLowerCase();
+    const cutoff = blDays ? new Date(Date.now() - blDays * 86400000).toISOString().slice(0, 10) : '';
+    return blacklist.filter(b => {
+      if (fBlReason && (b.reason || '') !== fBlReason) return false;
+      if (fBlStatus && (b.status || 'Blacklist') !== fBlStatus) return false;
+      if (fBlPerson && (b.sales_person || '') !== fBlPerson) return false;
+      if (cutoff && blDateOf(b) < cutoff) return false;
+      if (s) {
+        const hay = `${b.full_name || ''} ${b.phone || ''} ${b.nhanh_id || ''} ${b.product_name || ''} ${b.shipping_code || ''}`.toLowerCase();
+        if (!hay.includes(s)) return false;
+      }
+      return true;
+    });
+  }, [blacklist, fBlReason, fBlStatus, fBlPerson, fBlSearch, blDays]);
+
+  // Thống kê cuối bảng — theo đúng bộ lọc đang xem (7/15/30 ngày hoặc tất cả)
+  const blStats = useMemo(() => {
+    const rows = blFiltered;
+    const byStatus = {}; BL_STATUSES.forEach(s => { byStatus[s] = 0; });
+    const byReason = {};
+    let refundAmount = 0;
+    rows.forEach(b => {
+      const st = b.status || 'Blacklist';
+      byStatus[st] = (byStatus[st] || 0) + 1;
+      const rs = b.reason || 'Khác';
+      byReason[rs] = (byReason[rs] || 0) + 1;
+      refundAmount += Number(b.total_amount || 0);
+    });
+    const phones = new Set(rows.map(b => b.phone).filter(Boolean));
+    const reasonList = Object.entries(byReason)
+      .map(([name, value]) => ({ name, value, pct: rows.length ? Math.round(value / rows.length * 100) : 0 }))
+      .sort((a, b) => b.value - a.value);
+    return { total: rows.length, customers: phones.size, byStatus, reasonList, refundAmount };
+  }, [blFiltered]);
+
+  const saveBl = async () => {
+    const b = editBl; if (!b) return;
+    if (!(b.phone || '').trim()) { alert('Cần nhập Số điện thoại'); return; }
+    setSaving(true);
+    const payload = {
+      nhanh_id: b.nhanh_id || null, order_date: b.order_date || null,
+      full_name: b.full_name || null, phone: String(b.phone).replace(/[^\d]/g, ''),
+      source: b.source || null, product_name: b.product_name || null,
+      total_amount: b.total_amount === '' || b.total_amount == null ? null : Number(String(b.total_amount).replace(/[^\d]/g, '')),
+      reason: b.reason || null, shipping_code: b.shipping_code || null,
+      status: b.status || 'Blacklist', sales_person: b.sales_person || null,
+      address: b.address || null, updated_at: new Date().toISOString(),
+    };
+    const { error } = b.id
+      ? await supabase.from('crm_blacklist').update(payload).eq('id', b.id)
+      : await supabase.from('crm_blacklist').insert(payload);
+    setSaving(false);
+    if (error) { alert('Lỗi lưu: ' + error.message); return; }
+    setEditBl(null); fetchAll();
+  };
+  const delBl = async (b) => {
+    if (!confirm(`Xoá "${b.full_name || b.phone}" khỏi danh sách blacklist?`)) return;
+    await supabase.from('crm_blacklist').delete().eq('id', b.id);
+    fetchAll();
+  };
+  // Đổi nhanh trạng thái ngay trên bảng (Blacklist → Xem xét → Loại bỏ)
+  const setBlStatus = async (b, status) => {
+    setBlacklist(list => list.map(x => x.id === b.id ? { ...x, status } : x));   // cập nhật ngay trên UI
+    const { error } = await supabase.from('crm_blacklist')
+      .update({ status, updated_at: new Date().toISOString() }).eq('id', b.id);
+    if (error) { alert('Lỗi đổi trạng thái: ' + error.message); fetchAll(); }
+  };
+
+  /* ══ Module 3: thao tác trên đơn (duyệt · mã vận đơn · tình trạng giao) ══ */
+  const patchOrder = async (o, patch) => {
+    setOrders(list => list.map(x => x.id === o.id ? { ...x, ...patch } : x));   // cập nhật ngay trên UI
+    const { error } = await supabase.from('crm_orders').update(patch).eq('id', o.id);
+    if (error) { alert('Lỗi lưu: ' + error.message); fetchAll(); }
+  };
+  // Kế toán tích duyệt đơn → ghi lại ai duyệt + lúc nào
+  const toggleApprove = (o) => patchOrder(o, o.is_approved
+    ? { is_approved: false, approved_by: null, approved_at: null }
+    : { is_approved: true, approved_by: currentUser?.name || currentUser?.username || 'admin', approved_at: new Date().toISOString() });
+  const toggleInvoice = (o) => patchOrder(o, { has_invoice: !o.has_invoice });
+  const setOrderStatus = (o, status) => patchOrder(o, { status });
+  // Sale bấm cây bút để điền mã vận đơn (admin kho đẩy đơn xong mới có mã)
+  const editShipping = (o) => {
+    const v = prompt(`Mã vận đơn cho đơn ${o.order_code || o.id}:`, o.shipping_code || '');
+    if (v === null) return;
+    patchOrder(o, { shipping_code: v.trim() });
+  };
+
   /* ── Enriched customers (with tags + order stats) ───────────────────── */
   const enriched = useMemo(() => {
+    // Gom đơn theo SĐT 1 lần (thay vì filter lồng 3038×1666 ≈ 5 triệu phép so sánh mỗi lần render)
+    const byPhone = new Map();
+    orders.forEach(o => {
+      const p = o.recipient_phone; if (!p) return;
+      const arr = byPhone.get(p); if (arr) arr.push(o); else byPhone.set(p, [o]);
+    });
     return customers.map(c => {
-      const co = orders.filter(o => o.recipient_phone === c.phone);
+      const co = byPhone.get(c.phone) || [];
       const gmv = co.reduce((s,o) => s + Number(o.total_amount||0), 0);
-      const lastOrder = co.length ? co[0].created_at?.slice(0,10) : null;
-      return { ...c, tag: classifyCustomer(c, co), orderCount: co.length, gmv, lastOrder };
+      // orders đã sort order_date DESC → phần tử đầu là đơn gần nhất
+      const lastOrder = co.length ? (co[0].order_date || co[0].created_at?.slice(0,10) || null) : null;
+      const cnt = Math.max(co.length, Number(c.order_count) || 0);
+      // Phân loại KH theo BRIEF: VIP = trên 5 đơn HOẶC tổng chi tiêu trên 10 triệu; ≥2 đơn = Mua lại; còn lại = Mới
+      const briefTag = (cnt > 5 || gmv > 10_000_000) ? 'VIP' : (cnt >= 2 ? 'Mua lại' : 'Mới');
+      // "Khách quen" — brief: sale điền lặp SĐT thì tự gắn tag
+      const isRegular = cnt >= 2;
+      // Sản phẩm đã mua (rút gọn) — ưu tiên products(json), fallback product_name
+      const prodSet = new Set();
+      co.forEach(o => {
+        (Array.isArray(o.products) ? o.products : []).forEach(p => { if (p?.name) prodSet.add(String(p.name).trim()); });
+        if (o.product_name) prodSet.add(String(o.product_name).trim());
+      });
+      return { ...c, tag: classifyCustomer(c, co), briefTag, isRegular,
+               orderCount: co.length, orderCountEff: cnt, gmv, lastOrder,
+               myOrders: co, products: [...prodSet] };
     });
   }, [customers, orders]);
 
@@ -329,13 +467,19 @@ const CrmTab = () => {
       if (fBizType  && c.business_type !== fBizType) return false;
       if (fPerson   && c.sales_person !== fPerson) return false;
       if (fContact  && (c.contact_status || '') !== fContact) return false;
+      if (fBriefTag && c.briefTag !== fBriefTag) return false;
       if (fSearch) {
         const q = fSearch.toLowerCase();
         if (!(c.full_name||'').toLowerCase().includes(q) && !(c.phone||'').includes(q)) return false;
       }
       return true;
     });
-  }, [enriched, fProvince, fBizType, fPerson, fContact, fSearch]);
+  }, [enriched, fProvince, fBizType, fPerson, fContact, fBriefTag, fSearch]);
+  // Về trang 1 khi đổi bộ lọc (tránh đứng ở trang trống)
+  useEffect(() => { setCustPage(1); }, [fProvince, fBizType, fPerson, fContact, fBriefTag, fSearch]);
+  const custTotalPages = Math.max(1, Math.ceil(filteredCustomers.length / CUST_PER_PAGE));
+  const custPageC = Math.min(custPage, custTotalPages);
+  const pagedCustomers = filteredCustomers.slice((custPageC - 1) * CUST_PER_PAGE, custPageC * CUST_PER_PAGE);
 
   /* ── Tỉnh/TP options động (lấy từ data thật, vì DB lưu tên TP như "Nha Trang") ── */
   const provinceOptions = useMemo(() => {
@@ -477,16 +621,77 @@ const CrmTab = () => {
     const convRate = contactedCust > 0 ? (ordersCur.length / contactedCust * 100) : 0;
 
     const showTrend = hasDateFilter && !!prevS;
+
+    /* ── Bổ sung theo brief Module 1 ─────────────────────────────────── */
+    // Tổng KH KHÔNG TRÙNG LẶP: brief nhấn mạnh đếm theo khách, không phải theo đơn.
+    const uniqCust = new Set(fc.map(c => c.phone).filter(Boolean)).size || totalCust;
+
+    // Tổng sản phẩm bán ra: cộng số lượng trong products (json) của đơn trong kỳ.
+    // Data import cũ KHÔNG có số lượng → trả null để UI hiện "chưa có dữ liệu" thay vì số 0 sai.
+    let qty = 0, qtyKnown = false;
+    ordersCur.forEach(o => {
+      const ps = Array.isArray(o.products) ? o.products : [];
+      ps.forEach(p => { const q = Number(p?.quantity || 0); if (q > 0) { qty += q; qtyKnown = true; } });
+    });
+
+    // Tỷ lệ mua lại lần 2 = KH có từ 2 đơn trở lên / KH đã từng mua.
+    const cntByPhone = {};
+    ordersCur.forEach(o => { const p = o.recipient_phone; if (p) cntByPhone[p] = (cntByPhone[p]||0)+1; });
+    const buyers  = Object.keys(cntByPhone).length;
+    const repeat2 = Object.values(cntByPhone).filter(n => n >= 2).length;
+    const repeatRate = buyers > 0 ? (repeat2 / buyers * 100) : 0;
+
+    // Tỷ lệ chuyển đổi khách SÀN → CRM = KH nguồn sàn đã phát sinh đơn / tổng KH nguồn sàn.
+    const isSan = (s) => /^(tt |tiktok|shopee|lazada)/i.test(String(s || '').trim());
+    const sanCusts = fc.filter(c => isSan(c.data_source));
+    const sanConverted = sanCusts.filter(c => (c.orderCount || 0) > 0 || (c.order_count || 0) > 0).length;
+    const sanRate = sanCusts.length > 0 ? (sanConverted / sanCusts.length * 100) : 0;
+
     return [
-      { label:'Tổng KH',          value: fmtNum(totalCust),        raw: totalCust,        trend: 0 },
-      { label:'KH Mới',           value: fmtNum(newCustCur),       raw: newCustCur,       trend: 0 },
-      { label:'Đã liên hệ',       value: fmtNum(contactedCust),    raw: contactedCust,    trend: 0 },
-      { label:'Đơn',              value: fmtNum(ordersCur.length), raw: ordersCur.length, trend: showTrend ? pctChange(ordersCur.length, ordersPrev.length) : 0 },
-      { label:'Doanh thu',        value: fmtMoney(revCur),         raw: revCur,           trend: showTrend ? pctChange(revCur, revPrev) : 0 },
-      { label:'AOV',              value: fmtMoneyK(aovCur),        raw: aovCur,           trend: showTrend ? pctChange(aovCur, aovPrev) : 0 },
-      { label:'Tỷ lệ chuyển đổi', value:`${convRate.toFixed(1)}%`, raw: convRate,         trend: 0 },
+      { label:'GMV',                   value: fmtMoney(revCur),         raw: revCur,           trend: showTrend ? pctChange(revCur, revPrev) : 0 },
+      { label:'AOV',                   value: fmtMoneyK(aovCur),        raw: aovCur,           trend: showTrend ? pctChange(aovCur, aovPrev) : 0 },
+      { label:'Tổng đơn hàng',         value: fmtNum(ordersCur.length), raw: ordersCur.length, trend: showTrend ? pctChange(ordersCur.length, ordersPrev.length) : 0 },
+      { label:'Tổng SP bán ra',        value: qtyKnown ? fmtNum(qty) : '—', raw: qty,          trend: 0,
+        hint: qtyKnown ? 'Cộng số lượng trong đơn' : 'Đơn chưa có dữ liệu số lượng sản phẩm' },
+      { label:'Tổng KH (không trùng)', value: fmtNum(uniqCust),         raw: uniqCust,         trend: 0, hint:'Đếm theo SĐT không trùng lặp' },
+      { label:'Tỷ lệ mua lại lần 2',   value:`${repeatRate.toFixed(1)}%`, raw: repeatRate,     trend: 0, hint:`${repeat2}/${buyers} khách mua từ 2 đơn` },
+      { label:'Chuyển đổi sàn → CRM',  value:`${sanRate.toFixed(1)}%`,  raw: sanRate,          trend: 0, hint:`${sanConverted}/${sanCusts.length} khách nguồn sàn đã mua` },
+      { label:'KH Mới',                value: fmtNum(newCustCur),       raw: newCustCur,       trend: 0 },
+      { label:'Đã liên hệ',            value: fmtNum(contactedCust),    raw: contactedCust,    trend: 0, hint:`Tỷ lệ chốt đơn/đã LH: ${convRate.toFixed(1)}%` },
     ];
   }, [enriched, orders, fDateFrom, fDateTo, fProvince, fBizType, fPerson]);
+
+  /* ── Top sản phẩm bán chạy (brief Module 1) ──────────────────────── */
+  // Nguồn: products (json, có số lượng) → fallback product_name (chỉ đếm đơn + doanh thu).
+  const topProducts = useMemo(() => {
+    const curStart = fDateFrom || '0000-01-01';
+    const curEnd   = fDateTo   || '9999-12-31';
+    const map = {};
+    let hasQty = false;
+    orders.forEach(o => {
+      if (fPerson && o.sales_person !== fPerson) return;
+      if (Number(o.total_amount||0) <= 0) return;
+      const d = o.order_date || o.created_at?.slice(0,10) || '';
+      if (d < curStart || d > curEnd) return;
+      const ps = Array.isArray(o.products) ? o.products.filter(p => p?.name) : [];
+      if (ps.length) {
+        ps.forEach(p => {
+          const n = String(p.name).trim(); if (!n) return;
+          const q = Number(p.quantity || 0); if (q > 0) hasQty = true;
+          if (!map[n]) map[n] = { name:n, qty:0, orders:0, rev:0 };
+          map[n].qty += q; map[n].orders += 1;
+          map[n].rev += Number(o.total_amount||0) / ps.length;   // chia đều doanh thu đơn cho các SP trong đơn
+        });
+      } else if (o.product_name) {
+        const n = String(o.product_name).trim();
+        if (!map[n]) map[n] = { name:n, qty:0, orders:0, rev:0 };
+        map[n].orders += 1; map[n].rev += Number(o.total_amount||0);
+      }
+    });
+    const list = Object.values(map).sort((a,b) => b.rev - a.rev);
+    const totalRev = list.reduce((s,x) => s + x.rev, 0) || 1;
+    return { list: list.slice(0,10).map(x => ({ ...x, pct: Math.round(x.rev/totalRev*100) })), hasQty, count: list.length };
+  }, [orders, fDateFrom, fDateTo, fPerson]);
 
   /* ── Chart: customer growth (last 6 months) ─────────────────────────── */
   const growthChart = useMemo(() => {
@@ -743,6 +948,8 @@ const CrmTab = () => {
   const _fmtYmd = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const datePresetRange = (key) => {
     if (key === 'yesterday') { const y = new Date(); y.setDate(y.getDate()-1); const s = _fmtYmd(y); return [s, s]; }
+    // 'month' = THÁNG NÀY (từ ngày 1 tới hôm nay) — theo bộ lọc thời gian trong brief
+    if (key === 'month') { const n = new Date(); return [_fmtYmd(new Date(n.getFullYear(), n.getMonth(), 1)), _fmtYmd(n)]; }
     const end = new Date();
     const start = new Date(); start.setDate(start.getDate() - (key - 1));
     return [_fmtYmd(start), _fmtYmd(end)];
@@ -754,11 +961,13 @@ const CrmTab = () => {
      ══════════════════════════════════════════════════════════════════════ */
 
   /* ── KPI Card ────────────────────────────────────────────────────────── */
-  const KpiCard = ({ label, value, trend }) => {
+  const KpiCard = ({ label, value, trend, hint }) => {
     const up = trend >= 0;
     return (
-      <div style={{ ...S.card, padding:'16px 18px', flex:'1 1 130px', minWidth:130 }}>
-        <div style={{ fontSize:'0.76rem', color:'#64748b', fontWeight:500, marginBottom:6 }}>{label}</div>
+      <div style={{ ...S.card, padding:'16px 18px', flex:'1 1 130px', minWidth:130 }} title={hint || ''}>
+        <div style={{ fontSize:'0.76rem', color:'#64748b', fontWeight:500, marginBottom:6 }}>
+          {label}{hint && <span style={{ color:'#cbd5e1', marginLeft:4, cursor:'help' }}>ⓘ</span>}
+        </div>
         <div style={{ display:'flex', alignItems:'baseline', gap:8 }}>
           <span style={{ fontSize:'1.5rem', fontWeight:800, color:'#0f172a', letterSpacing:'-0.5px' }}>{value}</span>
           {trend !== 0 && (
@@ -843,7 +1052,7 @@ const CrmTab = () => {
       <input type='date' value={fDateTo} onChange={e=>setFDateTo(e.target.value)}
         style={{ ...S.input, width:140, padding:'7px 10px' }}/>
 
-      {[['yesterday','Hôm qua'],[7,'7 ngày'],[30,'30 ngày']].map(([key,label]) => {
+      {[['yesterday','Hôm qua'],[7,'7 ngày'],[30,'30 ngày'],['month','Tháng này']].map(([key,label]) => {
         const [s,e] = datePresetRange(key);
         const active = fDateFrom===s && fDateTo===e;
         return (
@@ -921,12 +1130,15 @@ const CrmTab = () => {
   /* ══════════════════════════════════════════════════════════════════════
      RENDER
      ══════════════════════════════════════════════════════════════════════ */
+  // 6 module theo brief "ĐỀ XUẤT TỐI ƯU QUY TRÌNH CRM" (+ Nhóm & OA giữ lại từ bản cũ)
   const tabItems = [
-    { key:'dashboard', label:'Dashboard',   icon:'📊' },
-    { key:'customers', label:'Khách hàng',  icon:'👥' },
-    { key:'orders',    label:'Đơn hàng',    icon:'📋' },
-    { key:'groups',    label:'Nhóm & OA',   icon:'📱' },
-    { key:'blacklist', label:'Blacklist',    icon:'🚫' },
+    { key:'dashboard', label:'1. Dashboard',    icon:'📊' },
+    { key:'customers', label:'2. Khách hàng',   icon:'👥' },
+    { key:'orders',    label:'3. Đơn hàng',     icon:'📋' },
+    { key:'pricing',   label:'4. Giá + Material', icon:'💰' },
+    { key:'care',      label:'5. Quy trình CSKH', icon:'📖' },
+    { key:'blacklist', label:'6. Blacklist',    icon:'🚫' },
+    { key:'groups',    label:'Nhóm & OA',       icon:'📱' },
   ];
 
   return (
@@ -981,6 +1193,64 @@ const CrmTab = () => {
           {/* KPI Cards */}
           <div style={{ display:'flex', gap:12, marginBottom:24, flexWrap:'wrap' }}>
             {kpis.map((k,i) => <KpiCard key={i} {...k} />)}
+          </div>
+
+          {/* Top sản phẩm bán chạy (brief Module 1) */}
+          <div style={{ ...S.card, padding:20, marginBottom:24 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', marginBottom:14 }}>
+              <div style={{ fontWeight:800, fontSize:'0.95rem', color:'#0f172a' }}>🏆 Top sản phẩm bán chạy</div>
+              <span style={{ fontSize:'0.76rem', color:'#94a3b8' }}>
+                {topProducts.count > 0 ? `${topProducts.count} sản phẩm · xếp theo doanh thu` : ''}
+              </span>
+            </div>
+            {topProducts.list.length > 0 ? (
+              <div style={{ overflowX:'auto' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.83rem' }}>
+                  <thead><tr style={{ background:'#f8fafc' }}>
+                    {['#','SẢN PHẨM', ...(topProducts.hasQty ? ['SỐ LƯỢNG'] : []), 'SỐ ĐƠN','DOANH THU','TỶ TRỌNG'].map(h => (
+                      <th key={h} style={{ padding:'9px 12px', textAlign: h==='SẢN PHẨM'?'left':'right', fontWeight:700,
+                        color:'#64748b', fontSize:'0.7rem', borderBottom:'1px solid #e5e7eb', whiteSpace:'nowrap' }}>{h}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody>
+                    {topProducts.list.map((p,i) => (
+                      <tr key={p.name} style={{ borderBottom:'1px solid #f1f5f9' }}>
+                        <td style={{ padding:'9px 12px', textAlign:'right', width:34 }}>
+                          <span style={{ display:'inline-flex', width:22, height:22, borderRadius:'50%', alignItems:'center',
+                            justifyContent:'center', fontSize:'0.72rem', fontWeight:800,
+                            background: i===0?'#fef3c7':i===1?'#f1f5f9':i===2?'#fff7ed':'#f8fafc',
+                            color: i===0?'#b45309':i===1?'#64748b':i===2?'#c2410c':'#94a3b8' }}>{i+1}</span>
+                        </td>
+                        <td style={{ padding:'9px 12px', fontWeight:700, color:'#0f172a' }}>{p.name}</td>
+                        {topProducts.hasQty && <td style={{ padding:'9px 12px', textAlign:'right', fontWeight:700, color:'#7c3aed' }}>{fmtNum(p.qty)}</td>}
+                        <td style={{ padding:'9px 12px', textAlign:'right', color:'#475569' }}>{fmtNum(p.orders)}</td>
+                        <td style={{ padding:'9px 12px', textAlign:'right', fontWeight:800, color:'#16a34a', whiteSpace:'nowrap' }}>{fmtMoney(p.rev)}đ</td>
+                        <td style={{ padding:'9px 12px', textAlign:'right', width:130 }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:7, justifyContent:'flex-end' }}>
+                            <div style={{ flex:1, maxWidth:70, height:6, background:'#f1f5f9', borderRadius:3, overflow:'hidden' }}>
+                              <div style={{ width:`${p.pct}%`, height:'100%', background:'#ff6a2c', borderRadius:3 }}/>
+                            </div>
+                            <span style={{ fontWeight:700, color:'#64748b', fontSize:'0.78rem', width:34, textAlign:'right' }}>{p.pct}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {!topProducts.hasQty && (
+                  <div style={{ marginTop:10, fontSize:'0.76rem', color:'#b45309', background:'#fffbeb',
+                    border:'1px solid #fde68a', borderRadius:9, padding:'8px 12px', lineHeight:1.5 }}>
+                    ⚠️ Đơn hiện <b>chưa có số lượng sản phẩm</b> nên chỉ xếp theo doanh thu/số đơn. Nhập đơn kèm sản phẩm + số lượng
+                    (tab <b>3. Đơn hàng</b>) thì cột SỐ LƯỢNG và KPI “Tổng SP bán ra” sẽ tự có số.
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ padding:30, textAlign:'center', color:'#94a3b8', fontSize:'0.85rem', lineHeight:1.6 }}>
+                Chưa có dữ liệu sản phẩm trong đơn.<br/>
+                <span style={{ fontSize:'0.78rem' }}>Đơn cần có tên sản phẩm (và số lượng) thì mục này mới thống kê được.</span>
+              </div>
+            )}
           </div>
 
           {/* Chỉ số theo ngày — doanh thu + số đơn */}
@@ -1247,66 +1517,101 @@ const CrmTab = () => {
             </button>
           </div>
 
-          {/* Count */}
-          <div style={{ fontSize:'0.82rem', color:'#64748b', marginBottom:10, fontWeight:500 }}>
-            Hiển thị <b style={{ color:'#0f172a' }}>{filteredCustomers.length}</b> khách hàng
+          {/* Phân loại KH theo brief (Mới / Mua lại / VIP) + đếm */}
+          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10, flexWrap:'wrap' }}>
+            <span style={{ fontSize:'0.78rem', color:'#64748b', fontWeight:700 }}>Phân loại KH:</span>
+            {[['','Tất cả'],['Mới','Mới'],['Mua lại','Mua lại'],['VIP','VIP']].map(([k,l]) => {
+              const n = k ? filteredCustomers.filter(c=>c.briefTag===k).length : filteredCustomers.length;
+              const active = fBriefTag === k;
+              return (
+                <button key={l} onClick={()=>setFBriefTag(prev => prev===k ? '' : k)} style={{
+                  padding:'5px 13px', borderRadius:20, cursor:'pointer', fontFamily:S.font,
+                  border: active ? '2px solid #ff6a2c' : '1.5px solid #e2e8f0',
+                  background: active ? '#fff7ed' : '#fff', color: active ? '#ff6a2c' : '#64748b',
+                  fontWeight:700, fontSize:'0.75rem',
+                }}>{l} <span style={{ opacity:0.7 }}>({fmtNum(n)})</span></button>
+              );
+            })}
+            <div style={{ marginLeft:'auto', fontSize:'0.82rem', color:'#64748b', fontWeight:500 }}>
+              Hiển thị <b style={{ color:'#0f172a' }}>{fmtNum(pagedCustomers.length)}</b> / {fmtNum(filteredCustomers.length)} khách hàng
+            </div>
           </div>
 
-          {/* Customer table */}
+          {/* Customer table — cột theo brief Module 2 */}
           <div style={{ ...S.card, overflow:'hidden' }}>
             <div style={{ overflowX:'auto' }}>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.83rem' }}>
                 <thead>
                   <tr style={{ background:'#f8fafc' }}>
-                    {['KHÁCH HÀNG','TAG','SĐT','TỈNH','LOẠI HÌNH','ĐƠN','TỔNG GMV','LIÊN HỆ','PHỤ TRÁCH'].map(h => (
-                      <th key={h} style={{ padding:'11px 14px', textAlign:'left', fontWeight:700,
-                        color:'#64748b', fontSize:'0.72rem', letterSpacing:'0.5px',
+                    {['TÊN KHÁCH HÀNG','SỐ ĐIỆN THOẠI','TỈNH/TP','TỔNG CHI TIÊU','ĐƠN','NGÀY MUA GẦN NHẤT','SẢN PHẨM ĐÃ MUA','NHÂN SỰ','PHÂN LOẠI TỆP','PHÂN LOẠI KH'].map(h => (
+                      <th key={h} style={{ padding:'11px 13px', textAlign:'left', fontWeight:700,
+                        color:'#64748b', fontSize:'0.7rem', letterSpacing:'0.4px',
                         borderBottom:'1px solid #e5e7eb', whiteSpace:'nowrap' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredCustomers.slice(0,100).map((c,i) => (
+                  {pagedCustomers.map((c,i) => (
                     <tr key={c.id} style={{ borderBottom:'1px solid #f1f5f9',
                       background: i%2 ? '#fafbfc' : '#fff', transition:'background 0.1s' }}
                       onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'}
                       onMouseLeave={e=>e.currentTarget.style.background=i%2?'#fafbfc':'#fff'}>
-                      <td style={{ padding:'10px 14px' }}>
+                      <td style={{ padding:'10px 13px' }}>
                         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                           <Avatar name={c.full_name} />
-                          <div>
-                            <div style={{ fontWeight:700, color:'#0f172a', fontSize:'0.85rem' }}>
-                              {c.full_name || '—'}
-                            </div>
-                          </div>
+                          <button onClick={()=>setDetailCust(c)} title='Xem tất cả đơn khách này đã mua'
+                            style={{ border:'none', background:'none', padding:0, cursor:'pointer', textAlign:'left',
+                              fontWeight:700, color:'#2563eb', fontSize:'0.85rem', fontFamily:S.font,
+                              textDecoration:'underline', textDecorationStyle:'dotted' }}>
+                            {c.full_name || '—'}
+                          </button>
                         </div>
                       </td>
-                      <td style={{ padding:'10px 14px' }}><TagBadge tag={c.tag}/></td>
-                      <td style={{ padding:'10px 14px', fontWeight:600, color:'#475569', fontFamily:'monospace' }}>
+                      <td style={{ padding:'10px 13px', fontWeight:600, color:'#475569', fontFamily:'monospace', whiteSpace:'nowrap' }}>
                         {c.phone}
+                        {c.isRegular && (
+                          <div style={{ display:'inline-block', marginLeft:6, padding:'1px 7px', borderRadius:20,
+                            fontSize:'0.65rem', fontWeight:800, background:'#dcfce7', color:'#16a34a',
+                            fontFamily:S.font }}>Khách quen</div>
+                        )}
                       </td>
-                      <td style={{ padding:'10px 14px', color:'#475569', fontSize:'0.8rem' }}>{c.province || '—'}</td>
-                      <td style={{ padding:'10px 14px', color:'#475569', fontSize:'0.78rem' }}>{c.business_type || '—'}</td>
-                      <td style={{ padding:'10px 14px', fontWeight:700, color:'#0f172a' }}>
-                        {Math.max(c.orderCount, c.order_count||0)}
-                      </td>
-                      <td style={{ padding:'10px 14px', fontWeight:700, color:'#16a34a' }}>
+                      <td style={{ padding:'10px 13px', color:'#475569', fontSize:'0.8rem' }}>{c.province || '—'}</td>
+                      <td style={{ padding:'10px 13px', fontWeight:800, color:'#16a34a', whiteSpace:'nowrap' }}>
                         {c.gmv > 0 ? fmtMoney(c.gmv)+'đ' : '—'}
                       </td>
-                      <td style={{ padding:'10px 14px' }}>
-                        <span style={{ padding:'2px 8px', borderRadius:20, fontSize:'0.7rem', fontWeight:600,
-                          background: c.contact_status === 'Đã liên hệ' ? '#dcfce7' : '#fef9c3',
-                          color: c.contact_status === 'Đã liên hệ' ? '#16a34a' : '#a16207',
-                        }}>{c.contact_status || '—'}</span>
+                      <td style={{ padding:'10px 13px', fontWeight:700, color:'#0f172a' }}>{c.orderCountEff}</td>
+                      <td style={{ padding:'10px 13px', color:'#475569', fontSize:'0.78rem', whiteSpace:'nowrap' }}>
+                        {c.lastOrder ? new Date(c.lastOrder).toLocaleDateString('vi-VN') : '—'}
                       </td>
-                      <td style={{ padding:'10px 14px', fontWeight:600, color:S.primary }}>
+                      <td style={{ padding:'10px 13px', maxWidth:190 }}>
+                        {c.products.length === 0 ? <span style={{ color:'#cbd5e1' }}>—</span> : (
+                          <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
+                            {c.products.slice(0,2).map(p => (
+                              <span key={p} style={{ padding:'2px 7px', borderRadius:6, background:'#f1f5f9',
+                                color:'#475569', fontSize:'0.7rem', fontWeight:600 }}>{p}</span>
+                            ))}
+                            {c.products.length > 2 && (
+                              <span style={{ padding:'2px 7px', borderRadius:6, background:'#eff6ff',
+                                color:'#2563eb', fontSize:'0.7rem', fontWeight:700 }}>+{c.products.length-2}</span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding:'10px 13px', fontWeight:600, color:S.primary, fontSize:'0.8rem' }}>
                         {c.sales_person || '—'}
+                      </td>
+                      <td style={{ padding:'10px 13px', color:'#475569', fontSize:'0.76rem' }}>{c.business_type || '—'}</td>
+                      <td style={{ padding:'10px 13px' }}>
+                        <span style={{ display:'inline-block', padding:'3px 10px', borderRadius:20, fontSize:'0.71rem', fontWeight:800,
+                          background: c.briefTag==='VIP' ? '#f5f3ff' : c.briefTag==='Mua lại' ? '#eff6ff' : '#f0fdf4',
+                          color:      c.briefTag==='VIP' ? '#7c3aed' : c.briefTag==='Mua lại' ? '#2563eb' : '#16a34a',
+                        }}>{c.briefTag==='VIP' ? '👑 VIP' : c.briefTag}</span>
                       </td>
                     </tr>
                   ))}
                   {filteredCustomers.length === 0 && (
                     <tr>
-                      <td colSpan={9} style={{ padding:48, textAlign:'center', color:'#94a3b8' }}>
+                      <td colSpan={10} style={{ padding:48, textAlign:'center', color:'#94a3b8' }}>
                         <div style={{ fontSize:'2rem', marginBottom:8 }}>👥</div>
                         Chưa có khách hàng
                       </td>
@@ -1315,8 +1620,111 @@ const CrmTab = () => {
                 </tbody>
               </table>
             </div>
+            {custTotalPages > 1 && (
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:10, padding:'12px 0', borderTop:'1px solid #f1f5f9' }}>
+                <button onClick={()=>setCustPage(p=>Math.max(1,p-1))} disabled={custPageC<=1}
+                  style={{ ...S.btnOutline, padding:'5px 13px', fontSize:'0.78rem', opacity:custPageC<=1?0.45:1 }}>‹ Trước</button>
+                <span style={{ fontSize:'0.8rem', color:'#64748b', fontWeight:600 }}>
+                  Trang {custPageC}/{custTotalPages}
+                </span>
+                <button onClick={()=>setCustPage(p=>Math.min(custTotalPages,p+1))} disabled={custPageC>=custTotalPages}
+                  style={{ ...S.btnOutline, padding:'5px 13px', fontSize:'0.78rem', opacity:custPageC>=custTotalPages?0.45:1 }}>Sau ›</button>
+              </div>
+            )}
           </div>
         </div>
+      )}
+
+      {/* ── MODAL: Chi tiết khách hàng — tất cả đơn đã mua + tình trạng giao (brief M2) ── */}
+      {detailCust && (
+        <Modal onClose={()=>setDetailCust(null)} title={`Chi tiết khách hàng — ${detailCust.full_name || detailCust.phone}`}>
+          {/* Tóm tắt */}
+          <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', marginBottom:14 }}>
+            <Avatar name={detailCust.full_name} size={46}/>
+            <div style={{ flex:'1 1 190px' }}>
+              <div style={{ fontWeight:800, fontSize:'1.05rem', color:'#0f172a' }}>
+                {detailCust.full_name || '—'}
+                {detailCust.isRegular && <span style={{ marginLeft:8, padding:'2px 9px', borderRadius:20, fontSize:'0.68rem', fontWeight:800, background:'#dcfce7', color:'#16a34a' }}>Khách quen</span>}
+              </div>
+              <div style={{ fontSize:'0.82rem', color:'#64748b', marginTop:2 }}>
+                📞 {detailCust.phone} · 📍 {detailCust.province || '—'}
+              </div>
+              <div style={{ fontSize:'0.78rem', color:'#64748b', marginTop:3 }}>
+                Tệp: <b>{detailCust.business_type || '—'}</b> · Phân loại: <b style={{ color:'#7c3aed' }}>{detailCust.briefTag}</b> · NS: <b style={{ color:S.primary }}>{detailCust.sales_person || '—'}</b>
+              </div>
+            </div>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(120px, 1fr))', gap:10, marginBottom:16 }}>
+            {[
+              { l:'Tổng chi tiêu', v: fmtMoney(detailCust.gmv)+'đ', c:'#16a34a' },
+              { l:'Tổng số đơn',   v: fmtNum(detailCust.orderCountEff), c:'#0f172a' },
+              { l:'Mua gần nhất',  v: detailCust.lastOrder ? new Date(detailCust.lastOrder).toLocaleDateString('vi-VN') : '—', c:'#2563eb' },
+              { l:'Lần mua đầu',   v: (() => { const ds = detailCust.myOrders.map(o=>o.order_date||o.created_at?.slice(0,10)).filter(Boolean).sort(); return ds.length ? new Date(ds[0]).toLocaleDateString('vi-VN') : '—'; })(), c:'#7c3aed' },
+            ].map((x,i) => (
+              <div key={i} style={{ ...S.card, padding:'11px 13px' }}>
+                <div style={{ fontSize:'0.68rem', color:'#94a3b8', fontWeight:700, textTransform:'uppercase', marginBottom:3 }}>{x.l}</div>
+                <div style={{ fontSize:'1.05rem', fontWeight:800, color:x.c }}>{x.v}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ fontWeight:800, fontSize:'0.9rem', color:'#0f172a', marginBottom:8 }}>
+            📋 Danh sách đơn hàng ({detailCust.myOrders.length})
+          </div>
+          {/* Số đơn ở file import (order_count) nhiều hơn số đơn CHI TIẾT có trong crm_orders → nói rõ, tránh tưởng lỗi */}
+          {detailCust.orderCountEff > detailCust.myOrders.length && (
+            <div style={{ marginBottom:8, padding:'8px 12px', borderRadius:9, background:'#fffbeb',
+              border:'1px solid #fde68a', color:'#92400e', fontSize:'0.76rem', lineHeight:1.5 }}>
+              ⚠️ Khách này có <b>{detailCust.orderCountEff} đơn</b> theo file Excel đã nhập, nhưng hệ thống mới có
+              chi tiết <b>{detailCust.myOrders.length} đơn</b>. Cần nhập đơn (tab <b>3. Đơn hàng</b>) thì mới xem được đầy đủ
+              — tổng chi tiêu &amp; ngày mua cũng tính từ đơn chi tiết.
+            </div>
+          )}
+          {detailCust.myOrders.length === 0 ? (
+            <div style={{ padding:26, textAlign:'center', color:'#94a3b8', fontSize:'0.85rem',
+              border:'1px dashed #e2e8f0', borderRadius:10 }}>
+              Khách này chưa có đơn nào trong hệ thống.
+            </div>
+          ) : (
+            <div style={{ maxHeight:330, overflowY:'auto', border:'1px solid #e5e7eb', borderRadius:10 }}>
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.79rem' }}>
+                <thead><tr style={{ position:'sticky', top:0, background:'#f8fafc', zIndex:1 }}>
+                  {['MÃ ĐƠN','MÃ VẬN ĐƠN','NGÀY ĐẶT','SẢN PHẨM','GIÁ TRỊ','TÌNH TRẠNG GIAO'].map(h => (
+                    <th key={h} style={{ padding:'8px 11px', textAlign:'left', fontWeight:700, color:'#64748b',
+                      fontSize:'0.67rem', borderBottom:'1px solid #e5e7eb', whiteSpace:'nowrap' }}>{h}</th>
+                  ))}
+                </tr></thead>
+                <tbody>
+                  {detailCust.myOrders.map(o => {
+                    const st = orderStatusBadge(o);
+                    const prods = (Array.isArray(o.products) ? o.products.filter(p=>p?.name).map(p=>p.name) : []);
+                    const pTxt = prods.length ? prods.join(', ') : (o.product_name || '—');
+                    return (
+                      <tr key={o.id} style={{ borderTop:'1px solid #f1f5f9' }}>
+                        <td style={{ padding:'8px 11px', fontFamily:'monospace', fontSize:'0.74rem', color:'#475569' }}>{o.order_code || '—'}</td>
+                        <td style={{ padding:'8px 11px', fontFamily:'monospace', fontSize:'0.72rem', color:'#64748b' }}>{o.shipping_code || '—'}</td>
+                        <td style={{ padding:'8px 11px', whiteSpace:'nowrap', color:'#475569' }}>
+                          {(o.order_date || o.created_at) ? new Date(o.order_date || o.created_at).toLocaleDateString('vi-VN') : '—'}
+                        </td>
+                        <td style={{ padding:'8px 11px', color:'#334155', maxWidth:210 }}>{pTxt}</td>
+                        <td style={{ padding:'8px 11px', fontWeight:800, color:'#0f172a', whiteSpace:'nowrap' }}>
+                          {Number(o.total_amount||0) > 0 ? fmtMoney(o.total_amount)+'đ' : '—'}
+                        </td>
+                        <td style={{ padding:'8px 11px' }}>
+                          <span style={{ padding:'2px 9px', borderRadius:20, fontSize:'0.68rem', fontWeight:700,
+                            background:st.bg, color:st.color, whiteSpace:'nowrap' }}>{st.label}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div style={{ display:'flex', justifyContent:'flex-end', marginTop:16 }}>
+            <button onClick={()=>setDetailCust(null)} style={S.btnOutline}>Đóng</button>
+          </div>
+        </Modal>
       )}
 
       {/* ════════════════════════════════════════════════════════════════════
@@ -1589,13 +1997,48 @@ const CrmTab = () => {
                             </div>
                           </div>
                         </div>
-                        {(o.sales_person || o.shipping_code) && (
-                          <div style={{ marginTop:8, paddingTop:8, borderTop:'1px solid #f1f5f9',
-                            fontSize:'0.78rem', color:'#64748b', display:'flex', justifyContent:'space-between' }}>
-                            {o.sales_person && <span>Phụ trách: <b style={{ color:S.primary }}>{o.sales_person}</b></span>}
-                            {o.shipping_code && <span style={{ fontFamily:'monospace', fontSize:'0.72rem' }}>MVĐ: {o.shipping_code}</span>}
-                          </div>
-                        )}
+                        {/* ── Hàng thao tác theo brief M3: duyệt · mã vận đơn · tình trạng giao · hoá đơn ── */}
+                        <div style={{ marginTop:8, paddingTop:8, borderTop:'1px solid #f1f5f9',
+                          display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', fontSize:'0.78rem', color:'#64748b' }}>
+                          {o.sales_person && <span>Phụ trách: <b style={{ color:S.primary }}>{o.sales_person}</b></span>}
+
+                          {/* Duyệt đơn — kế toán tích chọn */}
+                          <button onClick={()=>toggleApprove(o)}
+                            title={o.is_approved ? `Đã duyệt${o.approved_by ? ' bởi '+o.approved_by : ''}${o.approved_at ? ' · '+new Date(o.approved_at).toLocaleString('vi-VN') : ''} — bấm để bỏ duyệt` : 'Kế toán check đơn rồi bấm duyệt'}
+                            style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 10px', borderRadius:20,
+                              border:`1px solid ${o.is_approved ? '#bbf7d0' : '#e2e8f0'}`, cursor:'pointer', fontFamily:S.font,
+                              background: o.is_approved ? '#f0fdf4' : '#fff', color: o.is_approved ? '#16a34a' : '#94a3b8',
+                              fontWeight:700, fontSize:'0.73rem' }}>
+                            {o.is_approved ? '✅ Đã duyệt' : '☐ Duyệt'}
+                          </button>
+
+                          {/* Xuất hoá đơn — tích chọn */}
+                          <button onClick={()=>toggleInvoice(o)} title='Đơn này có xuất hoá đơn'
+                            style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 10px', borderRadius:20,
+                              border:`1px solid ${o.has_invoice ? '#fde68a' : '#e2e8f0'}`, cursor:'pointer', fontFamily:S.font,
+                              background: o.has_invoice ? '#fffbeb' : '#fff', color: o.has_invoice ? '#b45309' : '#94a3b8',
+                              fontWeight:700, fontSize:'0.73rem' }}>
+                            {o.has_invoice ? '🧾 Có hoá đơn' : '☐ Hoá đơn'}
+                          </button>
+
+                          {/* Tình trạng đơn hàng */}
+                          <select value={o.status || ''} onChange={e=>setOrderStatus(o, e.target.value)} title='Tình trạng đơn hàng'
+                            style={{ padding:'3px 8px', borderRadius:20, fontSize:'0.73rem', fontWeight:700,
+                              background:status.bg, color:status.color, border:`1px solid ${status.color}33`,
+                              cursor:'pointer', fontFamily:S.font }}>
+                            {[...new Set(['Đã lên đơn','Đang giao','Đã giao','Hàng hoàn', o.status].filter(Boolean))]
+                              .map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+
+                          {/* Mã vận đơn — sale bấm cây bút để điền */}
+                          <span style={{ marginLeft:'auto', display:'inline-flex', alignItems:'center', gap:5 }}>
+                            {o.shipping_code
+                              ? <span style={{ fontFamily:'monospace', fontSize:'0.72rem', color:'#475569' }}>MVĐ: {o.shipping_code}</span>
+                              : <span style={{ fontSize:'0.72rem', color:'#cbd5e1' }}>chưa có mã vận đơn</span>}
+                            <button onClick={()=>editShipping(o)} title='Điền / sửa mã vận đơn'
+                              style={{ border:'none', background:'none', cursor:'pointer', fontSize:'0.85rem', padding:0 }}>✏️</button>
+                          </span>
+                        </div>
                       </div>
                     );
                   })}
@@ -1798,67 +2241,127 @@ const CrmTab = () => {
       )}
 
       {/* ════════════════════════════════════════════════════════════════════
+         TAB: 4. CHÍNH SÁCH GIÁ + MATERIAL · 5. QUY TRÌNH CSKH (component riêng)
+         ════════════════════════════════════════════════════════════════════ */}
+      {subTab === 'pricing' && <CrmPricingTab />}
+      {subTab === 'care'    && <CrmCareTab currentUser={currentUser} />}
+
+      {/* ════════════════════════════════════════════════════════════════════
          TAB: BLACKLIST
          ════════════════════════════════════════════════════════════════════ */}
       {subTab === 'blacklist' && (
         <div>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16, gap:12, flexWrap:'wrap' }}>
             <div>
               <h3 style={{ margin:0, fontSize:'1.05rem', fontWeight:800, color:'#0f172a' }}>
-                Danh sách Blacklist
+                🚫 Danh sách Blacklist
               </h3>
               <div style={{ fontSize:'0.82rem', color:'#64748b', marginTop:4 }}>
-                {blacklist.length} khách hàng bị chặn
+                Khách bị hoàn hàng nhiều lần hoặc được đưa vào Blacklist.
               </div>
+            </div>
+            <button onClick={()=>setEditBl({ ...EMPTY_BL })} style={S.btnPrimary}>+ Thêm vào Blacklist</button>
+          </div>
+
+          {/* Bộ lọc */}
+          <div style={{ display:'flex', gap:9, marginBottom:14, flexWrap:'wrap', alignItems:'center' }}>
+            <select value={blDays} onChange={e=>setBlDays(Number(e.target.value))} style={{ ...S.select, width:150, padding:'7px 10px' }}>
+              <option value={0}>Tất cả thời gian</option>
+              <option value={7}>7 ngày gần đây</option>
+              <option value={15}>15 ngày gần đây</option>
+              <option value={30}>30 ngày gần đây</option>
+            </select>
+            <select value={fBlReason} onChange={e=>setFBlReason(e.target.value)} style={{ ...S.select, width:180, padding:'7px 10px' }}>
+              <option value=''>Lý do hoàn: Tất cả</option>
+              {BL_REASONS.map(r=><option key={r} value={r}>{r}</option>)}
+            </select>
+            <select value={fBlStatus} onChange={e=>setFBlStatus(e.target.value)} style={{ ...S.select, width:160, padding:'7px 10px' }}>
+              <option value=''>Trạng thái: Tất cả</option>
+              {BL_STATUSES.map(s=><option key={s} value={s}>{s}</option>)}
+            </select>
+            <select value={fBlPerson} onChange={e=>setFBlPerson(e.target.value)} style={{ ...S.select, width:150, padding:'7px 10px' }}>
+              <option value=''>Nhân sự: Tất cả</option>
+              {SALES_PERSONS.map(s=><option key={s} value={s}>{s}</option>)}
+            </select>
+            <input value={fBlSearch} onChange={e=>setFBlSearch(e.target.value)}
+              placeholder='🔍 Tìm ID, tên KH, SĐT, mã vận đơn...'
+              style={{ ...S.input, width:260, flex:'0 1 260px', padding:'8px 12px' }}/>
+            <div style={{ fontSize:'0.8rem', color:'#64748b', fontWeight:600 }}>
+              {blFiltered.length}/{blacklist.length} bản ghi
             </div>
           </div>
 
-          <div style={{ ...S.card, overflow:'hidden' }}>
+          {/* Bảng blacklist — đủ cột theo brief */}
+          <div style={{ ...S.card, overflow:'hidden', marginBottom:20 }}>
             <div style={{ overflowX:'auto' }}>
-              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.83rem' }}>
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.82rem' }}>
                 <thead>
                   <tr style={{ background:'#fef2f2' }}>
-                    {['#','HỌ TÊN','SĐT','ĐỊA CHỈ','LÝ DO'].map(h => (
-                      <th key={h} style={{ padding:'11px 14px', textAlign:'left', fontWeight:700,
-                        color:'#991b1b', fontSize:'0.72rem', letterSpacing:'0.5px',
+                    {['#','ID NHANH','NGÀY ĐẶT','KHÁCH HÀNG','SĐT','NGUỒN','SẢN PHẨM','TỔNG TIỀN','LÝ DO HOÀN','MÃ VẬN ĐƠN','TRẠNG THÁI','NHÂN SỰ','THAO TÁC'].map(h => (
+                      <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontWeight:700,
+                        color:'#991b1b', fontSize:'0.68rem', letterSpacing:'0.4px',
                         borderBottom:'1px solid #fecaca', whiteSpace:'nowrap' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {blacklist.map((b,i) => (
-                    <tr key={b.id} style={{ borderBottom:'1px solid #f1f5f9',
-                      background: i%2 ? '#fffbfb' : '#fff' }}>
-                      <td style={{ padding:'10px 14px', color:'#94a3b8', fontSize:'0.78rem' }}>{i+1}</td>
-                      <td style={{ padding:'10px 14px' }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                          <div style={{ width:32, height:32, borderRadius:'50%', display:'flex',
+                  {blFiltered.map((b,i) => {
+                    const st = b.status || 'Blacklist';
+                    const sty = BL_STATUS_STYLE[st] || BL_STATUS_STYLE['Blacklist'];
+                    return (
+                    <tr key={b.id} style={{ borderBottom:'1px solid #f1f5f9', background: i%2 ? '#fffbfb' : '#fff' }}>
+                      <td style={{ padding:'9px 12px', color:'#94a3b8', fontSize:'0.76rem' }}>{i+1}</td>
+                      <td style={{ padding:'9px 12px', fontFamily:'monospace', fontSize:'0.75rem', color:'#64748b' }}>{b.nhanh_id || '—'}</td>
+                      <td style={{ padding:'9px 12px', fontSize:'0.76rem', color:'#475569', whiteSpace:'nowrap' }}>
+                        {b.order_date ? new Date(b.order_date).toLocaleDateString('vi-VN') : '—'}
+                      </td>
+                      <td style={{ padding:'9px 12px' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                          <div style={{ width:28, height:28, borderRadius:'50%', display:'flex',
                             alignItems:'center', justifyContent:'center', flexShrink:0,
-                            background:'#fef2f2', color:'#dc2626', fontWeight:700, fontSize:12 }}>
+                            background:'#fef2f2', color:'#dc2626', fontWeight:700, fontSize:11 }}>
                             {getInitials(b.full_name)}
                           </div>
-                          <span style={{ fontWeight:700, color:'#0f172a' }}>{b.full_name || '—'}</span>
+                          <span style={{ fontWeight:700, color:'#0f172a', fontSize:'0.8rem' }}>{b.full_name || '—'}</span>
                         </div>
                       </td>
-                      <td style={{ padding:'10px 14px', fontWeight:600, color:'#dc2626', fontFamily:'monospace' }}>
-                        {b.phone}
+                      <td style={{ padding:'9px 12px', fontWeight:600, color:'#dc2626', fontFamily:'monospace', fontSize:'0.76rem' }}>{b.phone}</td>
+                      <td style={{ padding:'9px 12px', fontSize:'0.76rem' }}>
+                        {b.source ? <span style={{ padding:'2px 8px', borderRadius:20, background:'#eff6ff', color:'#2563eb', fontWeight:700, fontSize:'0.7rem' }}>{b.source}</span> : '—'}
                       </td>
-                      <td style={{ padding:'10px 14px', color:'#475569', maxWidth:300 }}>
-                        {b.address || '—'}
+                      <td style={{ padding:'9px 12px', color:'#475569', fontSize:'0.76rem', maxWidth:200 }}>{b.product_name || '—'}</td>
+                      <td style={{ padding:'9px 12px', fontWeight:700, color:'#0f172a', whiteSpace:'nowrap' }}>
+                        {Number(b.total_amount||0) > 0 ? fmtMoney(b.total_amount)+'đ' : '—'}
                       </td>
-                      <td style={{ padding:'10px 14px' }}>
-                        <span style={{ padding:'3px 10px', borderRadius:20, fontSize:'0.72rem',
-                          fontWeight:700, background:'#fef2f2', color:'#dc2626' }}>
-                          {b.reason || 'Blacklisted'}
+                      <td style={{ padding:'9px 12px' }}>
+                        <span style={{ padding:'3px 9px', borderRadius:20, fontSize:'0.7rem', fontWeight:700,
+                          background:'#fef2f2', color:'#dc2626', whiteSpace:'nowrap' }}>
+                          {b.reason || 'Khác'}
                         </span>
                       </td>
+                      <td style={{ padding:'9px 12px', fontFamily:'monospace', fontSize:'0.72rem', color:'#64748b' }}>{b.shipping_code || '—'}</td>
+                      <td style={{ padding:'9px 12px' }}>
+                        <select value={st} onChange={e=>setBlStatus(b, e.target.value)} title='Đổi trạng thái'
+                          style={{ padding:'3px 8px', borderRadius:20, fontSize:'0.7rem', fontWeight:700,
+                            background:sty.bg, color:sty.color, border:`1px solid ${sty.color}33`,
+                            cursor:'pointer', fontFamily:S.font }}>
+                          {BL_STATUSES.map(s=><option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ padding:'9px 12px', fontWeight:600, color:S.primary, fontSize:'0.76rem' }}>{b.sales_person || '—'}</td>
+                      <td style={{ padding:'9px 12px', whiteSpace:'nowrap' }}>
+                        <button onClick={()=>setEditBl({ ...b })} title='Sửa'
+                          style={{ border:'none', background:'none', cursor:'pointer', fontSize:'0.88rem' }}>✏️</button>
+                        <button onClick={()=>delBl(b)} title='Xoá khỏi blacklist'
+                          style={{ border:'none', background:'none', cursor:'pointer', fontSize:'0.88rem' }}>🗑️</button>
+                      </td>
                     </tr>
-                  ))}
-                  {blacklist.length === 0 && (
+                  );})}
+                  {blFiltered.length === 0 && (
                     <tr>
-                      <td colSpan={5} style={{ padding:48, textAlign:'center', color:'#94a3b8' }}>
+                      <td colSpan={13} style={{ padding:48, textAlign:'center', color:'#94a3b8' }}>
                         <div style={{ fontSize:'2rem', marginBottom:8 }}>🚫</div>
-                        Chưa có ai trong blacklist
+                        {blacklist.length === 0 ? 'Chưa có ai trong blacklist' : 'Không có bản ghi khớp bộ lọc'}
                       </td>
                     </tr>
                   )}
@@ -1866,7 +2369,141 @@ const CrmTab = () => {
               </table>
             </div>
           </div>
+
+          {/* ── Thống kê cuối bảng (theo bộ lọc 7/15/30 ngày) ── */}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(190px, 1fr))', gap:12, marginBottom:16 }}>
+            {[
+              { icon:'🚫', label:'Tổng khách Blacklist', value: fmtNum(blStats.byStatus['Blacklist']||0), color:'#dc2626' },
+              { icon:'⏳', label:'Đang xem xét',         value: fmtNum(blStats.byStatus['Xem xét']||0),   color:'#ea580c' },
+              { icon:'✅', label:'Đã loại bỏ',           value: fmtNum(blStats.byStatus['Loại bỏ']||0),   color:'#64748b' },
+              { icon:'🔄', label:'Tổng đơn hoàn',        value: fmtNum(blStats.total),                    color:'#7c3aed' },
+              { icon:'💸', label:'Giá trị đơn hoàn',     value: fmtMoney(blStats.refundAmount)+'đ',       color:'#0891b2' },
+            ].map((s,i) => (
+              <div key={i} style={{ ...S.card, padding:'14px 16px' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+                  <span style={{ width:28, height:28, borderRadius:9, display:'inline-flex', alignItems:'center',
+                    justifyContent:'center', background:`${s.color}18`, fontSize:'0.85rem' }}>{s.icon}</span>
+                  <span style={{ fontSize:'0.7rem', color:'#94a3b8', fontWeight:700, textTransform:'uppercase' }}>{s.label}</span>
+                </div>
+                <div style={{ fontSize:'1.35rem', fontWeight:900, color:s.color }}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Lý do hoàn theo tỷ lệ */}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+            <div style={{ ...S.card, padding:20 }}>
+              <div style={{ fontWeight:800, fontSize:'0.95rem', color:'#0f172a', marginBottom:14 }}>
+                📊 Thống kê lý do hoàn hàng
+                <span style={{ fontWeight:500, fontSize:'0.76rem', color:'#94a3b8', marginLeft:8 }}>
+                  {blDays ? `${blDays} ngày gần đây` : 'tất cả thời gian'}
+                </span>
+              </div>
+              {blStats.reasonList.length > 0 ? (
+                <div style={{ display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
+                  <ResponsiveContainer width={170} height={170}>
+                    <PieChart>
+                      <Pie data={blStats.reasonList} dataKey='value' nameKey='name' cx='50%' cy='50%'
+                        innerRadius={48} outerRadius={74} paddingAngle={3} strokeWidth={0}>
+                        {blStats.reasonList.map((_,i) => <Cell key={i} fill={BL_REASON_COLORS[i % BL_REASON_COLORS.length]}/>)}
+                      </Pie>
+                      <Tooltip formatter={(v,n)=>[`${v} đơn`, n]} contentStyle={{ borderRadius:10, border:'1px solid #e5e7eb' }}/>
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div style={{ flex:1, minWidth:180, display:'flex', flexDirection:'column', gap:7 }}>
+                    {blStats.reasonList.map((r,i) => (
+                      <div key={r.name} style={{ display:'flex', alignItems:'center', gap:8, fontSize:'0.8rem' }}>
+                        <span style={{ width:10, height:10, borderRadius:'50%', background:BL_REASON_COLORS[i % BL_REASON_COLORS.length], flexShrink:0 }}/>
+                        <span style={{ color:'#475569', flex:1 }}>{r.name}</span>
+                        <b style={{ color:'#0f172a' }}>{r.value}</b>
+                        <span style={{ color:'#94a3b8', width:42, textAlign:'right' }}>({r.pct}%)</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ padding:30, textAlign:'center', color:'#94a3b8', fontSize:'0.85rem' }}>Chưa có dữ liệu</div>
+              )}
+            </div>
+
+            {/* Cảnh báo */}
+            <div style={{ ...S.card, padding:20, background:'#fffbeb', borderColor:'#fde68a' }}>
+              <div style={{ fontWeight:800, fontSize:'0.95rem', color:'#b45309', marginBottom:12 }}>⚠️ Cảnh báo</div>
+              {(() => {
+                const cnt = {};
+                blacklist.forEach(b => { if (b.phone) cnt[b.phone] = (cnt[b.phone]||0)+1; });
+                const repeat = Object.entries(cnt).filter(([,n]) => n >= 3);
+                const reviewing = blStats.byStatus['Xem xét'] || 0;
+                const items = [
+                  { n: repeat.length, txt: 'khách hoàn hàng từ 3 lần trở lên — nên đưa vào Blacklist', color:'#dc2626' },
+                  { n: reviewing,     txt: 'khách đang ở trạng thái "Xem xét" — cần chốt xử lý',        color:'#ea580c' },
+                  { n: blStats.customers, txt: 'khách không trùng lặp trong danh sách đang lọc',        color:'#64748b' },
+                ];
+                return (
+                  <div style={{ display:'flex', flexDirection:'column', gap:11 }}>
+                    {items.map((it,i) => (
+                      <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:9 }}>
+                        <span style={{ minWidth:34, height:26, borderRadius:8, display:'inline-flex', alignItems:'center',
+                          justifyContent:'center', background:'#fff', border:`1px solid ${it.color}44`,
+                          color:it.color, fontWeight:900, fontSize:'0.82rem', padding:'0 6px' }}>{it.n}</span>
+                        <span style={{ fontSize:'0.8rem', color:'#78350f', lineHeight:1.5 }}>{it.txt}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+              <div style={{ marginTop:14, paddingTop:12, borderTop:'1px dashed #fde68a', fontSize:'0.76rem', color:'#92400e', lineHeight:1.55 }}>
+                ℹ️ Khách ở trạng thái <b>Blacklist</b> nên từ chối tạo đơn mới. Đổi trạng thái ngay trong cột “Trạng thái”.
+              </div>
+            </div>
+          </div>
         </div>
+      )}
+
+      {/* ── MODAL: thêm/sửa blacklist ── */}
+      {editBl && (
+        <Modal onClose={()=>setEditBl(null)} title={editBl.id ? 'Sửa bản ghi Blacklist' : 'Thêm vào Blacklist'}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:13 }}>
+            <div><FieldLabel label='ID Nhanh'/>
+              <input style={S.input} value={editBl.nhanh_id||''} onChange={e=>setEditBl(p=>({...p, nhanh_id:e.target.value}))}/></div>
+            <div><FieldLabel label='Ngày đặt hàng'/>
+              <input type='date' style={S.input} value={editBl.order_date||''} onChange={e=>setEditBl(p=>({...p, order_date:e.target.value}))}/></div>
+            <div><FieldLabel label='Tên khách hàng'/>
+              <input style={S.input} value={editBl.full_name||''} onChange={e=>setEditBl(p=>({...p, full_name:e.target.value}))}/></div>
+            <div><FieldLabel label='Số điện thoại *'/>
+              <input style={S.input} value={editBl.phone||''} onChange={e=>setEditBl(p=>({...p, phone:e.target.value}))}/></div>
+            <div><FieldLabel label='Nguồn khách'/>
+              <select style={S.select} value={editBl.source||''} onChange={e=>setEditBl(p=>({...p, source:e.target.value}))}>
+                <option value=''>—</option>{ORDER_SOURCES.map(s=><option key={s} value={s}>{s}</option>)}
+              </select></div>
+            <div><FieldLabel label='Tổng tiền (đ)'/>
+              <input style={S.input} value={editBl.total_amount??''} onChange={e=>setEditBl(p=>({...p, total_amount:e.target.value}))}/></div>
+            <div style={{ gridColumn:'1 / -1' }}><FieldLabel label='Sản phẩm'/>
+              <input style={S.input} value={editBl.product_name||''} onChange={e=>setEditBl(p=>({...p, product_name:e.target.value}))}/></div>
+            <div><FieldLabel label='Lý do blacklist'/>
+              <select style={S.select} value={editBl.reason||''} onChange={e=>setEditBl(p=>({...p, reason:e.target.value}))}>
+                {BL_REASONS.map(r=><option key={r} value={r}>{r}</option>)}
+              </select></div>
+            <div><FieldLabel label='Mã vận đơn'/>
+              <input style={S.input} value={editBl.shipping_code||''} onChange={e=>setEditBl(p=>({...p, shipping_code:e.target.value}))}/></div>
+            <div><FieldLabel label='Trạng thái'/>
+              <select style={S.select} value={editBl.status||'Blacklist'} onChange={e=>setEditBl(p=>({...p, status:e.target.value}))}>
+                {BL_STATUSES.map(s=><option key={s} value={s}>{s}</option>)}
+              </select></div>
+            <div><FieldLabel label='Nhân sự phụ trách'/>
+              <select style={S.select} value={editBl.sales_person||''} onChange={e=>setEditBl(p=>({...p, sales_person:e.target.value}))}>
+                <option value=''>—</option>{SALES_PERSONS.map(s=><option key={s} value={s}>{s}</option>)}
+              </select></div>
+            <div style={{ gridColumn:'1 / -1' }}><FieldLabel label='Địa chỉ'/>
+              <input style={S.input} value={editBl.address||''} onChange={e=>setEditBl(p=>({...p, address:e.target.value}))}/></div>
+          </div>
+          <div style={{ display:'flex', gap:9, marginTop:18 }}>
+            <button onClick={saveBl} disabled={saving} style={{ ...S.btnPrimary, flex:1, opacity:saving?0.6:1 }}>
+              {saving ? 'Đang lưu…' : 'Lưu'}
+            </button>
+            <button onClick={()=>setEditBl(null)} style={S.btnOutline}>Đóng</button>
+          </div>
+        </Modal>
       )}
 
       {/* ════════════════════════════════════════════════════════════════════

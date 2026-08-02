@@ -481,7 +481,7 @@ function AppMain({ user, onLogout, allowedViews }) {
           {currentView === 'landing_orders' && <LandingOrders />}
           {currentView === 'camp_registration' && <CampRegistrationTab />}
           {currentView === 'task_notes' && <TaskNoteTab />}
-          {currentView === 'crm' && <CrmTab />}
+          {currentView === 'crm' && <CrmTab currentUser={user} />}
           {currentView === 'koc_blacklist' && <KocBlacklistTab />}
           {currentView === 'koc_payment' && <KocPaymentTab />}
           {currentView === 'koc_performance' && <KocPerformanceTab />}
