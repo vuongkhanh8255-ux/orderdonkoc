@@ -11,7 +11,8 @@ import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
 
 const ACCENT = '#ff6a2c';
-const CONTENT_TYPES = ['Seeding TikTok', 'Review sản phẩm', 'Livestream', 'Affiliate campaign', 'Khác'];
+// CS 2/8: "Seeding TikTok" → đổi thành "Seeding" + thêm "Hỗ trợ ngoài"
+const CONTENT_TYPES = ['Seeding', 'Hỗ trợ ngoài', 'Review sản phẩm', 'Livestream', 'Affiliate campaign', 'Khác'];
 const VAT_OPTIONS = [0, 5, 8, 10];
 const ACTION_PW = 'STELLA8255$';   // mật khẩu duyệt / đánh dấu đã thanh toán (1 lần/phiên)
 const STATUS = {
@@ -33,7 +34,7 @@ const fmtDate = (s) => { if (!s) return ''; const p = String(s).slice(0, 10).spl
 const calcTotal = (amount, vat) => round(num(amount) * (1 + num(vat) / 100));
 
 const EMPTY = {
-  pay_date: todayYmd(), staff: '', seeder_name: '', content_type: 'Seeding TikTok',
+  pay_date: todayYmd(), staff: '', seeder_name: '', content_type: 'Seeding',
   budget_source: '',        // CS 1/8: Nguồn ngân sách BẮT BUỘC — Stella / Optimax (quản lý riêng, không dùng chung)
   amount: 0, vat_pct: 0, bank_account: '', bank_name: '', beneficiary: '',
   qr_image: '', link: '', invoice_file: '', note: '', status: 'draft',
@@ -110,6 +111,7 @@ export default function SeedingTab({ currentUser }) {
     const r = editing;
     if (!r.seeder_name?.trim()) { alert('Thiếu Họ tên seeder'); return; }
     if (!r.budget_source) { alert('Vui lòng chọn nguồn ngân sách'); return; }   // CS 1/8: bắt buộc, không cho lưu
+    if (!r.note?.trim()) { alert('Vui lòng điền GHI CHÚ (lý do) trước khi lưu phiếu'); return; }   // CS 2/8: bắt buộc
     const payload = {
       pay_date: r.pay_date || todayYmd(), staff: r.staff || (currentUser?.username || ''),
       budget_source: r.budget_source,
@@ -375,7 +377,13 @@ export default function SeedingTab({ currentUser }) {
               <Field label="Link QR (dán URL ảnh)"><input value={editing.qr_image || ''} onChange={e => setEditing({ ...editing, qr_image: e.target.value })} style={inputStyle} placeholder="https://..." /></Field>
               <Field label="Link nội dung (Drive/video/bài đăng)" span={2}><input value={editing.link || ''} onChange={e => setEditing({ ...editing, link: e.target.value })} style={inputStyle} placeholder="https://..." /></Field>
               <Field label="Link chứng từ (hoá đơn VAT/biên nhận)" span={2}><input value={editing.invoice_file || ''} onChange={e => setEditing({ ...editing, invoice_file: e.target.value })} style={inputStyle} placeholder="https://..." /></Field>
-              <Field label="Ghi chú" span={2}><input value={editing.note || ''} onChange={e => setEditing({ ...editing, note: e.target.value })} style={inputStyle} /></Field>
+              {/* CS 2/8: GHI CHÚ (lý do) BẮT BUỘC mới cho lưu phiếu */}
+              <Field label="Ghi chú (lý do) *" span={2}>
+                <input value={editing.note || ''} onChange={e => setEditing({ ...editing, note: e.target.value })}
+                  placeholder="Lý do chi khoản này…"
+                  style={{ ...inputStyle, borderColor: editing.note?.trim() ? '#e5e7eb' : '#fca5a5' }} />
+                {!editing.note?.trim() && <div style={{ fontSize: '0.68rem', color: '#dc2626', marginTop: 3 }}>Bắt buộc điền lý do mới lưu được phiếu</div>}
+              </Field>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
               <button onClick={() => setEditing(null)} style={{ padding: '9px 20px', borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, cursor: 'pointer' }}>Huỷ</button>
