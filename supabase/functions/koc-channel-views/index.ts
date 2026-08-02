@@ -119,10 +119,11 @@ async function tikwmPlay(link: string) {
   } catch (_) { return { play: null, wmplay: null, hdplay: null }; }
 }
 
-// Lấy NGÀY ĐĂNG (create_time) của 1 video theo aweme_id qua TikHub (fetch_one_video). Cho Hợp đồng.
-async function tikhubVideoDate(awemeId: string): Promise<{ ok: boolean; create_time: number; dbg: any }> {
+// Lấy NGÀY ĐĂNG (create_time) + LƯỢT XEM (play_count) của 1 video theo aweme_id qua TikHub (fetch_one_video).
+// Cho Hợp đồng (ngày air) và Theo dõi Booking (view thật).
+async function tikhubVideoDate(awemeId: string): Promise<{ ok: boolean; create_time: number; play_count: number; dbg: any }> {
   const dbg: any = {};
-  if (!TIKHUB_KEY) return { ok: false, create_time: 0, dbg: { err: 'no key' } };
+  if (!TIKHUB_KEY) return { ok: false, create_time: 0, play_count: 0, dbg: { err: 'no key' } };
   try {
     const r = await fetchT(
       `https://api.tikhub.io/api/v1/tiktok/app/v3/fetch_one_video?aweme_id=${encodeURIComponent(awemeId)}`,
@@ -133,10 +134,11 @@ async function tikhubVideoDate(awemeId: string): Promise<{ ok: boolean; create_t
     const data = j?.data ?? j;
     const detail = data?.aweme_detail ?? data?.aweme_details?.[0] ?? data?.aweme_list?.[0] ?? data;
     const ct = detail?.create_time ?? detail?.createTime ?? 0;
+    const play = detail?.statistics?.play_count ?? detail?.stats?.playCount ?? detail?.play_count ?? 0;
     dbg.keys = Object.keys(detail || {}).slice(0, 16);
-    if (ct) return { ok: true, create_time: Number(ct), dbg };
+    if (ct || play) return { ok: true, create_time: Number(ct) || 0, play_count: Number(play) || 0, dbg };
   } catch (e) { dbg.err = String(e); }
-  return { ok: false, create_time: 0, dbg };
+  return { ok: false, create_time: 0, play_count: 0, dbg };
 }
 
 Deno.serve(async (req) => {
@@ -161,7 +163,7 @@ Deno.serve(async (req) => {
     if (airId) {
       const r = await tikhubVideoDate(airId);
       const dateStr = r.ok && r.create_time ? new Date(r.create_time * 1000).toISOString().slice(0, 10) : '';
-      return json({ ok: r.ok, aweme_id: airId, create_time: r.create_time, date: dateStr, _dbg: (url.searchParams.get('debug') === '1' ? r.dbg : undefined) });
+      return json({ ok: r.ok, aweme_id: airId, create_time: r.create_time, play_count: r.play_count, date: dateStr, _dbg: (url.searchParams.get('debug') === '1' ? r.dbg : undefined) });
     }
 
     username = normUser(username);
