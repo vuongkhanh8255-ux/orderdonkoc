@@ -34,9 +34,11 @@ const calcTotal = (amount, vat) => round(num(amount) * (1 + num(vat) / 100));
 
 const EMPTY = {
   pay_date: todayYmd(), staff: '', seeder_name: '', content_type: 'Seeding TikTok',
+  budget_source: '',        // CS 1/8: Nguồn ngân sách BẮT BUỘC — Stella / Optimax (quản lý riêng, không dùng chung)
   amount: 0, vat_pct: 0, bank_account: '', bank_name: '', beneficiary: '',
   qr_image: '', link: '', invoice_file: '', note: '', status: 'draft',
 };
+const BUDGET_SOURCES = ['Stella', 'Optimax'];
 
 const inputStyle = { padding: '8px 11px', borderRadius: 9, border: '1px solid #e5e7eb', background: '#fff', fontSize: '0.85rem', color: '#1f2937', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' };
 const labelStyle = { fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.3px', marginBottom: 4, display: 'block' };
@@ -64,24 +66,35 @@ export default function SeedingTab({ currentUser }) {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  // Ngân sách đặt tay theo tháng (bảng seeding_budgets)
+  // Ngân sách đặt tay theo THÁNG × NGUỒN (CS 1/8: Stella / Optimax quản lý riêng, không dùng chung).
+  // srcBudgets = { 'YYYY-MM': { Stella: n, Optimax: n } }. Bảng cũ seeding_budgets (tổng tháng) vẫn
+  // đọc làm fallback cho tháng chưa đặt theo nguồn.
+  const [srcBudgets, setSrcBudgets] = useState({});
+  const [budgetEdit, setBudgetEdit] = useState(null);   // { Stella: '', Optimax: '' } — popup Đặt ngân sách
   const loadBudgets = useCallback(async () => {
     const { data } = await supabase.from('seeding_budgets').select('ym, amount');
     const m = {}; (data || []).forEach(b => { m[b.ym] = Number(b.amount) || 0; });
     setBudgets(m);
+    const { data: d2 } = await supabase.from('seeding_budget_sources').select('ym, source, amount');
+    const s = {}; (d2 || []).forEach(b => { (s[b.ym] = s[b.ym] || {})[b.source] = Number(b.amount) || 0; });
+    setSrcBudgets(s);
   }, []);
   useEffect(() => { loadBudgets(); }, [loadBudgets]);
 
-  const setBudget = async () => {
+  const setBudget = () => {
     if (month === 'all') { alert('Chọn 1 tháng cụ thể rồi mới đặt ngân sách nha.'); return; }
-    const cur = budgets[month] || 0;
-    const raw = window.prompt(`Ngân sách seeding tháng ${month} (VNĐ):`, cur ? String(cur) : '');
-    if (raw === null) return;
-    const amount = Number(String(raw).replace(/[^\d]/g, '')) || 0;
-    const { error } = await supabase.from('seeding_budgets')
-      .upsert({ ym: month, amount, updated_by: currentUser?.username || '', updated_at: new Date().toISOString() }, { onConflict: 'ym' });
+    const cur = srcBudgets[month] || {};
+    setBudgetEdit({ Stella: cur.Stella ?? '', Optimax: cur.Optimax ?? '' });
+  };
+  const saveBudget = async () => {
+    const rows2 = BUDGET_SOURCES.map(src => ({
+      ym: month, source: src, amount: Number(String(budgetEdit[src] ?? '').replace(/[^\d]/g, '')) || 0,
+      updated_by: currentUser?.username || '', updated_at: new Date().toISOString(),
+    }));
+    const { error } = await supabase.from('seeding_budget_sources').upsert(rows2, { onConflict: 'ym,source' });
     if (error) { alert('Lưu ngân sách không được: ' + error.message); return; }
-    setBudgets(b => ({ ...b, [month]: amount }));
+    setSrcBudgets(s => ({ ...s, [month]: Object.fromEntries(rows2.map(r => [r.source, r.amount])) }));
+    setBudgetEdit(null);
   };
 
   // Tên CS đã dùng → gợi ý cho ô "Người tạo" (thay danh sách nhân sự booking)
@@ -96,8 +109,10 @@ export default function SeedingTab({ currentUser }) {
   const save = async () => {
     const r = editing;
     if (!r.seeder_name?.trim()) { alert('Thiếu Họ tên seeder'); return; }
+    if (!r.budget_source) { alert('Vui lòng chọn nguồn ngân sách'); return; }   // CS 1/8: bắt buộc, không cho lưu
     const payload = {
       pay_date: r.pay_date || todayYmd(), staff: r.staff || (currentUser?.username || ''),
+      budget_source: r.budget_source,
       seeder_name: r.seeder_name.trim(), content_type: r.content_type || 'Khác',
       amount: num(r.amount), vat_pct: num(r.vat_pct), total: calcTotal(r.amount, r.vat_pct),
       bank_account: r.bank_account || null, bank_name: r.bank_name || null, beneficiary: r.beneficiary || null,
@@ -139,12 +154,24 @@ export default function SeedingTab({ currentUser }) {
   const kpi = useMemo(() => {
     let spend = 0, paid = 0, pending = 0;
     filtered.forEach(r => { const t = num(r.total); spend += t; if (r.status === 'paid') paid += t; else if (r.status !== 'rejected') pending += t; });
-    // Ngân sách = số ĐẶT TAY của tháng đang chọn (xem "all" thì cộng hết các tháng đã đặt).
-    const budget = month === 'all'
+    // Ngân sách THEO NGUỒN (CS 1/8): phiếu nguồn nào trừ nguồn đó, không cộng dồn/trừ chéo.
+    const srcOf = (ym) => srcBudgets[ym] || {};
+    const budgetSrc = {}, spendSrc = {};
+    BUDGET_SOURCES.forEach(src => {
+      budgetSrc[src] = month === 'all'
+        ? Object.keys(srcBudgets).reduce((a, ym) => a + (Number(srcOf(ym)[src]) || 0), 0)
+        : (Number(srcOf(month)[src]) || 0);
+      spendSrc[src] = filtered.filter(r => r.budget_source === src && r.status !== 'rejected')
+        .reduce((a, r) => a + num(r.total), 0);
+    });
+    // Tổng ngân sách: ưu tiên tổng 2 nguồn đã đặt; tháng chưa đặt theo nguồn → fallback số tổng cũ.
+    const sumSrc = BUDGET_SOURCES.reduce((a, s) => a + budgetSrc[s], 0);
+    const legacy = month === 'all'
       ? Object.values(budgets).reduce((a, b) => a + (Number(b) || 0), 0)
       : (Number(budgets[month]) || 0);
-    return { budget, spend, paid, pending, remain: budget - paid, hasBudget: budget > 0 };
-  }, [filtered, budgets, month]);
+    const budget = sumSrc > 0 ? sumSrc : legacy;
+    return { budget, spend, paid, pending, remain: budget - paid, hasBudget: budget > 0, budgetSrc, spendSrc };
+  }, [filtered, budgets, srcBudgets, month]);
 
   const months = useMemo(() => {
     const set = new Set(rows.map(r => (r.pay_date || '').slice(0, 7)).filter(Boolean));
@@ -154,7 +181,7 @@ export default function SeedingTab({ currentUser }) {
 
   const exportXlsx = () => {
     const data = filtered.map((r, i) => ({
-      STT: i + 1, 'Ngày': fmtDate(r.pay_date), 'Họ tên': r.seeder_name, 'Nội dung': r.content_type,
+      STT: i + 1, 'Ngày': fmtDate(r.pay_date), 'Họ tên': r.seeder_name, 'Nội dung': r.content_type, 'Nguồn ngân sách': r.budget_source || '',
       'Số tiền': num(r.amount), 'VAT %': num(r.vat_pct), 'Tổng': num(r.total),
       'Ngân hàng': r.bank_name || '', 'Số TK': r.bank_account || '', 'Chủ TK': r.beneficiary || '',
       'Link': r.link || '', 'Trạng thái': STATUS[r.status]?.label || r.status, 'Ghi chú': r.note || '',
@@ -200,6 +227,30 @@ export default function SeedingTab({ currentUser }) {
         ))}
       </div>
 
+      {/* NGÂN SÁCH THEO NGUỒN (CS 1/8): Stella / Optimax riêng biệt, phiếu nguồn nào trừ nguồn đó */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14, marginBottom: 20 }}>
+        {BUDGET_SOURCES.map(src => {
+          const b = kpi.budgetSrc[src] || 0, s = kpi.spendSrc[src] || 0, con = b - s;
+          const mau = src === 'Stella' ? '#7c3aed' : '#ea580c';
+          return (
+            <div key={src} style={{ ...card, borderTop: `3px solid ${mau}` }}>
+              <div style={{ ...labelStyle, color: mau }}>💰 Nguồn {src}</div>
+              {b > 0 ? (
+                <>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 900, color: con < 0 ? '#dc2626' : mau }}>{fmtMoney(con)}<span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#94a3b8' }}> đ còn lại</span></div>
+                  <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 2 }}>Đã chi {fmtMoney(s)}đ / ngân sách {fmtMoney(b)}đ</div>
+                  <div style={{ height: 7, background: '#f1f5f9', borderRadius: 5, overflow: 'hidden', marginTop: 6 }}>
+                    <div style={{ width: `${Math.min(100, Math.round(100 * s / b))}%`, height: '100%', background: con < 0 ? '#dc2626' : mau }} />
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: '0.82rem', color: '#94a3b8' }}>Chưa đặt ngân sách {month === 'all' ? '' : `tháng ${month}`} — đã chi <b style={{ color: mau }}>{fmtMoney(s)}đ</b>. Bấm “💰 Đặt ngân sách”.</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
       {/* FILTER */}
       <div style={{ ...card, marginBottom: 16, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <input type="text" placeholder="🔍 Tìm seeder, nội dung, ghi chú..." value={search} onChange={e => setSearch(e.target.value)}
@@ -223,6 +274,7 @@ export default function SeedingTab({ currentUser }) {
                 <th style={{ ...th, width: 90 }}>Ngày</th>
                 <th style={{ ...th, minWidth: 140 }}>Họ tên</th>
                 <th style={{ ...th, minWidth: 140 }}>Nội dung</th>
+                <th style={{ ...th, width: 84, textAlign: 'center' }}>Nguồn NS</th>
                 <th style={{ ...th, textAlign: 'right' }}>Số tiền</th>
                 <th style={{ ...th, textAlign: 'center', width: 55 }}>VAT</th>
                 <th style={{ ...th, textAlign: 'right' }}>Tổng</th>
@@ -233,9 +285,9 @@ export default function SeedingTab({ currentUser }) {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={10} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải...</td></tr>
+                <tr><td colSpan={11} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải...</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={10} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>Chưa có phiếu seeding nào — bấm "+ Thêm phiếu"</td></tr>
+                <tr><td colSpan={11} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>Chưa có phiếu seeding nào — bấm "+ Thêm phiếu"</td></tr>
               ) : filtered.map((r, i) => {
                 const st = STATUS[r.status] || STATUS.draft;
                 return (
@@ -244,6 +296,11 @@ export default function SeedingTab({ currentUser }) {
                     <td style={td}>{fmtDate(r.pay_date)}</td>
                     <td style={{ ...td, fontWeight: 700 }}>{r.seeder_name}{r.beneficiary && r.beneficiary !== r.seeder_name ? <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 400 }}>{r.beneficiary}</div> : null}</td>
                     <td style={td}>{r.content_type}</td>
+                    <td style={{ ...td, textAlign: 'center' }}>
+                      {r.budget_source
+                        ? <span style={{ padding: '2px 9px', borderRadius: 20, fontSize: '0.7rem', fontWeight: 800, background: r.budget_source === 'Stella' ? '#ede9fe' : '#ffedd5', color: r.budget_source === 'Stella' ? '#7c3aed' : '#ea580c' }}>{r.budget_source}</span>
+                        : <span style={{ color: '#cbd5e1' }} title="Phiếu cũ trước khi có trường Nguồn ngân sách — mở Sửa để gắn">—</span>}
+                    </td>
                     <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(r.amount)}</td>
                     <td style={{ ...td, textAlign: 'center', color: '#64748b' }}>{num(r.vat_pct)}%</td>
                     <td style={{ ...td, textAlign: 'right', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(r.total)}</td>
@@ -263,7 +320,7 @@ export default function SeedingTab({ currentUser }) {
                         {r.status === 'pending' && <button onClick={() => setStatus(r, 'rejected')} style={actBtn('#dc2626', '#fee2e2')}>Từ chối</button>}
                         {r.status === 'approved' && <button onClick={() => setStatus(r, 'paid')} style={actBtn('#15803d', '#dcfce7')}>Đã TT</button>}
                         <button onClick={() => setEditing(r)} style={actBtn('#64748b', '#f1f5f9')}>Sửa</button>
-                        <button onClick={() => del(r)} style={actBtn('#dc2626', '#fef2f2')}>Xoá</button>
+                        {currentUser?.role === 'admin' && <button onClick={() => del(r)} style={actBtn('#dc2626', '#fef2f2')}>Xoá</button>}
                       </div>
                     </td>
                   </tr>
@@ -281,6 +338,15 @@ export default function SeedingTab({ currentUser }) {
             <h2 style={{ margin: '0 0 18px', fontSize: '1.15rem', fontWeight: 900, color: '#0f172a' }}>{editing.id ? '✏️ Sửa phiếu seeding' : '🌱 Thêm phiếu seeding'}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
               <Field label="Ngày"><input type="date" value={editing.pay_date || ''} onChange={e => setEditing({ ...editing, pay_date: e.target.value })} style={inputStyle} /></Field>
+              {/* CS 1/8: Nguồn ngân sách BẮT BUỘC — ngay dưới Ngày. Stella/Optimax quản lý riêng. */}
+              <Field label="Nguồn ngân sách *">
+                <select value={editing.budget_source || ''} onChange={e => setEditing({ ...editing, budget_source: e.target.value })}
+                  style={{ ...inputStyle, borderColor: editing.budget_source ? '#e5e7eb' : '#fca5a5', fontWeight: 700 }}>
+                  <option value="">Chọn nguồn ngân sách</option>
+                  {BUDGET_SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                {!editing.budget_source && <div style={{ fontSize: '0.68rem', color: '#dc2626', marginTop: 3 }}>Vui lòng chọn nguồn ngân sách để tách riêng chi phí</div>}
+              </Field>
               {/* Người tạo = TÊN CS (trước đây đổ nhầm danh sách nhân sự booking).
                   Gõ tự do + gợi ý các tên CS đã dùng trước đó → CS tự thêm tên mình, khỏi chờ khai báo. */}
               <Field label="Người tạo (CS)">
@@ -314,6 +380,32 @@ export default function SeedingTab({ currentUser }) {
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
               <button onClick={() => setEditing(null)} style={{ padding: '9px 20px', borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, cursor: 'pointer' }}>Huỷ</button>
               <button onClick={save} style={{ padding: '9px 24px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontWeight: 800, cursor: 'pointer' }}>💾 Lưu</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* POPUP ĐẶT NGÂN SÁCH THEO NGUỒN (CS 1/8): Stella / Optimax nhập riêng, cập nhật độc lập */}
+      {budgetEdit && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, zIndex: 1000 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 24, width: '100%', maxWidth: 420 }}>
+            <h2 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 900 }}>💰 Đặt ngân sách — tháng {month}</h2>
+            <p style={{ margin: '0 0 16px', fontSize: '0.78rem', color: '#94a3b8' }}>Thiết lập hoặc cập nhật ngân sách cho từng nguồn.</p>
+            {BUDGET_SOURCES.map(src => (
+              <div key={src} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                <span style={{ width: 90, padding: '6px 0', textAlign: 'center', borderRadius: 8, fontWeight: 800, fontSize: '0.82rem', background: src === 'Stella' ? '#ede9fe' : '#ffedd5', color: src === 'Stella' ? '#7c3aed' : '#ea580c' }}>{src}</span>
+                <input value={budgetEdit[src]} inputMode="numeric" placeholder="0"
+                  onChange={e => setBudgetEdit(b => ({ ...b, [src]: e.target.value.replace(/[^\d]/g, '') }))}
+                  style={{ ...inputStyle, flex: 1, textAlign: 'right', fontWeight: 700 }} />
+                <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>đ</span>
+              </div>
+            ))}
+            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', borderRadius: 9, padding: '8px 12px', fontSize: '0.76rem', marginBottom: 16 }}>
+              ⓘ Hai nguồn ngân sách được quản lý riêng biệt, không dùng chung — phiếu nguồn nào trừ nguồn đó.
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button onClick={() => setBudgetEdit(null)} style={{ padding: '9px 20px', borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, cursor: 'pointer' }}>Huỷ</button>
+              <button onClick={saveBudget} style={{ padding: '9px 24px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontWeight: 800, cursor: 'pointer' }}>Lưu</button>
             </div>
           </div>
         </div>

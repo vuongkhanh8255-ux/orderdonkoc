@@ -7,9 +7,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
-import { useAppData } from '../context/AppDataContext';
 import EvidenceUploader from './EvidenceUploader';
 import { SHOPS, shopKey, findShopByKey } from '../constants/shops';
+import { CS_STAFF } from '../constants/csStaff';
 
 const ACCENT = '#ff6a2c';
 // 7 nhóm theo brief + 4 nhóm CS thực tế dùng nhiều (soi từ 4.811 voucher đã cấp trên sàn):
@@ -232,7 +232,7 @@ function ShopVouchers() {
 }
 
 export default function VoucherTab({ currentUser }) {
-  const { nhanSus } = useAppData();
+  const isAdmin = currentUser?.role === 'admin';   // CS 1/8: nút XÓA chỉ admin
   const [mainTab, setMainTab] = useState('cs');   // cs = CS gửi khách · shop = shop tạo trên sàn
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -269,6 +269,9 @@ export default function VoucherTab({ currentUser }) {
     if (!r.customer_name?.trim() && !r.voucher_code?.trim()) { alert('Cần Tên khách hoặc Mã voucher'); return; }
     const payload = {
       issue_date: r.issue_date || todayYmd(), platform: r.platform || null, order_sn: r.order_sn || null,
+      // CS 1/8: chọn gian TikTok mà ngoài bảng + file xuất trống — vì payload từng THIẾU shop_name
+      // (dropdown có set nhưng save không lưu). Bổ sung để cột Sàn·Gian, bộ lọc, Excel có tên gian.
+      shop_name: r.shop_name || null,
       customer_name: r.customer_name || null, reason_category: r.reason_category || null, voucher_code: r.voucher_code || null,
       amount: num(r.amount), use_status: r.use_status || 'unused', staff: r.staff || (currentUser?.username || ''),
       accountant_checked: !!r.accountant_checked, expire_date: r.expire_date || null,
@@ -304,13 +307,16 @@ export default function VoucherTab({ currentUser }) {
 
   // Danh sách gian cho ô lọc — CHỈ hiện gian thuộc SÀN đang chọn (CS 31/7: lọc sàn TikTok
   // không ra gì vì danh sách gian đang trộn cả 2 sàn).
+  // CS 1/8: bộ lọc THIẾU gian (vd TikTok eHerb Hồ Chí Minh) — vì list chỉ dựng từ data đã lưu.
+  // Gộp thêm danh sách gian CHUẨN (SHOPS) → gian nào cũng chọn được kể cả chưa có voucher.
   const shopList = useMemo(() => {
     const m = {};
+    SHOPS.forEach(s => { if (sanFilter === 'all' || s.san === sanFilter) m[s.name] = m[s.name] || 0; });
     rows.forEach(r => {
       if (sanFilter !== 'all' && (r.platform || 'shopee') !== sanFilter) return;
       const k = r.shop_name || '(chưa rõ)'; if (k !== '(chưa rõ)') m[k] = (m[k] || 0) + 1;
     });
-    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+    return Object.entries(m).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   }, [rows, sanFilter]);
 
   // Danh sách lý do CÓ THẬT trong data (kèm số lượng) — CS 31/7 xin bộ lọc lý do
@@ -400,10 +406,11 @@ export default function VoucherTab({ currentUser }) {
 
   const exportXlsx = () => {
     // Đủ trường brief mục 2 + gian (mục 8) + ảnh bằng chứng — kho & kế toán tra thẳng trên file này.
+    // Tên cột theo đúng yêu cầu CS 1/8: Ngày · Tên sàn · Mã đơn · Số tiền · Lý do (+ các cột phụ)
     const data = filtered.map((r, i) => ({
-      STT: i + 1, 'Ngày tạo': fmtDate(r.issue_date), 'Sàn': r.platform, 'Gian hàng': r.shop_name || '',
+      STT: i + 1, 'Ngày': fmtDate(r.issue_date), 'Tên sàn': r.platform === 'tiktok' ? 'TikTok' : r.platform === 'shopee' ? 'Shopee' : (r.platform || ''), 'Gian hàng': r.shop_name || '',
       'Mã đơn': r.order_sn, 'Khách hàng': r.customer_name, 'Mã voucher': r.voucher_code,
-      'Số tiền hỗ trợ': num(r.amount), 'Lý do tạo': r.reason_category,
+      'Số tiền': num(r.amount), 'Lý do': r.reason_category,
       'Trạng thái': USE_STATUS[r.use_status]?.label, 'Ngày dùng': fmtDate(r.used_at), 'Hạn dùng': fmtDate(r.expire_date),
       'Đối soát KT': r.accountant_checked ? 'x' : '', 'Nhân viên tạo': r.staff,
       'Ảnh bằng chứng': (r.evidence_links || '').split('\n').filter(Boolean).join(' , '), 'Ghi chú': r.note,
@@ -620,7 +627,7 @@ export default function VoucherTab({ currentUser }) {
                     </td>
                     <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={!!r.accountant_checked} onChange={e => patch(r, { accountant_checked: e.target.checked })} style={{ cursor: 'pointer', width: 16, height: 16 }} /></td>
                     <td style={{ ...td, fontSize: '0.76rem' }}>{r.staff || '—'}</td>
-                    <td style={{ ...td, textAlign: 'center' }}><div style={{ display: 'flex', gap: 5, justifyContent: 'center' }}><button onClick={() => setEditing(r)} style={miniBtn('#64748b')}>Sửa</button><button onClick={() => del(r)} style={miniBtn('#dc2626')}>Xoá</button></div></td>
+                    <td style={{ ...td, textAlign: 'center' }}><div style={{ display: 'flex', gap: 5, justifyContent: 'center' }}><button onClick={() => setEditing(r)} style={miniBtn('#64748b')}>Sửa</button>{isAdmin && <button onClick={() => del(r)} style={miniBtn('#dc2626')}>Xoá</button>}</div></td>
                   </tr>); })}
             </tbody>
           </table>
@@ -653,7 +660,8 @@ export default function VoucherTab({ currentUser }) {
               <div><label style={labelStyle}>Lý do cấp</label><select value={editing.reason_category || ''} onChange={e => setEditing({ ...editing, reason_category: e.target.value })} style={inputStyle}>{REASONS.map(x => <option key={x} value={x}>{x}</option>)}</select></div>
               <div><label style={labelStyle}>Trạng thái</label><select value={editing.use_status} onChange={e => setEditing({ ...editing, use_status: e.target.value })} style={inputStyle}>{Object.keys(USE_STATUS).map(s => <option key={s} value={s}>{USE_STATUS[s].label}</option>)}</select></div>
               <div><label style={labelStyle}>Hết hạn</label><input type="date" value={editing.expire_date || ''} onChange={e => setEditing({ ...editing, expire_date: e.target.value })} style={inputStyle} /></div>
-              <div><label style={labelStyle}>Nhân viên cấp</label><select value={editing.staff || ''} onChange={e => setEditing({ ...editing, staff: e.target.value })} style={inputStyle}><option value="">— chọn —</option>{(nhanSus || []).map(n => <option key={n.id} value={n.ten_nhansu}>{n.ten_nhansu}</option>)}</select></div>
+              {/* CS 2/8: danh sách NHÂN VIÊN CS (trước đây đổ nhầm danh sách nhân sự booking) */}
+              <div><label style={labelStyle}>Nhân viên cấp (CS)</label><select value={editing.staff || ''} onChange={e => setEditing({ ...editing, staff: e.target.value })} style={inputStyle}><option value="">— chọn —</option>{CS_STAFF.map(n => <option key={n} value={n}>{n}</option>)}{editing.staff && !CS_STAFF.includes(editing.staff) && <option value={editing.staff}>{editing.staff} (cũ)</option>}</select></div>
               <div style={{ gridColumn: 'span 2', display: 'flex', alignItems: 'center', gap: 8 }}><input type="checkbox" checked={!!editing.accountant_checked} onChange={e => setEditing({ ...editing, accountant_checked: e.target.checked })} style={{ width: 16, height: 16, cursor: 'pointer' }} /><label style={{ fontSize: '0.84rem', fontWeight: 600 }}>Đã đối soát kế toán</label></div>
               <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>Ghi chú</label><input value={editing.note || ''} onChange={e => setEditing({ ...editing, note: e.target.value })} style={inputStyle} /></div>
               {/* Brief mục 2: voucher phải lưu HÌNH ẢNH BẰNG CHỨNG — up thẳng lên web, khỏi qua Drive */}

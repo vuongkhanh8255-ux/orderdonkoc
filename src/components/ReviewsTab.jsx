@@ -7,7 +7,7 @@ const STAR_COLORS = { 5: '#22c55e', 4: '#84cc16', 3: '#eab308', 2: '#ff7a30', 1:
 const PAGE_SIZE = 20;
 
 // ── Module 1 CSKH: phân loại lý do + trạng thái xử lý + đã sửa đánh giá (lưu ở bảng review_cs_meta) ──
-const REASON_CATEGORIES = ['Chê sản phẩm', 'Lỗi sản phẩm', 'Kích ứng / Dị ứng', 'Không hiệu quả', 'Giao hàng chậm', 'Sai hàng', 'Thiếu hàng', 'Đóng gói', 'Shipper', 'Spam', 'Hiểu nhầm', 'Không nhận xét'];
+const REASON_CATEGORIES = ['Chê sản phẩm', 'Lỗi sản phẩm', 'Kích ứng / Dị ứng', 'Không hiệu quả', 'Giao hàng chậm', 'Sai hàng', 'Thiếu hàng', 'Hư hỏng vận chuyển', 'Đóng gói', 'Shipper', 'Spam', 'Hiểu nhầm', 'Không nhận xét'];   // + Hư hỏng vận chuyển (CS 1/8)
 // "Đã xóa" nằm CHUNG ô với đã-sửa-4/5★ (CS chốt 28/7: gắn tag rồi lọc đơn để report).
 const FIXED_OPTIONS = [
   { v: 'chua_sua', l: 'Chưa sửa' },

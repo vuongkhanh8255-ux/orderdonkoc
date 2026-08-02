@@ -16,7 +16,7 @@ const BRAND_COLORS = {
 const STAR_COLORS = { 1: '#ef4444', 2: '#ff7a30', 3: '#eab308', 4: '#22c55e', 5: '#10b981' };
 
 // ── Module 1 CSKH: phân loại lý do + trạng thái xử lý + đã sửa đánh giá ──
-const REASON_CATEGORIES = ['Chê sản phẩm', 'Kích ứng / Dị ứng', 'Không hiệu quả', 'Giao hàng chậm', 'Sai hàng', 'Thiếu hàng', 'Đóng gói', 'Shipper', 'Không nhận xét'];
+const REASON_CATEGORIES = ['Chê sản phẩm', 'Kích ứng / Dị ứng', 'Không hiệu quả', 'Giao hàng chậm', 'Sai hàng', 'Thiếu hàng', 'Hư hỏng vận chuyển', 'Đóng gói', 'Shipper', 'Không nhận xét'];   // + Hư hỏng vận chuyển (CS 1/8)
 const FIXED_OPTIONS = [{ v: 'chua_sua', l: 'Chưa sửa' }, { v: 'da_sua_4', l: 'Đã sửa 4★' }, { v: 'da_sua_5', l: 'Đã sửa 5★' }];
 
 const normalizeBrand = (b) => {

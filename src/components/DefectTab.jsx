@@ -292,7 +292,7 @@ export default function DefectTab({ currentUser }) {
                           <td style={{ ...td, textAlign: 'center' }}>
                             <select value={r.status} onChange={e => patch(r, { status: e.target.value })} style={{ padding: '3px 6px', borderRadius: 6, border: 'none', fontSize: '0.72rem', fontWeight: 700, background: (STATUS[r.status] || STATUS.new).bg, color: (STATUS[r.status] || STATUS.new).color, cursor: 'pointer' }}>{Object.keys(STATUS).map(s => <option key={s} value={s}>{STATUS[s].label}</option>)}</select>
                           </td>
-                          <td style={{ ...td, textAlign: 'center' }}><div style={{ display: 'flex', gap: 5, justifyContent: 'center' }}><button onClick={() => setEditing(r)} style={miniBtn('#64748b')}>Sửa</button><button onClick={() => del(r)} style={miniBtn('#dc2626')}>Xoá</button></div></td>
+                          <td style={{ ...td, textAlign: 'center' }}><div style={{ display: 'flex', gap: 5, justifyContent: 'center' }}><button onClick={() => setEditing(r)} style={miniBtn('#64748b')}>Sửa</button>{currentUser?.role === 'admin' && <button onClick={() => del(r)} style={miniBtn('#dc2626')}>Xoá</button>}</div></td>
                         </tr>); })}
                 </tbody>
               </table>

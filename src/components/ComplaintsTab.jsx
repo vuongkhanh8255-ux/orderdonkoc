@@ -18,17 +18,15 @@ const ACCENT = '#ff6a2c';
 const TABLE = 'cs_cases';
 const OVERDUE_DAYS = 3;
 
-// Vòng đời theo brief Module 3
+// Vòng đời — CS 1/8 BỎ 3 trạng thái (Chờ xác minh / Chờ khách phản hồi / Đã đóng hồ sơ),
+// hồ sơ cũ đã remap trong DB (verifying+awaiting_customer→processing, closed→done).
 const STATUS = {
   new:                { label: 'Mới tiếp nhận',     color: '#b45309', bg: '#fef3c7' },
-  verifying:          { label: 'Chờ xác minh',      color: '#0891b2', bg: '#cffafe' },
   processing:         { label: 'Đang xử lý',        color: '#1d4ed8', bg: '#dbeafe' },
   awaiting_gift:      { label: 'Chờ gửi bù',        color: '#7c3aed', bg: '#ede9fe' },
-  awaiting_customer:  { label: 'Chờ phản hồi khách', color: '#db2777', bg: '#fce7f3' },
   done:               { label: 'Đã hoàn tất',       color: '#15803d', bg: '#dcfce7' },
-  closed:             { label: 'Đã đóng hồ sơ',     color: '#475569', bg: '#f1f5f9' },
 };
-const FLOW = ['new', 'verifying', 'processing', 'awaiting_gift', 'awaiting_customer', 'done', 'closed'];
+const FLOW = ['new', 'processing', 'awaiting_gift', 'done'];
 // Phân loại nguyên nhân theo brief + 5 lý do CS bổ sung 27/7
 const REASONS = ['Thiếu hàng', 'Hư hỏng', 'Sai sản phẩm', 'Chất lượng sản phẩm', 'Vận chuyển',
   'Dịch vụ khách hàng', 'Không nhận được hàng',
@@ -73,6 +71,8 @@ const compLines = (r) => {
 const compText = (lines) => (lines || []).map(l => `${l.ten} x${l.sl}`).join(' | ');
 
 export default function ComplaintsTab({ currentUser }) {
+  const isAdmin = currentUser?.role === 'admin';   // CS 1/8: nút XÓA chỉ admin
+  const isKho = currentUser?.role === 'kho';       // CS 1/8: ô "Kho xác nhận" chỉ tài khoản kho
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
@@ -144,6 +144,11 @@ export default function ComplaintsTab({ currentUser }) {
     }).eq('id', row.id);
   };
   const del = async (row) => { if (!confirm('Xoá hồ sơ khiếu nại này?')) return; await supabase.from(TABLE).delete().eq('id', row.id); load(); };
+  // Sửa nhanh 1 dòng ngay trên bảng (dùng cho ô Kho xác nhận)
+  const patchRow = async (row, p) => {
+    setRows(prev => prev.map(x => (x.id === row.id ? { ...x, ...p } : x)));
+    await supabase.from(TABLE).update({ ...p, updated_at: new Date().toISOString() }).eq('id', row.id);
+  };
 
   const filtered = useMemo(() => rows.filter(r => {
     const d = (r.created_at || '').slice(0, 10);
@@ -202,16 +207,18 @@ export default function ComplaintsTab({ currentUser }) {
     filtered.forEach(r => compLines(r).forEach(l => out.push({
       'BARCODE': l.barcode || '',
       'TÊN SÀN': [sanLabel(r.platform), r.shop_name].filter(Boolean).join(' · '),
+      'MÃ ĐƠN HÀNG': r.order_sn || '',                       // CS 1/8
       'SẢN PHẨM GỬI BÙ': l.ten,
       'SỐ LƯỢNG': l.sl,
       'TÊN KHÁCH HÀNG': r.buyer_name || '',
       'SỐ ĐIỆN THOẠI KHÁCH HÀNG': r.buyer_phone || '',
       'ĐỊA CHỈ KHÁCH HÀNG': r.buyer_address || '',
+      'NỘI DUNG KHIẾU NẠI': r.reason || r.reason_category || '',   // CS 1/8
     })));
     if (!out.length) { alert('Không có hồ sơ nào có sản phẩm gửi bù trong bộ lọc đang xem.\nMở hồ sơ → mục "🎁 Đơn gửi bù" chọn sản phẩm rồi xuất lại.'); return; }
     const thieuBarcode = out.filter(x => !x.BARCODE).length;
     const ws = XLSX.utils.json_to_sheet(out);
-    ws['!cols'] = [{ wch: 16 }, { wch: 24 }, { wch: 44 }, { wch: 10 }, { wch: 22 }, { wch: 15 }, { wch: 50 }];
+    ws['!cols'] = [{ wch: 16 }, { wch: 24 }, { wch: 20 }, { wch: 44 }, { wch: 10 }, { wch: 22 }, { wch: 15 }, { wch: 50 }, { wch: 46 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Don gui bu');
     XLSX.writeFile(wb, `KhieuNai_GuiBu_${fromF}_${toF}.xlsx`);
@@ -356,11 +363,13 @@ export default function ComplaintsTab({ currentUser }) {
               <th style={th}>Sàn</th><th style={th}>Mã đơn</th><th style={th}>Khách</th>
               <th style={th}>Mã vận đơn</th><th style={th}>NV xử lý</th><th style={th}>Nguyên nhân</th>
               <th style={th}>Gửi bù</th><th style={{ ...th, textAlign: 'center' }}>Ngày</th>
-              <th style={{ ...th, textAlign: 'center' }}>Trạng thái</th><th style={{ ...th, textAlign: 'center', width: 210 }}>Hành động</th>
+              <th style={{ ...th, textAlign: 'center' }}>Trạng thái</th>
+              <th style={{ ...th, textAlign: 'center' }} title="Kho tick khi đã xác nhận — chỉ tài khoản KHO thao tác được">🏭 Kho xác nhận</th>
+              <th style={{ ...th, textAlign: 'center', width: 210 }}>Hành động</th>
             </tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={10} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải...</td></tr>
-                : filtered.length === 0 ? <tr><td colSpan={10} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>Chưa có khiếu nại nào — bấm “+ Lên đơn khiếu nại”.</td></tr>
+              {loading ? <tr><td colSpan={11} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải...</td></tr>
+                : filtered.length === 0 ? <tr><td colSpan={11} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>Chưa có khiếu nại nào — bấm “+ Lên đơn khiếu nại”.</td></tr>
                   : filtered.map(r => {
                     const st = STATUS[r.status] || STATUS.new;
                     const over = !['done', 'closed'].includes(r.status) && daysSince(r.created_at) >= OVERDUE_DAYS;
@@ -379,6 +388,13 @@ export default function ComplaintsTab({ currentUser }) {
                         <td style={{ ...td, fontSize: '0.74rem' }}>{r.compensation_items ? <span style={{ color: '#7c3aed', fontWeight: 700 }}>🎁 {r.compensation_items}</span> : <span style={{ color: '#cbd5e1' }}>—</span>}</td>
                         <td style={{ ...td, textAlign: 'center', fontSize: '0.76rem', color: over ? '#dc2626' : '#64748b' }}>{fmtDate(r.created_at)}{over && <div style={{ fontSize: '0.66rem', fontWeight: 700 }}>{daysSince(r.created_at)}n</div>}</td>
                         <td style={{ ...td, textAlign: 'center' }}><span style={{ padding: '3px 9px', borderRadius: 20, fontSize: '0.7rem', fontWeight: 700, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>{st.label}</span></td>
+                        {/* CS 1/8: ô "Kho xác nhận" — CHỈ tài khoản KHO tick được, người khác chỉ xem */}
+                        <td style={{ ...td, textAlign: 'center' }}>
+                          <input type="checkbox" checked={!!r.kho_confirmed} disabled={!isKho}
+                            title={isKho ? 'Kho xác nhận đơn này' : (r.kho_confirmed ? `Kho đã xác nhận${r.kho_confirmed_at ? ' ' + fmtDate(r.kho_confirmed_at) : ''}` : 'Chỉ tài khoản KHO tick được')}
+                            onChange={e => patchRow(r, { kho_confirmed: e.target.checked, kho_confirmed_at: e.target.checked ? new Date().toISOString() : null, kho_confirmed_by: e.target.checked ? (currentUser?.name || currentUser?.username || 'kho') : null })}
+                            style={{ width: 17, height: 17, cursor: isKho ? 'pointer' : 'not-allowed', accentColor: '#15803d' }} />
+                        </td>
                         <td style={{ ...td, textAlign: 'center' }}>
                           <div style={{ display: 'flex', gap: 5, justifyContent: 'center', flexWrap: 'wrap' }}>
                             {next && <button onClick={() => quickStatus(r, next)} style={miniBtn('#2563eb')} title={`Chuyển sang: ${STATUS[next].label}`}>→ {STATUS[next].label}</button>}
@@ -485,7 +501,7 @@ export default function ComplaintsTab({ currentUser }) {
               {editing.id && <div style={{ gridColumn: 'span 2', fontSize: '0.74rem', color: '#94a3b8' }}>Tạo: {fmtDate(editing.created_at)} · Cập nhật: {fmtDate(editing.updated_at)}</div>}
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 20 }}>
-              {editing.id ? <button onClick={() => { del(editing); setEditing(null); }} style={{ padding: '9px 16px', borderRadius: 9, border: '1.5px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, cursor: 'pointer' }}>Xoá</button> : <span />}
+              {editing.id && isAdmin ? <button onClick={() => { del(editing); setEditing(null); }} style={{ padding: '9px 16px', borderRadius: 9, border: '1.5px solid #fecaca', background: '#fff', color: '#dc2626', fontWeight: 700, cursor: 'pointer' }}>Xoá</button> : <span />}
               <div style={{ display: 'flex', gap: 10 }}>
                 <button onClick={() => { if (window.confirm('Đóng mà chưa Lưu thì mất phần đang nhập. Đóng luôn?')) setEditing(null); }} style={{ padding: '9px 20px', borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', color: '#64748b', fontWeight: 700, cursor: 'pointer' }}>Đóng</button>
                 <button onClick={save} style={{ padding: '9px 24px', borderRadius: 9, border: 'none', background: ACCENT, color: '#fff', fontWeight: 800, cursor: 'pointer' }}>💾 Lưu</button>

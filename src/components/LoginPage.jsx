@@ -152,6 +152,8 @@ export const ACCOUNTS = [
     { username: 'khanhpro8255', password: 'Khanhpro@8255',   role: 'admin',      name: 'Khánh Pro'   },
     // { username: 'booking', password: 'Booking@SK2025', role: 'booking', name: 'Booking' }, // VÔ HIỆU 14/7 — dời sang account cá nhân từng nhân sự (booking_staff)
     { username: 'cs',         password: 'CS@SK2025',       role: 'cs',         name: 'CS'          },
+    // ── KHO (CS 1/8): tick ô "Kho xác nhận" ở Khiếu nại — CHỈ role này thao tác được ô đó ──
+    { username: 'kho',        password: 'Kho@SK2026',      role: 'kho',        name: 'Kho'         },
     { username: 'livestream', password: 'Live@SK2025',     role: 'livestream', name: 'Livestream'  },
     // ── Reviewer account (for Shopee/TikTok API review) ──
     { username: 'shopee-reviewer', password: 'ShopeeTest@2026', role: 'reviewer', name: 'Reviewer' },
@@ -199,6 +201,8 @@ export const ROLE_VIEWS = {
     //   + (Khánh 15/7 thêm) Báo cáo nhân sự, Hợp đồng, Thanh toán KOC, Ngân sách Ecom.
     booking_staff: ['order','koc_performance','airlinks','staff_report','contract','koc_payment','expense'],
     cs:         ['crm','cskh','seeding','returns','complaints','vouchers','defects','reviews','order','airlinks','expense','task_notes'],
+    // KHO: xác nhận nhận hàng khiếu nại + tra cứu trả hàng/voucher/SP lỗi (brief M2 mục 4 + M7 mục 6)
+    kho:        ['complaints','returns','vouchers','defects'],
     livestream: ['stella_dashboard','livestream','expense','task_notes'],
     // ECOM: full Ecom group + CSKH + Livestream + Booking group (trừ Hợp Đồng) + Ngân Sách Ecom
     //       booking_performance chỉ được "đề xuất" (yellow), admin duyệt mới thành red
