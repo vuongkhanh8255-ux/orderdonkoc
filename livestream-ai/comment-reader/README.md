@@ -11,7 +11,7 @@ Extension **không hardcode selector** (Shopee đổi CSS là gãy). Nó tự d�
 1. Mở `chrome://extensions` (Edge: `edge://extensions`).
 2. Bật **Developer mode** (góc trên phải).
 3. Bấm **Load unpacked** → chọn thư mục:
-   `C:\Users\ASUS\koc-tool\livestream-ai\comment-reader`
+   `C:\APP CODE\koc-tool\livestream-ai\comment-reader`
 4. Thấy extension "Shopee Live Comment Reader (POC)" xuất hiện → xong.
 
 ---
