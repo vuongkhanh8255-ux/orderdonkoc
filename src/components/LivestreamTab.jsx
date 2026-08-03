@@ -10,7 +10,7 @@ const SHEET_ID    = '19XM9DYn6ZUNNiY2T1OhkndSsC5OQTQXB-bWI-R6CZk4';
 const SHEET_VIDEO = 'TỔNG - VIDEO 2026';
 const SHEET_LIVE  = 'TỔNG - PERFORMANCE LIVES 2025';
 
-const BRANDS = ['Tất cả', 'Bodymiss', 'Milaganics', 'Moaw Moaws', 'eHerb', 'Masube', 'Real Steel', 'Healmi'];
+const BRANDS = ['Tất cả', 'Bodymiss', 'Milaganics', 'Moaw Moaws', 'eHerb', 'Masube', 'Real Steel', 'Healmii'];
 
 const BRAND_COLORS = {
   'Bodymiss':   '#ff7a30',
@@ -19,7 +19,7 @@ const BRAND_COLORS = {
   'eHerb':      '#eab308',
   'Masube':     '#8b5cf6',
   'Real Steel': '#3b82f6',
-  'Healmi':     '#ec4899',
+  'Healmii':    '#ec4899',
 };
 
 const PIE_COLORS = ['#ff7a30','#22c55e','#ef4444','#eab308','#8b5cf6','#3b82f6','#ec4899'];
@@ -33,7 +33,7 @@ function normalizeBrand(kenhStr) {
   if (s.includes('eherb')) return 'eHerb';
   if (s.includes('masube')) return 'Masube';
   if (s.includes('realsteal') || s.includes('realsteel')) return 'Real Steel';
-  if (s.includes('healmii') || s.includes('healmi')) return 'Healmi';
+  if (s.includes('healmii') || s.includes('healmi')) return 'Healmii';
   return kenhStr;
 }
 

@@ -48,7 +48,7 @@ const BRANDS = [
       { id: '55e44ceb-b81a-4c09-97a9-040bd1a9b4d4', name: 'Lưu Hằng' },
       { id: '240ed700-d1e0-4d75-b6ab-60a29cfdbdcd', name: 'Hoàng Vũ' },
     ] },
-  { key: 'healmi', name: 'Healmi', brandIds: ['0de3c90e-1a9d-44fa-b667-396122cf6e88'], shops: [], staff: [
+  { key: 'healmi', name: 'Healmii', brandIds: ['0de3c90e-1a9d-44fa-b667-396122cf6e88'], shops: [], staff: [
       { id: 'dd7061dd-871f-4d11-89e4-6b3c1e217511', name: 'Hữu Đan' },
     ] },
 ];
