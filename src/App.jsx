@@ -110,7 +110,7 @@ function App() {
       const fresh = ACCOUNTS.find(a => a.username === saved.username);
       // Account bị VÔ HIỆU/xoá khỏi ACCOUNTS (vd 'booking' chung) → phiên cũ hết hiệu lực, bắt đăng nhập lại.
       if (!fresh) return null;
-      const merged = { ...saved, role: fresh.role, name: fresh.name, staff: fresh.staff, seeAll: fresh.seeAll };
+      const merged = { ...saved, role: fresh.role, name: fresh.name, staff: fresh.staff, seeAll: fresh.seeAll, seeAllOrders: fresh.seeAllOrders };
       // GHI LẠI session đã đồng bộ vào ĐÚNG storage → component đọc sk_session trực tiếp (vd KocPerformanceTab)
       // thấy đúng field mới (staff) mà KHÔNG cần đăng nhập lại.
       (inLocal ? localStorage : sessionStorage).setItem(SESSION_KEY, JSON.stringify(merged));

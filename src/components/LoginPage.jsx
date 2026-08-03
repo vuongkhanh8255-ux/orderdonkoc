@@ -173,12 +173,15 @@ export const ACCOUNTS = [
     //    chỉ thao tác đơn/tag của mình. `staff` = ten_nhansu KHỚP CHÍNH XÁC bảng nhansu (để lọc quyền).
     // seeAll: true = coi HẾT đơn order + chọn tên bất kỳ. Khánh 23/7: GỠ khỏi Thu Thảo/Hoàng Vy/Minh Thảo
     //   -> 3 bạn giới hạn như booking khác, chỉ coi KOC/đơn của chính mình.
-    { username: 'thuthao',   password: 'Kyn6t9#8', role: 'booking_staff', name: 'Thu Thảo',   staff: 'Thu Thảo'   },
-    { username: 'hoangvy',   password: 'Zb6#gm9z', role: 'booking_staff', name: 'Hoàng Vy',   staff: 'Hoàng Vy'   },
+    // seeAllOrders: true (Khánh 3/8) = MỞ LẠI phần XEM cho đúng 3 bạn đó — coi được đơn order của
+    //   mọi thành viên. Nhưng TẠO đơn vẫn khoá dưới tên mình, và ở Báo cáo nhân sự vẫn chỉ tự gỡ
+    //   tag KOC của mình (cố ý: mở luôn 2 chỗ đó là đơn ghi sai tên -> lệch GMV nhân sự).
+    { username: 'thuthao',   password: 'Kyn6t9#8', role: 'booking_staff', name: 'Thu Thảo',   staff: 'Thu Thảo',   seeAllOrders: true },
+    { username: 'hoangvy',   password: 'Zb6#gm9z', role: 'booking_staff', name: 'Hoàng Vy',   staff: 'Hoàng Vy',   seeAllOrders: true },
     { username: 'hoangvu',   password: 'Y2c55j@h', role: 'booking_staff', name: 'Hoàng Vũ',   staff: 'Hoàng Vũ'   },
     { username: 'trucquynh', password: 'Wi9jyy9$', role: 'booking_staff', name: 'Trúc Quỳnh', staff: 'Trúc Quỳnh' },
     { username: 'anhnhi',    password: 'Uzz3$ezy', role: 'booking_staff', name: 'Anh Nhi',    staff: 'Anh Nhi'    },
-    { username: 'minhthao',  password: 'Ymnvm36#', role: 'booking_staff', name: 'Minh Thảo',  staff: 'Minh Thảo'  },
+    { username: 'minhthao',  password: 'Ymnvm36#', role: 'booking_staff', name: 'Minh Thảo',  staff: 'Minh Thảo',  seeAllOrders: true },
     { username: 'tuongvi',   password: 'Vqi$6b6t', role: 'booking_staff', name: 'Tường Vi',   staff: 'Tường Vi'   },
     { username: 'ngocmai',   password: 'B9ak4q@7', role: 'booking_staff', name: 'Ngọc Mai',   staff: 'Ngọc Mai'   },
     { username: 'nguyenbao', password: 'Xm9xde7$', role: 'booking_staff', name: 'Nguyên Bảo', staff: 'Nguyên Bảo' },

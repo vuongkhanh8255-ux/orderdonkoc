@@ -1,6 +1,6 @@
 // src/components/OrderTab.jsx
 
-import React, { useState, useMemo, useEffect, Fragment } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, Fragment } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import ResizableHeader from './ResizableHeader';
 import { supabase } from '../supabaseClient';
@@ -339,19 +339,24 @@ const OrderTab = ({ currentUser } = {}) => {
     } = useAppData();
 
     // ── KHÓA NHÂN SỰ theo account (Khánh 14/7): account cá nhân chỉ order + coi đơn dưới TÊN MÌNH.
-    //    Chỉ account có cờ seeAll mới coi HẾT + chọn tên bất kỳ (Khánh 23/7: không còn account nào bật cờ này).
+    //    seeAll      = coi HẾT đơn + TẠO đơn dưới tên bất kỳ (quyền cao nhất).
+    //    seeAllOrders (Khánh 3/8) = chỉ MỞ PHẦN XEM: coi đơn của mọi thành viên, nhưng TẠO đơn
+    //      vẫn khoá dưới tên mình. Tách ra vì mở luôn phần tạo là đơn có thể ghi sai tên nhân sự
+    //      -> lệch GMV/báo cáo nhân sự. Cấp cho Thu Thảo / Hoàng Vy / Minh Thảo.
     const lockedStaff = (currentUser?.staff && !currentUser?.seeAll) ? currentUser.staff : null;
-    const lockedStaffId = useMemo(() => {
-        if (!lockedStaff) return null;
-        const m = (nhanSus || []).find(n => (n.ten_nhansu || '').trim() === lockedStaff.trim());
+    const lockedFilterStaff = (lockedStaff && !currentUser?.seeAllOrders) ? lockedStaff : null;
+    const idCuaNhanSu = useCallback((ten) => {
+        if (!ten) return null;
+        const m = (nhanSus || []).find(n => (n.ten_nhansu || '').trim() === ten.trim());
         return m ? String(m.id) : null;
-    }, [lockedStaff, nhanSus]);
+    }, [nhanSus]);
+    const lockedStaffId = useMemo(() => idCuaNhanSu(lockedStaff), [idCuaNhanSu, lockedStaff]);
+    const lockedFilterStaffId = useMemo(() => idCuaNhanSu(lockedFilterStaff), [idCuaNhanSu, lockedFilterStaff]);
     // Ép chọn đúng nhân sự của mình khi TẠO đơn + LỌC danh sách chỉ đơn của mình (không cho đổi)
     useEffect(() => {
-        if (!lockedStaffId) return;
-        if (String(selectedNhanSu) !== lockedStaffId) setSelectedNhanSu(lockedStaffId);
-        if (String(filterNhanSu) !== lockedStaffId) setFilterNhanSu(lockedStaffId);
-    }, [lockedStaffId, selectedNhanSu, filterNhanSu, setSelectedNhanSu, setFilterNhanSu]);
+        if (lockedStaffId && String(selectedNhanSu) !== lockedStaffId) setSelectedNhanSu(lockedStaffId);
+        if (lockedFilterStaffId && String(filterNhanSu) !== lockedFilterStaffId) setFilterNhanSu(lockedFilterStaffId);
+    }, [lockedStaffId, lockedFilterStaffId, selectedNhanSu, filterNhanSu, setSelectedNhanSu, setFilterNhanSu]);
 
     // Blacklist
     const [blacklistChannels, setBlacklistChannels] = useState([]);
@@ -1119,8 +1124,8 @@ const OrderTab = ({ currentUser } = {}) => {
                         placeholder={!filterBrand ? "Chọn Brand trước" : "Tất cả Sản phẩm"}
                         style={{ flex: '1 1 320px', opacity: !filterBrand ? 0.6 : 1, pointerEvents: !filterBrand ? 'none' : 'auto' }}
                     />
-                    {lockedStaff ? (
-                        <div style={{ flex: '1 1 180px', padding: '6px 10px', borderRadius: 6, border: '1px solid #86efac', background: '#f0fdf4', color: '#166534', fontWeight: 700, fontSize: '0.85rem' }}>🔒 {lockedStaff}</div>
+                    {lockedFilterStaff ? (
+                        <div style={{ flex: '1 1 180px', padding: '6px 10px', borderRadius: 6, border: '1px solid #86efac', background: '#f0fdf4', color: '#166534', fontWeight: 700, fontSize: '0.85rem' }}>🔒 {lockedFilterStaff}</div>
                     ) : (
                         <select value={filterNhanSu} onChange={e => setFilterNhanSu(e.target.value)} style={{ flex: '1 1 180px' }}><option value="">Tất cả nhân sự</option>{nhanSus.filter(n => !isHiddenStaffName(n.ten_nhansu)).map(ns => <option key={ns.id} value={ns.id}>{ns.ten_nhansu}</option>)}</select>
                     )}
