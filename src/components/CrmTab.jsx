@@ -53,11 +53,15 @@ const parseCustomerSheet = (rows2d) => {
    Constants
    ═══════════════════════════════════════════════════════════════════════════ */
 const SALES_PERSONS = ['HUỆ', 'KỲ ANH', 'HẠNH'];
-const BUSINESS_TYPES = ['SPA - CLINIC', 'GỘI ĐẦU DƯỠNG SINH', 'MINI MART', 'WAXING/TRIỆT', 'CÔNG TY'];
+// Phân loại tệp — brief yêu cầu: spa, minimart, cosmetic, khách lẻ, công ty, nhà thuốc.
+// GIỮ nguyên các giá trị cũ đang có trong data (SPA - CLINIC / GỘI ĐẦU DƯỠNG SINH / WAXING) rồi THÊM 3 tệp brief còn thiếu,
+// nếu thay hẳn thì 3038 KH cũ mất phân loại.
+const BUSINESS_TYPES = ['SPA - CLINIC', 'GỘI ĐẦU DƯỠNG SINH', 'MINI MART', 'WAXING/TRIỆT', 'CÔNG TY', 'COSMETIC', 'NHÀ THUỐC', 'KHÁCH LẺ'];
 // Loại hình bị ẩn khỏi dashboard/charts (data rác, ít record)
 const HIDDEN_BIZ_TYPES = ['Sỉ Oil eHerb'];
 const DATA_SOURCES = ['Zalo SPA', 'TT MILA', 'TT MOAW', 'Tiktok eHerb', 'Shopee MP', 'TT eHERB'];
-const ORDER_SOURCES = ['Zalo Group', 'Zalo OA', 'Zalo Sỉ', 'CRM', 'FB Ads', 'Google Ads', 'SMS', 'Đơn Bán Lẻ', 'Quà tặng'];
+// Nguồn khách — brief: Zalo Sỉ, Website, Khách sàn, Zalo group (4 nguồn đầu). Các nguồn sau là của data cũ, giữ lại.
+const ORDER_SOURCES = ['Zalo Sỉ', 'Website', 'Khách sàn', 'Zalo Group', 'Zalo OA', 'CRM', 'FB Ads', 'Google Ads', 'SMS', 'Đơn Bán Lẻ', 'Quà tặng'];
 const PAY_METHODS   = ['COD', 'Chuyển khoản'];
 // Module 6 — Blacklist (theo brief)
 const BL_REASONS  = ['Không liên hệ được', 'Sai địa chỉ', 'Đổi ý', 'Sản phẩm lỗi', 'Khác'];
@@ -251,6 +255,13 @@ const CrmTab = ({ currentUser } = {}) => {
   const [custPage,   setCustPage]   = useState(1);
   const [detailCust, setDetailCust] = useState(null);  // KH đang mở chi tiết (null = đóng)
   const CUST_PER_PAGE = 25;
+  /* ── Module 3: bảng đơn (theo mockup) — form tạo đơn thu gọn + lọc + phân trang ── */
+  const [showOrderForm, setShowOrderForm] = useState(false);
+  const [fOrdSource, setFOrdSource] = useState('');
+  const [fOrdPerson, setFOrdPerson] = useState('');
+  const [fOrdSearch, setFOrdSearch] = useState('');
+  const [ordPage,    setOrdPage]    = useState(1);
+  const ORD_PER_PAGE = 15;
 
   /* ── Forms ──────────────────────────────────────────────────────────── */
   const [blacklist, setBlacklist] = useState([]);
@@ -543,6 +554,20 @@ const CrmTab = ({ currentUser } = {}) => {
     enriched.forEach(c => { if (c.phone) m.set(c.phone, c.business_type); });
     return m;
   }, [enriched]);
+  // Nhân sự phụ trách của ĐƠN: crm_orders.sales_person đang trống toàn bộ (data import) →
+  // lấy theo NS đang quản lý KHÁCH đó (khớp SĐT) để cột "Nhân sự phụ trách" có dữ liệu thật.
+  const custPersonByPhone = useMemo(() => {
+    const m = new Map();
+    customers.forEach(c => { if (c.phone && c.sales_person) m.set(c.phone, c.sales_person); });
+    return m;
+  }, [customers]);
+  // Thứ tự ưu tiên: cột sales_person của đơn → tên NS nhúng trong nguồn ("Zalo Sỉ Kỳ Anh") → NS quản lý khách.
+  const orderPerson = useCallback((o) => {
+    if (o.sales_person) return o.sales_person;
+    const src = (o.order_source || '').toUpperCase();
+    for (const p of SALES_PERSONS) if (src.includes(p)) return p;   // HUỆ / KỲ ANH / HẠNH
+    return custPersonByPhone.get(o.recipient_phone) || '';
+  }, [custPersonByPhone]);
   const groupSummary = useMemo(() => {
     const nm = {};
     groups.forEach(g => { if (!nm[g.group_name]) nm[g.group_name] = g; });
@@ -656,9 +681,6 @@ const CrmTab = ({ currentUser } = {}) => {
     const showTrend = hasDateFilter && !!prevS;
 
     /* ── Bổ sung theo brief Module 1 ─────────────────────────────────── */
-    // Tổng KH KHÔNG TRÙNG LẶP: brief nhấn mạnh đếm theo khách, không phải theo đơn.
-    const uniqCust = new Set(fc.map(c => c.phone).filter(Boolean)).size || totalCust;
-
     // Tổng sản phẩm bán ra: cộng số lượng trong products (json) của đơn trong kỳ.
     // Data import cũ KHÔNG có số lượng → trả null để UI hiện "chưa có dữ liệu" thay vì số 0 sai.
     let qty = 0, qtyKnown = false;
@@ -686,7 +708,8 @@ const CrmTab = ({ currentUser } = {}) => {
       { label:'Tổng đơn hàng',         value: fmtNum(ordersCur.length), raw: ordersCur.length, trend: showTrend ? pctChange(ordersCur.length, ordersPrev.length) : 0 },
       { label:'Tổng SP bán ra',        value: qtyKnown ? fmtNum(qty) : '—', raw: qty,          trend: 0,
         hint: qtyKnown ? 'Cộng số lượng trong đơn' : 'Đơn chưa có dữ liệu số lượng sản phẩm' },
-      { label:'Tổng KH (không trùng)', value: fmtNum(uniqCust),         raw: uniqCust,         trend: 0, hint:'Đếm theo SĐT không trùng lặp' },
+      { label:'Tổng KH đã lên đơn',    value: fmtNum(buyers),           raw: buyers,           trend: 0,
+        hint:`Khách KHÔNG TRÙNG LẶP có phát sinh đơn trong kỳ (không phải tổng số đơn). Toàn bộ danh sách KH: ${fmtNum(totalCust)}` },
       { label:'Tỷ lệ mua lại lần 2',   value:`${repeatRate.toFixed(1)}%`, raw: repeatRate,     trend: 0, hint:`${repeat2}/${buyers} khách mua từ 2 đơn` },
       { label:'Chuyển đổi sàn → CRM',  value:`${sanRate.toFixed(1)}%`,  raw: sanRate,          trend: 0, hint:`${sanConverted}/${sanCusts.length} khách nguồn sàn đã mua` },
       { label:'KH Mới',                value: fmtNum(newCustCur),       raw: newCustCur,       trend: 0 },
@@ -1786,9 +1809,18 @@ const CrmTab = ({ currentUser } = {}) => {
          TAB: ĐƠN HÀNG (split layout)
          ════════════════════════════════════════════════════════════════════ */}
       {subTab === 'orders' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:24 }}>
-          {/* LEFT — Order form */}
-          <div style={{ ...S.card, padding:24 }}>
+        <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
+          {/* Nút mở form tạo đơn — mockup M3 là BẢNG full-width nên form để thu gọn */}
+          <div>
+            <button onClick={()=>setShowOrderForm(v=>!v)}
+              style={{ ...(showOrderForm ? S.btnOutline : S.btnPrimary), padding:'9px 18px', fontSize:'0.85rem' }}>
+              {showOrderForm ? '✕ Đóng form tạo đơn' : '+ Tạo đơn hàng mới'}
+            </button>
+          </div>
+
+          {/* FORM tạo đơn (thu gọn) */}
+          {showOrderForm && (
+          <div style={{ ...S.card, padding:24, maxWidth:760 }}>
             <h3 style={{ margin:'0 0 20px', fontSize:'1.05rem', fontWeight:800, color:'#0f172a' }}>
               Tạo đơn hàng mới
             </h3>
@@ -1950,8 +1982,9 @@ const CrmTab = ({ currentUser } = {}) => {
               </button>
             </div>
           </div>
+          )}
 
-          {/* RIGHT — Recent orders */}
+          {/* BẢNG ĐƠN HÀNG (theo mockup Module 3) */}
           <div>
             {/* Bộ lọc: tháng + loại hình KD */}
             <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap' }}>
@@ -1965,8 +1998,22 @@ const CrmTab = ({ currentUser } = {}) => {
                 <option value=''>Tất cả loại hình</option>
                 {BUSINESS_TYPES.map(b => <option key={b} value={b}>{b}</option>)}
               </select>
-              {(fOrderMonth || fOrderBiz) && (
-                <button onClick={()=>{ setFOrderMonth(''); setFOrderBiz(''); }}
+              {/* Bộ lọc theo mockup M3: nguồn khách · nhân sự phụ trách · tìm theo ID nhanh/tên/SĐT */}
+              <select value={fOrdSource} onChange={e=>{setFOrdSource(e.target.value); setOrdPage(1);}}
+                style={{ ...S.select, width:'auto', minWidth:160, padding:'7px 10px' }}>
+                <option value=''>Nguồn khách: Tất cả</option>
+                {ORDER_SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <select value={fOrdPerson} onChange={e=>{setFOrdPerson(e.target.value); setOrdPage(1);}}
+                style={{ ...S.select, width:'auto', minWidth:170, padding:'7px 10px' }}>
+                <option value=''>Nhân sự phụ trách: Tất cả</option>
+                {SALES_PERSONS.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <input value={fOrdSearch} onChange={e=>{setFOrdSearch(e.target.value); setOrdPage(1);}}
+                placeholder='🔍 Tìm theo ID nhanh, tên KH, SĐT...'
+                style={{ ...S.input, width:250, flex:'0 1 250px', padding:'7px 12px' }}/>
+              {(fOrderMonth || fOrderBiz || fOrdSource || fOrdPerson || fOrdSearch) && (
+                <button onClick={()=>{ setFOrderMonth(''); setFOrderBiz(''); setFOrdSource(''); setFOrdPerson(''); setFOrdSearch(''); setOrdPage(1); }}
                   style={{ padding:'7px 12px', borderRadius:8, border:'1.5px solid #e2e8f0', background:'#fff',
                     color:'#64748b', fontWeight:600, fontSize:'0.78rem', cursor:'pointer', fontFamily:S.font }}>
                   ✕ Bỏ lọc
@@ -1976,9 +2023,21 @@ const CrmTab = ({ currentUser } = {}) => {
 
             {(() => {
               const odMonth = (o) => (o.order_date || o.created_at?.slice(0,10) || '').slice(0,7);
+              const q = fOrdSearch.trim().toLowerCase();
               const filtered = orders.filter(o => {
                 if (fOrderMonth && odMonth(o) !== fOrderMonth) return false;
                 if (fOrderBiz && (custBizByPhone.get(o.recipient_phone) || '') !== fOrderBiz) return false;
+                // Data thật có biến thể "Zalo Sỉ Kỳ Anh / Zalo Sỉ Huệ / Zalo Sỉ Hạnh" → khớp theo TIỀN TỐ,
+                // nếu khớp tuyệt đối thì lọc "Zalo Sỉ" sẽ ra 0 đơn.
+                if (fOrdSource) {
+                  const src = (o.order_source || '').toLowerCase();
+                  if (!src.startsWith(fOrdSource.toLowerCase())) return false;
+                }
+                if (fOrdPerson && orderPerson(o) !== fOrdPerson) return false;
+                if (q) {
+                  const hay = `${o.platform_order_id||''} ${o.order_code||''} ${o.recipient_name||''} ${o.recipient_phone||''} ${o.shipping_code||''}`.toLowerCase();
+                  if (!hay.includes(q)) return false;
+                }
                 return true;
               });
               const revOrders = filtered.filter(o => Number(o.total_amount||0) > 0);
@@ -1994,116 +2053,124 @@ const CrmTab = ({ currentUser } = {}) => {
                   </span>
                 </div>
 
-                <div style={{ display:'flex', flexDirection:'column', gap:10, maxHeight:'calc(100vh - 300px)',
-                  overflowY:'auto', paddingRight:4 }}>
-                  {filtered.slice(0,50).map(o => {
-                    const status = orderStatusBadge(o);
-                    const displayDate = o.order_date || o.created_at?.slice(0,10) || '';
-                    return (
-                      <div key={o.id} style={{ ...S.card, padding:'14px 18px' }}>
-                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-                          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                            <span style={{ fontWeight:700, fontSize:'0.82rem', color:'#0891b2', fontFamily:'monospace' }}>
-                              {o.order_code || '—'}
-                            </span>
-                            {o.order_type && (
-                              <span style={{ padding:'2px 8px', borderRadius:4, fontSize:'0.68rem',
-                                fontWeight:600, background:'#f1f5f9', color:'#475569' }}>
-                                {o.order_type}
-                              </span>
-                            )}
-                          </div>
-                          <span style={{ fontSize:'0.72rem', fontWeight:700, padding:'3px 10px', borderRadius:20,
-                            background:status.bg, color:status.color }}>{status.label}</span>
-                        </div>
-                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-                          <div style={{ flex:1 }}>
-                            <div style={{ fontWeight:700, fontSize:'0.88rem', color:'#0f172a' }}>
-                              {o.recipient_name}
-                            </div>
-                            <div style={{ fontSize:'0.78rem', color:'#94a3b8', marginTop:2 }}>
-                              {o.recipient_phone} {o.recipient_address ? `· ${o.recipient_address}` : ''}
-                            </div>
-                            {o.product_name && (
-                              <div style={{ fontSize:'0.75rem', color:'#64748b', marginTop:3 }}>
-                                SP: <b>{o.product_name}</b>
-                              </div>
-                            )}
-                            {(o.products||[]).length > 0 && !o.product_name && (
-                              <div style={{ fontSize:'0.75rem', color:'#64748b', marginTop:3 }}>
-                                {o.products.filter(p=>p.name).map(p => `${p.name} ×${p.quantity}`).join(', ')}
-                              </div>
-                            )}
-                            {o.campaign && (
-                              <div style={{ fontSize:'0.72rem', color:'#94a3b8', marginTop:2 }}>
-                                Nguồn: {o.campaign}
-                              </div>
-                            )}
-                          </div>
-                          <div style={{ textAlign:'right', flexShrink:0, marginLeft:12 }}>
-                            <div style={{ fontWeight:800, fontSize:'0.95rem',
-                              color: Number(o.total_amount||0) > 0 ? '#16a34a' : '#94a3b8' }}>
-                              {Number(o.total_amount||0) > 0
-                                ? Number(o.total_amount).toLocaleString('vi-VN')+'đ'
-                                : '0đ'}
-                            </div>
-                            <div style={{ fontSize:'0.72rem', color:'#94a3b8', marginTop:2 }}>
-                              {displayDate}
-                            </div>
-                          </div>
-                        </div>
-                        {/* ── Hàng thao tác theo brief M3: duyệt · mã vận đơn · tình trạng giao · hoá đơn ── */}
-                        <div style={{ marginTop:8, paddingTop:8, borderTop:'1px solid #f1f5f9',
-                          display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', fontSize:'0.78rem', color:'#64748b' }}>
-                          {o.sales_person && <span>Phụ trách: <b style={{ color:S.primary }}>{o.sales_person}</b></span>}
-
-                          {/* Duyệt đơn — kế toán tích chọn */}
-                          <button onClick={()=>toggleApprove(o)}
-                            title={o.is_approved ? `Đã duyệt${o.approved_by ? ' bởi '+o.approved_by : ''}${o.approved_at ? ' · '+new Date(o.approved_at).toLocaleString('vi-VN') : ''} — bấm để bỏ duyệt` : 'Kế toán check đơn rồi bấm duyệt'}
-                            style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 10px', borderRadius:20,
-                              border:`1px solid ${o.is_approved ? '#bbf7d0' : '#e2e8f0'}`, cursor:'pointer', fontFamily:S.font,
-                              background: o.is_approved ? '#f0fdf4' : '#fff', color: o.is_approved ? '#16a34a' : '#94a3b8',
-                              fontWeight:700, fontSize:'0.73rem' }}>
-                            {o.is_approved ? '✅ Đã duyệt' : '☐ Duyệt'}
-                          </button>
-
-                          {/* Xuất hoá đơn — tích chọn */}
-                          <button onClick={()=>toggleInvoice(o)} title='Đơn này có xuất hoá đơn'
-                            style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 10px', borderRadius:20,
-                              border:`1px solid ${o.has_invoice ? '#fde68a' : '#e2e8f0'}`, cursor:'pointer', fontFamily:S.font,
-                              background: o.has_invoice ? '#fffbeb' : '#fff', color: o.has_invoice ? '#b45309' : '#94a3b8',
-                              fontWeight:700, fontSize:'0.73rem' }}>
-                            {o.has_invoice ? '🧾 Có hoá đơn' : '☐ Hoá đơn'}
-                          </button>
-
-                          {/* Tình trạng đơn hàng */}
-                          <select value={o.status || ''} onChange={e=>setOrderStatus(o, e.target.value)} title='Tình trạng đơn hàng'
-                            style={{ padding:'3px 8px', borderRadius:20, fontSize:'0.73rem', fontWeight:700,
-                              background:status.bg, color:status.color, border:`1px solid ${status.color}33`,
-                              cursor:'pointer', fontFamily:S.font }}>
-                            {[...new Set(['Đã lên đơn','Đang giao','Đã giao','Hàng hoàn', o.status].filter(Boolean))]
-                              .map(s => <option key={s} value={s}>{s}</option>)}
-                          </select>
-
-                          {/* Mã vận đơn — sale bấm cây bút để điền */}
-                          <span style={{ marginLeft:'auto', display:'inline-flex', alignItems:'center', gap:5 }}>
-                            {o.shipping_code
-                              ? <span style={{ fontFamily:'monospace', fontSize:'0.72rem', color:'#475569' }}>MVĐ: {o.shipping_code}</span>
-                              : <span style={{ fontSize:'0.72rem', color:'#cbd5e1' }}>chưa có mã vận đơn</span>}
-                            <button onClick={()=>editShipping(o)} title='Điền / sửa mã vận đơn'
-                              style={{ border:'none', background:'none', cursor:'pointer', fontSize:'0.85rem', padding:0 }}>✏️</button>
-                          </span>
+                {/* Bảng đơn hàng — đúng cột theo mockup Module 3 */}
+                {(() => {
+                  const totalPages = Math.max(1, Math.ceil(filtered.length / ORD_PER_PAGE));
+                  const pageC = Math.min(ordPage, totalPages);
+                  const paged = filtered.slice((pageC-1)*ORD_PER_PAGE, pageC*ORD_PER_PAGE);
+                  const payStyle = (m) => /ck|chuyển/i.test(m||'')
+                    ? { bg:'#eff6ff', color:'#2563eb', txt:'CK' }
+                    : { bg:'#fff7ed', color:'#ea580c', txt:'COD' };
+                  return (<>
+                  <div style={{ ...S.card, overflow:'hidden' }}>
+                    <div style={{ overflowX:'auto' }}>
+                      <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.81rem' }}>
+                        <thead><tr style={{ background:'#f8fafc' }}>
+                          {['#','ID NHANH','NGÀY ĐẶT','KHÁCH HÀNG','SĐT','NGUỒN KHÁCH','SẢN PHẨM','TỔNG TIỀN (Đ)','TT THANH TOÁN','TRẠNG THÁI ĐƠN HÀNG','MÃ VẬN ĐƠN','DUYỆT','HOÁ ĐƠN','NHÂN SỰ PHỤ TRÁCH'].map(h => (
+                            <th key={h} style={{ padding:'10px 11px', textAlign:'left', fontWeight:700, color:'#64748b',
+                              fontSize:'0.67rem', letterSpacing:'0.3px', borderBottom:'1px solid #e5e7eb', whiteSpace:'nowrap' }}>{h}</th>
+                          ))}
+                        </tr></thead>
+                        <tbody>
+                          {paged.map((o,i) => {
+                            const status = orderStatusBadge(o);
+                            const pay = payStyle(o.payment_method);
+                            const prods = Array.isArray(o.products) ? o.products.filter(p=>p?.name) : [];
+                            const pTxt = prods.length
+                              ? prods.map(p => `${p.name}${p.quantity>1?` ×${p.quantity}`:''}`).join(', ')
+                              : (o.product_name || '—');
+                            return (
+                              <tr key={o.id} style={{ borderBottom:'1px solid #f1f5f9', background: i%2 ? '#fafbfc' : '#fff' }}>
+                                <td style={{ padding:'9px 11px', color:'#94a3b8', fontSize:'0.75rem' }}>{(pageC-1)*ORD_PER_PAGE + i + 1}</td>
+                                <td style={{ padding:'9px 11px', fontFamily:'monospace', fontSize:'0.74rem', color:'#0891b2', fontWeight:700 }}>
+                                  {o.platform_order_id || o.order_code || '—'}
+                                </td>
+                                <td style={{ padding:'9px 11px', fontSize:'0.75rem', color:'#475569', whiteSpace:'nowrap' }}>
+                                  {(o.order_date || o.created_at)
+                                    ? new Date(o.order_date || o.created_at).toLocaleDateString('vi-VN') : '—'}
+                                </td>
+                                <td style={{ padding:'9px 11px', fontWeight:700, color:'#0f172a', maxWidth:150 }}>{o.recipient_name || '—'}</td>
+                                <td style={{ padding:'9px 11px', fontFamily:'monospace', fontSize:'0.75rem', color:'#475569', whiteSpace:'nowrap' }}>{o.recipient_phone || '—'}</td>
+                                <td style={{ padding:'9px 11px' }}>
+                                  {o.order_source
+                                    ? <span style={{ padding:'2px 8px', borderRadius:20, background:'#f5f3ff', color:'#7c3aed', fontWeight:700, fontSize:'0.69rem', whiteSpace:'nowrap' }}>{o.order_source}</span>
+                                    : '—'}
+                                </td>
+                                <td style={{ padding:'9px 11px', color:'#334155', fontSize:'0.76rem', maxWidth:210 }}>{pTxt}</td>
+                                <td style={{ padding:'9px 11px', fontWeight:800, whiteSpace:'nowrap',
+                                  color: Number(o.total_amount||0) > 0 ? '#16a34a' : '#94a3b8' }}>
+                                  {Number(o.total_amount||0) > 0 ? fmtMoney(o.total_amount)+'đ' : '0đ'}
+                                </td>
+                                <td style={{ padding:'9px 11px' }}>
+                                  <span style={{ padding:'2px 9px', borderRadius:6, background:pay.bg, color:pay.color, fontWeight:800, fontSize:'0.69rem' }}>{pay.txt}</span>
+                                </td>
+                                <td style={{ padding:'9px 11px' }}>
+                                  <select value={o.status || ''} onChange={e=>setOrderStatus(o, e.target.value)} title='Đổi tình trạng đơn hàng'
+                                    style={{ padding:'3px 8px', borderRadius:20, fontSize:'0.7rem', fontWeight:700,
+                                      background:status.bg, color:status.color, border:`1px solid ${status.color}33`,
+                                      cursor:'pointer', fontFamily:S.font, maxWidth:130 }}>
+                                    {[...new Set(['Đã lên đơn','Đang giao','Đã giao','Hàng hoàn', o.status].filter(Boolean))]
+                                      .map(s => <option key={s} value={s}>{s}</option>)}
+                                  </select>
+                                </td>
+                                <td style={{ padding:'9px 11px', whiteSpace:'nowrap' }}>
+                                  <span style={{ fontFamily:'monospace', fontSize:'0.71rem', color: o.shipping_code ? '#475569' : '#cbd5e1' }}>
+                                    {o.shipping_code || 'chưa có'}
+                                  </span>
+                                  <button onClick={()=>editShipping(o)} title='Sale bấm để điền / sửa mã vận đơn'
+                                    style={{ border:'none', background:'none', cursor:'pointer', fontSize:'0.82rem', padding:'0 0 0 4px' }}>✏️</button>
+                                </td>
+                                <td style={{ padding:'9px 11px' }}>
+                                  <button onClick={()=>toggleApprove(o)}
+                                    title={o.is_approved ? `Đã duyệt${o.approved_by ? ' bởi '+o.approved_by : ''}${o.approved_at ? ' · '+new Date(o.approved_at).toLocaleString('vi-VN') : ''} — bấm để bỏ duyệt` : 'Kế toán check đơn rồi bấm duyệt'}
+                                    style={{ padding:'3px 9px', borderRadius:20, cursor:'pointer', fontFamily:S.font, fontWeight:700, fontSize:'0.7rem',
+                                      border:`1px solid ${o.is_approved ? '#bbf7d0' : '#e2e8f0'}`,
+                                      background: o.is_approved ? '#f0fdf4' : '#fff', color: o.is_approved ? '#16a34a' : '#94a3b8', whiteSpace:'nowrap' }}>
+                                    {o.is_approved ? '✅ Đã duyệt' : '☐ Duyệt'}
+                                  </button>
+                                </td>
+                                <td style={{ padding:'9px 11px' }}>
+                                  <button onClick={()=>toggleInvoice(o)} title='Đơn này có xuất hoá đơn'
+                                    style={{ padding:'3px 9px', borderRadius:20, cursor:'pointer', fontFamily:S.font, fontWeight:700, fontSize:'0.7rem',
+                                      border:`1px solid ${o.has_invoice ? '#fde68a' : '#e2e8f0'}`,
+                                      background: o.has_invoice ? '#fffbeb' : '#fff', color: o.has_invoice ? '#b45309' : '#94a3b8', whiteSpace:'nowrap' }}>
+                                    {o.has_invoice ? '🧾 Có' : '☐ HĐ'}
+                                  </button>
+                                </td>
+                                <td style={{ padding:'9px 11px', fontWeight:600, color:S.primary, fontSize:'0.76rem', whiteSpace:'nowrap' }}
+                                  title={!o.sales_person && orderPerson(o) ? 'Lấy theo nhân sự đang quản lý khách này' : ''}>
+                                  {orderPerson(o) || '—'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {filtered.length === 0 && (
+                            <tr><td colSpan={14} style={{ padding:48, textAlign:'center', color:'#94a3b8' }}>
+                              <div style={{ fontSize:'2rem', marginBottom:8 }}>📋</div>
+                              {(fOrderMonth || fOrderBiz || fOrdSource || fOrdPerson || fOrdSearch) ? 'Không có đơn khớp bộ lọc' : 'Chưa có đơn hàng'}
+                            </td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                    {totalPages > 1 && (
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10,
+                        padding:'11px 16px', borderTop:'1px solid #f1f5f9', flexWrap:'wrap' }}>
+                        <span style={{ fontSize:'0.78rem', color:'#64748b' }}>
+                          Hiển thị {(pageC-1)*ORD_PER_PAGE+1} – {Math.min(pageC*ORD_PER_PAGE, filtered.length)} trong tổng số {fmtNum(filtered.length)} đơn hàng
+                        </span>
+                        <div style={{ display:'flex', alignItems:'center', gap:9 }}>
+                          <button onClick={()=>setOrdPage(p=>Math.max(1,p-1))} disabled={pageC<=1}
+                            style={{ ...S.btnOutline, padding:'5px 12px', fontSize:'0.78rem', opacity:pageC<=1?0.45:1 }}>‹ Trước</button>
+                          <span style={{ fontSize:'0.8rem', color:'#64748b', fontWeight:600 }}>Trang {pageC}/{totalPages}</span>
+                          <button onClick={()=>setOrdPage(p=>Math.min(totalPages,p+1))} disabled={pageC>=totalPages}
+                            style={{ ...S.btnOutline, padding:'5px 12px', fontSize:'0.78rem', opacity:pageC>=totalPages?0.45:1 }}>Sau ›</button>
                         </div>
                       </div>
-                    );
-                  })}
-                  {filtered.length === 0 && (
-                    <div style={{ textAlign:'center', padding:48, color:'#94a3b8' }}>
-                      <div style={{ fontSize:'2rem', marginBottom:8 }}>📋</div>
-                      {(fOrderMonth || fOrderBiz) ? 'Không có đơn khớp bộ lọc' : 'Chưa có đơn hàng'}
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                  </>);
+                })()}
               </>);
             })()}
           </div>
