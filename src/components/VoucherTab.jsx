@@ -405,12 +405,14 @@ export default function VoucherTab({ currentUser }) {
   }, [rpt, rows, periodMode]);                               // eslint-disable-line react-hooks/exhaustive-deps
 
   const exportXlsx = () => {
-    // Đủ trường brief mục 2 + gian (mục 8) + ảnh bằng chứng — kho & kế toán tra thẳng trên file này.
-    // Tên cột theo đúng yêu cầu CS 1/8: Ngày · Tên sàn · Mã đơn · Số tiền · Lý do (+ các cột phụ)
+    // FB 3/8: 5 cột CS yêu cầu phải đứng LIỀN NHAU ngay đầu file (Ngày · Tên sàn · Mã đơn ·
+    // Số tiền · Lý do) — trước đây Gian hàng/Khách hàng/Mã voucher chen vào giữa nên CS phải
+    // kéo ngang mới đọc được. Các cột phụ (brief mục 2 + gian mục 8 + ảnh) dời xuống sau.
     const data = filtered.map((r, i) => ({
-      STT: i + 1, 'Ngày': fmtDate(r.issue_date), 'Tên sàn': r.platform === 'tiktok' ? 'TikTok' : r.platform === 'shopee' ? 'Shopee' : (r.platform || ''), 'Gian hàng': r.shop_name || '',
-      'Mã đơn': r.order_sn, 'Khách hàng': r.customer_name, 'Mã voucher': r.voucher_code,
-      'Số tiền': num(r.amount), 'Lý do': r.reason_category,
+      STT: i + 1, 'Ngày': fmtDate(r.issue_date),
+      'Tên sàn': r.platform === 'tiktok' ? 'TikTok' : r.platform === 'shopee' ? 'Shopee' : (r.platform || ''),
+      'Mã đơn': r.order_sn, 'Số tiền': num(r.amount), 'Lý do': r.reason_category,
+      'Gian hàng': r.shop_name || '', 'Khách hàng': r.customer_name, 'Mã voucher': r.voucher_code,
       'Trạng thái': USE_STATUS[r.use_status]?.label, 'Ngày dùng': fmtDate(r.used_at), 'Hạn dùng': fmtDate(r.expire_date),
       'Đối soát KT': r.accountant_checked ? 'x' : '', 'Nhân viên tạo': r.staff,
       'Ảnh bằng chứng': (r.evidence_links || '').split('\n').filter(Boolean).join(' , '), 'Ghi chú': r.note,

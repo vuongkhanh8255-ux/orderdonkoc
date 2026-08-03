@@ -9,6 +9,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
+import { SHOPS, shopKey, findShopByKey, shopLabel, sanLabel } from '../constants/shops';
 
 const ACCENT = '#ff6a2c';
 // CS 2/8: "Seeding TikTok" → đổi thành "Seeding" + thêm "Hỗ trợ ngoài"
@@ -36,6 +37,7 @@ const calcTotal = (amount, vat) => round(num(amount) * (1 + num(vat) / 100));
 const EMPTY = {
   pay_date: todayYmd(), staff: '', seeder_name: '', content_type: 'Seeding',
   budget_source: '',        // CS 1/8: Nguồn ngân sách BẮT BUỘC — Stella / Optimax (quản lý riêng, không dùng chung)
+  shop_name: '', platform: '',   // FB 3/8: gian hàng của phiếu seeding
   amount: 0, vat_pct: 0, bank_account: '', bank_name: '', beneficiary: '',
   qr_image: '', link: '', invoice_file: '', note: '', status: 'draft',
 };
@@ -53,6 +55,7 @@ export default function SeedingTab({ currentUser }) {
   const [loading, setLoading] = useState(true);
   const [month, setMonth] = useState(curYm());
   const [statusFilter, setStatusFilter] = useState('all');
+  const [shopFilter, setShopFilter] = useState('all');   // FB 3/8: lọc theo gian hàng (value = shopKey)
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState(null);   // object đang sửa/thêm, null = đóng form
   const [authed, setAuthed] = useState(false);     // đã nhập mật khẩu duyệt trong phiên
@@ -115,6 +118,7 @@ export default function SeedingTab({ currentUser }) {
     const payload = {
       pay_date: r.pay_date || todayYmd(), staff: r.staff || (currentUser?.username || ''),
       budget_source: r.budget_source,
+      shop_name: r.shop_name || null, platform: r.platform || null,   // FB 3/8
       seeder_name: r.seeder_name.trim(), content_type: r.content_type || 'Khác',
       amount: num(r.amount), vat_pct: num(r.vat_pct), total: calcTotal(r.amount, r.vat_pct),
       bank_account: r.bank_account || null, bank_name: r.bank_name || null, beneficiary: r.beneficiary || null,
@@ -149,9 +153,34 @@ export default function SeedingTab({ currentUser }) {
   const filtered = useMemo(() => rows.filter(r => {
     if (month !== 'all') { const d = (r.pay_date || '').slice(0, 10); if (!(d >= start && d < end)) return false; }
     if (statusFilter !== 'all' && r.status !== statusFilter) return false;
-    if (search) { const q = search.toLowerCase(); if (![r.seeder_name, r.content_type, r.note, r.beneficiary].some(v => v && String(v).toLowerCase().includes(q))) return false; }
+    // FB 3/8: lọc gian. So bằng shopKey vì "eHerb Hồ Chí Minh" có ở CẢ 2 sàn — so mỗi tên là dính nhầm.
+    // Phiếu cũ chưa có platform thì so tạm bằng tên để vẫn lọc ra được.
+    if (shopFilter !== 'all') {
+      if (shopFilter === '__none') { if (r.shop_name) return false; }
+      else {
+        const want = findShopByKey(shopFilter);
+        if (!want || r.shop_name !== want.name) return false;
+        if (r.platform && r.platform !== want.san) return false;
+      }
+    }
+    if (search) { const q = search.toLowerCase(); if (![r.seeder_name, r.content_type, r.note, r.beneficiary, r.shop_name].some(v => v && String(v).toLowerCase().includes(q))) return false; }
     return true;
-  }), [rows, month, statusFilter, search, start, end]);
+  }), [rows, month, statusFilter, shopFilter, search, start, end]);
+
+  // FB 3/8: chi theo GIAN. Tính trên tháng đang chọn nhưng CỐ TÌNH bỏ qua shopFilter — nếu tính
+  // trên `filtered` thì bấm 1 gian là các gian còn lại biến mất, hết so sánh được.
+  const shopSpend = useMemo(() => {
+    const m = {};
+    rows.forEach(r => {
+      if (month !== 'all') { const d = (r.pay_date || '').slice(0, 10); if (!(d >= start && d < end)) return; }
+      if (r.status === 'rejected') return;
+      const key = r.shop_name ? `${r.platform || 'shopee'}|${r.shop_name}` : '__none';
+      const label = r.shop_name ? `${sanLabel(r.platform)} · ${r.shop_name}` : 'Chưa gắn gian';
+      const c = m[key] || (m[key] = { label, tien: 0, soPhieu: 0 });
+      c.tien += num(r.total); c.soPhieu++;
+    });
+    return Object.entries(m).sort((a, b) => b[1].tien - a[1].tien);
+  }, [rows, month, start, end]);
 
   const kpi = useMemo(() => {
     let spend = 0, paid = 0, pending = 0;
@@ -183,7 +212,9 @@ export default function SeedingTab({ currentUser }) {
 
   const exportXlsx = () => {
     const data = filtered.map((r, i) => ({
-      STT: i + 1, 'Ngày': fmtDate(r.pay_date), 'Họ tên': r.seeder_name, 'Nội dung': r.content_type, 'Nguồn ngân sách': r.budget_source || '',
+      STT: i + 1, 'Ngày': fmtDate(r.pay_date), 'Họ tên': r.seeder_name,
+      'Sàn': sanLabel(r.platform), 'Gian hàng': r.shop_name || '',
+      'Nội dung': r.content_type, 'Nguồn ngân sách': r.budget_source || '',
       'Số tiền': num(r.amount), 'VAT %': num(r.vat_pct), 'Tổng': num(r.total),
       'Ngân hàng': r.bank_name || '', 'Số TK': r.bank_account || '', 'Chủ TK': r.beneficiary || '',
       'Link': r.link || '', 'Trạng thái': STATUS[r.status]?.label || r.status, 'Ghi chú': r.note || '',
@@ -253,10 +284,34 @@ export default function SeedingTab({ currentUser }) {
         })}
       </div>
 
+      {/* FB 3/8: CHI THEO GIAN HÀNG — hiện thẳng ngoài dashboard, bấm vào là lọc luôn */}
+      {shopSpend.length > 0 && (
+        <div style={{ ...card, marginBottom: 20 }}>
+          <div style={labelStyle}>🏪 Chi theo gian hàng {month === 'all' ? '(tất cả tháng)' : `tháng ${month}`}</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+            {shopSpend.map(([key, s]) => (
+              <button key={key} onClick={() => setShopFilter(shopFilter === key ? 'all' : key)}
+                style={{ padding: '7px 13px', borderRadius: 10, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
+                  border: `1.5px solid ${shopFilter === key ? ACCENT : '#e5e7eb'}`, background: shopFilter === key ? '#fff7ed' : '#fff' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569' }}>{s.label}</div>
+                <div style={{ fontSize: '0.95rem', fontWeight: 900, color: ACCENT }}>{fmtMoney(s.tien)}<span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#94a3b8' }}> đ · {s.soPhieu} phiếu</span></div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* FILTER */}
       <div style={{ ...card, marginBottom: 16, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <input type="text" placeholder="🔍 Tìm seeder, nội dung, ghi chú..." value={search} onChange={e => setSearch(e.target.value)}
+        <input type="text" placeholder="🔍 Tìm seeder, gian hàng, nội dung, ghi chú..." value={search} onChange={e => setSearch(e.target.value)}
           style={{ ...inputStyle, width: 280 }} />
+        {/* FB 3/8: bộ lọc GIAN HÀNG */}
+        <select value={shopFilter} onChange={e => setShopFilter(e.target.value)}
+          style={{ ...inputStyle, width: 'auto', cursor: 'pointer', borderColor: shopFilter !== 'all' ? ACCENT : '#e5e7eb', color: shopFilter !== 'all' ? '#e85518' : '#1f2937', fontWeight: shopFilter !== 'all' ? 700 : 400 }}>
+          <option value="all">🏪 Tất cả gian hàng</option>
+          {SHOPS.map(s => <option key={shopKey(s)} value={shopKey(s)}>{shopLabel(s)}</option>)}
+          <option value="__none">— Chưa gắn gian —</option>
+        </select>
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
           <button onClick={() => setStatusFilter('all')} style={pill(statusFilter === 'all', '#64748b')}>Tất cả</button>
           {STATUS_ORDER.map(s => (
@@ -275,6 +330,7 @@ export default function SeedingTab({ currentUser }) {
                 <th style={{ ...th, width: 40, textAlign: 'center' }}>#</th>
                 <th style={{ ...th, width: 90 }}>Ngày</th>
                 <th style={{ ...th, minWidth: 140 }}>Họ tên</th>
+                <th style={{ ...th, minWidth: 130 }}>Gian hàng</th>
                 <th style={{ ...th, minWidth: 140 }}>Nội dung</th>
                 <th style={{ ...th, width: 84, textAlign: 'center' }}>Nguồn NS</th>
                 <th style={{ ...th, textAlign: 'right' }}>Số tiền</th>
@@ -287,9 +343,9 @@ export default function SeedingTab({ currentUser }) {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={11} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải...</td></tr>
+                <tr><td colSpan={12} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>⏳ Đang tải...</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={11} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>Chưa có phiếu seeding nào — bấm "+ Thêm phiếu"</td></tr>
+                <tr><td colSpan={12} style={{ ...td, textAlign: 'center', padding: 40, color: '#94a3b8' }}>Chưa có phiếu seeding nào — bấm "+ Thêm phiếu"</td></tr>
               ) : filtered.map((r, i) => {
                 const st = STATUS[r.status] || STATUS.draft;
                 return (
@@ -297,6 +353,11 @@ export default function SeedingTab({ currentUser }) {
                     <td style={{ ...td, textAlign: 'center', color: '#94a3b8' }}>{i + 1}</td>
                     <td style={td}>{fmtDate(r.pay_date)}</td>
                     <td style={{ ...td, fontWeight: 700 }}>{r.seeder_name}{r.beneficiary && r.beneficiary !== r.seeder_name ? <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 400 }}>{r.beneficiary}</div> : null}</td>
+                    <td style={td}>
+                      {r.shop_name
+                        ? <><span style={{ fontSize: '0.66rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>{sanLabel(r.platform)}</span><div style={{ fontWeight: 600 }}>{r.shop_name}</div></>
+                        : <span style={{ color: '#cbd5e1' }} title="Phiếu cũ chưa gắn gian — mở Sửa để chọn">—</span>}
+                    </td>
                     <td style={td}>{r.content_type}</td>
                     <td style={{ ...td, textAlign: 'center' }}>
                       {r.budget_source
@@ -356,6 +417,15 @@ export default function SeedingTab({ currentUser }) {
                 <datalist id="cs-staff-list">{csNames.map(n => <option key={n} value={n} />)}</datalist>
               </Field>
               <Field label="Họ tên seeder *"><input value={editing.seeder_name || ''} onChange={e => setEditing({ ...editing, seeder_name: e.target.value })} style={inputStyle} placeholder="Tên người nhận" /></Field>
+              {/* FB 3/8: gian hàng của phiếu. Value = shopKey (sàn|tên) vì có gian trùng tên ở 2 sàn. */}
+              <Field label="Gian hàng">
+                <select value={editing.platform && editing.shop_name ? `${editing.platform}|${editing.shop_name}` : ''}
+                  onChange={e => { const sh = findShopByKey(e.target.value); setEditing({ ...editing, shop_name: sh?.name || '', platform: sh?.san || '' }); }}
+                  style={inputStyle}>
+                  <option value="">— Chọn gian hàng —</option>
+                  {SHOPS.map(s => <option key={shopKey(s)} value={shopKey(s)}>{shopLabel(s)}</option>)}
+                </select>
+              </Field>
               <Field label="Nội dung">
                 <select value={editing.content_type || ''} onChange={e => setEditing({ ...editing, content_type: e.target.value })} style={inputStyle}>
                   {CONTENT_TYPES.map(c => <option key={c} value={c}>{c}</option>)}

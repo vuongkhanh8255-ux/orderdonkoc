@@ -10,9 +10,11 @@ const BRANDS = ['Bodymiss', 'Milaganics', 'Moaw Moaws', 'eHerb', 'eHerb HCM', 'R
 
 // Tên gian hiển thị trên đầu 2 bảng Shopee/TikTok của từng thẻ
 const BRAND_SHOP = {
-  'eHerb': 'EHERB VN', 'eHerb HCM': 'EHERB HCM',
+  'eHerb': 'EHERB VN', 'eHerb HCM': 'EHERB HCM', 'Healmi': 'HEALMII',
 };
-const BRAND_LABEL = { 'eHerb': 'eHerb VN' };
+// FB 3/8: brand viết đúng là "Healmii" (2 chữ i). Chỉ đổi CHỮ HIỂN THỊ, giữ nguyên key 'Healmi'
+// vì key này là cột `brand` của các báo cáo đã lưu — đổi key là mất hết báo cáo cũ.
+const BRAND_LABEL = { 'eHerb': 'eHerb VN', 'Healmi': 'Healmii' };
 
 const BRAND_COLORS = {
   'Bodymiss': '#3b82f6', 'Milaganics': '#10b981', 'Moaw Moaws': '#ff7a30',
@@ -370,7 +372,7 @@ export default function ReportCSTab() {
 
         {/* 1.1 TikTok */}
         <div style={{ marginBottom: 24 }}>
-          <h4 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: '#333', fontFamily: 'system-ui, sans-serif', lineHeight: 1.4 }}>1.1 Chỉ số sàn TikTok {selectedBrand}</h4>
+          <h4 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: '#333', fontFamily: 'system-ui, sans-serif', lineHeight: 1.4 }}>1.1 Chỉ số sàn TikTok {BRAND_LABEL[selectedBrand] || selectedBrand}</h4>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <div>
               <div style={labelStyle}>- Tỷ lệ đánh giá tiêu cực:</div>
@@ -393,7 +395,7 @@ export default function ReportCSTab() {
 
         {/* 1.2 Shopee */}
         <div style={{ marginBottom: 24 }}>
-          <h4 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: '#333', fontFamily: 'system-ui, sans-serif', lineHeight: 1.4 }}>1.2 Chỉ số sàn Shopee {selectedBrand}</h4>
+          <h4 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 700, color: '#333', fontFamily: 'system-ui, sans-serif', lineHeight: 1.4 }}>1.2 Chỉ số sàn Shopee {BRAND_LABEL[selectedBrand] || selectedBrand}</h4>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
             <div>
               <div style={labelStyle}>- Thời gian phản hồi:</div>

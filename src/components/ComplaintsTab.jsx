@@ -72,7 +72,8 @@ const compText = (lines) => (lines || []).map(l => `${l.ten} x${l.sl}`).join(' |
 
 export default function ComplaintsTab({ currentUser }) {
   const isAdmin = currentUser?.role === 'admin';   // CS 1/8: nút XÓA chỉ admin
-  const isKho = currentUser?.role === 'kho';       // CS 1/8: ô "Kho xác nhận" chỉ tài khoản kho
+  // CS 1/8: ô "Kho xác nhận" chỉ tài khoản kho — FB 3/8: mở khóa thêm cho ADMIN
+  const isKho = currentUser?.role === 'kho' || isAdmin;
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
@@ -364,7 +365,7 @@ export default function ComplaintsTab({ currentUser }) {
               <th style={th}>Mã vận đơn</th><th style={th}>NV xử lý</th><th style={th}>Nguyên nhân</th>
               <th style={th}>Gửi bù</th><th style={{ ...th, textAlign: 'center' }}>Ngày</th>
               <th style={{ ...th, textAlign: 'center' }}>Trạng thái</th>
-              <th style={{ ...th, textAlign: 'center' }} title="Kho tick khi đã xác nhận — chỉ tài khoản KHO thao tác được">🏭 Kho xác nhận</th>
+              <th style={{ ...th, textAlign: 'center' }} title="Kho tick khi đã xác nhận — tài khoản KHO và ADMIN thao tác được">🏭 Kho xác nhận</th>
               <th style={{ ...th, textAlign: 'center', width: 210 }}>Hành động</th>
             </tr></thead>
             <tbody>
@@ -388,10 +389,10 @@ export default function ComplaintsTab({ currentUser }) {
                         <td style={{ ...td, fontSize: '0.74rem' }}>{r.compensation_items ? <span style={{ color: '#7c3aed', fontWeight: 700 }}>🎁 {r.compensation_items}</span> : <span style={{ color: '#cbd5e1' }}>—</span>}</td>
                         <td style={{ ...td, textAlign: 'center', fontSize: '0.76rem', color: over ? '#dc2626' : '#64748b' }}>{fmtDate(r.created_at)}{over && <div style={{ fontSize: '0.66rem', fontWeight: 700 }}>{daysSince(r.created_at)}n</div>}</td>
                         <td style={{ ...td, textAlign: 'center' }}><span style={{ padding: '3px 9px', borderRadius: 20, fontSize: '0.7rem', fontWeight: 700, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>{st.label}</span></td>
-                        {/* CS 1/8: ô "Kho xác nhận" — CHỈ tài khoản KHO tick được, người khác chỉ xem */}
+                        {/* CS 1/8: ô "Kho xác nhận" — tài khoản KHO tick; FB 3/8 mở thêm ADMIN. Người khác chỉ xem */}
                         <td style={{ ...td, textAlign: 'center' }}>
                           <input type="checkbox" checked={!!r.kho_confirmed} disabled={!isKho}
-                            title={isKho ? 'Kho xác nhận đơn này' : (r.kho_confirmed ? `Kho đã xác nhận${r.kho_confirmed_at ? ' ' + fmtDate(r.kho_confirmed_at) : ''}` : 'Chỉ tài khoản KHO tick được')}
+                            title={isKho ? 'Kho xác nhận đơn này' : (r.kho_confirmed ? `Kho đã xác nhận${r.kho_confirmed_at ? ' ' + fmtDate(r.kho_confirmed_at) : ''}` : 'Chỉ tài khoản KHO hoặc ADMIN tick được')}
                             onChange={e => patchRow(r, { kho_confirmed: e.target.checked, kho_confirmed_at: e.target.checked ? new Date().toISOString() : null, kho_confirmed_by: e.target.checked ? (currentUser?.name || currentUser?.username || 'kho') : null })}
                             style={{ width: 17, height: 17, cursor: isKho ? 'pointer' : 'not-allowed', accentColor: '#15803d' }} />
                         </td>

@@ -33,7 +33,7 @@ const catNorm = (s) => noAccent(s || '')
   .replace(/[^A-Z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
 
 // Tên khác của cùng 1 SP mà sàn hay đặt (trái: tên trên sàn -> phải: phân loại của CS)
-const CAT_ALIASES = [['GEL LO HOI', 'GEL NHA ĐAM']];
+const CAT_ALIASES = [['GEL LO HOI', 'GEL NHA ĐAM'], ['GEL LO HOI B5', 'GEL NHA ĐAM B5']];
 
 // Vòng 1: khớp NGUYÊN CỤM (dài trước, nên "GEL NHA ĐAM B5" không bị "GEL NHA ĐAM" nuốt)
 const CAT_PHRASE = [
@@ -48,10 +48,21 @@ const CAT_TOKENS = PRODUCT_CATEGORIES
   .filter(([, t]) => t.length >= 2 && t.every(w => w.length >= 3))
   .sort((a, b) => b[1].length - a[1].length);
 
+// Vòng 3 (FB 3/8): sàn hay viết DÍNH LIỀN — TikTok ghi "GONEBAD" trong khi CS ghi "GONE BAD",
+// nên 2 vòng trên đều trượt. Bỏ hết khoảng trắng 2 bên rồi so lại.
+// Chỉ nhận phân loại từ 2 chữ trở lên và dài >= 7 ký tự sau khi bỏ trắng, tránh khớp bừa
+// (vd "TỰ DO" -> "TUDO" quá ngắn, dễ nằm lọt trong chữ khác).
+const CAT_SQUASH = PRODUCT_CATEGORIES
+  .map(c => [catNorm(c).replace(/ /g, ''), c])
+  .filter(([sq, c]) => catNorm(c).includes(' ') && sq.length >= 7)
+  .sort((a, b) => b[0].length - a[0].length);
+
 /** Đoán phân loại SP từ tên sản phẩm (+ mẫu/SKU nếu có). Trả '' nếu không nhận ra. */
 export const autoProductCategory = (productName, sku) => {
   const s = ` ${catNorm(`${productName || ''} ${sku || ''}`)} `;
   for (const [needle, cat] of CAT_PHRASE) if (s.includes(` ${needle} `)) return cat;
   for (const [cat, tokens] of CAT_TOKENS) if (tokens.every(w => s.includes(` ${w} `))) return cat;
+  const squashed = s.replace(/ /g, '');
+  for (const [needle, cat] of CAT_SQUASH) if (squashed.includes(needle)) return cat;
   return '';
 };
