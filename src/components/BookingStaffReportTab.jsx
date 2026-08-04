@@ -373,7 +373,10 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
     return () => { alive = false; };
   }, [r.nhansu_id]);
   // ── BẢNG GỘP "Link & Video của nhân sự" = Link air + Link air có cast + Video theo tag (1 bảng, lọc theo LOẠI) ──
-  // Phân trang + tìm kiếm PHÍA SERVER (RPC staff_all_records). Link air = toàn bộ từ trước tới nay; Video theo tag = trong kỳ.
+  // Phân trang + tìm kiếm PHÍA SERVER (RPC staff_all_records).
+  // KHÁNH 4/8: bảng này KHÔNG lọc theo khung thời gian nữa — hiện TRỌN pool (link air + video theo tag +
+  // đã trả cast) từ trước tới nay. Trước đây video-theo-tag bị cắt theo kỳ nên dán link video tháng 7 lúc
+  // đang xem kỳ tháng 8 thì báo "không tìm thấy" → tưởng mất video. View/GMV vì vậy là số TỔNG (mọi thời gian).
   const [allRows, setAllRows] = useState(null);
   const [allTotal, setAllTotal] = useState(0);
   const [allLoai, setAllLoai] = useState('');       // '' = tất cả | 'air' | 'cast' | 'tag'
@@ -384,20 +387,21 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
   const [allProg, setAllProg] = useState(0);        // số dòng đã kéo được khi xuất
   const [allErr, setAllErr] = useState('');         // lỗi tải (hiện rõ, KHÔNG im lặng báo 0 dòng)
   const ALL_PER = 25;
+  const ALL_FROM = '2025-01-01', ALL_TO = '2030-12-31';   // khung "mọi thời gian" cho bảng gộp (không theo kỳ)
   const LOAI_LABEL = { air: '🔗 Link air', cast: '💸 Link air có cast', tag: '🎬 Video theo tag', pay: '💸 Đã trả cast (chưa có link air)' };
   useEffect(() => { const t = setTimeout(() => { setAllQ(allSearch.trim()); setAllPage(1); }, 400); return () => clearTimeout(t); }, [allSearch]);
   useEffect(() => { setAllPage(1); setOtFilter('all'); }, [r.nhansu_id]);
   useEffect(() => { setAllPage(1); }, [allLoai]);
   useEffect(() => {
     let alive = true; setAllRows(null);
-    supabase.rpc('staff_all_records', { p_nhansu_id: r.nhansu_id, p_from: range.start, p_to: range.end, p_loai: allLoai || null, p_search: allQ || null, p_limit: ALL_PER, p_offset: (allPage - 1) * ALL_PER })
+    supabase.rpc('staff_all_records', { p_nhansu_id: r.nhansu_id, p_from: ALL_FROM, p_to: ALL_TO, p_loai: allLoai || null, p_search: allQ || null, p_limit: ALL_PER, p_offset: (allPage - 1) * ALL_PER })
       .then(({ data, error }) => {
         if (!alive) return;
         if (error) { setAllErr(error.message || 'Lỗi tải dữ liệu'); setAllRows([]); setAllTotal(0); return; }
         setAllErr(''); setAllRows(data || []); setAllTotal(data && data.length ? Number(data[0].total) : 0);
       }, (e) => { if (alive) { setAllErr(e?.message || 'Lỗi tải dữ liệu'); setAllRows([]); setAllTotal(0); } });
     return () => { alive = false; };
-  }, [r.nhansu_id, range.start, range.end, allLoai, allQ, allPage]);
+  }, [r.nhansu_id, allLoai, allQ, allPage]);
   const allTotalPages = Math.max(1, Math.ceil(allTotal / ALL_PER));
   const allPageC = Math.min(allPage, allTotalPages);
   // ── ⚠️ KOC SẮP BỊ GỠ TAG (Khánh 27/7): trước đây tag auto-gỡ mà nhân sự KHÔNG được báo gì
@@ -418,7 +422,7 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
       const rows = [];
       let off = 0;
       while (off < allTotal) {
-        const { data, error } = await supabase.rpc('staff_all_records', { p_nhansu_id: r.nhansu_id, p_from: range.start, p_to: range.end, p_loai: allLoai || null, p_search: allQ || null, p_limit: CHUNK, p_offset: off });
+        const { data, error } = await supabase.rpc('staff_all_records', { p_nhansu_id: r.nhansu_id, p_from: ALL_FROM, p_to: ALL_TO, p_loai: allLoai || null, p_search: allQ || null, p_limit: CHUNK, p_offset: off });
         if (error) throw error;
         const batch = data || [];
         if (!batch.length) break;                 // hết dữ liệu
@@ -428,7 +432,7 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
       }
       const XLSX = await import('xlsx').then(m => m.default || m);
       const aoa = [
-        ['STT', 'Loại', 'Kênh / KOC', 'Brand', 'Sản phẩm', 'Ngày air', 'CAST (đ)', 'View (kỳ)', 'GMV (kỳ)', 'Trạng thái', 'Link'],
+        ['STT', 'Loại', 'Kênh / KOC', 'Brand', 'Sản phẩm', 'Ngày air', 'CAST (đ)', 'View (tổng)', 'GMV (tổng)', 'Trạng thái', 'Link'],
         ...rows.map((v, i) => [i + 1, LOAI_LABEL[v.loai] || v.loai, v.koc || '', v.brand || '', v.san_pham || '',
           v.ngay_air ? new Date(v.ngay_air).toLocaleDateString('vi-VN') : '', num(v.cast_amount), num(v.view_ky), num(v.gmv_ky), v.trang_thai || '', v.link || '']),
       ];
@@ -436,7 +440,7 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
       ws['!cols'] = [{ wch: 5 }, { wch: 18 }, { wch: 20 }, { wch: 14 }, { wch: 22 }, { wch: 11 }, { wch: 13 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 52 }];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Link-Video');
-      XLSX.writeFile(wb, `link-video_${String(r.ten_nhansu || 'NS').replace(/\s+/g, '-')}_${range.start}_${range.end}.xlsx`);
+      XLSX.writeFile(wb, `link-video_${String(r.ten_nhansu || 'NS').replace(/\s+/g, '-')}_toan-bo.xlsx`);
       if (rows.length < allTotal) alert(`⚠️ Chỉ lấy được ${fmt(rows.length)}/${fmt(allTotal)} dòng — server ngắt giữa chừng. Thử xuất lại hoặc lọc bớt theo loại.`);
     } catch (e) { alert('Lỗi xuất Excel: ' + e.message); }
     finally { setAllBusy(false); setAllProg(0); }
@@ -961,7 +965,7 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
           {/* ═══ LINK & VIDEO CỦA NHÂN SỰ (GỘP 3 BẢNG) ═══ link air + link air có cast + video theo tag; lọc theo loại + xuất Excel */}
           <Section icon="🔗" title={<>Link &amp; Video của nhân sự: <span style={{ padding: '2px 11px', borderRadius: 20, background: '#1d4ed8', color: '#fff', fontSize: '0.85rem', fontWeight: 800, marginLeft: 4 }}>👤 {r.ten_nhansu}</span></>} hint={allRows == null ? 'đang tải…' : `${fmt(allTotal)} dòng${allLoai ? ' · ' + LOAI_LABEL[allLoai] : ''}`} accent={{ bg: '#eff6ff', fg: '#1d4ed8' }}>
             <div style={{ fontSize: '0.8rem', color: '#475569', marginBottom: 4, lineHeight: 1.55, background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 10, padding: '8px 12px' }}>
-              Gộp 3 nguồn: <b>🔗 Link air</b> (bạn tự điền — toàn bộ từ trước tới nay) · <b>💸 Link air có cast</b> (có tiền cast — chỉ để BIẾT, <b>không</b> tính vào số KOC quản lý) · <b>🎬 Video theo tag</b> (hệ thống tự ghi nhận vì bạn giữ tag lúc video lên — trong kỳ đang chọn). Bấm nút để lọc từng loại, hoặc <b>Xuất Excel</b> để dò offline.
+              Gộp 3 nguồn: <b>🔗 Link air</b> (bạn tự điền) · <b>💸 Link air có cast</b> (có tiền cast — chỉ để BIẾT, <b>không</b> tính vào số KOC quản lý) · <b>🎬 Video theo tag</b> (hệ thống tự ghi nhận vì bạn giữ tag lúc video lên). Bảng này hiện <b>TOÀN BỘ từ trước tới nay</b> — <b>không</b> theo khung thời gian phía trên, nên dán link nào cũng dò ra. View/GMV là số <b>tổng</b>. Bấm nút để lọc từng loại, hoặc <b>Xuất Excel</b> để dò offline.
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               {[['', 'Tất cả'], ['air', '🔗 Link air'], ['cast', '💸 Có cast'], ['tag', '🎬 Video theo tag']].map(([v, lb]) => (
@@ -985,7 +989,7 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
                   <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1040 }}>
                     <thead>
                       <tr style={{ background: '#f8fafc' }}>
-                        {['STT', 'LOẠI', 'KÊNH / KOC', 'BRAND', 'SẢN PHẨM', 'NGÀY AIR', 'CAST', 'VIEW (KỲ)', 'GMV (KỲ)', 'TRẠNG THÁI', 'LINK'].map((h, i) => (
+                        {['STT', 'LOẠI', 'KÊNH / KOC', 'BRAND', 'SẢN PHẨM', 'NGÀY AIR', 'CAST', 'VIEW (TỔNG)', 'GMV (TỔNG)', 'TRẠNG THÁI', 'LINK'].map((h, i) => (
                           <th key={i} style={{ padding: '10px 12px', textAlign: (i >= 6 && i <= 8) ? 'right' : 'left', fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: '2px solid #e2e8f0' }}>{h}</th>
                         ))}
                       </tr>
