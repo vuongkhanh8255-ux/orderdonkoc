@@ -9,6 +9,10 @@
  */
 import { matchIntent } from './intent.js';
 
+// Comment thật của khách trên live rất ngắn. Dài hơn mức này = extension dò nhầm vùng chat,
+// bắn nguyên trang web vào → bỏ qua, đừng phát clip oan.
+const MAX_COMMENT_LEN = 200;
+
 export class Orchestrator {
   constructor({ obs, intents, logic }) {
     this.obs = obs;
@@ -38,7 +42,16 @@ export class Orchestrator {
 
   // Goi moi khi co comment moi
   onComment({ user, text }) {
-    const m = matchIntent(text, this.intents, this.minConfidence);
+    // CHẶN RÁC (4/8/2026): lúc phòng live chưa có comment thật, extension dò nhầm vùng chat
+    // và bắn NGUYÊN TRANG (cả nghìn ký tự: menu, hướng dẫn OBS, tên sản phẩm...) vào đây
+    // → khớp trúng "Hỏi giá"/"Voucher" và PHÁT CLIP OAN. Comment thật của khách rất ngắn.
+    const clean = String(text || '').trim();
+    if (!clean) return;
+    if (clean.length > MAX_COMMENT_LEN) {
+      console.log(`[bo qua] doan text dai ${clean.length} ky tu — khong phai comment that (chan rac)`);
+      return;
+    }
+    const m = matchIntent(clean, this.intents, this.minConfidence);
     if (!m) {
       console.log(`[skip] "${text}" — khong khop intent`);
       return;

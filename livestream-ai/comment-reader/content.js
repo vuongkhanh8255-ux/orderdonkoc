@@ -134,6 +134,12 @@
     const fullText = visibleText(rowEl);
     if (!fullText) return;
 
+    // CHẶN RÁC (4/8/2026): lúc phòng live CHƯA có comment nào, bộ dò tự động hay vớ nhầm
+    // khối bao cả trang → bắn nguyên trang (menu, hướng dẫn OBS, tên sản phẩm...) làm 1
+    // "comment" → agent khớp trúng "Hỏi giá"/"Voucher" và PHÁT CLIP OAN (đã dính khi test).
+    // Comment thật rất ngắn. Agent cũng chặn lần 2 ở orchestrator.js (MAX_COMMENT_LEN).
+    if (fullText.length > 200) return;
+
     // Chong lap theo text trong cua so thoi gian
     const last = recentText.get(fullText);
     const ts = now();

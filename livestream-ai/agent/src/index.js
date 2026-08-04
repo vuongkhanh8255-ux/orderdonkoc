@@ -94,6 +94,23 @@ async function main() {
   const orch = new Orchestrator({ obs, intents: faq.intents, logic });
   await orch.start();
 
+  // TỰ NẠP LẠI KHO CÂU HỎI mỗi 60s (4/8/2026).
+  // Trước đây chỉ nạp 1 lần lúc khởi động → sửa clip/câu hỏi trên web (Module 4) mà agent
+  // vẫn phát clip CŨ, phải tắt bật lại mới ăn (đã dính khi test: đổi clip "Hỏi giá" nhưng
+  // agent vẫn phát file cũ). Giờ sửa trên web, chờ tối đa 1 phút là agent tự cập nhật.
+  if (src.startsWith('Supabase')) {
+    setInterval(async () => {
+      try {
+        const moi = await loadFromSupabase(sb);
+        if (!moi || !moi.intents.length) return;
+        const cuJson = JSON.stringify(orch.intents);
+        if (cuJson === JSON.stringify(moi.intents)) return;   // không đổi thì im lặng
+        orch.intents = moi.intents;
+        console.log(`[Config] Da tu cap nhat kho cau hoi tu web — ${moi.intents.length} intent.`);
+      } catch (e) { /* mạng chập chờn thì bỏ qua, giữ bản đang chạy */ }
+    }, 60_000);
+  }
+
   const onComment = (c) => orch.onComment(c);
 
   if (MOCK) {
