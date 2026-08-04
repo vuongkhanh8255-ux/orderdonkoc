@@ -34,9 +34,11 @@
 --    sang KOC người khác" → phải disable đúng lúc chạy lệnh dọn rồi bật lại (tên kênh không hề đổi).
 -- KẾT QUẢ: `order_tag_gaps(60)` = **0 ca sót**. donguis/tag/lịch sử: 0 bản dơ.
 
--- ══════════ CÒN LẠI — CHỜ KHÁNH QUYẾT ══════════
--- 5.357 cặp CŨ hơn 60 ngày vẫn chưa có tag (1.935 ca 61-120 ngày + 3.422 ca >120 ngày, đơn từ 9/12/2025).
--- Nếu trả công cho nhóm này: +2.313 video hiện KHÔNG ai được tính; 8.419 video đã đúng người (không đổi);
--- nhưng 735 video sẽ ĐỔI CHỦ (đang tính cho người điền link air tay → về người order).
--- Cách sạch: ghi thẳng cặp assign+remove vào koc_assignment_history (staff_tenure_videos đọc cả lịch sử,
--- không chỉ tag đang sống) → trả công đúng mà KHÔNG tạo hàng nghìn tag sống rồi bị auto-gỡ ngay.
+-- ══════════ QUÁ KHỨ: KHÔNG ĐỘNG (Khánh chốt) ══════════
+-- KHÁNH CHỐT 4/8: "để nguyên chỉ sửa từ nay về sau".
+-- 5.357 cặp cũ >60 ngày (đơn từ 9/12/2025) KHÔNG gắn bù, KHÔNG trả công lại. ĐỪNG đề xuất backfill lại.
+-- Lý do bỏ qua: sẽ làm 735 video ĐỔI CHỦ (đang tính cho người điền link air tay → về người order),
+-- xáo số liệu quá khứ mà mấy bạn đã xem/đối chiếu rồi.
+-- (Số tham khảo nếu sau này đổi ý: +2.313 video hiện không ai được tính; 8.419 video vốn đã đúng người.
+--  Cách sạch khi đó = ghi cặp assign+remove thẳng vào koc_assignment_history — staff_tenure_videos đọc cả
+--  lịch sử chứ không chỉ tag đang sống → trả công đúng mà không tạo hàng nghìn tag sống rồi bị auto-gỡ.)
