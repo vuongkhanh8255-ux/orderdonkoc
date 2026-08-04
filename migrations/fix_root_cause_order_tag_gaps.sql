@@ -1,0 +1,42 @@
+-- 4/8/2026 — TÌM GỐC & SỬA TRIỆT ĐỂ vụ "order rồi mà không được gắn tag"
+
+-- ══════════ NGUYÊN NHÂN GỐC (2 lỗi độc lập) ══════════
+--
+-- ▸ GỐC #1 — CỬA SỔ 30 NGÀY, HỤT LÀ HỤT VĨNH VIỄN
+--   cron `sync-order-tags-hourly` chạy `sync_order_tags(30)` → chỉ xét đơn trong 30 ngày.
+--   Đơn nào KHÔNG sinh được tag trong 30 ngày đó (đổi luật, KOC đang blacklist lúc ấy, đơn chưa gán
+--   nhân sự, cron chết…) thì KHÔNG BAO GIỜ được thử lại → mất công ÂM THẦM, không ai biết.
+--   Cú hụt lớn nhất: trước 15/7 nhánh INSERT còn đòi "KOC chưa air" (not exists koc_video_unit) nên
+--   KOC đã air rồi thì order KHÔNG đẻ tag. Bỏ điều kiện đó ngày 15/7 nhưng cửa sổ 30 ngày chỉ vớt lại
+--   được tới 15/6 → toàn bộ đơn cũ hơn mất trắng.
+--   ĐO ĐƯỢC: 8.801 cặp (KOC×brand) từng được order → 5.480 cặp chưa từng có tag (không lý do).
+--     Trong đó 2.642 cặp KOC ĐÃ lên clip SAU ngày order = nhân sự gửi mẫu mà không được tính công.
+--     Quy ra video: 12.927 video; 10.405 (80%) mấy bạn đã phải TỰ ĐIỀN LINK AIR TAY để đòi công
+--     (chính là mấy file "link air sót" gửi liên tục!), 2.522 video chưa ai được tính.
+--
+-- ▸ GỐC #2 — KHÔNG TRIM TÊN KÊNH ⇒ TAG "CHẾT"
+--   `sync_order_tags` chuẩn hoá bằng lower(regexp_replace(koc_id_kenh,'^@','')) — CÓ lower, KHÔNG trim.
+--   459/11.622 đơn nhập dư khoảng trắng → đẻ tag koc_id kiểu 'heomoi1707 ' → KHÔNG khớp bảng video/đơn
+--   (đều đã chuẩn hoá) → hệ thống tưởng KOC "chưa air" → auto-gỡ oan + video không được tính công.
+--   Đã sinh 33 tag hỏng. Rà rộng: 10 hàm đọc koc_id_kenh mà KHÔNG hàm nào trim.
+
+-- ══════════ ĐÃ SỬA ══════════
+-- 1. GIÁM SÁT: RPC `order_tag_gaps(p_days)` — liệt kê "đơn đã gửi mà chưa có tag", kèm lý do
+--    (blacklist / đã gỡ sau order / thiếu tag không lý do), ngày order, số ngày, ngày air gần nhất,
+--    số video sau order. Từ nay lỗi LỘ ngay chứ không âm thầm.
+-- 2. NỚI CỬA SỔ: cron job 1 đổi `sync_order_tags(30)` → `(60)`. Lỗi tạm thời có 60 ngày để tự lành.
+--    Chạy ngay: tạo thêm 112 tag; nhóm 31-60 ngày rớt 123 → 11 (11 ca này là đơn đúng mép 60 ngày).
+-- 3. CHUẨN HOÁ TẠI NGUỒN (fix gốc #2): trigger `trg_normalize_koc_handle` BEFORE INSERT/UPDATE trên
+--    `donguis` tự trim koc_id_kenh → 10 hàm kia khỏi cần nhớ trim, không tái diễn.
+--    Dọn dữ liệu cũ: 459 đơn + 33 tag + lịch sử (bản dơ nào đã có bản sạch cùng brand thì xoá để né
+--    UNIQUE(koc_id,brand_name), còn lại trim). Kèm trim trong `sync_order_tags` (phòng thủ 2 lớp).
+--    LƯU Ý: trigger `trg_block_koc_tag_conflict` trên donguis hiểu nhầm "bỏ khoảng trắng" là "đổi kênh
+--    sang KOC người khác" → phải disable đúng lúc chạy lệnh dọn rồi bật lại (tên kênh không hề đổi).
+-- KẾT QUẢ: `order_tag_gaps(60)` = **0 ca sót**. donguis/tag/lịch sử: 0 bản dơ.
+
+-- ══════════ CÒN LẠI — CHỜ KHÁNH QUYẾT ══════════
+-- 5.357 cặp CŨ hơn 60 ngày vẫn chưa có tag (1.935 ca 61-120 ngày + 3.422 ca >120 ngày, đơn từ 9/12/2025).
+-- Nếu trả công cho nhóm này: +2.313 video hiện KHÔNG ai được tính; 8.419 video đã đúng người (không đổi);
+-- nhưng 735 video sẽ ĐỔI CHỦ (đang tính cho người điền link air tay → về người order).
+-- Cách sạch: ghi thẳng cặp assign+remove vào koc_assignment_history (staff_tenure_videos đọc cả lịch sử,
+-- không chỉ tag đang sống) → trả công đúng mà KHÔNG tạo hàng nghìn tag sống rồi bị auto-gỡ ngay.
