@@ -20,6 +20,15 @@ function normalize(text) {
   t = t.replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
   return t.split(' ').map((w) => ABBR[w] || w).join(' ');
 }
+// ⚠️ PHẢI GIỐNG HỆT agent/src/intent.js — sửa 1 bên là phải sửa bên kia, kẻo web bảo
+// nhận diện đúng mà lúc live thật lại phát nhầm clip.
+// Từ hỏi CHUNG CHUNG (không chỉ ra chủ đề gì) chỉ được 1 điểm; từ chỉ CHỦ ĐỀ được 4-5 điểm.
+// Vì sao: câu "ship bao nhiêu tiền" dính 3 từ khoá của GIÁ (bao nhiêu + bn + nhiêu tiền)
+// = 6 điểm, trong khi "ship" chỉ 1 → trước đây phát nhầm clip GIÁ (bắt được khi test 4/8).
+const WEAK_KEYWORDS = new Set([
+  'bao nhieu', 'bn', 'nhieu tien', 'nhiu tien', 'may xu', 'gia sao',
+  'con khong', 'con ko', 'het chua', 'co ben khong', 'chat the nao',
+]);
 function matchIntent(text, intents, minScore = 1) {
   const norm = normalize(text);
   if (!norm) return null;
@@ -30,7 +39,7 @@ function matchIntent(text, intents, minScore = 1) {
       const nkw = normalize(kw);
       if (!nkw) continue;
       if (norm === nkw || norm.includes(' ' + nkw + ' ') || norm.startsWith(nkw + ' ') || norm.endsWith(' ' + nkw) || norm.includes(nkw)) {
-        score += nkw.includes(' ') ? 2 : 1;
+        score += WEAK_KEYWORDS.has(nkw) ? 1 : (nkw.includes(' ') ? 5 : 4);
       }
     }
     if (score > bestScore) { bestScore = score; best = intent; }

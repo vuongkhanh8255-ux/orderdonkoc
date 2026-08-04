@@ -36,8 +36,23 @@ export function normalize(text) {
 }
 
 /*
+ * TU HOI CHUNG CHUNG (4/8/2026) — khong chi ra CHU DE gi, chi la cach hoi "bao nhieu / con khong".
+ * Vi sao can: cham diem cong don lam cau "ship bao nhieu tien" dinh 3 tu khoa cua GIA
+ * (bao nhieu + bn + nhieu tien = 6 diem) trong khi "ship" chi 1 diem -> PHAT NHAM CLIP GIA.
+ * Nay tu chung chung chi 1 diem, tu chi CHU DE (ship/voucher/size...) 4-5 diem -> chu de thang.
+ * Van giu duoc ca "bn shop?" (2 tu chung chung = 2 diem >= nguong) -> ra clip gia nhu cu.
+ */
+const WEAK_KEYWORDS = new Set([
+  'bao nhieu', 'bn', 'nhieu tien', 'nhiu tien', 'may xu', 'gia sao',
+  'con khong', 'con ko', 'het chua', 'co ben khong', 'chat the nao',
+]);
+const W_WEAK = 1;      // tu hoi chung chung
+const W_ONE = 4;       // tu khoa chu de 1 chu (ship, voucher, size, gia...)
+const W_MULTI = 5;     // cum tu khoa chu de nhieu chu (phi ship, con hang, chat lieu...)
+
+/*
  * So khop comment voi danh sach intent.
- * Diem = so keyword khop (keyword cung duoc bo dau truoc de so).
+ * Diem = tong trong so cac keyword khop (keyword cung duoc bo dau truoc de so).
  * Tra { intent, score } hoac null neu duoi nguong.
  */
 export function matchIntent(text, intents, minScore = 1) {
@@ -56,8 +71,8 @@ export function matchIntent(text, intents, minScore = 1) {
       if (norm === nkw || norm.includes(' ' + nkw + ' ') ||
           norm.startsWith(nkw + ' ') || norm.endsWith(' ' + nkw) ||
           norm.includes(nkw)) {
-        // Cum dai khop duoc tinh diem cao hon (uu tien cu the)
-        score += nkw.includes(' ') ? 2 : 1;
+        // Tu chi CHU DE an diem cao hon han tu hoi chung chung (xem WEAK_KEYWORDS)
+        score += WEAK_KEYWORDS.has(nkw) ? W_WEAK : (nkw.includes(' ') ? W_MULTI : W_ONE);
       }
     }
     if (score > bestScore) {
