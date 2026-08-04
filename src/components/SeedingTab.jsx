@@ -228,7 +228,9 @@ export default function SeedingTab({ currentUser }) {
   const liveTotal = editing ? calcTotal(editing.amount, editing.vat_pct) : 0;
 
   return (
-    <div style={{ fontFamily: "'Outfit', sans-serif", maxWidth: 1400 }}>
+    // Khánh 4/8: bỏ maxWidth 1400 — màn rộng thì cả bảng tổng bị dồn về góc trái, chừa khoảng trắng
+    // bên phải. Nay trải full theo bề ngang trang cho khớp các tab khác (Dashboard Ecom, Báo cáo NS).
+    <div style={{ fontFamily: "'Outfit', sans-serif", width: '100%' }}>
       {/* HEADER */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
