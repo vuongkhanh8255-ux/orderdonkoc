@@ -37,8 +37,9 @@ const SearchableDropdown = ({ options, value, onChange, placeholder, style, isMu
     const getDisplayValue = () => {
         if (isMulti) {
             if (!value || value.length === 0) return placeholder;
-            if (value.length === 1) return value[0];
-            return `${value.length} sản phẩm đã chọn`;
+            // Chọn 1 cái thì hiện TÊN (trước đây hiện thẳng value = mã id, người dùng không đọc được)
+            if (value.length === 1) return options.find(o => o.value === value[0])?.label || value[0];
+            return `Đã chọn ${value.length} sản phẩm`;
         }
         return value ? options.find(o => o.value === value)?.label || value : placeholder;
     };
@@ -124,6 +125,17 @@ const SearchableDropdown = ({ options, value, onChange, placeholder, style, isMu
                                 onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
                             >
                                 -- {placeholder} --
+                            </div>
+                        )}
+                        {/* Chọn nhiều: dòng bỏ chọn hết — khỏi phải bấm gỡ từng cái */}
+                        {isMulti && value && value.length > 0 && (
+                            <div
+                                onClick={() => onChange([])}
+                                style={{ padding: '10px 14px', cursor: 'pointer', fontSize: '13px', color: '#dc2626', borderBottom: '1px dashed #eee', fontWeight: 600 }}
+                                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#fef2f2'}
+                                onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                            >
+                                ✕ Bỏ chọn hết ({value.length})
                             </div>
                         )}
                         {filteredOptions.length > 0 ? filteredOptions.map(opt => {

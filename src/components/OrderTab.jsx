@@ -1,7 +1,7 @@
 // src/components/OrderTab.jsx
 
 import React, { useState, useMemo, useEffect, useCallback, Fragment } from 'react';
-import { useAppData } from '../context/AppDataContext';
+import { useAppData, spIdList } from '../context/AppDataContext';
 import ResizableHeader from './ResizableHeader';
 import { supabase } from '../supabaseClient';
 import SearchableDropdown from './SearchableDropdown'; // Shared component
@@ -352,6 +352,8 @@ const OrderTab = ({ currentUser } = {}) => {
     }, [nhanSus]);
     const lockedStaffId = useMemo(() => idCuaNhanSu(lockedStaff), [idCuaNhanSu, lockedStaff]);
     const lockedFilterStaffId = useMemo(() => idCuaNhanSu(lockedFilterStaff), [idCuaNhanSu, lockedFilterStaff]);
+    // Bộ lọc sản phẩm lưu dạng chuỗi "id1,id2" -> đổi ra mảng cho dropdown chọn nhiều
+    const filterSanPhamList = useMemo(() => spIdList(filterSanPham), [filterSanPham]);
     // Ép chọn đúng nhân sự của mình khi TẠO đơn + LỌC danh sách chỉ đơn của mình (không cho đổi)
     useEffect(() => {
         if (lockedStaffId && String(selectedNhanSu) !== lockedStaffId) setSelectedNhanSu(lockedStaffId);
@@ -1116,11 +1118,13 @@ const OrderTab = ({ currentUser } = {}) => {
                     <input type="text" placeholder="ID kênh..." value={filterIdKenh} onChange={e => setFilterIdKenh(e.target.value)} style={{ flex: '1 1 150px' }} />
                     <input type="text" placeholder="SĐT..." value={filterSdt} onChange={e => setFilterSdt(e.target.value)} style={{ flex: '1 1 150px' }} />
                     <select value={filterBrand} onChange={e => setFilterBrand(e.target.value)} style={{ flex: '1 1 200px' }}><option value="">Tất cả Brand</option>{brands.map(b => <option key={b.id} value={b.id}>{b.ten_brand}</option>)}</select>
+                    {/* Khánh 3/8: tick chọn NHIỀU sản phẩm cùng lúc. Lưu dạng "id1,id2" (xem spIdList). */}
                     <SearchableDropdown
+                        isMulti
                         options={filterSanPhams
-                            .map(sp => ({ value: sp.id, label: sp.ten_sanpham }))}
-                        value={filterSanPham}
-                        onChange={setFilterSanPham}
+                            .map(sp => ({ value: String(sp.id), label: sp.ten_sanpham }))}
+                        value={filterSanPhamList}
+                        onChange={(arr) => setFilterSanPham((arr || []).join(','))}
                         placeholder={!filterBrand ? "Chọn Brand trước" : "Tất cả Sản phẩm"}
                         style={{ flex: '1 1 320px', opacity: !filterBrand ? 0.6 : 1, pointerEvents: !filterBrand ? 'none' : 'auto' }}
                     />

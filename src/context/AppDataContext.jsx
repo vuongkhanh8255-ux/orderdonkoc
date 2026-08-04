@@ -5,6 +5,9 @@ import { supabase } from '../supabaseClient';
 import * as XLSX from 'xlsx';
 import { buildAndDownloadSpxExcel } from '../utils/spx/buildSpxExcel';
 
+/** Tách chuỗi lọc sản phẩm "id1,id2,id3" thành mảng id. Rỗng = không lọc. */
+export const spIdList = (v) => String(v || '').split(',').map(s => s.trim()).filter(Boolean);
+
 // ============================================================================
 // --- HÀM CHUYỂN SỐ THÀNH CHỮ (GIỮ NGUYÊN) ---
 // ============================================================================
@@ -122,6 +125,9 @@ export const AppDataProvider = ({ children }) => {
   const [filterIdKenh, setFilterIdKenh] = useState('');
   const [filterSdt, setFilterSdt] = useState('');
   const [filterBrand, setFilterBrand] = useState('');
+  // Khánh 3/8: lọc được NHIỀU sản phẩm cùng lúc. Vẫn giữ kiểu CHUỖI (id nối bằng dấu phẩy)
+  // thay vì mảng — vì filterSanPham nằm trong mảng dependency của useEffect tải đơn; để mảng
+  // thì mỗi lần render ra tham chiếu mới -> tải lại đơn liên tục.
   const [filterSanPham, setFilterSanPham] = useState('');
   const [filterNhanSu, setFilterNhanSu] = useState('');
   const [filterNgayStart, setFilterNgayStart] = useState('');
@@ -232,7 +238,8 @@ export const AppDataProvider = ({ children }) => {
 
     // STEP 1: Find IDs of matching Orders
     // We use !inner here if filtering by product/brand to find the relevant Order IDs
-    const hasProductFilter = !!filterBrand || !!filterSanPham;
+    const spIds = spIdList(filterSanPham);
+    const hasProductFilter = !!filterBrand || spIds.length > 0;
 
     let idQuery = supabase.from('donguis').select(`
         id, ngay_gui,
@@ -260,7 +267,7 @@ export const AppDataProvider = ({ children }) => {
       idQuery = idQuery.eq('da_sua', isEdited);
     }
     if (filterBrand) idQuery = idQuery.eq('chitiettonguis.sanphams.brand_id', filterBrand);
-    if (filterSanPham) idQuery = idQuery.eq('chitiettonguis.sanphams.id', filterSanPham);
+    if (spIds.length) idQuery = idQuery.in('chitiettonguis.sanphams.id', spIds);
 
     // Execute Step 1
     const { data: idData, count, error: countError } = await idQuery.order('ngay_gui', { ascending: false }).range(startIndex, endIndex);
@@ -551,7 +558,7 @@ export const AppDataProvider = ({ children }) => {
   };
 
   const handleExportAll = async () => {
-    setIsLoading(true); const hasProductFilter = !!filterBrand || !!filterSanPham; const ctRelation = hasProductFilter ?
+    setIsLoading(true); const spIds = spIdList(filterSanPham); const hasProductFilter = !!filterBrand || spIds.length > 0; const ctRelation = hasProductFilter ?
       'chitiettonguis!chitiettonguis_dongui_id_fkey_final!inner' : 'chitiettonguis!chitiettonguis_dongui_id_fkey_final'; const spRelation = hasProductFilter ? 'sanphams!inner' : 'sanphams';
     const buildExportQuery = () => {
       let query = supabase.from('donguis').select(`id, ngay_gui, da_sua, loai_ship, original_loai_ship, trang_thai, original_trang_thai, koc_ho_ten, original_koc_ho_ten, koc_id_kenh, original_koc_id_kenh, original_koc_id_kenh, koc_sdt, original_koc_sdt, koc_dia_chi, original_koc_dia_chi, koc_cccd, original_koc_cccd, nhansu ( id, ten_nhansu ), ${ctRelation} ( id, so_luong, ${spRelation} ( id, ten_sanpham, barcode, gia_tien, brands ( id, ten_brand ) ) )`).order('ngay_gui', { ascending: false }).order('id', { ascending: false });
@@ -560,7 +567,7 @@ export const AppDataProvider = ({ children }) => {
       if (filterNgayStart) query = query.gte('ngay_gui', `${filterNgayStart}T00:00:00.000Z`);
       if (filterNgayEnd)   query = query.lte('ngay_gui', `${filterNgayEnd}T23:59:59.999Z`);
       if (filterEditedStatus !== 'all') query = query.eq('da_sua', filterEditedStatus === 'edited');
-      if (filterBrand) query = query.eq('chitiettonguis.sanphams.brand_id', filterBrand); if (filterSanPham) query = query.eq('chitiettonguis.sanphams.id', filterSanPham);
+      if (filterBrand) query = query.eq('chitiettonguis.sanphams.brand_id', filterBrand); if (spIds.length) query = query.in('chitiettonguis.sanphams.id', spIds);
       return query;
     };
     // Lấy TẤT CẢ đơn — Supabase trả tối đa 1000 dòng/lần → phân trang gộp lại (xuất full >10k đơn)
@@ -585,7 +592,8 @@ export const AppDataProvider = ({ children }) => {
     setIsLoading(true);
     // Nếu có TICK CHỌN đơn → xuất ĐÚNG mấy đơn đã tick. Không tick cái nào → xuất hết theo bộ lọc.
     const selIds = selectedOrders && selectedOrders.size > 0 ? Array.from(selectedOrders) : null;
-    const hasProductFilter = !selIds && (!!filterBrand || !!filterSanPham);
+    const spIds = spIdList(filterSanPham);
+    const hasProductFilter = !selIds && (!!filterBrand || spIds.length > 0);
     const ctRelation = hasProductFilter ? 'chitiettonguis!chitiettonguis_dongui_id_fkey_final!inner' : 'chitiettonguis!chitiettonguis_dongui_id_fkey_final';
     const spRelation = hasProductFilter ? 'sanphams!inner' : 'sanphams';
     const buildExportQuery = () => {
@@ -596,7 +604,7 @@ export const AppDataProvider = ({ children }) => {
       if (filterNgayStart) query = query.gte('ngay_gui', `${filterNgayStart}T00:00:00.000Z`);
       if (filterNgayEnd)   query = query.lte('ngay_gui', `${filterNgayEnd}T23:59:59.999Z`);
       if (filterEditedStatus !== 'all') query = query.eq('da_sua', filterEditedStatus === 'edited');
-      if (filterBrand) query = query.eq('chitiettonguis.sanphams.brand_id', filterBrand); if (filterSanPham) query = query.eq('chitiettonguis.sanphams.id', filterSanPham);
+      if (filterBrand) query = query.eq('chitiettonguis.sanphams.brand_id', filterBrand); if (spIds.length) query = query.in('chitiettonguis.sanphams.id', spIds);
       return query;
     };
     let exportData = [];
@@ -1236,6 +1244,9 @@ export const AppDataProvider = ({ children }) => {
   // [FIX] Load products for List Filter separately from Form
   useEffect(() => {
     const fetchFilterProducts = async () => {
+      // Đổi brand thì bỏ luôn sản phẩm đã chọn — không thì nó giữ SP của brand cũ, lọc ra 0 đơn
+      // mà nhìn ngoài tưởng "không có đơn nào".
+      setFilterSanPham('');
       if (!filterBrand) { setFilterSanPhams([]); return; }
       const { data } = await supabase.from('sanphams').select('id, ten_sanpham, brand_id').eq('brand_id', filterBrand).not('an', 'is', true);
       setFilterSanPhams(data || []);
