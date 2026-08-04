@@ -154,20 +154,24 @@ const SearchableDropdown = ({ options, value, onChange, placeholder, style, isMu
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'flex-start',
+                                        textAlign: 'left',
                                         gap: '8px'
                                     }}
                                     onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = '#f9fafb'; }}
                                     onMouseLeave={e => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent'; }}
                                 >
                                     {isMulti && (
+                                        // CSS toàn cục (index.css) áp `input { width:100%; padding:11px 13px }` cho MỌI input,
+                                        // ô tick cũng dính -> nó giành hết bề ngang, đẩy chữ sang phải và co giãn theo độ dài
+                                        // chữ từng dòng (nhìn như thụt ra thụt vào). Phải ghim cứng kích thước ở đây.
                                         <input
                                             type="checkbox"
                                             checked={isSelected}
                                             onChange={() => { }}
-                                            style={{ cursor: 'pointer', accentColor: '#ff6a2c' }}
+                                            style={{ cursor: 'pointer', accentColor: '#ff6a2c', width: '16px', minWidth: '16px', height: '16px', flex: '0 0 16px', padding: 0, margin: 0 }}
                                         />
                                     )}
-                                    {opt.label}
+                                    <span style={{ flex: 1, minWidth: 0 }}>{opt.label}</span>
                                 </div>
                             );
                         }) : (
