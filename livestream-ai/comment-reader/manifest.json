@@ -14,6 +14,9 @@
       "all_frames": true
     }
   ],
+  "background": {
+    "service_worker": "bg.js"
+  },
   "permissions": ["storage"],
   "host_permissions": ["https://*.shopee.vn/*"]
 }

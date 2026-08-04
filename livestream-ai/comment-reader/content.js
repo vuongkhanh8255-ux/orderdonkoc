@@ -106,27 +106,25 @@
   // ---------------------------------------------------------------------------
   // WebSocket bridge (tuy chon) — day comment sang agent local
   // ---------------------------------------------------------------------------
-  let ws = null;
+  // 4/8/2026 — KHÔNG tạo WebSocket ở đây nữa: **CSP của trang Shopee chặn** WebSocket mở từ
+  // content script (badge cứ "khong co agent" dù agent chạy ngon). Giờ đẩy qua service worker
+  // (bg.js) — chạy trên origin extension nên không dính CSP trang.
   let wsTimer = null;
   function connectWS() {
-    if (!IS_TOP) return; // chi top frame ket noi, tranh nhieu ket noi
+    if (!IS_TOP) return;   // chỉ top frame hỏi trạng thái, tránh spam
     try {
-      ws = new WebSocket(CFG.wsUrl);
-      ws.onopen = () => setBadge('bridge', 'da noi agent');
-      ws.onclose = () => { setBadge('bridge', 'khong co agent'); scheduleReconnect(); };
-      ws.onerror = () => { try { ws.close(); } catch (e) {} };
+      chrome.runtime.sendMessage({ __cr__: true, type: 'status' }, (res) => {
+        if (chrome.runtime.lastError) { setBadge('bridge', 'khong co agent'); return; }
+        setBadge('bridge', res && res.connected ? 'da noi agent ✓' : 'khong co agent');
+      });
     } catch (e) {
-      scheduleReconnect();
+      setBadge('bridge', 'khong co agent');
     }
-  }
-  function scheduleReconnect() {
     clearTimeout(wsTimer);
-    wsTimer = setTimeout(connectWS, 5000);
+    wsTimer = setTimeout(connectWS, 5000);   // hỏi lại mỗi 5s để badge luôn đúng
   }
   function sendWS(payload) {
-    if (ws && ws.readyState === 1) {
-      try { ws.send(JSON.stringify(payload)); } catch (e) {}
-    }
+    try { chrome.runtime.sendMessage({ __cr__: true, type: 'comment', payload }); } catch (e) {}
   }
 
   // ---------------------------------------------------------------------------
