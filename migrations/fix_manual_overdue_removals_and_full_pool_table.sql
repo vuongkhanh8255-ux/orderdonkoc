@@ -1,0 +1,35 @@
+-- 4/8/2026 — 2 ca Khánh soi: (1) gỡ tag oan qua nút bấm tay, (2) "có tag mà không ăn được video"
+
+-- ══ CA 1: @hibesdung / MOAW gỡ 20/7 ghi "quá hạn" trong khi clip gần nhất 15/7 ══
+-- KHÔNG phải cron auto: actor = 'khanhpro8255 (tự gỡ quá hạn)' = BẤM TAY theo danh sách "đề xuất gỡ".
+-- Lúc đó `koc_assignment_warnings` còn đọc `koc_video_unit` (bảng TRỄ) → báo quá hạn oan.
+-- Bằng chứng: đơn của video 15/7 (content_id 7662657737246903573) đã sync về từ 16/7 00:10,
+--   tức 4 NGÀY TRƯỚC lúc gỡ → dữ liệu tươi có sẵn, chỉ nguồn cũ không thấy.
+-- Hàm đã fix 22/7 (đọc tiktok_affiliate_orders + tiktok_shop_videos). Kiểm chứng lại hôm nay:
+--   koc_assignment_warnings('7495831977917385095','MOAW MOAWS') → hibesdung: last_air 15/7,
+--   days_since_air 20 / limit 45 → "không báo gỡ" ✅. @hibesdung đã được gắn lại 22/7.
+--
+-- RÀ TOÀN BỘ hệ quả của lỗi này (141 lần gỡ tay "tự gỡ quá hạn"):
+--   · 27 ca gỡ OAN (tại thời điểm gỡ, KOC đã air trong vòng 45 ngày — tính air = đơn ĐẦU TIÊN mỗi video)
+--   · 10/27 ca đến 4/8 vẫn CHƯA được gắn lại → Khánh chốt: gắn lại hết, giữ ngày tag gốc.
+-- ĐÃ KHÔI PHỤC 10 (migration `restore_10_wrongly_manual_removed_tags_4aug`):
+--   assigned_at = now() (để qua trigger block_zombie_assignment vốn chặn khi assigned_at < lần remove),
+--   approved_at = NGÀY TAG GỐC → giữ tenure liên tục, không phá GMV/quy công đã tính.
+--   Nguyên Bảo 4 (ngoctocxoann, sn.xo.chua.ngt9816, doranguyen68, duong29050) · Hoàng Vy 4
+--   (_hsin09, biunie206, bong.creator, hihi.haha7249) · Trúc Quỳnh 1 (hanhnguyenmikixi) · Tường Vi 1 (arieo008).
+-- LƯU Ý ĐÃ BÁO KHÁNH: 4/10 (duong29050, biunie206, bong.creator, hihi.haha7249) air gần nhất còn ở
+--   tháng 6 → theo luật 45/50 ngày hiện hành thì cron auto-gỡ SẼ gỡ lại (đúng luật, không phải bug).
+--   Muốn giữ thì phải cho KOC lên clip mới, hoặc đưa vào koc_tag_priority để hoãn.
+
+-- ══ CA 2: @i_imphuong có tag MOAW (từ 16/6) nhưng dán link video không ra dòng nào ══
+-- KHÔNG mất video — video air 11/7 nhưng trang đang xem KỲ THÁNG 8 → bảng "Link & Video của nhân sự"
+-- lọc video-theo-tag theo kỳ nên không hiện. Kiểm chứng: staff_all_records(kỳ 1-31/7) → ra đúng 1 dòng
+-- loai='tag', view 6.122, GMV 496.595đ; cùng search với kỳ tháng 8 → 0 dòng.
+-- Khánh chốt: "chọn tháng nào kệ tao, miễn có trong pool thì cho chọn hết".
+-- FIX (frontend BookingStaffReportTab.jsx): bảng gộp gọi staff_all_records với khung CỐ ĐỊNH
+--   2025-01-01 → 2030-12-31 (mọi thời gian), bỏ phụ thuộc `range` của trang; đổi tên cột
+--   VIEW/GMV "(KỲ)" → "(TỔNG)", sửa chú thích + tên file Excel. Verify: pool Nguyên Bảo 5.397 dòng;
+--   dán link video 11/7 ra đúng 1 dòng dù trang đang ở kỳ nào.
+
+-- BÀI HỌC: mọi tính toán "quá hạn / lâu chưa air" phải lấy air từ nguồn TƯƠI (orders + shop_videos),
+-- và bảng tra cứu link thì KHÔNG nên lọc theo kỳ — người dùng dán link để TÌM, không phải để lọc.
