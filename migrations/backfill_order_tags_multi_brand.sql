@@ -1,0 +1,37 @@
+-- 4/8/2026 — "1 bạn order 2 brand thì gắn tag bạn ở CẢ 2 brand" (Khánh hỏi) + nạp link air sót đợt 2
+
+-- ══ A. KIỂM CHỨNG CƠ CHẾ: ĐÃ ĐÚNG SẴN ══
+-- `sync_order_tags` build `_cand` bằng `distinct on (uname, brand_name)` → mỗi (KOC × brand) là 1 ứng viên
+-- riêng, nên order 2 brand thì tạo 2 tag. Đo thực tế 60 ngày, KOC được order từ 2 brand trở lên:
+--   1.138 cặp (KOC×brand) — 659 đã có tag, 479 chưa. Bóc 479:
+--     · 350 đã bị GỠ sau ngày order (đúng, tôn trọng quyết định gỡ)
+--     ·   5 KOC nằm blacklist
+--     · 433 đơn cũ hơn 30 ngày (ngoài cửa sổ cron)
+--     ·   0 ca THIẾU THẬT SỰ trong 30 ngày gần đây  ✅ → cơ chế chạy đúng.
+
+-- ══ B. 127 CẶP CŨ CHƯA TAG (đơn trước 15/7) — ĐÃ GẮN BÙ ══
+-- Gốc: trước 15/7 nhánh INSERT còn đòi "KOC chưa air" (not exists koc_video_unit) nên KOC đã air rồi thì
+-- order KHÔNG sinh tag. Bỏ điều kiện đó ngày 15/7 nhưng cron chỉ nhìn lại 30 ngày → đơn cũ hơn không bao giờ
+-- được gắn bù. Ví dụ điển hình: @phunphun1302 order Bodymiss + MOAW (Minh Thảo) mà chỉ có tag MOAW.
+-- Đo trong 127 ca: 77 KOC CÓ air cho brand bị sót, trong đó 68 air SAU ngày order → nhân sự gửi mẫu,
+--   KOC lên clip, mà không được tính công. 50 ca chưa air lần nào.
+-- Khánh chốt: gắn bù hết, lấy NGÀY ORDER làm ngày tag.
+-- ĐÃ CHẠY (`backfill_order_tags_multi_brand_4aug_v2`): **126 tag** (Minh Thảo 41 · Thu Thảo 25 · Hoàng Vy 15 ·
+--   Anh Nhi 7 · Hữu Đan 7 · Trúc Quỳnh 7 · Hoàng Vũ 6 · Lưu Hằng 6 · Ngọc Mai 5 · Nguyên Bảo 4 · Tường Vi 3).
+-- An toàn đã áp: bỏ KOC blacklist · bỏ cặp có lệnh GỠ sau ngày order · 1 KOC×brand mà 2 bạn cùng order thì
+--   lấy ĐƠN GẦN NHẤT (đúng luật distinct-on của sync_order_tags — vd @hanghia1402/BODYMISS: Minh Thảo và
+--   Thu Thảo cùng order 10/6 → về Thu Thảo).
+-- Kỹ thuật: INSERT assigned_at=now() để qua trigger `block_zombie_assignment` (trigger chỉ chạy lúc INSERT),
+--   rồi UPDATE lùi assigned_at về ngày order; approved_at = ngày order để tenure tính đúng từ lúc gửi mẫu.
+-- LƯU Ý: bảng có UNIQUE (koc_id, brand_name) → lần chạy đầu fail vì trong danh sách có 2 dòng cùng
+--   (KOC,brand) do 2 bạn cùng order; phải distinct-on trước khi insert.
+-- HỆ QUẢ ĐÃ BÁO KHÁNH: ~50 ca KOC chưa air lần nào sẽ bị cron auto-gỡ trong vài tiếng (đúng luật 45 ngày),
+--   nhưng lịch sử tag đã ghi nên công cho video (nếu có) vẫn giữ.
+
+-- ══ C. NẠP LINK AIR SÓT ĐỢT 2 ══
+-- File "Link air sót đợt 2.xlsx": 361 dòng có link → nạp 360 (bỏ 1 đã có: @shopcuanhim_ dòng 57).
+-- Rà trước khi nạp: 0 trùng trong file · 0 trùng với file đợt 1 · 0 link lỗi · 2 lệch shop · 5 lệch tag ·
+--   6 video air trước 1/7 · 1 video không thấy ở shop nào (@kimm_ten).
+-- Khánh chốt: (1) 2 ca lệch shop nạp theo SHOP THẬT — @nps171200 → BODYMISS (khai eHerb VN),
+--   @lalareviewww dòng 330 → MILAGANICS (khai MOAW); (2) 5 link @emkimtaphoa tính công cho Thu Thảo
+--   nhưng GIỮ NGUYÊN tag EHERB của Nguyên Bảo (không đụng bảng tag).
