@@ -102,7 +102,7 @@ export default function LivestreamAiTab({ shop = 'chung' }) {
       min_confidence: cf?.min_confidence ?? 1,
       max_queue: cf?.max_queue ?? 3,
     });
-    setForm(empty); setEditing(false);   // đổi gian -> bỏ form đang sửa dở của gian cũ
+    setForm(empty); setEditing(false); setFormOpen(false);   // đổi gian -> bỏ form đang sửa dở của gian cũ
     setLoading(false);
   };
   useEffect(() => { load(); }, [shop]);
@@ -134,8 +134,9 @@ export default function LivestreamAiTab({ shop = 'chung' }) {
 
   const editIntent = (it) => {
     setForm({ id: it.id, label: it.label, keywords: (it.keywords || []).join(', '), clip: it.clip || '', enabled: it.enabled });
-    setEditing(true); setStatus('');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setEditing(true); setFormOpen(true); setStatus('');
+    // Cuộn TỚI ĐÚNG KHUNG SỬA (trước đây cuộn lên đầu trang -> đụng mấy khối cài đặt, tưởng bấm không ăn)
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
   };
   const delIntent = async (it) => {
     if (!window.confirm(`Xoá câu hỏi "${it.label}"?`)) return;
@@ -158,8 +159,23 @@ export default function LivestreamAiTab({ shop = 'chung' }) {
   // ── NHÂN BẢN bộ câu hỏi từ gian khác (Khánh 4/8) ──────────────────────────
   // Gian mới khỏi gõ lại 20 câu: copy nguyên bộ (kèm từ khoá) từ "Bộ mẫu" hoặc gian đã làm rồi.
   // CỐ Ý không copy `clip`: clip là video của gian cũ, để lại là live gian mới phát nhầm nội dung.
+  const [formOpen, setFormOpen] = useState(false);   // khung Thêm/Sửa — gấp lại để DANH SÁCH nổi lên trước
+  const formRef = React.useRef(null);
+  const [setupOpen, setSetupOpen] = useState(false); // thanh "Cài máy live & nhân bản" — gấp cho đỡ rối
   const [helpOpen, setHelpOpen] = useState(false);   // hướng dẫn cài trên máy live
   const [cloneFrom, setCloneFrom] = useState('');
+  // Số câu hỏi của TỪNG gian — để ô "nhân bản" hiện luôn gian nào có/không, khỏi chọn nhầm gian trống
+  const [shopCounts, setShopCounts] = useState({});
+  useEffect(() => {
+    let alive = true;
+    supabase.from('livestream_intents').select('shop_key').then(({ data }) => {
+      if (!alive) return;
+      const m = {}; LIVE_SHOP_OPTIONS.forEach(o => { m[o.key] = 0; });
+      (data || []).forEach(r => { m[r.shop_key] = (m[r.shop_key] || 0) + 1; });
+      setShopCounts(m);
+    }, () => {});
+    return () => { alive = false; };
+  }, [shop]);   // sau khi nhân bản / sửa thì đếm lại
   const [cloning, setCloning] = useState(false);
   const cloneIntents = async () => {
     if (!cloneFrom || cloneFrom === shop) { setStatus('❌ Chọn gian NGUỒN khác gian đang mở.'); return; }
@@ -199,21 +215,28 @@ export default function LivestreamAiTab({ shop = 'chung' }) {
 
   return (
     <div style={{ padding: '8px 4px 40px', maxWidth: 1100, margin: '0 auto', fontFamily: 'Outfit, sans-serif' }}>
-      {/* Tiêu đề + hướng dẫn to rõ */}
-      <div style={{ marginBottom: 18 }}>
-        <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 900, color: '#1e293b' }}>📝 Bước 1 — Kho câu hỏi</h2>
-        <p style={{ margin: '6px 0 0', color: '#475569', fontSize: '0.98rem', lineHeight: 1.65 }}>
-          Khai báo <b>các câu người xem hay hỏi khi live</b> (giá? ship? size? voucher?…) + từ khoá để máy nhận diện.
-          Làm xong qua tab <b>② Xưởng Clip</b> để sản xuất video trả lời cho từng câu.
-        </p>
-        <div style={{ marginTop: 8, fontSize: '0.9rem', color: '#0f172a' }}>
-          Đang soạn cho: <b style={{ color: '#ea580c' }}>{liveShopLabel(shop)}</b> — mỗi gian hàng một kho riêng.
-        </div>
+      {/* Tiêu đề — gọn 1 dòng, khỏi chiếm chỗ */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+        <h2 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 900, color: '#1e293b' }}>📝 Kho câu hỏi</h2>
+        <span style={{ fontSize: '0.92rem', color: '#475569' }}>
+          của <b style={{ color: '#ea580c' }}>{liveShopLabel(shop)}</b>
+        </span>
+        <span style={{ ...hintTxt, marginTop: 0 }}>Câu hỏi + từ khoá để máy nhận diện comment · làm clip ở tab ② Xưởng Clip.</span>
       </div>
 
-      {/* MÃ GIAN HÀNG cho agent + NHÂN BẢN từ gian khác */}
-      <div style={{ ...card, padding: 0, marginBottom: 16 }}>
-        <div style={{ padding: '14px 20px', display: 'flex', gap: 22, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+      {/* ⚙️ CÀI ĐẶT MÁY LIVE — gộp mã gian hàng + hướng dẫn + nhân bản, GẤP LẠI mặc định cho đỡ rối */}
+      <div style={{ ...card, marginBottom: 14 }}>
+        <div onClick={() => setSetupOpen(v => !v)}
+          style={{ padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', background: setupOpen ? '#fffdfb' : '#fff' }}>
+          <span style={{ fontSize: '1.05rem' }}>⚙️</span>
+          <span style={{ fontWeight: 800, fontSize: '0.96rem', color: '#334155', flex: 1 }}>
+            Cài máy live &amp; nhân bản <span style={{ fontWeight: 600, color: '#94a3b8', fontSize: '0.85rem' }}>— làm 1 lần lúc setup</span>
+          </span>
+          <span style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: '#94a3b8' }}>{shop}</span>
+          <span style={{ color: '#94a3b8', fontWeight: 800 }}>{setupOpen ? '▲' : '▼'}</span>
+        </div>
+        {setupOpen && (<>
+        <div style={{ padding: '4px 18px 16px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 22, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div style={{ flex: '1 1 320px' }}>
             <label style={lbl}>Mã gian hàng — dán vào <code>config.json</code> của agent</label>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -221,10 +244,9 @@ export default function LivestreamAiTab({ shop = 'chung' }) {
               <button onClick={() => { navigator.clipboard?.writeText(shop); setStatus('📋 Đã copy mã gian hàng — dán vào "shop" trong config.json của agent.'); }}
                 style={{ padding: '10px 16px', borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}>📋 Copy</button>
             </div>
-            <div style={hintTxt}>Máy live phải khai <b>đúng</b> mã này thì mới nạp được kho câu hỏi của gian.</div>
             <button onClick={() => setHelpOpen(v => !v)}
               style={{ marginTop: 8, padding: '7px 14px', borderRadius: 8, border: '1.5px solid #fed7aa', background: '#fff7ed', color: '#c2410c', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', fontFamily: 'inherit' }}>
-              {helpOpen ? '▲ Đóng hướng dẫn' : '❓ Cài trên máy live thế nào? — xem hướng dẫn'}
+              {helpOpen ? '▲ Đóng hướng dẫn' : '❓ Cài trên máy live thế nào?'}
             </button>
           </div>
           <div style={{ flex: '1 1 320px' }}>
@@ -232,7 +254,14 @@ export default function LivestreamAiTab({ shop = 'chung' }) {
             <div style={{ display: 'flex', gap: 8 }}>
               <select value={cloneFrom} onChange={e => setCloneFrom(e.target.value)} style={inp}>
                 <option value="">— chọn gian nguồn —</option>
-                {LIVE_SHOP_OPTIONS.filter(o => o.key !== shop).map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+                {/* Hiện SỐ CÂU từng gian + khoá gian rỗng: trước đây chọn nhầm gian trống mới báo lỗi, rất khó hiểu */}
+                {LIVE_SHOP_OPTIONS.filter(o => o.key !== shop).map(o => {
+                  const n = shopCounts[o.key];
+                  const chuaBiet = n === undefined;
+                  return <option key={o.key} value={o.key} disabled={!chuaBiet && !n}>
+                    {o.label}{chuaBiet ? '' : ` — ${n} câu${n ? '' : ' (trống)'}`}
+                  </option>;
+                })}
               </select>
               <button onClick={cloneIntents} disabled={cloning || !cloneFrom}
                 style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: cloneFrom ? '#7c3aed' : '#e2e8f0', color: '#fff', fontWeight: 800, cursor: cloneFrom ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>
@@ -282,13 +311,21 @@ export default function LivestreamAiTab({ shop = 'chung' }) {
             </div>
           </div>
         )}
+        </>)}
       </div>
 
-      {/* A — THÊM / SỬA */}
-      <div style={card}>
-        <SecHead badge="A" icon={editing ? '✏️' : '➕'} title={editing ? `Sửa câu hỏi "${form.label}"` : 'Thêm câu hỏi mới'}
-          hint="Chỉ cần Tên + Từ khoá là thêm được. Đường dẫn clip có thể để trống — làm video xong bên Xưởng Clip nó tự điền." />
-        <div style={{ padding: 20 }}>
+      {/* A — THÊM / SỬA. Gấp lại mặc định để DANH SÁCH nổi lên trước; bấm Sửa/Thêm mới mở ra. */}
+      <div style={card} ref={formRef}>
+        <div onClick={() => { if (formOpen && editing) { setForm(empty); setEditing(false); } setFormOpen(v => !v); }}
+          style={{ padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', background: formOpen ? '#fffdfb' : '#fff' }}>
+          <span style={{ width: 34, height: 34, borderRadius: 10, background: '#fff4ec', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.05rem', flex: 'none' }}>{editing ? '✏️' : '➕'}</span>
+          <span style={{ fontWeight: 800, fontSize: '0.98rem', color: '#0f172a', flex: 1 }}>
+            {editing ? <>Sửa câu hỏi <span style={{ color: '#ea580c' }}>"{form.label}"</span></> : 'Thêm câu hỏi mới'}
+          </span>
+          <span style={{ color: '#94a3b8', fontWeight: 800, fontSize: '0.85rem' }}>{formOpen ? (editing ? '▲ Huỷ sửa' : '▲ Đóng') : '▼ Mở'}</span>
+        </div>
+        {formOpen && (
+        <div style={{ padding: 20, borderTop: '1px solid #f1f5f9' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 14, marginBottom: 14 }}>
             <div>
               <label style={lbl}>Tên câu hỏi *</label>
@@ -310,9 +347,10 @@ export default function LivestreamAiTab({ shop = 'chung' }) {
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <button style={btn(ACCENT)} onClick={saveIntent}>{editing ? '💾 Lưu thay đổi' : '➕ Thêm câu hỏi'}</button>
-            {editing && <button style={btn('#94a3b8')} onClick={() => { setForm(empty); setEditing(false); }}>Huỷ</button>}
+            {editing && <button style={btn('#94a3b8')} onClick={() => { setForm(empty); setEditing(false); setFormOpen(false); }}>Huỷ</button>}
           </div>
         </div>
+        )}
       </div>
 
       {/* B — DANH SÁCH */}
@@ -322,7 +360,7 @@ export default function LivestreamAiTab({ shop = 'chung' }) {
           right={<button style={{ ...btn('#16a34a'), padding: '9px 16px', fontSize: '0.85rem' }} onClick={exportFaq} title="Dự phòng — agent giờ đọc thẳng Supabase, không cần file này">📥 Xuất faq.json</button>} />
         <div style={{ padding: '10px 20px 20px' }}>
           {loading ? <div style={{ color: '#94a3b8', padding: 20 }}>⏳ Đang tải...</div>
-            : intents.length === 0 ? <div style={{ color: '#94a3b8', padding: 20, fontSize: '0.95rem' }}>Chưa có câu hỏi nào — thêm ở khung A phía trên.</div>
+            : intents.length === 0 ? <div style={{ color: '#94a3b8', padding: 20, fontSize: '0.95rem' }}>Chưa có câu hỏi nào — bấm ➕ Thêm câu hỏi mới ở trên.</div>
             : intents.map(it => (
               <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '14px 16px', marginTop: 10, borderRadius: 12, border: '1.5px solid #f1f5f9', background: it.enabled ? '#fff' : '#f8fafc', opacity: it.enabled ? 1 : 0.6 }}>
                 <label title={it.enabled ? 'Đang BẬT — máy sẽ nhận diện câu này' : 'Đang TẮT'} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flex: 'none' }}>
