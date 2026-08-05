@@ -4,6 +4,7 @@
 //   ① Kho câu hỏi (Module 4)  ② Xưởng Clip (Module 5)  ③ Studio (ngày live)
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { supabase } from '../supabaseClient';
+import { LIVE_SHOP_OPTIONS, LIVE_TEMPLATE_KEY } from '../constants/shops';
 
 const LivestreamAiTab = lazy(() => import('./LivestreamAiTab'));
 const LiveClipFactoryTab = lazy(() => import('./LiveClipFactoryTab'));
@@ -19,12 +20,27 @@ const TABS = [
   { key: 'studio',  icon: '🎛️', name: '③ Studio' },
 ];
 
+// Nhớ gian hàng đang chọn giữa các lần mở (khỏi phải chọn lại mỗi lần vào tab)
+const SHOP_LS_KEY = 'live_ai_shop';
+const readShop = () => {
+  try {
+    const v = localStorage.getItem(SHOP_LS_KEY);
+    return LIVE_SHOP_OPTIONS.some(o => o.key === v) ? v : LIVE_TEMPLATE_KEY;
+  } catch { return LIVE_TEMPLATE_KEY; }
+};
+
 export default function LiveAiHubTab({ initial = 'home' }) {
   const [tab, setTab] = useState(initial);
+  // ── GIAN HÀNG (Khánh 4/8): mỗi gian 1 kho câu hỏi + 1 bộ clip + 1 bối cảnh RIÊNG.
+  //    Chọn ở đây 1 lần, cả 3 tab con (Kho câu hỏi · Xưởng Clip · Studio) dùng chung.
+  const [shop, setShop] = useState(readShop);
+  useEffect(() => { try { localStorage.setItem(SHOP_LS_KEY, shop); } catch { /* chế độ ẩn danh */ } }, [shop]);
+  const isTemplate = shop === LIVE_TEMPLATE_KEY;
+
   return (
     <div>
-      {/* Thanh tab — đánh số theo thứ tự làm việc */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14, background: '#fff', border: '1px solid #f1f5f9', borderRadius: 12, padding: 8 }}>
+      {/* Thanh tab — đánh số theo thứ tự làm việc + ô chọn gian hàng */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14, background: '#fff', border: '1px solid #f1f5f9', borderRadius: 12, padding: 8 }}>
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             style={{
@@ -35,27 +51,44 @@ export default function LiveAiHubTab({ initial = 'home' }) {
             <span>{t.icon}</span> {t.name}
           </button>
         ))}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#64748b' }}>GIAN HÀNG:</span>
+          <select value={shop} onChange={e => setShop(e.target.value)}
+            style={{ padding: '9px 12px', borderRadius: 9, border: `2px solid ${isTemplate ? '#f59e0b' : ORANGE}`, background: isTemplate ? '#fffbeb' : '#fff7ed', color: '#0f172a', fontFamily: 'inherit', fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer', minWidth: 250 }}>
+            {LIVE_SHOP_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+          </select>
+        </div>
       </div>
+
+      {isTemplate && (
+        <div style={{ marginBottom: 14, padding: '11px 16px', borderRadius: 10, background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', fontSize: '0.86rem' }}>
+          🧪 Đang xem <b>BỘ MẪU (chung)</b> — chỉ để soạn sẵn rồi <b>nhân bản</b> sang gian hàng thật.
+          Agent <b>không</b> chạy bộ này: máy live phải khai đúng mã gian hàng của nó.
+        </div>
+      )}
+
       <Suspense fallback={<div style={{ padding: 30, color: '#94a3b8' }}>⏳ Đang tải…</div>}>
-        {tab === 'home' && <FlowHome go={setTab} />}
+        {tab === 'home' && <FlowHome go={setTab} shop={shop} />}
         {tab === 'model' && <LiveModelShotTab />}
-        {tab === 'faq' && <LivestreamAiTab />}
-        {tab === 'factory' && <LiveClipFactoryTab />}
-        {tab === 'studio' && <LiveStudioTab />}
+        {tab === 'faq' && <LivestreamAiTab shop={shop} />}
+        {tab === 'factory' && <LiveClipFactoryTab shop={shop} />}
+        {tab === 'studio' && <LiveStudioTab shop={shop} />}
       </Suspense>
     </div>
   );
 }
 
 // ── 🏠 Trang QUY TRÌNH — nhìn 10 giây là biết đang ở đâu, làm gì tiếp ──
-function FlowHome({ go }) {
+function FlowHome({ go, shop }) {
   const [stat, setStat] = useState(null); // { nIntents, nClipDone, nPath, total }
   useEffect(() => {
     let alive = true;
+    setStat(null);   // đổi gian -> xoá số cũ, tránh hiện nhầm tiến độ của gian trước
     (async () => {
+      // Đếm tiến độ CỦA ĐÚNG GIAN ĐANG CHỌN — trước đây đếm cả hệ thống nên nhiều shop là số vô nghĩa
       const [{ data: intents }, { data: prod }] = await Promise.all([
-        supabase.from('livestream_intents').select('id, clip, enabled'),
-        supabase.from('livestream_clip_prod').select('intent_id, status'),
+        supabase.from('livestream_intents').select('id, clip, enabled').eq('shop_key', shop),
+        supabase.from('livestream_clip_prod').select('intent_id, status').eq('shop_key', shop),
       ]);
       if (!alive) return;
       const all = intents || [];
@@ -67,7 +100,7 @@ function FlowHome({ go }) {
       });
     })();
     return () => { alive = false; };
-  }, []);
+  }, [shop]);   // đổi gian hàng -> đếm lại
 
   const s = stat || { nIntents: 0, total: 0, nClipDone: 0, nPath: 0 };
   // Trạng thái từng bước: xong (xanh) / đang dở (cam) / chưa (xám)

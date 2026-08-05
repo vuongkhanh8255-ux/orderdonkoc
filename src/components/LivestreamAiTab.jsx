@@ -4,6 +4,7 @@
 // UI thiết kế theo BƯỚC (A thêm → B danh sách → C test) — chữ to, mỗi khu có hướng dẫn ngay tại chỗ.
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
+import { LIVE_SHOP_OPTIONS, LIVE_TEMPLATE_KEY, liveShopLabel } from '../constants/shops';
 
 // ── Bộ nhận diện — COPY Y HỆT livestream-ai/agent/src/intent.js để test khớp với agent thật ──
 function removeDiacritics(str) {
@@ -71,7 +72,7 @@ function SecHead({ badge, icon, title, hint, right }) {
   );
 }
 
-export default function LivestreamAiTab() {
+export default function LivestreamAiTab({ shop = 'chung' }) {
   const [intents, setIntents] = useState([]);
   const [config, setConfig] = useState({ cooldown_sec: 45, min_confidence: 1, max_queue: 3 });
   const [loading, setLoading] = useState(true);
@@ -83,17 +84,24 @@ export default function LivestreamAiTab() {
   const [form, setForm] = useState(empty);
   const [editing, setEditing] = useState(false);
 
+  // MỌI truy vấn đều khoá theo gian hàng đang chọn (Khánh 4/8) — không thì shop này ghi đè shop kia.
   const load = async () => {
     setLoading(true);
     const [{ data: it }, { data: cf }] = await Promise.all([
-      supabase.from('livestream_intents').select('*').order('sort_order', { ascending: true }),
-      supabase.from('livestream_config').select('*').eq('id', 'default').maybeSingle(),
+      supabase.from('livestream_intents').select('*').eq('shop_key', shop).order('sort_order', { ascending: true }),
+      supabase.from('livestream_config').select('*').eq('id', shop).maybeSingle(),
     ]);
     setIntents((it || []).map(r => ({ ...r, keywords: Array.isArray(r.keywords) ? r.keywords : [] })));
-    if (cf) setConfig({ cooldown_sec: cf.cooldown_sec ?? 45, min_confidence: cf.min_confidence ?? 1, max_queue: cf.max_queue ?? 3 });
+    // Gian chưa có dòng cấu hình -> quay về mặc định an toàn, KHÔNG mượn cấu hình gian khác
+    setConfig({
+      cooldown_sec: cf?.cooldown_sec ?? 45,
+      min_confidence: cf?.min_confidence ?? 1,
+      max_queue: cf?.max_queue ?? 3,
+    });
+    setForm(empty); setEditing(false);   // đổi gian -> bỏ form đang sửa dở của gian cũ
     setLoading(false);
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [shop]);
 
   const testResult = useMemo(() => {
     if (!testText.trim()) return null;
@@ -108,11 +116,12 @@ export default function LivestreamAiTab() {
     const keywords = form.keywords.split(',').map(k => k.trim()).filter(Boolean);
     if (!keywords.length) { setStatus('❌ Nhập ít nhất 1 từ khoá (cách nhau dấu phẩy).'); return; }
     const row = {
-      id, label, keywords, clip: form.clip.trim(), enabled: form.enabled,
+      shop_key: shop, id, label, keywords, clip: form.clip.trim(), enabled: form.enabled,
       sort_order: editing ? (intents.find(i => i.id === id)?.sort_order ?? intents.length + 1) : intents.length + 1,
       updated_at: new Date().toISOString(),
     };
-    const { error } = await supabase.from('livestream_intents').upsert(row, { onConflict: 'id' });
+    // onConflict PHẢI đủ cặp khoá — để 'id' không thôi là ghi đè câu cùng mã của gian khác
+    const { error } = await supabase.from('livestream_intents').upsert(row, { onConflict: 'shop_key,id' });
     if (error) { setStatus('❌ Lỗi lưu: ' + error.message); return; }
     setStatus(`✅ Đã lưu "${label}".`);
     setForm(empty); setEditing(false);
@@ -126,23 +135,54 @@ export default function LivestreamAiTab() {
   };
   const delIntent = async (it) => {
     if (!window.confirm(`Xoá câu hỏi "${it.label}"?`)) return;
-    const { error } = await supabase.from('livestream_intents').delete().eq('id', it.id);
+    // Xoá câu hỏi: dọn luôn dòng sản xuất clip của ĐÚNG gian đó, tránh để lại rác mồ côi
+    const { error } = await supabase.from('livestream_intents').delete().eq('shop_key', shop).eq('id', it.id);
     if (error) { setStatus('❌ Lỗi xoá: ' + error.message); return; }
+    await supabase.from('livestream_clip_prod').delete().eq('shop_key', shop).eq('intent_id', it.id);
     setStatus(`🗑️ Đã xoá "${it.label}".`); await load();
   };
   const toggleEnabled = async (it) => {
-    await supabase.from('livestream_intents').update({ enabled: !it.enabled, updated_at: new Date().toISOString() }).eq('id', it.id);
+    await supabase.from('livestream_intents').update({ enabled: !it.enabled, updated_at: new Date().toISOString() })
+      .eq('shop_key', shop).eq('id', it.id);
     await load();
   };
   const saveConfig = async () => {
-    const { error } = await supabase.from('livestream_config').upsert({ id: 'default', ...config, updated_at: new Date().toISOString() }, { onConflict: 'id' });
-    setStatus(error ? '❌ Lỗi lưu cài đặt: ' + error.message : '✅ Đã lưu cài đặt chung.');
+    const { error } = await supabase.from('livestream_config').upsert({ id: shop, ...config, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+    setStatus(error ? '❌ Lỗi lưu cài đặt: ' + error.message : '✅ Đã lưu cài đặt cho gian này.');
+  };
+
+  // ── NHÂN BẢN bộ câu hỏi từ gian khác (Khánh 4/8) ──────────────────────────
+  // Gian mới khỏi gõ lại 20 câu: copy nguyên bộ (kèm từ khoá) từ "Bộ mẫu" hoặc gian đã làm rồi.
+  // CỐ Ý không copy `clip`: clip là video của gian cũ, để lại là live gian mới phát nhầm nội dung.
+  const [cloneFrom, setCloneFrom] = useState('');
+  const [cloning, setCloning] = useState(false);
+  const cloneIntents = async () => {
+    if (!cloneFrom || cloneFrom === shop) { setStatus('❌ Chọn gian NGUỒN khác gian đang mở.'); return; }
+    const { data: src, error: e1 } = await supabase.from('livestream_intents').select('*').eq('shop_key', cloneFrom);
+    if (e1) { setStatus('❌ Lỗi đọc gian nguồn: ' + e1.message); return; }
+    if (!src?.length) { setStatus('❌ Gian nguồn chưa có câu hỏi nào.'); return; }
+    const daCo = new Set(intents.map(i => i.id));
+    const them = src.filter(r => !daCo.has(r.id));   // câu đã có thì GIỮ NGUYÊN, không đè
+    if (!them.length) { setStatus('ℹ️ Gian này đã có đủ các câu của gian nguồn — không thêm gì.'); return; }
+    if (!window.confirm(`Chép ${them.length} câu hỏi từ "${cloneFrom}" sang gian đang mở?\n\nChỉ chép câu hỏi + từ khoá. KHÔNG chép đường dẫn clip (clip là video riêng của từng gian) — bạn làm clip mới ở tab Xưởng Clip.`)) return;
+    setCloning(true);
+    const rows = them.map((r, i) => ({
+      shop_key: shop, id: r.id, label: r.label, keywords: r.keywords || [],
+      clip: '', enabled: r.enabled ?? true, sort_order: intents.length + i + 1,
+      updated_at: new Date().toISOString(),
+    }));
+    const { error } = await supabase.from('livestream_intents').upsert(rows, { onConflict: 'shop_key,id' });
+    setCloning(false);
+    if (error) { setStatus('❌ Lỗi nhân bản: ' + error.message); return; }
+    setStatus(`✅ Đã chép ${rows.length} câu hỏi sang gian này. Giờ qua ② Xưởng Clip làm video riêng cho gian.`);
+    await load();
   };
 
   // Xuất faq.json đúng format agent đọc (dự phòng — agent giờ đọc thẳng Supabase)
   const exportFaq = () => {
     const data = {
-      _note: 'Xuất từ Live AI dashboard (koc-tool). Đặt file này vào livestream-ai/agent/faq.json.',
+      _note: `Xuất từ Live AI dashboard (koc-tool) — GIAN HÀNG: ${shop}. Đặt file này vào livestream-ai/agent/faq.json của ĐÚNG máy chạy gian này.`,
+      shop_key: shop,
       intents: intents.filter(i => i.enabled).map(i => ({ id: i.id, label: i.label, keywords: i.keywords, clip: i.clip })),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -161,6 +201,38 @@ export default function LivestreamAiTab() {
           Khai báo <b>các câu người xem hay hỏi khi live</b> (giá? ship? size? voucher?…) + từ khoá để máy nhận diện.
           Làm xong qua tab <b>② Xưởng Clip</b> để sản xuất video trả lời cho từng câu.
         </p>
+        <div style={{ marginTop: 8, fontSize: '0.9rem', color: '#0f172a' }}>
+          Đang soạn cho: <b style={{ color: '#ea580c' }}>{liveShopLabel(shop)}</b> — mỗi gian hàng một kho riêng.
+        </div>
+      </div>
+
+      {/* MÃ GIAN HÀNG cho agent + NHÂN BẢN từ gian khác */}
+      <div style={{ ...card, padding: 0, marginBottom: 16 }}>
+        <div style={{ padding: '14px 20px', display: 'flex', gap: 22, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div style={{ flex: '1 1 320px' }}>
+            <label style={lbl}>Mã gian hàng — dán vào <code>config.json</code> của agent</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input readOnly value={shop} style={{ ...inp, fontFamily: 'monospace', background: '#f8fafc' }} onFocus={e => e.target.select()} />
+              <button onClick={() => { navigator.clipboard?.writeText(shop); setStatus('📋 Đã copy mã gian hàng — dán vào "shop" trong config.json của agent.'); }}
+                style={{ padding: '10px 16px', borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}>📋 Copy</button>
+            </div>
+            <div style={hintTxt}>Máy live phải khai <b>đúng</b> mã này thì mới nạp được kho câu hỏi của gian.</div>
+          </div>
+          <div style={{ flex: '1 1 320px' }}>
+            <label style={lbl}>Nhân bản câu hỏi từ gian khác (khỏi gõ lại)</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <select value={cloneFrom} onChange={e => setCloneFrom(e.target.value)} style={inp}>
+                <option value="">— chọn gian nguồn —</option>
+                {LIVE_SHOP_OPTIONS.filter(o => o.key !== shop).map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+              </select>
+              <button onClick={cloneIntents} disabled={cloning || !cloneFrom}
+                style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: cloneFrom ? '#7c3aed' : '#e2e8f0', color: '#fff', fontWeight: 800, cursor: cloneFrom ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>
+                {cloning ? '⏳...' : '⧉ Chép sang đây'}
+              </button>
+            </div>
+            <div style={hintTxt}>Chỉ chép <b>câu hỏi + từ khoá</b>. <b>Không</b> chép clip — clip là video riêng của từng gian.</div>
+          </div>
+        </div>
       </div>
 
       {/* A — THÊM / SỬA */}

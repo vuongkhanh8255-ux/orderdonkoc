@@ -62,16 +62,41 @@ async function main() {
     url: (config.supabase && config.supabase.url) || rootEnv.url || '',
     anonKey: (config.supabase && config.supabase.anonKey) || process.env.SUPABASE_ANON_KEY || rootEnv.anonKey || '',
   };
+
+  // ── GIAN HANG (Khanh 4/8/2026) ────────────────────────────────────────────
+  // May nay phat live cho gian nao? Moi gian co kho cau hoi + bo clip RIENG.
+  // Khong khai -> KHONG duoc nap tu web (nap tat ca la phat nham clip cua shop khac).
+  const SHOP = String(config.shop || '').trim();
+  if (SHOP) console.log(`[Config] Gian hang: ${SHOP}`);
+  else console.warn('[Config] ⚠ Chua khai "shop" trong config.json -> khong nap duoc tu web, chi dung faq.json tai may.');
+
+  let sbOk = false;                      // goi web THANH CONG (phan biet voi loi mang)
   try {
-    const fromSb = await loadFromSupabase(sb);
-    if (fromSb && fromSb.intents.length) {
-      faq = { intents: fromSb.intents };
-      logic = fromSb.logic;
-      src = 'Supabase (dashboard Module 4)';
+    const fromSb = await loadFromSupabase(sb, SHOP);
+    if (fromSb) {
+      sbOk = true;
+      if (fromSb.intents.length) {
+        faq = { intents: fromSb.intents };
+        logic = fromSb.logic;
+        src = `Supabase (Module 4) — gian "${SHOP}"`;
+      }
     }
   } catch (e) {
     console.warn(`[Config] Khong nap duoc tu Supabase (${e.message}) -> dung file faq.json.`);
   }
+
+  // Goi web OK nhung gian nay CHUA co cau hoi nao = gan nhu chac chan go sai ma gian hang.
+  // KHONG im lang quay ve faq.json (file do co the la clip cua gian khac -> phat nham khi dang live).
+  if (SHOP && sbOk && !faq) {
+    console.error('\n❌ ============================================');
+    console.error(`❌  Gian "${SHOP}" CHUA co cau hoi nao tren web (Module 4).`);
+    console.error('❌  Kiem tra: (1) go dung ma gian hang chua — bam nut "Copy" o Module 4;');
+    console.error('❌            (2) da tao cau hoi + BAT (enabled) cho gian nay chua.');
+    console.error('❌  Dung agent de tranh phat nham clip cua gian khac.');
+    console.error('❌ ============================================\n');
+    process.exit(1);
+  }
+
   if (!faq) {
     const faqFile = fs.existsSync(path.join(ROOT, 'faq.json')) ? 'faq.json' : 'faq.example.json';
     faq = loadJson(faqFile);
@@ -101,8 +126,8 @@ async function main() {
   if (src.startsWith('Supabase')) {
     setInterval(async () => {
       try {
-        const moi = await loadFromSupabase(sb);
-        if (!moi || !moi.intents.length) return;
+        const moi = await loadFromSupabase(sb, SHOP);   // van khoa dung gian hang cua may nay
+        if (!moi || !moi.intents.length) return;        // gian bi xoa het cau hoi -> giu ban dang chay
         const cuJson = JSON.stringify(orch.intents);
         if (cuJson === JSON.stringify(moi.intents)) return;   // không đổi thì im lặng
         orch.intents = moi.intents;

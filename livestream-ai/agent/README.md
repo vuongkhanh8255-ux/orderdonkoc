@@ -15,6 +15,26 @@ cd livestream-ai/agent
 npm install
 ```
 
+## ⚠️ BẮT BUỘC: khai GIAN HÀNG của máy này (từ 4/8/2026)
+
+Mỗi gian hàng có **kho câu hỏi + bộ clip RIÊNG** (clip là nội dung của chính shop đó: giá, sản phẩm,
+chính sách ship, người mẫu). Máy này phát live cho gian nào thì khai đúng gian đó:
+
+1. Vào web koc-tool → **Live AI** → chọn gian hàng ở góc phải → ô **"Mã gian hàng"** → bấm **📋 Copy**.
+2. Dán vào `config.json`:
+
+```json
+{ "shop": "shopee|eHerb Việt Nam", ... }
+```
+
+- Khai **sai** mã gian (gian chưa có câu hỏi nào) → agent **dừng hẳn** kèm thông báo, cố tình không chạy
+  để khỏi phát nhầm clip của gian khác khi đang live.
+- **Để trống** → agent không nạp được từ web, chỉ dùng `faq.json` tại máy.
+
+**Nhiều gian hàng cùng lúc:** mỗi gian **1 máy riêng** (mỗi máy có OBS + extension + agent riêng, nối
+với nhau qua `127.0.0.1` nên máy nào việc máy nấy). Một máy **chưa** chạy được 2 gian: extension ghi cứng
+cổng `8787` và OBS chỉ 1 bản/máy.
+
 ## Test nhanh KHÔNG cần OBS/Shopee (kiểm tra logic nhận diện)
 
 ```bash

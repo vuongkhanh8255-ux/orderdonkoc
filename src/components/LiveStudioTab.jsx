@@ -7,22 +7,27 @@ import { supabase } from '../supabaseClient';
 
 const C = { bg: '#0f1117', panel: '#181b24', panel2: '#1f2430', border: '#2a2f3d', text: '#e6e8ee', sub: '#8b93a7', accent: '#ff6a2c', good: '#22c55e', live: '#ef4444', purple: '#a855f7' };
 
-export default function LiveStudioTab() {
+export default function LiveStudioTab({ shop = 'chung' }) {
   const [clips, setClips] = useState([]);
   const [prod, setProd] = useState({});
   const [sel, setSel] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let alive = true;
+    setLoading(true);
     (async () => {
+      // Chỉ lấy clip + kịch bản CỦA GIAN ĐANG CHỌN (Khánh 4/8) — ngày live mà lộn gian là phát nhầm nội dung
       const [{ data: it }, { data: pr }] = await Promise.all([
-        supabase.from('livestream_intents').select('id,label,keywords,clip,enabled').order('sort_order', { ascending: true }),
-        supabase.from('livestream_clip_prod').select('intent_id,script,status'),
+        supabase.from('livestream_intents').select('id,label,keywords,clip,enabled').eq('shop_key', shop).order('sort_order', { ascending: true }),
+        supabase.from('livestream_clip_prod').select('intent_id,script,status').eq('shop_key', shop),
       ]);
+      if (!alive) return;
       const pmap = {}; (pr || []).forEach(p => { pmap[p.intent_id] = p; });
       setClips(it || []); setProd(pmap); setSel((it || [])[0]?.id || null); setLoading(false);
     })();
-  }, []);
+    return () => { alive = false; };
+  }, [shop]);
 
   const panel = { background: C.panel, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16 };
   const head = { fontSize: '0.72rem', fontWeight: 800, color: C.sub, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 };

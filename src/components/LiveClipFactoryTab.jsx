@@ -36,7 +36,7 @@ function StepBlock({ n, title, hint, color = ACCENT, children }) {
   );
 }
 
-export default function LiveClipFactoryTab() {
+export default function LiveClipFactoryTab({ shop = 'chung' }) {
   const [rows, setRows] = useState([]);   // merge intents + prod
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState(null);
@@ -50,10 +50,12 @@ export default function LiveClipFactoryTab() {
 
   const load = async () => {
     setLoading(true);
+    // Khoá theo gian hàng (Khánh 4/8): trước đây select không lọc → bảng prod của gian khác
+    // lọt vào pmap[intent_id], ghi đè lẫn nhau và có thể poll nhầm job HeyGen của gian khác.
     const [{ data: intents }, { data: prod }, { data: cfg }] = await Promise.all([
-      supabase.from('livestream_intents').select('id,label,keywords,clip,enabled').order('sort_order', { ascending: true }),
-      supabase.from('livestream_clip_prod').select('*'),
-      supabase.from('livestream_config').select('clip_shared').eq('id', 'default').maybeSingle(),
+      supabase.from('livestream_intents').select('id,label,keywords,clip,enabled').eq('shop_key', shop).order('sort_order', { ascending: true }),
+      supabase.from('livestream_clip_prod').select('*').eq('shop_key', shop),
+      supabase.from('livestream_config').select('clip_shared').eq('id', shop).maybeSingle(),
     ]);
     setShared(cfg?.clip_shared || {});
     const pmap = {}; (prod || []).forEach(p => { pmap[p.intent_id] = p; });
@@ -69,19 +71,19 @@ export default function LiveClipFactoryTab() {
     })));
     setLoading(false);
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [shop]);   // đổi gian hàng -> nạp lại đúng bộ của gian đó
 
   const setField = (id, field, val) => setRows(rs => rs.map(r => r.id === id ? { ...r, [field]: val } : r));
 
   const saveRow = async (r) => {
     const [p1, p2] = await Promise.all([
       supabase.from('livestream_clip_prod').upsert({
-        intent_id: r.id, script: r.script, img_prompt: r.img_prompt, image_url: r.image_url,
+        shop_key: shop, intent_id: r.id, script: r.script, img_prompt: r.img_prompt, image_url: r.image_url,
         vform: r.vform || {},
         product_image_url: r.product_image_url || null,
         video_url: r.video_url, status: r.prod_status, updated_at: new Date().toISOString(),
-      }, { onConflict: 'intent_id' }),
-      supabase.from('livestream_intents').update({ clip: r.clip || '', updated_at: new Date().toISOString() }).eq('id', r.id),
+      }, { onConflict: 'shop_key,intent_id' }),
+      supabase.from('livestream_intents').update({ clip: r.clip || '', updated_at: new Date().toISOString() }).eq('shop_key', shop).eq('id', r.id),
     ]);
     setStatus((p1.error || p2.error) ? ('❌ Lỗi lưu: ' + (p1.error?.message || p2.error?.message)) : `✅ Đã lưu "${r.label}".`);
   };
@@ -90,7 +92,7 @@ export default function LiveClipFactoryTab() {
   // ── BỐI CẢNH CHUNG (áp cho mọi câu): mô tả/nội dung/góc quay/hành động + prompt hình ──
   const setSf = (k, v) => setShared(s => ({ ...s, [k]: v }));
   const saveShared = async () => {
-    const { error } = await supabase.from('livestream_config').upsert({ id: 'default', clip_shared: shared, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+    const { error } = await supabase.from('livestream_config').upsert({ id: shop, clip_shared: shared, updated_at: new Date().toISOString() }, { onConflict: 'id' });
     setStatus(error ? '❌ Lỗi lưu bối cảnh: ' + error.message : '✅ Đã lưu BỐI CẢNH CHUNG — áp cho mọi câu.');
   };
   const suggestShared = async () => {
@@ -137,7 +139,7 @@ export default function LiveClipFactoryTab() {
       if (error) throw error;
       const { data } = supabase.storage.from('live-assets').getPublicUrl(path);
       setField(r.id, 'product_image_url', data.publicUrl);
-      await supabase.from('livestream_clip_prod').upsert({ intent_id: r.id, product_image_url: data.publicUrl, updated_at: new Date().toISOString() }, { onConflict: 'intent_id' });
+      await supabase.from('livestream_clip_prod').upsert({ shop_key: shop, intent_id: r.id, product_image_url: data.publicUrl, updated_at: new Date().toISOString() }, { onConflict: 'shop_key,intent_id' });
       setStatus('✅ Đã up ảnh sản phẩm — bấm 🪄 Tạo ảnh là nhân vật cầm ĐÚNG sản phẩm này.');
     } catch (e) { setStatus('❌ Lỗi up ảnh sản phẩm: ' + e.message); }
     finally { setBusy(''); }
@@ -155,7 +157,7 @@ export default function LiveClipFactoryTab() {
       if (error) throw error;
       const { data } = supabase.storage.from('live-assets').getPublicUrl(path);
       setField(r.id, 'image_url', data.publicUrl);
-      await supabase.from('livestream_clip_prod').upsert({ intent_id: r.id, image_url: data.publicUrl, updated_at: new Date().toISOString() }, { onConflict: 'intent_id' });
+      await supabase.from('livestream_clip_prod').upsert({ shop_key: shop, intent_id: r.id, image_url: data.publicUrl, updated_at: new Date().toISOString() }, { onConflict: 'shop_key,intent_id' });
       setStatus('✅ Đã up ảnh nhân vật — qua bước ③ bấm 🎬 tạo video là được (không cần OpenAI).');
     } catch (e) { setStatus('❌ Lỗi up ảnh nhân vật: ' + e.message); }
     finally { setBusy(''); }
@@ -174,7 +176,7 @@ export default function LiveClipFactoryTab() {
       if (error) throw error;
       const { data } = supabase.storage.from('live-assets').getPublicUrl(path);
       setField(r.id, 'video_url', data.publicUrl); setField(r.id, 'prod_status', 'xong');
-      await supabase.from('livestream_clip_prod').upsert({ intent_id: r.id, video_url: data.publicUrl, status: 'xong', updated_at: new Date().toISOString() }, { onConflict: 'intent_id' });
+      await supabase.from('livestream_clip_prod').upsert({ shop_key: shop, intent_id: r.id, video_url: data.publicUrl, status: 'xong', updated_at: new Date().toISOString() }, { onConflict: 'shop_key,intent_id' });
       setStatus('✅ Đã up video vào kho — giờ tải về máy phát live rồi điền đường dẫn ở ④.');
     } catch (e) { setStatus('❌ Lỗi up video: ' + e.message); }
     finally { setBusy(''); }
@@ -186,7 +188,7 @@ export default function LiveClipFactoryTab() {
   const genImageAuto = async (r) => {
     if (!r.img_prompt.trim()) { setStatus('❌ Cần prompt ảnh trước.'); return; }
     setBusy(`${r.id}:img`); setStatus('🪄 Đang tạo ảnh (OpenAI)... ~15-40s' + (r.product_image_url ? ' — ghép ảnh sản phẩm thật' : ''));
-    const j = await callApi('live_gen_image', { intent_id: r.id, prompt: r.img_prompt, product_image_url: r.product_image_url || undefined });
+    const j = await callApi('live_gen_image', { shop_key: shop, intent_id: r.id, prompt: r.img_prompt, product_image_url: r.product_image_url || undefined });
     setBusy('');
     if (!j.ok) { setStatus('❌ ' + (j.error || 'Lỗi tạo ảnh')); return; }
     setField(r.id, 'image_url', j.image_url); setStatus('✅ Đã tạo ảnh xong.' + (j.warn ? ' ⚠️ ' + j.warn : ''));
@@ -214,7 +216,7 @@ export default function LiveClipFactoryTab() {
     let count = 0, errStreak = 0;
     const timer = setInterval(async () => {
       count++;
-      const j = await callApi('live_check_video', { intent_id: id, video_id });
+      const j = await callApi('live_check_video', { shop_key: shop, intent_id: id, video_id });
       // Bấm 🎬 lần nữa giữa chừng → interval mới thay thế; lượt poll CŨ đang bay về thì tự bỏ, kẻo giết
       // nhầm interval mới / ghi đè kết quả video mới bằng video cũ.
       if (pollRef.current[id] !== timer) return;
@@ -235,7 +237,7 @@ export default function LiveClipFactoryTab() {
     if (!r.image_url) { setStatus('❌ Cần ảnh nhân vật trước (bước ②).'); return; }
     if (!r.script.trim()) { setStatus('❌ Cần kịch bản trước.'); return; }
     setBusy(`${r.id}:vid`); setStatus('🎬 Đang gửi HeyGen tạo video...');
-    const j = await callApi('live_make_video', { intent_id: r.id, image_url: r.image_url, script: r.script, voice_id: r.voice_id || undefined });
+    const j = await callApi('live_make_video', { shop_key: shop, intent_id: r.id, image_url: r.image_url, script: r.script, voice_id: r.voice_id || undefined });
     setBusy('');
     if (!j.ok) { setStatus('❌ ' + (j.error || 'Lỗi tạo video')); return; }
     setField(r.id, 'video_id', j.video_id); if (j.voice_id) setField(r.id, 'voice_id', j.voice_id); setField(r.id, 'prod_status', 'lam');
@@ -245,7 +247,7 @@ export default function LiveClipFactoryTab() {
   const checkVideoAuto = async (r) => {
     if (!r.video_id) { setStatus('❌ Chưa có video_id (bấm "Tạo video" trước).'); return; }
     setBusy(`${r.id}:chk`); setStatus('🔄 Đang kiểm tra HeyGen...');
-    const j = await callApi('live_check_video', { intent_id: r.id, video_id: r.video_id });
+    const j = await callApi('live_check_video', { shop_key: shop, intent_id: r.id, video_id: r.video_id });
     setBusy('');
     if (!applyCheckResult(r.id, j, r.label)) setStatus(j.ok === false && j.error ? '❌ ' + j.error : `⏳ Đang render (${j.status || 'processing'})... đợi thêm rồi bấm kiểm tra lại.`);
   };

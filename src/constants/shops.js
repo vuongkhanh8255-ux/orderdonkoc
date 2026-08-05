@@ -41,3 +41,28 @@ export const sanLabel = (s) => (s === 'shopee' ? 'Shopee' : s === 'tiktok' ? 'Ti
 export const shopLabel = (sh) => `${sanLabel(sh.san)} · ${sh.name}`;
 /** Suy brand từ tên gian (khi dòng cũ chưa có cột brand) */
 export const brandOfShop = (name) => SHOPS.find(s => s.name === name)?.brand || '';
+
+// ── LIVESTREAM AI (Khánh 4/8/2026) ─────────────────────────────────────────
+// Mỗi gian hàng PHẢI có bộ câu hỏi + bộ clip RIÊNG (clip là nội dung của chính shop đó:
+// giá, sản phẩm, chính sách ship, người mẫu, tông thương hiệu). Trước đây cả hệ thống dùng
+// chung 1 bộ → làm bộ cho shop này là đè mất bộ shop kia, agent lại tự nạp lại mỗi 60s nên
+// máy đang live sẽ nhảy sang clip của shop khác. Nay mọi bảng livestream_* khoá theo `shop_key`.
+//
+// shop_key = shopKey(sh) = "sàn|tên" — DÙNG CHUNG định dạng với CSKH/Seeding, KHÔNG đặt định
+// dạng riêng (đặt riêng là sớm muộn lệch nhau). Agent khai đúng chuỗi này trong config.json.
+
+/** Bộ mẫu dùng để nhân bản sang gian hàng mới — KHÔNG gian nào tự lấy bộ này khi live. */
+export const LIVE_TEMPLATE_KEY = 'chung';
+
+/** Gian hàng chạy Livestream AI. Module làm cho Shopee Live nên chỉ liệt kê gian Shopee. */
+export const LIVE_SHOPS = SHOPS.filter(s => s.san === 'shopee');
+
+/** Danh sách cho ô chọn: bộ mẫu + các gian Shopee. */
+export const LIVE_SHOP_OPTIONS = [
+  { key: LIVE_TEMPLATE_KEY, label: '🧪 Bộ mẫu (chung — để nhân bản)' },
+  ...LIVE_SHOPS.map(s => ({ key: shopKey(s), label: `🛒 ${s.name}` })),
+];
+
+/** Nhãn hiển thị từ shop_key; key lạ (gian đã xoá) vẫn hiện được chứ không mất tiêu. */
+export const liveShopLabel = (key) =>
+  LIVE_SHOP_OPTIONS.find(o => o.key === key)?.label || `❓ ${key || '(chưa chọn)'}`;

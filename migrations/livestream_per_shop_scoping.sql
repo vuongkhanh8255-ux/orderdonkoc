@@ -1,0 +1,57 @@
+-- 4/8/2026 — LIVESTREAM AI: TÁCH KHO CÂU HỎI / CLIP / BỐI CẢNH THEO TỪNG GIAN HÀNG (Khánh yêu cầu)
+
+-- ══════════ VẤN ĐỀ ══════════
+-- 3 bảng livestream_* chỉ chứa ĐÚNG 1 BỘ cho cả hệ thống:
+--   livestream_intents  — khoá chính (id)         → 2 shop cùng câu "Hỏi giá" (slug 'gia') là ĐÈ nhau
+--   livestream_clip_prod— khoá chính (intent_id)  → 9 chỗ upsert onConflict:'intent_id' ghi đè chéo
+--   livestream_config   — đúng 1 dòng id='default' (kèm clip_shared = BỐI CẢNH CHUNG cho AI dựng clip)
+-- Hệ quả: làm bộ clip cho eHerb xong quay qua làm Bodymiss là mất bộ eHerb. Nặng hơn: agent TỰ NẠP LẠI
+-- kho câu hỏi mỗi 60 giây → máy đang live eHerb sẽ nhảy sang clip Bodymiss trong vòng 1 phút, giữa buổi live.
+
+-- ══════════ ĐÃ SỬA — DB ══════════
+--   livestream_intents  : + shop_key, khoá chính → (shop_key, id)
+--   livestream_clip_prod: + shop_key, khoá chính → (shop_key, intent_id)
+--   livestream_config   : cột `id` CHÍNH LÀ shop_key, mỗi gian 1 dòng; dòng cũ 'default' → 'chung'
+--   + index (shop_key, sort_order) và (shop_key)
+-- shop_key = "sàn|tên" — DÙNG CHUNG hàm shopKey() với CSKH/Seeding, không đặt định dạng riêng.
+-- Dữ liệu cũ (5 câu mẫu + clip test) gom vào bucket 'chung' = BỘ MẪU để nhân bản; KHÔNG gian nào tự dùng.
+-- (SQL thực thi nằm ở migration `livestream_per_shop_scoping` trên Supabase.)
+
+-- ══════════ ĐÃ SỬA — CODE (30 chỗ đụng 3 bảng, không sót chỗ nào) ══════════
+-- src/constants/shops.js         : LIVE_SHOPS / LIVE_SHOP_OPTIONS / LIVE_TEMPLATE_KEY / liveShopLabel
+-- src/components/LiveAiHubTab.jsx: ô CHỌN GIAN HÀNG dùng chung cho 4 tab (nhớ trong localStorage),
+--                                  băng cảnh báo khi đang ở bộ mẫu, đếm tiến độ theo gian
+-- LivestreamAiTab.jsx (Kho câu hỏi): 6 thao tác khoá theo gian; upsert onConflict 'shop_key,id';
+--                                  xoá câu hỏi dọn luôn dòng clip_prod cùng gian (trước để lại rác mồ côi);
+--                                  + ô "Mã gian hàng" kèm nút Copy cho agent;
+--                                  + NHÂN BẢN câu hỏi từ gian khác (chép câu + từ khoá, CỐ Ý không chép clip)
+-- LiveClipFactoryTab.jsx (Xưởng Clip): 9 thao tác khoá theo gian; 4 API call gửi kèm shop_key
+-- LiveStudioTab.jsx              : 2 select khoá theo gian (ngày live lộn gian là phát nhầm)
+-- lib/liveai.js                  : 6 thao tác — 4 upsert ghi shop_key + onConflict 'shop_key,intent_id',
+--                                  2 .maybeSingle() thêm .eq('shop_key') (không thì >1 dòng → PGRST116,
+--                                  cache talking-photo và cache mp4 chết ngầm)
+-- api/tiktok-shop/analytics.js   : KHÔNG cần sửa — router đã truyền nguyên params xuống lib/liveai.js
+-- agent/config.json              : thêm "shop" + chú thích cách lấy mã
+-- agent/src/faqSource.js         : lọc shop_key (encodeURIComponent vì tên gian có dấu + ký tự '|')
+-- agent/src/index.js             : in gian hàng; vòng tự nạp lại 60s cũng khoá theo gian;
+--                                  gian đã khai mà web trả 0 câu → DỪNG AGENT (exit 1) kèm hướng dẫn,
+--                                  KHÔNG im lặng quay về faq.json (file đó có thể là clip gian khác)
+
+-- ══════════ ĐÃ TEST (chạy thật, không phải suy đoán) ══════════
+-- 1. DB      : 3 gian cùng mã câu 'gia' tồn tại song song, clip riêng — không đè nhau ✔
+-- 2. Agent   : gọi THẲNG hàm loadFromSupabase thật —
+--              eHerb→1 câu (EHERB_gia.mp4) · Bodymiss→1 câu (BODYMISS_gia.mp4) · chung→5 câu ·
+--              gian rỗng→0 câu · không khai gian→null ✔
+-- 3. Agent   : chạy thật `node src/index.js --mock --dry`, gõ cùng 1 comment "gia bao nhieu shop oi":
+--              máy khai eHerb    → ▶ PHAT C:/clips/EHERB_gia.mp4
+--              máy khai Bodymiss → ▶ PHAT C:/clips/BODYMISS_gia.mp4   (cách ly hoàn toàn) ✔
+-- 4. Agent   : khai gian rỗng → dừng hẳn, exit code 1, thông báo rõ ✔; để trống → cảnh báo + faq.json ✔
+-- 5. Web     : đổi gian ở Kho câu hỏi / Xưởng Clip / Studio đều chỉ thấy dữ liệu của gian đó ✔
+-- 6. Web     : nhân bản 5 câu từ bộ mẫu sang gian rỗng → 5 câu, clip TRỐNG, bộ mẫu nguyên vẹn ✔
+-- 7. Không lỗi console; vite build sạch; node --check sạch 4 file backend
+-- Dữ liệu test đã xoá, DB trả về đúng trạng thái ban đầu (chỉ còn bucket 'chung').
+
+-- ══════════ LƯU Ý VẬN HÀNH ══════════
+-- · Mỗi gian hàng = 1 MÁY riêng (extension + agent + OBS nối nhau qua 127.0.0.1). Một máy chưa chạy được
+--   2 gian: extension ghi cứng cổng 8787 và OBS chỉ 1 bản/máy. Muốn 1 máy nhiều gian thì phải sửa thêm.
+-- · live_brand_shots (tab Ảnh người mẫu) vốn đã tách theo BRAND nên không đụng tới.
