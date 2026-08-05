@@ -56,6 +56,10 @@ const card = { background: '#fff', borderRadius: 16, border: '1px solid #eef0f3'
 const inp = { padding: '12px 14px', borderRadius: 10, border: '1.5px solid #e2e8f0', fontSize: '0.95rem', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' };
 const lbl = { fontSize: '0.85rem', fontWeight: 800, color: '#334155', marginBottom: 6, display: 'block' };
 const hintTxt = { fontSize: '0.8rem', color: '#94a3b8', marginTop: 5, lineHeight: 1.5 };
+// dùng cho khối HƯỚNG DẪN CÀI MÁY LIVE
+const codeTag = { background: '#f1f5f9', padding: '2px 6px', borderRadius: 5, fontFamily: 'monospace', fontSize: '0.85em', color: '#0f172a' };
+const preBox = { flex: 1, margin: 0, padding: '11px 14px', background: '#0f172a', color: '#e2e8f0', borderRadius: 9, fontFamily: 'monospace', fontSize: '0.86rem', overflowX: 'auto', whiteSpace: 'pre' };
+const btnCopy = { padding: '10px 14px', borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' };
 const btn = (bg) => ({ padding: '12px 24px', borderRadius: 10, border: 'none', background: bg, color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: 'inherit' });
 
 // Header khu vực: chữ cái bước + tiêu đề to + hướng dẫn 1 dòng
@@ -154,6 +158,7 @@ export default function LivestreamAiTab({ shop = 'chung' }) {
   // ── NHÂN BẢN bộ câu hỏi từ gian khác (Khánh 4/8) ──────────────────────────
   // Gian mới khỏi gõ lại 20 câu: copy nguyên bộ (kèm từ khoá) từ "Bộ mẫu" hoặc gian đã làm rồi.
   // CỐ Ý không copy `clip`: clip là video của gian cũ, để lại là live gian mới phát nhầm nội dung.
+  const [helpOpen, setHelpOpen] = useState(false);   // hướng dẫn cài trên máy live
   const [cloneFrom, setCloneFrom] = useState('');
   const [cloning, setCloning] = useState(false);
   const cloneIntents = async () => {
@@ -217,6 +222,10 @@ export default function LivestreamAiTab({ shop = 'chung' }) {
                 style={{ padding: '10px 16px', borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}>📋 Copy</button>
             </div>
             <div style={hintTxt}>Máy live phải khai <b>đúng</b> mã này thì mới nạp được kho câu hỏi của gian.</div>
+            <button onClick={() => setHelpOpen(v => !v)}
+              style={{ marginTop: 8, padding: '7px 14px', borderRadius: 8, border: '1.5px solid #fed7aa', background: '#fff7ed', color: '#c2410c', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+              {helpOpen ? '▲ Đóng hướng dẫn' : '❓ Cài trên máy live thế nào? — xem hướng dẫn'}
+            </button>
           </div>
           <div style={{ flex: '1 1 320px' }}>
             <label style={lbl}>Nhân bản câu hỏi từ gian khác (khỏi gõ lại)</label>
@@ -233,6 +242,46 @@ export default function LivestreamAiTab({ shop = 'chung' }) {
             <div style={hintTxt}>Chỉ chép <b>câu hỏi + từ khoá</b>. <b>Không</b> chép clip — clip là video riêng của từng gian.</div>
           </div>
         </div>
+
+        {/* HƯỚNG DẪN CÀI TRÊN MÁY LIVE — mở ra là làm theo được, khỏi hỏi ai */}
+        {helpOpen && (
+          <div style={{ borderTop: '1px solid #f1f5f9', background: '#fffdfb', padding: '18px 20px' }}>
+            <div style={{ fontWeight: 900, fontSize: '1.02rem', color: '#0f172a', marginBottom: 4 }}>
+              🖥️ Cài máy live cho gian <span style={{ color: '#ea580c' }}>{liveShopLabel(shop)}</span>
+            </div>
+            <div style={{ ...hintTxt, marginBottom: 14 }}>
+              Mỗi gian hàng chạy trên <b>1 máy riêng</b> (1 OBS + 1 extension + 1 agent). Làm 1 lần, các buổi live sau chỉ việc mở lên.
+            </div>
+
+            <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#334155', marginBottom: 6 }}>
+              Bước 1 — Mở file <code style={codeTag}>livestream-ai\agent\config.json</code> trên máy live, sửa dòng <code style={codeTag}>"shop"</code> thành:
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 6 }}>
+              <pre style={preBox}>{`"shop": ${JSON.stringify(shop)},`}</pre>
+              <button onClick={() => { navigator.clipboard?.writeText(`"shop": ${JSON.stringify(shop)},`); setStatus('📋 Đã copy dòng cấu hình — dán đè dòng "shop" trong config.json.'); }}
+                style={btnCopy}>📋 Copy dòng này</button>
+            </div>
+            <div style={{ ...hintTxt, marginBottom: 14 }}>Giữ nguyên các dòng còn lại (OBS, cổng…). Nhớ <b>dấu phẩy</b> ở cuối.</div>
+
+            <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#334155', marginBottom: 6 }}>Bước 2 — Chép clip của gian này vào ổ cứng máy đó</div>
+            <div style={{ ...hintTxt, marginBottom: 14 }}>
+              OBS phát clip bằng <b>file trong máy</b>, web chỉ lưu <b>đường dẫn</b>. Nên máy live phải có sẵn file mp4.
+              👉 Mẹo: máy nào cũng để clip ở cùng một chỗ (VD <code style={codeTag}>C:\live-clips\</code>) thì đường dẫn ghi trên web dùng chung được, khỏi nhớ máy nào để đâu.
+            </div>
+
+            <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#334155', marginBottom: 6 }}>Bước 3 — Mỗi buổi live</div>
+            <ol style={{ margin: '0 0 14px', paddingLeft: 20, color: '#475569', fontSize: '0.88rem', lineHeight: 1.9 }}>
+              <li>Mở <b>OBS</b> → bắt đầu phát (đang ở scene <b>IDLE</b>)</li>
+              <li>Mở cửa sổ lệnh ở thư mục <code style={codeTag}>agent</code> → gõ <code style={codeTag}>npm start</code></li>
+              <li>Mở phòng live Shopee của gian này trên Chrome → chờ ~10-15 giây, thấy panel cam báo <b>“tự dò ✓”</b> là xong</li>
+            </ol>
+
+            <div style={{ padding: '11px 14px', borderRadius: 9, background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', fontSize: '0.85rem', lineHeight: 1.6 }}>
+              ✅ Chạy đúng thì cửa sổ lệnh in: <code style={codeTag}>[Config] Gian hang: {shop}</code> và <code style={codeTag}>Nguon: Supabase (Module 4)</code>.<br />
+              ❌ Nếu gõ sai mã gian, agent <b>dừng hẳn</b> và báo lý do — cố tình vậy để không phát nhầm clip của gian khác lúc đang live.
+            </div>
+          </div>
+        )}
       </div>
 
       {/* A — THÊM / SỬA */}
