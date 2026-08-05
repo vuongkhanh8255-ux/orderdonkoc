@@ -14,8 +14,10 @@ import { matchIntent } from './intent.js';
 const MAX_COMMENT_LEN = 200;
 
 export class Orchestrator {
-  constructor({ obs, intents, logic }) {
+  constructor({ obs, intents, logic, onEvent }) {
     this.obs = obs;
+    // 4/8/2026: ban su kien ra ngoai de tab Studio tren web hien NHAT KY + trang thai THAT
+    this.onEvent = typeof onEvent === 'function' ? onEvent : () => {};
     this.intents = intents;
     this.cooldownSec = logic.cooldownSec ?? 45;
     this.minConfidence = logic.minConfidence ?? 1;
@@ -38,6 +40,37 @@ export class Orchestrator {
   async start() {
     await this.obs.goIdle();
     console.log('[Orchestrator] Bat dau o che do IDLE.');
+  }
+
+  // ── LENH TU STUDIO (4/8/2026) ─────────────────────────────────────────────
+  /** Phat NGAY 1 cau theo id (bo qua cooldown/hang doi) — de test clip trong luc live. */
+  async playById(intentId) {
+    const intent = this.intents.find((i) => i.id === intentId);
+    if (!intent) return { ok: false, error: 'Khong tim thay cau hoi: ' + intentId };
+    if (!String(intent.clip || '').trim()) return { ok: false, error: 'Cau nay chua co clip' };
+    this.queue = [];                 // bam tay = uu tien, don hang doi cu
+    if (this.answering) { try { await this.obs.goIdle(); } catch (e) {} this.answering = false; }
+    await this._play(intent);
+    return { ok: true, label: intent.label };
+  }
+
+  /** Dung clip dang phat, ve IDLE ngay. */
+  async stopNow() {
+    clearTimeout(this._fsTimer);
+    this.queue = [];
+    try { await this.obs.goIdle(); } catch (e) { return { ok: false, error: e.message }; }
+    this.answering = false;
+    this.onEvent({ kind: 'stopped' });
+    return { ok: true };
+  }
+
+  /** Trang thai hien tai cho Studio hien dung thuc te. */
+  getState() {
+    return {
+      answering: this.answering,
+      queue: this.queue.map((i) => i.id),
+      intents: this.intents.map((i) => ({ id: i.id, label: i.label, clip: i.clip || '' })),
+    };
   }
 
   // Goi moi khi co comment moi
@@ -87,6 +120,7 @@ export class Orchestrator {
     this._armFailsafe();
     try {
       console.log(`▶ PHAT: ${intent.label} -> ${intent.clip}`);
+      this.onEvent({ kind: 'play', intentId: intent.id, label: intent.label, clip: intent.clip });
       await this.obs.playAnswer(intent.clip);
       // Chi tinh cooldown khi PHAT THANH CONG (fail thi nguoi xem hoi lai phai duoc tra loi ngay)
       this.lastPlayedAt.set(intent.id, Date.now());
@@ -120,6 +154,7 @@ export class Orchestrator {
     if (!fromFailsafe && Date.now() - (this._playStartedAt || 0) < 2000) return;
     clearTimeout(this._fsTimer);
     console.log('✔ Clip tra loi xong -> ve IDLE');
+    this.onEvent({ kind: 'ended' });
     try { await this.obs.goIdle(); } catch (e) {}
     this.answering = false;
     this._next();

@@ -12,7 +12,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ObsController } from './obs.js';
 import { Orchestrator } from './orchestrator.js';
-import { startBridgeServer, startMockSource } from './commentSource.js';
+import { startBridgeServer, startMockSource, broadcast } from './commentSource.js';
 import { loadFromSupabase } from './faqSource.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -116,7 +116,11 @@ async function main() {
     }
   }
 
-  const orch = new Orchestrator({ obs, intents: faq.intents, logic });
+  // Su kien cua orchestrator -> ban thang xuong Studio (nhat ky chay realtime)
+  const orch = new Orchestrator({
+    obs, intents: faq.intents, logic,
+    onEvent: (ev) => broadcast({ type: 'log', at: Date.now(), ...ev }),
+  });
   await orch.start();
 
   // TỰ NẠP LẠI KHO CÂU HỎI mỗi 60s (4/8/2026).
@@ -138,6 +142,31 @@ async function main() {
 
   const onComment = (c) => orch.onComment(c);
 
+  // ── LENH TU TAB STUDIO tren web (4/8/2026) ────────────────────────────────
+  // Studio mo ws://127.0.0.1:<port> roi gui {type:'cmd', action}. Tra loi qua chinh socket do.
+  const onCommand = async (msg, ws) => {
+    const reply = (o) => { try { ws.send(JSON.stringify({ type: 'cmdres', action: msg.action, ...o })); } catch (e) {} };
+    switch (msg.action) {
+      case 'hello':                       // Studio vua noi -> gui trang thai + danh sach clip
+        return reply({ ok: true, shop: SHOP, state: orch.getState() });
+      case 'play':
+        return reply(await orch.playById(msg.intent_id));
+      case 'stop':
+        return reply(await orch.stopNow());
+      case 'reload': {                    // nap lai kho cau hoi tu web NGAY (khong cho 60s)
+        try {
+          const moi = await loadFromSupabase(sb, SHOP);
+          if (!moi || !moi.intents.length) return reply({ ok: false, error: 'Web tra ve 0 cau hoi' });
+          orch.intents = moi.intents;
+          broadcast({ type: 'log', at: Date.now(), kind: 'reload', n: moi.intents.length });
+          return reply({ ok: true, n: moi.intents.length, state: orch.getState() });
+        } catch (e) { return reply({ ok: false, error: e.message }); }
+      }
+      default:
+        return reply({ ok: false, error: 'Lenh la: ' + msg.action });
+    }
+  };
+
   if (MOCK) {
     console.log('\n⚠️ ============================================');
     console.log('⚠️  CHE DO MOCK — go tay de TEST, KHONG phai che do live!');
@@ -145,7 +174,7 @@ async function main() {
     console.log('⚠️ ============================================\n');
     startMockSource(onComment);
   } else {
-    startBridgeServer(config.bridge.port, onComment);
+    startBridgeServer(config.bridge.port, onComment, onCommand);
   }
 
   // Dong sach khi thoat
