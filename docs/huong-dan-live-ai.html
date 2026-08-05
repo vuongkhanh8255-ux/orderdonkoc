@@ -1,0 +1,499 @@
+<title>Hướng dẫn Livestream AI — Stella Kinetics</title>
+
+<style>
+  :root {
+    --paper:      #fbfaf9;
+    --paper-2:    #f3f1ef;
+    --ink:        #1b1a19;
+    --muted:      #6f6a66;
+    --rule:       #e6e2de;
+    --accent:     #ff6a2c;
+    --accent-ink: #b8410f;
+    --signal:     #15803d;
+    --signal-bg:  #eaf6ee;
+    --alert:      #c22626;
+    --alert-bg:   #fcecec;
+    --screen:     #14161d;
+    --screen-2:   #1f2430;
+    --screen-ink: #e6e8ee;
+    --screen-sub: #8b93a7;
+
+    --sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #17161a; --paper-2: #201f24; --ink: #ecebe9; --muted: #a09a95;
+      --rule: #322f35; --accent: #ff7d47; --accent-ink: #ffa77c;
+      --signal: #5bd07f; --signal-bg: #17291d; --alert: #ff8080; --alert-bg: #2c1a1a;
+      --screen: #0e1015; --screen-2: #1a1e28;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #17161a; --paper-2: #201f24; --ink: #ecebe9; --muted: #a09a95;
+    --rule: #322f35; --accent: #ff7d47; --accent-ink: #ffa77c;
+    --signal: #5bd07f; --signal-bg: #17291d; --alert: #ff8080; --alert-bg: #2c1a1a;
+    --screen: #0e1015; --screen-2: #1a1e28;
+  }
+  :root[data-theme="light"] {
+    --paper: #fbfaf9; --paper-2: #f3f1ef; --ink: #1b1a19; --muted: #6f6a66;
+    --rule: #e6e2de; --accent: #ff6a2c; --accent-ink: #b8410f;
+    --signal: #15803d; --signal-bg: #eaf6ee; --alert: #c22626; --alert-bg: #fcecec;
+    --screen: #14161d; --screen-2: #1f2430;
+  }
+
+  body {
+    background: var(--paper); color: var(--ink); font-family: var(--sans);
+    line-height: 1.65; margin: 0; padding: 0 20px 90px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; }
+  .wide { max-width: 940px; margin: 0 auto; }
+
+  /* ── Masthead ─────────────────────────────────────── */
+  header { padding: 56px 0 30px; border-bottom: 3px solid var(--ink); margin-bottom: 40px; }
+  .eyebrow {
+    font-size: .72rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--accent-ink); margin: 0 0 14px;
+  }
+  h1 {
+    font-size: clamp(2.1rem, 6vw, 3.1rem); line-height: 1.05; letter-spacing: -.028em;
+    font-weight: 800; margin: 0 0 16px; text-wrap: balance;
+  }
+  .standfirst { font-size: 1.08rem; color: var(--muted); margin: 0; max-width: 62ch; }
+
+  h2 {
+    font-size: 1.5rem; letter-spacing: -.02em; font-weight: 800; margin: 0 0 6px;
+    text-wrap: balance;
+  }
+  .sec { margin: 54px 0 0; }
+  .sec-num {
+    display: inline-block; font-family: var(--mono); font-size: .74rem; font-weight: 700;
+    letter-spacing: .1em; color: var(--accent-ink); background: var(--paper-2);
+    border: 1px solid var(--rule); border-radius: 4px; padding: 3px 9px; margin-bottom: 12px;
+  }
+  .sec-lede { color: var(--muted); margin: 0 0 22px; max-width: 64ch; }
+  h3 { font-size: 1.05rem; font-weight: 750; margin: 30px 0 8px; letter-spacing: -.01em; }
+  p { margin: 0 0 14px; }
+  a { color: var(--accent-ink); }
+
+  code {
+    font-family: var(--mono); font-size: .875em; background: var(--paper-2);
+    border: 1px solid var(--rule); border-radius: 4px; padding: 1px 5px;
+  }
+
+  /* ── Steps ────────────────────────────────────────── */
+  ol.steps { list-style: none; counter-reset: s; padding: 0; margin: 0; display: grid; gap: 22px; }
+  ol.steps > li { counter-increment: s; display: grid; grid-template-columns: 34px 1fr; gap: 16px; }
+  ol.steps > li::before {
+    content: counter(s); grid-row: span 2;
+    width: 34px; height: 34px; border-radius: 50%;
+    background: var(--ink); color: var(--paper);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: .95rem; font-variant-numeric: tabular-nums;
+  }
+  ol.steps h4 { margin: 4px 0 6px; font-size: 1.02rem; font-weight: 750; }
+  ol.steps p  { margin: 0 0 10px; }
+
+  /* ── Callouts ─────────────────────────────────────── */
+  .note {
+    border-left: 4px solid var(--accent); background: var(--paper-2);
+    padding: 14px 18px; margin: 20px 0; border-radius: 0 8px 8px 0;
+  }
+  .note.warn  { border-left-color: var(--alert);  background: var(--alert-bg); }
+  .note.good  { border-left-color: var(--signal); background: var(--signal-bg); }
+  .note strong { font-weight: 750; }
+  .note p:last-child { margin-bottom: 0; }
+
+  /* ── Screens (mockup) ─────────────────────────────── */
+  figure { margin: 24px 0; }
+  figure svg { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--rule); }
+  figcaption {
+    font-size: .82rem; color: var(--muted); margin-top: 9px; padding-left: 2px;
+    border-left: 2px solid var(--rule); padding-left: 10px;
+  }
+
+  /* ── Code block ───────────────────────────────────── */
+  pre {
+    background: var(--screen); color: var(--screen-ink); border-radius: 10px;
+    padding: 16px 18px; overflow-x: auto; font-family: var(--mono); font-size: .86rem;
+    line-height: 1.7; margin: 16px 0; border: 1px solid #2a2f3d;
+  }
+  pre .k { color: #7dd3fc; }
+  pre .v { color: #fdba74; }
+  pre .c { color: #64748b; }
+
+  /* ── Table ────────────────────────────────────────── */
+  .tbl-scroll { overflow-x: auto; margin: 18px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; min-width: 520px; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: .74rem; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+  tbody tr:last-child td { border-bottom: none; }
+  td strong { font-weight: 700; }
+
+  /* ── Rule cards ───────────────────────────────────── */
+  .rules { display: grid; gap: 14px; margin: 22px 0; }
+  @media (min-width: 700px) { .rules { grid-template-columns: 1fr 1fr; } }
+  .rule-card {
+    border: 1px solid var(--rule); border-radius: 10px; padding: 16px 18px; background: var(--paper-2);
+  }
+  .rule-card h4 { margin: 0 0 6px; font-size: .98rem; font-weight: 750; }
+  .rule-card p { margin: 0; font-size: .9rem; color: var(--muted); }
+
+  ul.tight { margin: 0 0 14px; padding-left: 20px; }
+  ul.tight li { margin-bottom: 6px; }
+
+  footer {
+    margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--rule);
+    font-size: .84rem; color: var(--muted);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .blink { animation: bl 1.6s ease-in-out infinite; }
+    @keyframes bl { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Stella Kinetics · Hướng dẫn nội bộ</p>
+    <h1>Livestream AI cho Shopee Live</h1>
+    <p class="standfirst">
+      Khách comment hỏi giá, hỏi ship — máy tự nhận ra câu hỏi và bật đúng clip trả lời lên sóng.
+      Tài liệu này hướng dẫn cài một máy cho một gian hàng, và cách chạy mỗi buổi live.
+    </p>
+  </header>
+
+  <!-- ══ SƠ ĐỒ ══ -->
+  <section class="sec" style="margin-top:0">
+    <span class="sec-num">TỔNG QUAN</span>
+    <h2>Hệ thống chạy thế nào</h2>
+    <p class="sec-lede">Bốn mắt xích, tất cả nằm trên <em>cùng một máy</em>. Máy nào việc máy nấy — không đụng máy khác.</p>
+
+    <figure>
+      <svg viewBox="0 0 940 210" role="img" aria-label="Sơ đồ: Chrome đọc comment, gửi tới Agent, Agent điều khiển OBS, OBS phát lên Shopee Live">
+        <rect width="940" height="210" fill="#14161d"/>
+        <g font-family="ui-sans-serif, system-ui, sans-serif">
+          <!-- box 1 -->
+          <rect x="24" y="52" width="184" height="98" rx="12" fill="#1f2430" stroke="#333a4a"/>
+          <text x="116" y="84" fill="#e6e8ee" font-size="15" font-weight="700" text-anchor="middle">Chrome</text>
+          <text x="116" y="106" fill="#8b93a7" font-size="12" text-anchor="middle">Tiện ích đọc</text>
+          <text x="116" y="123" fill="#8b93a7" font-size="12" text-anchor="middle">comment phòng live</text>
+          <!-- arrow -->
+          <line x1="212" y1="101" x2="252" y2="101" stroke="#ff6a2c" stroke-width="2"/>
+          <path d="M252 101 l-9 -5 v10 z" fill="#ff6a2c"/>
+          <!-- box 2 -->
+          <rect x="258" y="52" width="184" height="98" rx="12" fill="#1f2430" stroke="#ff6a2c"/>
+          <text x="350" y="84" fill="#e6e8ee" font-size="15" font-weight="700" text-anchor="middle">Agent</text>
+          <text x="350" y="106" fill="#8b93a7" font-size="12" text-anchor="middle">Nhận ra câu hỏi</text>
+          <text x="350" y="123" fill="#8b93a7" font-size="12" text-anchor="middle">→ chọn clip</text>
+          <line x1="446" y1="101" x2="486" y2="101" stroke="#ff6a2c" stroke-width="2"/>
+          <path d="M486 101 l-9 -5 v10 z" fill="#ff6a2c"/>
+          <!-- box 3 -->
+          <rect x="492" y="52" width="184" height="98" rx="12" fill="#1f2430" stroke="#333a4a"/>
+          <text x="584" y="84" fill="#e6e8ee" font-size="15" font-weight="700" text-anchor="middle">OBS</text>
+          <text x="584" y="106" fill="#8b93a7" font-size="12" text-anchor="middle">Đổi cảnh, phát clip</text>
+          <text x="584" y="123" fill="#8b93a7" font-size="12" text-anchor="middle">IDLE ⇄ ANSWER</text>
+          <line x1="680" y1="101" x2="720" y2="101" stroke="#ef4444" stroke-width="2"/>
+          <path d="M720 101 l-9 -5 v10 z" fill="#ef4444"/>
+          <!-- box 4 -->
+          <rect x="726" y="52" width="190" height="98" rx="12" fill="#241419" stroke="#ef4444"/>
+          <circle cx="762" cy="101" r="6" fill="#ef4444"/>
+          <text x="836" y="95" fill="#e6e8ee" font-size="15" font-weight="700" text-anchor="middle">Shopee Live</text>
+          <text x="836" y="116" fill="#f0a0a0" font-size="12" text-anchor="middle">khán giả xem</text>
+          <!-- labels -->
+          <text x="232" y="176" fill="#5f6779" font-size="11" text-anchor="middle">trong máy</text>
+          <text x="466" y="176" fill="#5f6779" font-size="11" text-anchor="middle">trong máy</text>
+          <text x="700" y="176" fill="#5f6779" font-size="11" text-anchor="middle">lên mạng</text>
+          <text x="24" y="32" fill="#8b93a7" font-size="12" font-weight="600">MỘT MÁY = MỘT GIAN HÀNG</text>
+        </g>
+      </svg>
+      <figcaption>Ba mắt xích đầu chạy trong máy, chỉ mắt xích cuối mới ra internet. Muốn chạy 3 gian hàng cùng lúc thì cần 3 máy.</figcaption>
+    </figure>
+
+    <div class="note">
+      <p><strong>Kho câu hỏi và bộ clip là của riêng từng gian hàng.</strong> Clip của eHerb nói giá eHerb, chính sách ship eHerb —
+      không dùng cho Bodymiss được. Vì vậy máy live phải khai rõ nó chạy cho gian nào.</p>
+    </div>
+  </section>
+
+  <!-- ══ PHẦN 1: CÀI MÁY ══ -->
+  <section class="sec">
+    <span class="sec-num">PHẦN 1 · LÀM MỘT LẦN</span>
+    <h2>Cài máy live</h2>
+    <p class="sec-lede">Làm đúng một lần cho mỗi máy. Xong rồi những buổi live sau chỉ việc mở lên.</p>
+
+    <ol class="steps">
+      <li>
+        <div>
+          <h4>Cài OBS và tạo 2 cảnh</h4>
+          <p>Cài OBS Studio (bản 28 trở lên). Vào <code>Tools → WebSocket Server Settings</code>, bật lên, để cổng <code>4455</code>.</p>
+          <p>Tạo 2 cảnh:</p>
+          <ul class="tight">
+            <li><strong>IDLE</strong> — clip chạy vòng lặp lúc không ai hỏi. <em>Nhớ bỏ clip vào đây, để trống là khán giả thấy màn hình đen.</em></li>
+            <li><strong>ANSWER</strong> — thêm một Media Source, đặt tên đúng chữ <code>ANSWER_PLAYER</code>. Không cần chọn file, máy tự đổi.</li>
+          </ul>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h4>Cài tiện ích đọc comment vào Chrome</h4>
+          <p>Mở <code>chrome://extensions</code> → bật <strong>Developer mode</strong> (góc trên phải) → bấm <strong>Load unpacked</strong> → chọn thư mục <code>comment-reader</code>.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h4>Khai gian hàng cho máy này</h4>
+          <p>Đây là bước quan trọng nhất — khai sai là máy tải nhầm kho clip của gian khác.</p>
+          <p>Vào web <strong>Live AI → ① Kho câu hỏi</strong>, chọn gian hàng ở góc phải, mở thanh <strong>Cài máy live &amp; nhân bản</strong>, bấm <strong>Copy</strong> ở ô Mã gian hàng.</p>
+        </div>
+      </li>
+    </ol>
+
+    <figure>
+      <svg viewBox="0 0 940 300" role="img" aria-label="Màn hình Kho câu hỏi: ô chọn gian hàng ở góc phải và thanh Cài máy live có ô Mã gian hàng kèm nút Copy">
+        <rect width="940" height="300" fill="#ffffff"/>
+        <g font-family="ui-sans-serif, system-ui, sans-serif">
+          <!-- tab bar -->
+          <rect x="16" y="14" width="908" height="46" rx="10" fill="#ffffff" stroke="#eef0f3"/>
+          <rect x="26" y="23" width="96" height="28" rx="7" fill="#f8fafc"/>
+          <text x="74" y="42" fill="#475569" font-size="12" text-anchor="middle">Quy trình</text>
+          <rect x="128" y="23" width="128" height="28" rx="7" fill="#ff6a2c"/>
+          <text x="192" y="42" fill="#ffffff" font-size="12" font-weight="700" text-anchor="middle">① Kho câu hỏi</text>
+          <rect x="262" y="23" width="106" height="28" rx="7" fill="#f8fafc"/>
+          <text x="315" y="42" fill="#475569" font-size="12" text-anchor="middle">② Xưởng Clip</text>
+          <rect x="374" y="23" width="86" height="28" rx="7" fill="#f8fafc"/>
+          <text x="417" y="42" fill="#475569" font-size="12" text-anchor="middle">③ Studio</text>
+          <!-- shop selector -->
+          <text x="640" y="42" fill="#64748b" font-size="11" font-weight="700">GIAN HÀNG:</text>
+          <rect x="712" y="24" width="200" height="28" rx="8" fill="#fff7ed" stroke="#ff6a2c" stroke-width="2"/>
+          <text x="724" y="43" fill="#0f172a" font-size="12" font-weight="700">🛒 eHerb Việt Nam</text>
+          <text x="898" y="43" fill="#94a3b8" font-size="11">▾</text>
+          <circle cx="812" cy="72" r="26" fill="none" stroke="#ff6a2c" stroke-width="2" stroke-dasharray="4 3"/>
+          <text x="812" y="112" fill="#b8410f" font-size="11" font-weight="700" text-anchor="middle">① chọn gian ở đây</text>
+
+          <!-- setup strip -->
+          <rect x="16" y="132" width="908" height="46" rx="10" fill="#ffffff" stroke="#eef0f3"/>
+          <text x="34" y="160" font-size="14">⚙️</text>
+          <text x="56" y="160" fill="#334155" font-size="13" font-weight="700">Cài máy live &amp; nhân bản</text>
+          <text x="222" y="160" fill="#94a3b8" font-size="11">— làm 1 lần lúc setup</text>
+          <text x="890" y="160" fill="#94a3b8" font-size="12" font-weight="700">▾</text>
+          <text x="470" y="197" fill="#b8410f" font-size="11" font-weight="700">② bấm mở thanh này</text>
+
+          <!-- expanded -->
+          <rect x="16" y="208" width="908" height="78" rx="10" fill="#fffdfb" stroke="#eef0f3"/>
+          <text x="34" y="232" fill="#334155" font-size="11" font-weight="700">MÃ GIAN HÀNG — DÁN VÀO CONFIG.JSON CỦA AGENT</text>
+          <rect x="34" y="242" width="470" height="32" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+          <text x="46" y="263" fill="#0f172a" font-size="12.5" font-family="ui-monospace, monospace">shopee|eHerb Việt Nam</text>
+          <rect x="514" y="242" width="88" height="32" rx="8" fill="#ffffff" stroke="#e5e7eb" stroke-width="1.5"/>
+          <text x="558" y="263" fill="#0f172a" font-size="12" font-weight="700" text-anchor="middle">📋 Copy</text>
+          <circle cx="558" cy="258" r="24" fill="none" stroke="#ff6a2c" stroke-width="2" stroke-dasharray="4 3"/>
+          <text x="700" y="263" fill="#b8410f" font-size="11" font-weight="700">③ copy mã này</text>
+        </g>
+      </svg>
+      <figcaption>Màn <strong>① Kho câu hỏi</strong>. Ô chọn gian hàng nằm góc phải; thanh ⚙️ mở ra có ô mã gian hàng kèm nút Copy.</figcaption>
+    </figure>
+
+    <p>Mở file <code>livestream-ai\agent\config.json</code> trên máy live, dán vào dòng <code>"shop"</code>:</p>
+    <pre><span class="c">// config.json — chỉ sửa đúng dòng "shop", giữ nguyên phần còn lại</span>
+{
+  <span class="k">"shop"</span>: <span class="v">"shopee|eHerb Việt Nam"</span>,
+  <span class="k">"obs"</span>: { <span class="k">"url"</span>: <span class="v">"ws://127.0.0.1:4455"</span>, <span class="k">"password"</span>: <span class="v">""</span> },
+  ...
+}</pre>
+
+    <div class="note good">
+      <p><strong>Trên web có sẵn nút copy nguyên dòng này.</strong> Trong thanh ⚙️ bấm
+      <em>“Cài trên máy live thế nào?”</em> — nó hiện đúng dòng của gian đang chọn, khỏi gõ tay.</p>
+    </div>
+
+    <h3>Bước 4 — Chép clip vào ổ cứng máy đó</h3>
+    <p>OBS phát clip bằng <strong>file trong máy</strong>; trên web chỉ lưu <strong>đường dẫn</strong>. Nên máy live phải có sẵn file mp4.</p>
+    <div class="note">
+      <p><strong>Mẹo:</strong> máy nào cũng để clip ở cùng một chỗ, ví dụ <code>C:\live-clips\</code>.
+      Vậy đường dẫn ghi trên web dùng chung được, khỏi phải nhớ máy nào để đâu.</p>
+    </div>
+  </section>
+
+  <!-- ══ PHẦN 2: NỘI DUNG ══ -->
+  <section class="sec">
+    <span class="sec-num">PHẦN 2 · SOẠN NỘI DUNG</span>
+    <h2>Kho câu hỏi và clip trả lời</h2>
+    <p class="sec-lede">Làm trên web, ngồi máy nào cũng được. Nhớ chọn đúng gian hàng trước khi soạn.</p>
+
+    <ol class="steps">
+      <li>
+        <div>
+          <h4>Thêm câu hỏi khách hay hỏi</h4>
+          <p>Mỗi câu gồm <strong>tên</strong> (Hỏi giá, Phí ship…) và <strong>từ khoá</strong> để máy nhận ra comment.
+          Từ khoá cách nhau dấu phẩy, viết có dấu hay không dấu, viết tắt (bn, ko, z…) đều bắt được.</p>
+          <p>Càng nhiều từ khoá càng bắt trúng.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h4>Gian mới thì nhân bản cho nhanh</h4>
+          <p>Trong thanh ⚙️ có ô <strong>Nhân bản câu hỏi từ gian khác</strong> — chép nguyên bộ câu hỏi + từ khoá sang, khỏi gõ lại.</p>
+          <p>Ô này ghi rõ mỗi gian đang có bao nhiêu câu, gian nào trống thì không chọn được.</p>
+          <p><strong>Không chép clip</strong> — vì clip là video riêng của từng gian.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h4>Làm clip trả lời</h4>
+          <p>Qua tab <strong>② Xưởng Clip</strong> làm video cho từng câu, rồi điền đường dẫn file mp4 trên máy live vào.</p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ══ PHẦN 3: BUỔI LIVE ══ -->
+  <section class="sec">
+    <span class="sec-num">PHẦN 3 · MỖI BUỔI LIVE</span>
+    <h2>Ba việc, theo đúng thứ tự</h2>
+
+    <ol class="steps">
+      <li><div><h4>Mở OBS và bắt đầu phát</h4><p>Để ở cảnh <strong>IDLE</strong>.</p></div></li>
+      <li><div><h4>Chạy agent</h4><p>Mở cửa sổ lệnh ở thư mục <code>agent</code>, gõ <code>npm start</code>.</p></div></li>
+      <li>
+        <div>
+          <h4>Mở phòng live Shopee trên Chrome</h4>
+          <p>Chờ khoảng 10–15 giây, thấy bảng cam góc trên phải báo <strong>“tự dò ✓”</strong> là tiện ích đã bắt được comment.</p>
+        </div>
+      </li>
+    </ol>
+
+    <div class="note good">
+      <p><strong>Biết mình chạy đúng chưa:</strong> cửa sổ lệnh phải in ra dòng
+      <code>[Config] Gian hang: shopee|eHerb Việt Nam</code> và <code>Nguon: Supabase (Module 4)</code>.</p>
+    </div>
+    <div class="note warn">
+      <p><strong>Gõ sai mã gian hàng thì agent dừng hẳn</strong> và báo lý do. Cố tình làm vậy —
+      thà không chạy còn hơn phát nhầm clip của gian khác giữa buổi live.</p>
+    </div>
+  </section>
+
+  <!-- ══ PHẦN 4: STUDIO ══ -->
+  <section class="sec">
+    <span class="sec-num">PHẦN 4 · ĐIỀU KHIỂN</span>
+    <h2>Studio — bảng điều khiển lúc live</h2>
+    <p class="sec-lede">Mở tab <strong>③ Studio</strong> trên chính máy đang live. Bấm nút ở đây là điều khiển OBS thật.</p>
+
+    <figure>
+      <svg viewBox="0 0 940 330" role="img" aria-label="Màn Studio: badge đã nối agent, ba nút điều khiển và nhật ký hoạt động">
+        <rect width="940" height="330" fill="#14161d"/>
+        <g font-family="ui-sans-serif, system-ui, sans-serif">
+          <!-- top bar -->
+          <text x="24" y="38" fill="#e6e8ee" font-size="15" font-weight="800">🎛️ Live AI Studio</text>
+          <rect x="560" y="22" width="212" height="24" rx="12" fill="#12291b"/>
+          <circle cx="576" cy="34" r="4.5" fill="#4ade80" class="blink"/>
+          <text x="588" y="38" fill="#4ade80" font-size="11.5" font-weight="700">Đã nối agent · eHerb Việt Nam</text>
+          <rect x="782" y="22" width="134" height="24" rx="12" fill="#2a1c10"/>
+          <text x="794" y="38" fill="#fdba74" font-size="11.5" font-weight="700">▶ Đang phát: Hỏi giá</text>
+          <line x1="24" y1="58" x2="916" y2="58" stroke="#2a2f3d"/>
+
+          <!-- controls panel -->
+          <rect x="24" y="76" width="440" height="130" rx="12" fill="#181b24" stroke="#2a2f3d"/>
+          <text x="42" y="102" fill="#8b93a7" font-size="10.5" font-weight="800" letter-spacing="1">ĐIỀU KHIỂN NHANH</text>
+          <rect x="42" y="116" width="132" height="66" rx="10" fill="#1f2430" stroke="#2a2f3d"/>
+          <text x="108" y="142" fill="#e6e8ee" font-size="17" text-anchor="middle">▶</text>
+          <text x="108" y="164" fill="#e6e8ee" font-size="11" font-weight="700" text-anchor="middle">Phát clip</text>
+          <text x="108" y="177" fill="#e6e8ee" font-size="11" font-weight="700" text-anchor="middle">đang chọn</text>
+          <rect x="184" y="116" width="132" height="66" rx="10" fill="#1f2430" stroke="#2a2f3d"/>
+          <text x="250" y="142" fill="#e6e8ee" font-size="17" text-anchor="middle">⏹</text>
+          <text x="250" y="170" fill="#e6e8ee" font-size="11" font-weight="700" text-anchor="middle">Dừng, về IDLE</text>
+          <rect x="326" y="116" width="132" height="66" rx="10" fill="#1f2430" stroke="#2a2f3d"/>
+          <text x="392" y="142" fill="#e6e8ee" font-size="17" text-anchor="middle">🔄</text>
+          <text x="392" y="164" fill="#e6e8ee" font-size="11" font-weight="700" text-anchor="middle">Nạp lại</text>
+          <text x="392" y="177" fill="#e6e8ee" font-size="11" font-weight="700" text-anchor="middle">kho câu hỏi</text>
+
+          <!-- log panel -->
+          <rect x="480" y="76" width="436" height="230" rx="12" fill="#181b24" stroke="#2a2f3d"/>
+          <text x="498" y="102" fill="#8b93a7" font-size="10.5" font-weight="800" letter-spacing="1">NHẬT KÝ HOẠT ĐỘNG · REALTIME</text>
+          <g font-size="11.5" font-family="ui-monospace, monospace">
+            <text x="498" y="128" fill="#5f6779">13:34:41</text><text x="566" y="128" fill="#4ade80">🔄 Nạp lại kho: 5 câu</text>
+            <text x="498" y="152" fill="#5f6779">13:34:39</text><text x="566" y="152" fill="#8b93a7">⏹ Đã dừng, về IDLE</text>
+            <text x="498" y="176" fill="#5f6779">13:34:28</text><text x="566" y="176" fill="#4ade80">✔ Clip xong → IDLE</text>
+            <text x="498" y="200" fill="#5f6779">13:34:25</text><text x="566" y="200" fill="#fdba74">▶ Hỏi giá</text>
+            <text x="498" y="224" fill="#5f6779">13:34:19</text><text x="566" y="224" fill="#5f6779">· "shop oi" — không khớp câu nào</text>
+          </g>
+
+          <!-- playlist -->
+          <rect x="24" y="220" width="440" height="86" rx="12" fill="#181b24" stroke="#2a2f3d"/>
+          <text x="42" y="246" fill="#8b93a7" font-size="10.5" font-weight="800" letter-spacing="1">PLAYLIST CLIP TRẢ LỜI (5)</text>
+          <text x="42" y="270" fill="#e6e8ee" font-size="11.5">1 · Hỏi giá</text>
+          <text x="200" y="270" fill="#93c5fd" font-size="11" font-family="ui-monospace, monospace">C:\live-clips\gia.mp4</text>
+          <text x="42" y="292" fill="#e6e8ee" font-size="11.5">2 · Phí ship</text>
+          <text x="200" y="292" fill="#93c5fd" font-size="11" font-family="ui-monospace, monospace">C:\live-clips\ship.mp4</text>
+        </g>
+      </svg>
+      <figcaption>Chấm xanh <strong>“Đã nối agent”</strong> nghĩa là bấm nút được. Đỏ là chưa mở agent trên máy này.</figcaption>
+    </figure>
+
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th style="width:34%">Nút</th><th>Bấm vào thì gì xảy ra</th></tr></thead>
+        <tbody>
+          <tr><td><strong>▶ Phát clip đang chọn</strong></td><td>Phát ngay clip của câu đang chọn trong Playlist. Dùng để thử clip, hoặc trả lời tay khi máy chưa bắt được câu hỏi.</td></tr>
+          <tr><td><strong>⏹ Dừng, về IDLE</strong></td><td>Cắt clip đang phát, quay về cảnh chờ. Dùng khi phát nhầm.</td></tr>
+          <tr><td><strong>🔄 Nạp lại kho câu hỏi</strong></td><td>Lấy ngay nội dung mới nhất từ web. Không bấm thì máy cũng tự cập nhật, chậm nhất 1 phút.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p><strong>Nhật ký</strong> chạy realtime: khách hỏi gì, máy phát clip nào, câu nào không khớp — hiện hết ở đây.
+    Nhìn cột này biết ngay máy đang làm gì.</p>
+
+    <div class="note">
+      <p><strong>Ô Preview và Thống kê lượt xem chưa làm.</strong> Muốn xem hình thì nhìn thẳng OBS,
+      xem lượt xem thì mở app Shopee.</p>
+    </div>
+  </section>
+
+  <!-- ══ SỰ CỐ ══ -->
+  <section class="sec">
+    <span class="sec-num">XỬ LÝ SỰ CỐ</span>
+    <h2>Gặp lỗi thì làm gì</h2>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th style="width:38%">Hiện tượng</th><th>Cách xử</th></tr></thead>
+        <tbody>
+          <tr><td>Studio báo <strong>“Chưa nối agent”</strong>, 3 nút mờ đi</td><td>Agent chưa chạy trên máy này. Mở thư mục <code>agent</code> gõ <code>npm start</code>, chờ vài giây nút tự sáng.</td></tr>
+          <tr><td>Agent chạy rồi <strong>tắt ngay</strong>, báo “gian chưa có câu hỏi nào”</td><td>Mã gian hàng gõ sai, hoặc gian đó chưa tạo câu hỏi. Copy lại mã ở web dán vào <code>config.json</code>.</td></tr>
+          <tr><td>Bảng cam trong Chrome báo <strong>chưa dò được</strong></td><td>Chỉ hoạt động khi ở trong phòng live đang có comment chạy. Chờ thêm 10–15 giây.</td></tr>
+          <tr><td>Máy phát <strong>nhầm clip</strong></td><td>Từ khoá bị trùng giữa hai câu. Vào ① Kho câu hỏi bớt từ khoá chung chung đi (“bao nhiêu” dính cả giá lẫn ship).</td></tr>
+          <tr><td>Khán giả thấy <strong>màn hình đen</strong> lúc không ai hỏi</td><td>Cảnh IDLE trong OBS đang trống. Bỏ clip vào và bật lặp.</td></tr>
+          <tr><td>Sửa nội dung trên web mà máy <strong>chưa đổi</strong></td><td>Chờ tối đa 1 phút, hoặc bấm <strong>🔄 Nạp lại kho câu hỏi</strong> ở Studio.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══ NGUYÊN TẮC ══ -->
+  <section class="sec">
+    <span class="sec-num">NHỚ GIÙM</span>
+    <h2>Bốn điều quan trọng</h2>
+    <div class="rules">
+      <div class="rule-card">
+        <h4>Một gian hàng, một máy</h4>
+        <p>Một máy chưa chạy được hai gian cùng lúc. Ba gian live cùng giờ thì cần ba máy.</p>
+      </div>
+      <div class="rule-card">
+        <h4>Clip nằm trong máy, không nằm trên web</h4>
+        <p>Web chỉ lưu đường dẫn. Máy nào live gian nào thì phải có sẵn clip của gian đó trong ổ cứng.</p>
+      </div>
+      <div class="rule-card">
+        <h4>Chọn gian hàng trước khi soạn</h4>
+        <p>Ô chọn gian ở góc phải quyết định bạn đang sửa kho của ai. Nhìn nó trước khi gõ.</p>
+      </div>
+      <div class="rule-card">
+        <h4>Bộ mẫu không dùng để live</h4>
+        <p>“Bộ mẫu (chung)” chỉ để soạn sẵn rồi nhân bản sang gian thật. Máy live không chạy bộ này.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Stella Kinetics · Livestream AI cho Shopee Live · cập nhật 4/8/2026.
+    Có gì không chạy được thì chụp màn hình cửa sổ lệnh gửi lại — trong đó ghi rõ máy đang chạy gian nào.
+  </footer>
+</div>
