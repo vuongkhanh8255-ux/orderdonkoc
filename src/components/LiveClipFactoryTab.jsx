@@ -53,7 +53,7 @@ export default function LiveClipFactoryTab({ shop = 'chung' }) {
     // Khoá theo gian hàng (Khánh 4/8): trước đây select không lọc → bảng prod của gian khác
     // lọt vào pmap[intent_id], ghi đè lẫn nhau và có thể poll nhầm job HeyGen của gian khác.
     const [{ data: intents }, { data: prod }, { data: cfg }] = await Promise.all([
-      supabase.from('livestream_intents').select('id,label,keywords,clip,enabled').eq('shop_key', shop).order('sort_order', { ascending: true }),
+      supabase.from('livestream_intents').select('id,label,keywords,clip,clips,enabled').eq('shop_key', shop).order('sort_order', { ascending: true }),
       supabase.from('livestream_clip_prod').select('*').eq('shop_key', shop),
       supabase.from('livestream_config').select('clip_shared').eq('id', shop).maybeSingle(),
     ]);
@@ -62,6 +62,8 @@ export default function LiveClipFactoryTab({ shop = 'chung' }) {
     setRows((intents || []).map(it => ({
       ...it,
       keywords: Array.isArray(it.keywords) ? it.keywords : [],
+      // nhiều clip -> hiện mỗi dòng 1 clip ở bước ④ (máy xoay vòng khi khách hỏi lại)
+      clip: (Array.isArray(it.clips) && it.clips.length ? it.clips : (it.clip ? [it.clip] : [])).join('\n'),
       script: pmap[it.id]?.script || '', img_prompt: pmap[it.id]?.img_prompt || '',
       vform: pmap[it.id]?.vform || {},
       product_image_url: pmap[it.id]?.product_image_url || '',
@@ -83,7 +85,14 @@ export default function LiveClipFactoryTab({ shop = 'chung' }) {
         product_image_url: r.product_image_url || null,
         video_url: r.video_url, status: r.prod_status, updated_at: new Date().toISOString(),
       }, { onConflict: 'shop_key,intent_id' }),
-      supabase.from('livestream_intents').update({ clip: r.clip || '', updated_at: new Date().toISOString() }).eq('shop_key', shop).eq('id', r.id),
+      // Ô clip ở đây nhập NHIỀU DÒNG (mỗi dòng 1 clip) — máy xoay vòng khi khách hỏi lại.
+      // `clip` = clip đầu, giữ cho mấy chỗ đang đọc 1 clip.
+      (() => {
+        const ds = [...new Set(String(r.clip || '').split('\n').map(s => s.trim()).filter(Boolean))];
+        return supabase.from('livestream_intents')
+          .update({ clips: ds, clip: ds[0] || '', updated_at: new Date().toISOString() })
+          .eq('shop_key', shop).eq('id', r.id);
+      })(),
     ]);
     setStatus((p1.error || p2.error) ? ('❌ Lỗi lưu: ' + (p1.error?.message || p2.error?.message)) : `✅ Đã lưu "${r.label}".`);
   };
@@ -391,8 +400,14 @@ export default function LiveClipFactoryTab({ shop = 'chung' }) {
 
                 {/* ④ Clip cuối */}
                 <StepBlock n="4" title="Clip cuối — đường dẫn file trên MÁY PHÁT LIVE" color={r.clip ? '#16a34a' : '#dc2626'}
-                  hint="Tải video ở ③ về máy chạy OBS, lưu vào thư mục cố định, rồi điền đường dẫn file vào đây. Đây chính là clip máy sẽ phát khi có người hỏi.">
-                  <input style={{ ...inp, borderColor: r.clip ? '#86efac' : '#fecaca', fontWeight: 700 }} placeholder="C:/live-clips/gia.mp4" value={r.clip || ''} onChange={e => setField(r.id, 'clip', e.target.value)} />
+                  hint="Tải video ở ③ về máy chạy OBS, lưu vào thư mục cố định, rồi điền đường dẫn file vào đây. MỖI DÒNG 1 CLIP — khách hỏi lại câu này thì máy phát clip kế tiếp, không lặp y hệt.">
+                  <textarea style={{ ...inp, borderColor: r.clip ? '#86efac' : '#fecaca', fontWeight: 700, minHeight: 74, resize: 'vertical', fontFamily: 'ui-monospace, monospace', fontSize: '0.86rem' }}
+                    placeholder={'C:/live-clips/gia_1.mp4\nC:/live-clips/gia_2.mp4'} value={r.clip || ''} onChange={e => setField(r.id, 'clip', e.target.value)} />
+                  {String(r.clip || '').split('\n').filter(s => s.trim()).length > 1 && (
+                    <div style={{ ...hintTxt, marginTop: 6, color: '#16a34a', fontWeight: 700 }}>
+                      🔀 {String(r.clip).split('\n').filter(s => s.trim()).length} clip — máy sẽ xoay vòng lần lượt
+                    </div>
+                  )}
                 </StepBlock>
 
                 {/* lưu */}

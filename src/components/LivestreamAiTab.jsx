@@ -119,8 +119,12 @@ export default function LivestreamAiTab({ shop = 'chung' }) {
     const id = (form.id || '').trim() || slugify(label);
     const keywords = form.keywords.split(',').map(k => k.trim()).filter(Boolean);
     if (!keywords.length) { setStatus('❌ Nhập ít nhất 1 từ khoá (cách nhau dấu phẩy).'); return; }
+    // mỗi dòng 1 clip; bỏ dòng trống + trùng (dán 2 lần cùng 1 file thì clip đó bị phát gấp đôi)
+    const dsClip = [...new Set(form.clip.split('\n').map(s => s.trim()).filter(Boolean))];
     const row = {
-      shop_key: shop, id, label, keywords, clip: form.clip.trim(), enabled: form.enabled,
+      // Ô clip nhập NHIỀU DÒNG -> lưu thành mảng `clips` (máy xoay vòng).
+      // Vẫn ghi `clip` = clip đầu để mấy chỗ đang đọc 1 clip (Studio, đếm tiến độ, xuất faq.json) chạy y nguyên.
+      shop_key: shop, id, label, keywords, clips: dsClip, clip: dsClip[0] || '', enabled: form.enabled,
       sort_order: editing ? (intents.find(i => i.id === id)?.sort_order ?? intents.length + 1) : intents.length + 1,
       updated_at: new Date().toISOString(),
     };
@@ -133,7 +137,9 @@ export default function LivestreamAiTab({ shop = 'chung' }) {
   };
 
   const editIntent = (it) => {
-    setForm({ id: it.id, label: it.label, keywords: (it.keywords || []).join(', '), clip: it.clip || '', enabled: it.enabled });
+    // mảng clips -> hiện mỗi dòng 1 clip trong ô nhập
+    const ds = Array.isArray(it.clips) && it.clips.length ? it.clips : (it.clip ? [it.clip] : []);
+    setForm({ id: it.id, label: it.label, keywords: (it.keywords || []).join(', '), clip: ds.join('\n'), enabled: it.enabled });
     setEditing(true); setFormOpen(true); setStatus('');
     // Cuộn TỚI ĐÚNG KHUNG SỬA (trước đây cuộn lên đầu trang -> đụng mấy khối cài đặt, tưởng bấm không ăn)
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
@@ -342,8 +348,14 @@ export default function LivestreamAiTab({ shop = 'chung' }) {
             <div style={hintTxt}>Cách nhau <b>dấu phẩy</b>. Có dấu / không dấu / viết tắt (bn, ko, z…) đều bắt được — hệ thống tự chuẩn hoá. Càng nhiều từ khoá càng bắt trúng.</div>
           </div>
           <div style={{ marginBottom: 16 }}>
-            <label style={lbl}>Đường dẫn clip trả lời (file .mp4 trên máy phát live)</label>
-            <input style={inp} placeholder="D:/live-clips/faq_gia.mp4 — để trống cũng được, điền sau ở Xưởng Clip" value={form.clip} onChange={e => setForm({ ...form, clip: e.target.value })} />
+            <label style={lbl}>Clip trả lời — <b style={{ color: '#ea580c' }}>mỗi dòng 1 clip</b>, máy sẽ xoay vòng</label>
+            <textarea style={{ ...inp, minHeight: 76, resize: 'vertical', fontFamily: 'ui-monospace, monospace', fontSize: '0.86rem' }}
+              placeholder={'C:/live-clips/gia_1.mp4\nC:/live-clips/gia_2.mp4\nC:/live-clips/gia_3.mp4'}
+              value={form.clip} onChange={e => setForm({ ...form, clip: e.target.value })} />
+            <div style={hintTxt}>
+              Khách hỏi lại câu này thì máy phát <b>clip kế tiếp</b> chứ không lặp y hệt — live đỡ lộ là máy chạy tự động.
+              Để trống cũng được, làm video xong bên Xưởng Clip nó tự điền.
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <button style={btn(ACCENT)} onClick={saveIntent}>{editing ? '💾 Lưu thay đổi' : '➕ Thêm câu hỏi'}</button>
@@ -374,9 +386,15 @@ export default function LivestreamAiTab({ shop = 'chung' }) {
                   {(it.keywords || []).map((k, i) => <span key={i} style={{ display: 'inline-block', background: '#fff4ec', color: '#c2410c', borderRadius: 7, padding: '3px 10px', margin: '2px 4px 2px 0', fontSize: '0.82rem', fontWeight: 600 }}>{k}</span>)}
                 </div>
                 <div style={{ flex: '1 1 180px', minWidth: 160 }}>
-                  {it.clip
-                    ? <span title={it.clip} style={{ display: 'inline-block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: 8, padding: '4px 10px', fontSize: '0.78rem', fontWeight: 700 }}>🎬 {it.clip}</span>
-                    : <span style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, padding: '4px 10px', fontSize: '0.78rem', fontWeight: 700 }}>⚠️ Chưa có clip — làm ở ② Xưởng Clip</span>}
+                  {(() => {
+                    const ds = Array.isArray(it.clips) && it.clips.length ? it.clips : (it.clip ? [it.clip] : []);
+                    if (!ds.length) return <span style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, padding: '4px 10px', fontSize: '0.78rem', fontWeight: 700 }}>⚠️ Chưa có clip — làm ở ② Xưởng Clip</span>;
+                    return (
+                      <span title={ds.join('\n')} style={{ display: 'inline-block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: 8, padding: '4px 10px', fontSize: '0.78rem', fontWeight: 700 }}>
+                        🎬 {ds.length > 1 ? `${ds.length} clip — xoay vòng` : ds[0]}
+                      </span>
+                    );
+                  })()}
                 </div>
                 <div style={{ flex: 'none', display: 'flex', gap: 8 }}>
                   <button onClick={() => editIntent(it)} style={{ ...btn('#3b82f6'), padding: '8px 16px', fontSize: '0.85rem' }}>Sửa</button>

@@ -23,7 +23,7 @@ export default function LiveStudioTab({ shop = 'chung' }) {
     (async () => {
       // Chỉ lấy clip + kịch bản CỦA GIAN ĐANG CHỌN (Khánh 4/8) — ngày live mà lộn gian là phát nhầm nội dung
       const [{ data: it }, { data: pr }] = await Promise.all([
-        supabase.from('livestream_intents').select('id,label,keywords,clip,enabled').eq('shop_key', shop).order('sort_order', { ascending: true }),
+        supabase.from('livestream_intents').select('id,label,keywords,clip,clips,enabled').eq('shop_key', shop).order('sort_order', { ascending: true }),
         supabase.from('livestream_clip_prod').select('intent_id,script,status').eq('shop_key', shop),
       ]);
       if (!alive) return;
@@ -68,7 +68,7 @@ export default function LiveStudioTab({ shop = 'chung' }) {
           if (m.action === 'reload' && m.ok) addLog(`🔄 Nạp lại kho: ${m.n} câu`, C.good);
           setBusy('');
         } else if (m.type === 'log') {
-          if (m.kind === 'play') { setPlaying(m.label); addLog(`▶ ${m.label}`, C.accent); }
+          if (m.kind === 'play') { setPlaying(m.label); addLog(`▶ ${m.label}` + (m.clipTong > 1 ? ` (clip ${m.clipIdx}/${m.clipTong})` : ''), C.accent); }
           else if (m.kind === 'ended') { setPlaying(null); addLog('✔ Clip xong → IDLE', C.good); }
           else if (m.kind === 'stopped') { setPlaying(null); }
           else if (m.kind === 'skip') addLog(`· "${String(m.text).slice(0, 50)}" — không khớp câu nào`, C.sub);
@@ -163,7 +163,11 @@ export default function LiveStudioTab({ shop = 'chung' }) {
                       <tr key={c.id} onClick={() => setSel(c.id)} style={{ cursor: 'pointer', background: sel === c.id ? C.panel2 : 'transparent', borderTop: `1px solid ${C.border}` }}>
                         <td style={{ padding: '9px 8px', color: C.sub, fontWeight: 700 }}>{i + 1}</td>
                         <td style={{ padding: '9px 8px', fontWeight: 700 }}>{c.label}<div style={{ fontSize: '0.68rem', color: C.sub, fontWeight: 400 }}>{(c.keywords || []).slice(0, 3).join(' · ')}</div></td>
-                        <td style={{ padding: '9px 8px', fontSize: '0.74rem', color: c.clip ? '#93c5fd' : C.live, wordBreak: 'break-all' }}>{c.clip || '⚠️ chưa có'}</td>
+                        <td style={{ padding: '9px 8px', fontSize: '0.74rem', color: c.clip ? '#93c5fd' : C.live, wordBreak: 'break-all' }}>
+                          {c.clip || '⚠️ chưa có'}
+                          {Array.isArray(c.clips) && c.clips.length > 1 &&
+                            <span style={{ marginLeft: 8, color: '#4ade80', fontWeight: 700, whiteSpace: 'nowrap' }}>🔀 {c.clips.length} clip</span>}
+                        </td>
                         <td style={{ padding: '9px 8px', textAlign: 'center' }}>{c.clip ? badge('#12301c', C.good, 'Sẵn') : badge('#301212', '#f87171', 'Thiếu')}</td>
                       </tr>
                     ))}

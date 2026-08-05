@@ -17,7 +17,7 @@ export async function loadFromSupabase(sb, shopKey) {
   const q = encodeURIComponent(shopKey);     // ten gian co dau + ky tu '|' -> phai encode
 
   const [intentsRes, cfgRes] = await Promise.all([
-    fetch(`${base}/rest/v1/livestream_intents?select=id,label,keywords,clip&enabled=eq.true&shop_key=eq.${q}&order=sort_order.asc`, { headers }),
+    fetch(`${base}/rest/v1/livestream_intents?select=id,label,keywords,clip,clips&enabled=eq.true&shop_key=eq.${q}&order=sort_order.asc`, { headers }),
     fetch(`${base}/rest/v1/livestream_config?select=cooldown_sec,min_confidence,max_queue&id=eq.${q}`, { headers }),
   ]);
   if (!intentsRes.ok) throw new Error('intents HTTP ' + intentsRes.status);
@@ -31,7 +31,16 @@ export async function loadFromSupabase(sb, shopKey) {
     maxQueue: c.max_queue ?? 3,
   };
   return {
-    intents: intents.map((i) => ({ id: i.id, label: i.label, keywords: i.keywords || [], clip: i.clip || '' })),
+    // `clips` = danh sach clip de XOAY VONG. Cau nao chua co mang thi dung tam `clip` cu (1 cai).
+    intents: intents.map((i) => {
+      const ds = Array.isArray(i.clips) ? i.clips.map((c) => String(c || '').trim()).filter(Boolean) : [];
+      const mot = String(i.clip || '').trim();
+      return {
+        id: i.id, label: i.label, keywords: i.keywords || [],
+        clips: ds.length ? ds : (mot ? [mot] : []),
+        clip: ds[0] || mot || '',        // giu cho cho nao con doc 1 clip
+      };
+    }),
     logic,
   };
 }

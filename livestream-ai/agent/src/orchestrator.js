@@ -30,6 +30,10 @@ export class Orchestrator {
     this.answering = false;
     this.queue = [];
     this.lastPlayedAt = new Map(); // intentId -> timestamp
+    // XOAY VONG CLIP (5/8/2026): 1 cau hoi co the co nhieu clip. Live 2 tieng ma cau "gia bao nhieu"
+    // lan nao cung phat Y HET 1 clip -> khan gia biet ngay la may chay tu dong. Nho vi tri da phat
+    // cua tung cau de lan sau phat cai KE TIEP.
+    this.clipIdx = new Map();      // intentId -> vi tri clip vua phat
 
     // Khi clip tra loi xong: quay ve idle, xu ly hang doi
     this.obs.onAnswerEnded(() => this._onAnswerEnded());
@@ -47,7 +51,8 @@ export class Orchestrator {
   async playById(intentId) {
     const intent = this.intents.find((i) => i.id === intentId);
     if (!intent) return { ok: false, error: 'Khong tim thay cau hoi: ' + intentId };
-    if (!String(intent.clip || '').trim()) return { ok: false, error: 'Cau nay chua co clip' };
+    const coClip = (Array.isArray(intent.clips) && intent.clips.length) || String(intent.clip || '').trim();
+    if (!coClip) return { ok: false, error: 'Cau nay chua co clip' };
     this.queue = [];                 // bam tay = uu tien, don hang doi cu
     if (this.answering) { try { await this.obs.goIdle(); } catch (e) {} this.answering = false; }
     await this._play(intent);
@@ -69,7 +74,10 @@ export class Orchestrator {
     return {
       answering: this.answering,
       queue: this.queue.map((i) => i.id),
-      intents: this.intents.map((i) => ({ id: i.id, label: i.label, clip: i.clip || '' })),
+      intents: this.intents.map((i) => ({
+        id: i.id, label: i.label, clip: i.clip || '',
+        soClip: (Array.isArray(i.clips) ? i.clips.length : 0) || (String(i.clip || '').trim() ? 1 : 0),
+      })),
     };
   }
 
@@ -115,13 +123,27 @@ export class Orchestrator {
     this._play(intent);
   }
 
+  /** Chon clip KE TIEP cua 1 cau hoi (xoay vong). Chi co 1 clip thi luon la clip do. */
+  _chonClip(intent) {
+    const ds = Array.isArray(intent.clips) && intent.clips.length
+      ? intent.clips
+      : (String(intent.clip || '').trim() ? [String(intent.clip).trim()] : []);
+    if (!ds.length) return { path: '', i: 0, n: 0 };
+    const truoc = this.clipIdx.has(intent.id) ? this.clipIdx.get(intent.id) : -1;
+    const i = (truoc + 1) % ds.length;
+    this.clipIdx.set(intent.id, i);
+    return { path: ds[i], i, n: ds.length };
+  }
+
   async _play(intent) {
     this.answering = true;
     this._armFailsafe();
+    const chon = this._chonClip(intent);
     try {
-      console.log(`▶ PHAT: ${intent.label} -> ${intent.clip}`);
-      this.onEvent({ kind: 'play', intentId: intent.id, label: intent.label, clip: intent.clip });
-      await this.obs.playAnswer(intent.clip);
+      const stt = chon.n > 1 ? ` (clip ${chon.i + 1}/${chon.n})` : '';
+      console.log(`▶ PHAT: ${intent.label}${stt} -> ${chon.path}`);
+      this.onEvent({ kind: 'play', intentId: intent.id, label: intent.label, clip: chon.path, clipIdx: chon.i + 1, clipTong: chon.n });
+      await this.obs.playAnswer(chon.path);
       // Chi tinh cooldown khi PHAT THANH CONG (fail thi nguoi xem hoi lai phai duoc tra loi ngay)
       this.lastPlayedAt.set(intent.id, Date.now());
       this._playStartedAt = Date.now();
