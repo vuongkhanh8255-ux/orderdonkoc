@@ -497,7 +497,7 @@ async function runAutoBoost(supabase, shopId, { source = 'cron', force = false }
   // hết hạn rồi đẩy lại (tối đa 2 lần, mỗi lần 25s) → khoảng trống top giảm từ ~4h xuống <1 phút.
   const isSlotLimit = (r) => /slot limit|bump.*limit|boost.*limit|limit.*(boost|bump)/i.test(`${r?.error || ''} ${r?.message || ''}`);
   const SLOT_RETRY_MAX = 2, SLOT_RETRY_WAIT_MS = 25000;
-  let boostResult, slotRetries = 0, loiLanDau = '', xacMinh = null;
+  let boostResult, slotRetries = 0, loiLanDau = '', xacMinh = null, ttCuoi = null;
   for (let attempt = 0; ; attempt++) {
     try {
       boostResult = await boostItems(supabase, shopId, batch);
@@ -512,6 +512,7 @@ async function runAutoBoost(supabase, shopId, { source = 'cron', force = false }
     // "reached shop's bump slot limit" CỦA CHÍNH MÌNH → ghi log 'error' dù top đang chạy ngon.
     // Nay hỏi thẳng get_boosted_list: mã của mình đang được đẩy MỚI TINH thì tính THÀNH CÔNG.
     const tt = await checkBoostedFresh(supabase, shopId, batch);
+    ttCuoi = tt;
     if (tt.fresh > 0) { xacMinh = tt; boostResult = { ok: true, data: {}, verified: true }; break; }
 
     if (!isSlotLimit(boostResult) || attempt >= SLOT_RETRY_MAX) break;
@@ -556,9 +557,14 @@ async function runAutoBoost(supabase, shopId, { source = 'cron', force = false }
   //    để lượt cron kế (sau ~RETRY_AFTER) do lại — lúc đó slot/cooldown đã hết. KHÔNG xoay vòng khi hụt.
   const boostedOk = successCount > 0;
   const newRotation = (boostedOk && itemIds.length > 0) ? (rotationIndex + batch.length) % itemIds.length : rotationIndex;
+  //  - Slot đang bị BOOST CŨ giữ (Shopee cho biết còn bao nhiêu giây) → hẹn đúng lúc nó hết hạn,
+  //    ĐỪNG thử lại mỗi 30 phút cho phí. Audit 10 ngày: mỗi lần hụt kéo theo 3 lượt thử vô ích
+  //    cách nhau 1 tiếng, tất cả đều đâm vào chính slot của mình rồi mới ăn ở giờ thứ 4.
   const nextLastRun = boostedOk
     ? new Date()
-    : new Date(Date.now() - interval - DUE_BUFFER_MS + RETRY_AFTER_MS);
+    : (ttCuoi && ttCuoi.known && ttCuoi.coolDown > 0
+        ? new Date(Date.now() + (ttCuoi.coolDown + 120) * 1000 - interval - DUE_BUFFER_MS)
+        : new Date(Date.now() - interval - DUE_BUFFER_MS + RETRY_AFTER_MS));
   await supabase
     .from('shopee_boost_schedule')
     .update({ rotation_index: newRotation, last_run_at: nextLastRun.toISOString(), updated_at: new Date().toISOString() })
