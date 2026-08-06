@@ -108,7 +108,9 @@ function BookingStaffReportTab({ currentUser } = {}) {
   // ── GIỚI HẠN QUYỀN XEM (Khánh 22/7): mỗi tài khoản CHỈ xem báo cáo của CHÍNH MÌNH.
   // Admin xem hết. Account có `staff` (booking_staff, ecom Đan…) → chỉ thấy đúng dòng tên mình.
   // Lọc ngay từ gốc nên áp cho TẤT CẢ: bảng, tổng KPI, biểu đồ, và panel chi tiết bên dưới.
-  const onlyMe = currentUser?.role !== 'admin' && !!currentUser?.staff;
+  // seeAllReport (Khánh 6/8, Tường Vi): mở phần XEM toàn đội ở trang này. Vẫn KHÔNG nới quyền gỡ tag —
+  // `canRemove` bên dưới bắt đúng tên chủ sở hữu, và RPC koc_self_remove_assignment chặn lại ở server.
+  const onlyMe = currentUser?.role !== 'admin' && !!currentUser?.staff && !currentUser?.seeAllReport;
   const myName = (currentUser?.staff || '').trim();
   const scopeRows = useCallback((rs) => onlyMe
     ? (rs || []).filter(x => (x.ten_nhansu || '').trim() === myName)

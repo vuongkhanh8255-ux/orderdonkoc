@@ -182,7 +182,10 @@ export const ACCOUNTS = [
     { username: 'trucquynh', password: 'Wi9jyy9$', role: 'booking_staff', name: 'Trúc Quỳnh', staff: 'Trúc Quỳnh' },
     { username: 'anhnhi',    password: 'Uzz3$ezy', role: 'booking_staff', name: 'Anh Nhi',    staff: 'Anh Nhi'    },
     { username: 'minhthao',  password: 'Ymnvm36#', role: 'booking_staff', name: 'Minh Thảo',  staff: 'Minh Thảo',  seeAllOrders: true },
-    { username: 'tuongvi',   password: 'Vqi$6b6t', role: 'booking_staff', name: 'Tường Vi',   staff: 'Tường Vi'   },
+    // seeAllReport: true (Khánh 6/8) = coi FULL Báo cáo nhân sự (mọi nhân sự, KPI/biểu đồ/chi tiết
+    //   toàn đội), nhưng GỠ TAG vẫn chỉ gỡ được KOC mang đúng tên mình (server chặn, xem
+    //   koc_self_remove_assignment) và TẠO đơn vẫn khoá dưới tên mình.
+    { username: 'tuongvi',   password: 'Vqi$6b6t', role: 'booking_staff', name: 'Tường Vi',   staff: 'Tường Vi',   seeAllReport: true },
     { username: 'ngocmai',   password: 'B9ak4q@7', role: 'booking_staff', name: 'Ngọc Mai',   staff: 'Ngọc Mai'   },
     { username: 'nguyenbao', password: 'Xm9xde7$', role: 'booking_staff', name: 'Nguyên Bảo', staff: 'Nguyên Bảo' },
     { username: 'huudan',    password: 'J6w8$4rg', role: 'booking_staff', name: 'Hữu Đan',    staff: 'Hữu Đan'    },
