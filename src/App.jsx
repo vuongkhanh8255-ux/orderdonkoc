@@ -5,6 +5,7 @@ import { AppDataProvider } from './context/AppDataContext';
 import RunnerLoader from './components/RunnerLoader';
 import { supabase } from './supabaseClient';
 // Giữ EAGER: cần ngay khi vào trang / có named export dùng đồng bộ
+import SystemHealthBanner from './components/SystemHealthBanner';
 import LoginPage, { ROLE_VIEWS, ACCOUNTS } from './components/LoginPage';
 import TikTokShopCallback from './components/TikTokShopCallback';
 import PublicLandingPage from './components/PublicLandingPage';
@@ -453,6 +454,10 @@ function AppMain({ user, onLogout, allowedViews }) {
 
         {/* --- MAIN CONTENT --- */}
         <div style={mainContentStyle}>
+
+          {/* Cảnh báo việc tự động chết/trễ — hiện ở MỌI trang, mọi tài khoản (Khánh 6/8).
+              Chạy ngon thì không hiện gì cả. */}
+          <SystemHealthBanner />
 
           {/* Tabs render bình thường (mount/unmount theo active).
               Bọc Error Boundary key theo view → đổi tab là reset, 1 tab lỗi không kéo trắng cả app. */}
