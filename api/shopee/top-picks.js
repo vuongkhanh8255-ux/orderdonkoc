@@ -621,7 +621,13 @@ async function runAutoBoostAll(supabase, { source = 'cron', force = false } = {}
 
   const list = schedules || [];
   const results = [];
+  // NGÂN SÁCH THỜI GIAN (6/8/2026): 5 gian × tối đa 50s chờ retry slot > giới hạn chạy của Vercel
+  // → 504, và gian CHƯA kịp chạy thì không được ghi nhận (đã dính: 3 gian mang mốc cũ dù đã đẩy).
+  // Hết ngân sách thì DỪNG SẠCH và trả kết quả — cron chạy mỗi giờ sẽ lo nốt mấy gian còn lại.
+  const DEADLINE = Date.now() + 200_000;
+  let boQua = 0;
   for (const s of list) {
+    if (Date.now() > DEADLINE) { boQua++; continue; }
     try {
       const r = await runAutoBoost(supabase, s.shop_id, { source, force });
       results.push({ shop_id: s.shop_id, ...r });
@@ -629,10 +635,12 @@ async function runAutoBoostAll(supabase, { source = 'cron', force = false } = {}
       results.push({ shop_id: s.shop_id, ok: false, error: e.message });
     }
   }
+  if (boQua > 0) console.warn(`[AutoBoostAll] Het gio, con ${boQua} gian de luot cron sau lo`);
   return {
     ok: true,
     total: list.length,
     ran_count: results.filter(r => r.ran).length,
+    skipped_no_time: boQua,
     results,
   };
 }
