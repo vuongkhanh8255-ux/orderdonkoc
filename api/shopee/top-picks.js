@@ -296,6 +296,29 @@ async function handleBoostedList(supabase, shopId) {
   return { ok: true, data: result.response };
 }
 
+/** Hỏi THẲNG Shopee: trong `batch` có mấy mã đang được đẩy, và có phải VỪA đẩy xong không?
+ *  Dùng để không báo lỗi oan khi cú gọi boost đã ăn nhưng phản hồi về lỗi (mất gói / Shopee trả nhầm).
+ *  Phân biệt "vừa đẩy" vs "boost cũ còn sót" bằng cool_down_second: vừa đẩy thì còn gần trọn 4h.
+ *  (Không dựa vào việc mã có trong danh sách hay không — shop chỉ có đúng 5 mã, vòng nào cũng đẩy
+ *   y hệt, nên "có trong danh sách" KHÔNG chứng minh được là lượt này vừa đẩy.) */
+const BOOST_DURATION_SEC = 4 * 3600;      // Shopee giữ boost 4 tiếng
+const FRESH_WINDOW_SEC = 15 * 60;         // coi là "vừa đẩy" nếu bắt đầu trong 15 phút gần đây
+async function checkBoostedFresh(supabase, shopId, batch) {
+  try {
+    const r = await handleBoostedList(supabase, shopId);
+    if (!r.ok) return { known: false, fresh: 0, coolDown: 0 };
+    const dangDay = new Map((r.data?.item_list || [])
+      .map(x => [Number(x.item_id), Number(x.cool_down_second) || 0]));
+    const con = (batch || []).map(Number)
+      .map(id => dangDay.get(id))
+      .filter(s => typeof s === 'number');
+    const fresh = con.filter(s => s >= BOOST_DURATION_SEC - FRESH_WINDOW_SEC).length;
+    return { known: true, fresh, coolDown: con.length ? Math.max(...con) : 0 };
+  } catch {
+    return { known: false, fresh: 0, coolDown: 0 };
+  }
+}
+
 /** 12. top_sellers — best-selling products per shop (ranking from synced orders) + cover image.
  *  Ranking is computed in Postgres (RPC shopee_top_sellers) from shopee_orders — no Shopee call.
  *  Cover image + current price are fetched per shop via get_item_base_info (best-effort). */
@@ -474,21 +497,37 @@ async function runAutoBoost(supabase, shopId, { source = 'cron', force = false }
   // hết hạn rồi đẩy lại (tối đa 2 lần, mỗi lần 25s) → khoảng trống top giảm từ ~4h xuống <1 phút.
   const isSlotLimit = (r) => /slot limit|bump.*limit|boost.*limit|limit.*(boost|bump)/i.test(`${r?.error || ''} ${r?.message || ''}`);
   const SLOT_RETRY_MAX = 2, SLOT_RETRY_WAIT_MS = 25000;
-  let boostResult, slotRetries = 0;
+  let boostResult, slotRetries = 0, loiLanDau = '', xacMinh = null;
   for (let attempt = 0; ; attempt++) {
     try {
       boostResult = await boostItems(supabase, shopId, batch);
     } catch (e) {
       boostResult = { ok: false, error: e.message };
     }
-    if (boostResult.ok || !isSlotLimit(boostResult) || attempt >= SLOT_RETRY_MAX) break;
+    if (boostResult.ok) break;
+    if (!loiLanDau) loiLanDau = boostResult.message || boostResult.error || '';
+
+    // ĐỐI CHIẾU VỚI SHOPEE trước khi kết luận hụt (6/8/2026 — Khánh báo "đẩy SP không hoạt động").
+    // Ca thật: cú gọi ĐẦU đã đẩy được trên Shopee nhưng phản hồi về lỗi → code retry → lần 2,3 dính
+    // "reached shop's bump slot limit" CỦA CHÍNH MÌNH → ghi log 'error' dù top đang chạy ngon.
+    // Nay hỏi thẳng get_boosted_list: mã của mình đang được đẩy MỚI TINH thì tính THÀNH CÔNG.
+    const tt = await checkBoostedFresh(supabase, shopId, batch);
+    if (tt.fresh > 0) { xacMinh = tt; boostResult = { ok: true, data: {}, verified: true }; break; }
+
+    if (!isSlotLimit(boostResult) || attempt >= SLOT_RETRY_MAX) break;
     slotRetries = attempt + 1;
     await new Promise(r => setTimeout(r, SLOT_RETRY_WAIT_MS)); // chờ boost cũ hết hạn
   }
 
   // Parse success/fail
   let successCount = 0, failCount = 0, status = 'ok', message = '';
-  if (boostResult.ok) {
+  if (xacMinh) {
+    // Không tin phản hồi API nữa — lấy đúng số mã Shopee đang đẩy mới tinh làm kết quả.
+    successCount = xacMinh.fresh;
+    failCount = Math.max(0, batch.length - successCount);
+    status = failCount > 0 ? 'partial' : 'ok';
+    message = `Đã đẩy ${successCount}/${batch.length} SP — XÁC MINH với Shopee (API báo lỗi "${(loiLanDau || '').slice(0, 70)}" nhưng thực tế đã đẩy)`;
+  } else if (boostResult.ok) {
     failCount = boostResult.data?.failure_count || (boostResult.data?.failure_list?.length || 0);
     successCount = Math.max(0, batch.length - failCount);
     if (failCount > 0) {
@@ -504,6 +543,8 @@ async function runAutoBoost(supabase, shopId, { source = 'cron', force = false }
     status = 'error';
     failCount = batch.length;
     message = boostResult.message || boostResult.error || 'Lỗi đẩy sản phẩm';
+    // Giữ LỖI LẦN ĐẦU nếu khác lỗi lần cuối — trước đây bị ghi đè nên không biết cú đầu hỏng vì gì.
+    if (loiLanDau && !message.includes(loiLanDau)) message += ` (lỗi đầu: ${loiLanDau.slice(0, 70)})`;
   }
   if (slotRetries > 0) message += status === 'error'
     ? ` (đã thử lại ${slotRetries} lần, slot vẫn đầy)`
