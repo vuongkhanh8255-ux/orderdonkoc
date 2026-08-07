@@ -434,12 +434,13 @@ function StaffDetailPanel({ r, range, bg, currentUser, dsNhanSu = [] }) {
       }
       const XLSX = await import('xlsx').then(m => m.default || m);
       const aoa = [
-        ['STT', 'Loại', 'Kênh / KOC', 'Brand', 'Sản phẩm', 'Ngày air', 'CAST (đ)', 'View (tổng)', 'GMV (tổng)', 'Trạng thái', 'Link'],
+        ['STT', 'Loại', 'Kênh / KOC', 'Brand', 'Sản phẩm', 'Ngày air', 'CAST (đ)', 'View (tổng)', 'GMV (tổng)', 'Trạng thái', 'ID video', 'Link'],
+        // ID video để CHỮ (không phải số) — 19 chữ số, Excel để kiểu số sẽ hiện 7.65E+18 và làm TRÒN mất đuôi.
         ...rows.map((v, i) => [i + 1, LOAI_LABEL[v.loai] || v.loai, v.koc || '', v.brand || '', v.san_pham || '',
-          v.ngay_air ? new Date(v.ngay_air).toLocaleDateString('vi-VN') : '', num(v.cast_amount), num(v.view_ky), num(v.gmv_ky), v.trang_thai || '', v.link || '']),
+          v.ngay_air ? new Date(v.ngay_air).toLocaleDateString('vi-VN') : '', num(v.cast_amount), num(v.view_ky), num(v.gmv_ky), v.trang_thai || '', String(v.id_video || ''), v.link || '']),
       ];
       const ws = XLSX.utils.aoa_to_sheet(aoa);
-      ws['!cols'] = [{ wch: 5 }, { wch: 18 }, { wch: 20 }, { wch: 14 }, { wch: 22 }, { wch: 11 }, { wch: 13 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 52 }];
+      ws['!cols'] = [{ wch: 5 }, { wch: 18 }, { wch: 20 }, { wch: 14 }, { wch: 22 }, { wch: 11 }, { wch: 13 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 21 }, { wch: 52 }];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Link-Video');
       XLSX.writeFile(wb, `link-video_${String(r.ten_nhansu || 'NS').replace(/\s+/g, '-')}_toan-bo.xlsx`, { compression: true });
@@ -487,12 +488,13 @@ function StaffDetailPanel({ r, range, bg, currentUser, dsNhanSu = [] }) {
 
       // Sheet 1 — chi tiết đủ dòng
       const aoa = [
-        ['STT', 'Nhân sự', 'Loại', 'Kênh / KOC', 'Brand', 'Sản phẩm', 'Ngày air', 'CAST (đ)', 'View (tổng)', 'GMV (tổng)', 'Trạng thái', 'Link'],
+        ['STT', 'Nhân sự', 'Loại', 'Kênh / KOC', 'Brand', 'Sản phẩm', 'Ngày air', 'CAST (đ)', 'View (tổng)', 'GMV (tổng)', 'Trạng thái', 'ID video', 'Link'],
+        // ID video để CHỮ (không phải số) — 19 chữ số, Excel để kiểu số sẽ hiện 7.65E+18 và làm TRÒN mất đuôi.
         ...tatCa.map((v, i) => [i + 1, v._ns || '', LOAI_LABEL[v.loai] || v.loai, v.koc || '', v.brand || '', v.san_pham || '',
-          v.ngay_air ? new Date(v.ngay_air).toLocaleDateString('vi-VN') : '', num(v.cast_amount), num(v.view_ky), num(v.gmv_ky), v.trang_thai || '', v.link || '']),
+          v.ngay_air ? new Date(v.ngay_air).toLocaleDateString('vi-VN') : '', num(v.cast_amount), num(v.view_ky), num(v.gmv_ky), v.trang_thai || '', String(v.id_video || ''), v.link || '']),
       ];
       const ws = XLSX.utils.aoa_to_sheet(aoa);
-      ws['!cols'] = [{ wch: 6 }, { wch: 14 }, { wch: 18 }, { wch: 20 }, { wch: 14 }, { wch: 22 }, { wch: 11 }, { wch: 13 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 52 }];
+      ws['!cols'] = [{ wch: 6 }, { wch: 14 }, { wch: 18 }, { wch: 20 }, { wch: 14 }, { wch: 22 }, { wch: 11 }, { wch: 13 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 21 }, { wch: 52 }];
       XLSX.utils.book_append_sheet(wb, ws, 'Chi tiet');
 
       // Sheet 2 — tổng hợp: mỗi nhân sự bao nhiêu dòng từng loại
