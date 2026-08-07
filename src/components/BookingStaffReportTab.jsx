@@ -285,7 +285,7 @@ function BookingStaffReportTab({ currentUser } = {}) {
       </div>
       <p style={{ color: '#94a3b8', fontSize: '0.76rem', marginTop: 10 }}>* Chi phí mẫu = cost (cột AMIS V2) ×1.08×SL + 5k + ship (giống Module 1). CAST đã dùng = koc_payments. Ngân sách = max(15tr, GMV×2.2%). Chi tiết hiện bên dưới — bấm dòng khác để đổi nhân sự.</p>
 
-      {selectedRow && <StaffDetailPanel r={selectedRow} range={range} bg={budgetByStaff[selectedRow.ten_nhansu]} currentUser={currentUser} />}
+      {selectedRow && <StaffDetailPanel r={selectedRow} range={range} bg={budgetByStaff[selectedRow.ten_nhansu]} currentUser={currentUser} dsNhanSu={rowsV} />}
     </div>
   );
 }
@@ -316,7 +316,7 @@ const Mini = ({ label, val, color = '#475569', icon }) => (
 );
 
 // ── Panel chi tiết nhân sự (hiện INLINE bên dưới bảng) ─────────────────────────
-function StaffDetailPanel({ r, range, bg, currentUser }) {
+function StaffDetailPanel({ r, range, bg, currentUser, dsNhanSu = [] }) {
   const [det, setDet] = useState(null);
   const [loadingDet, setLoadingDet] = useState(true);
   // ── TỰ GỠ TAG (Khánh 15/7): mỗi account chỉ được tự gỡ KOC của ĐÚNG tên mình (r.ten_nhansu === currentUser.staff).
@@ -442,10 +442,81 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
       ws['!cols'] = [{ wch: 5 }, { wch: 18 }, { wch: 20 }, { wch: 14 }, { wch: 22 }, { wch: 11 }, { wch: 13 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 52 }];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Link-Video');
-      XLSX.writeFile(wb, `link-video_${String(r.ten_nhansu || 'NS').replace(/\s+/g, '-')}_toan-bo.xlsx`);
+      XLSX.writeFile(wb, `link-video_${String(r.ten_nhansu || 'NS').replace(/\s+/g, '-')}_toan-bo.xlsx`, { compression: true });
       if (rows.length < allTotal) alert(`⚠️ Chỉ lấy được ${fmt(rows.length)}/${fmt(allTotal)} dòng — server ngắt giữa chừng. Thử xuất lại hoặc lọc bớt theo loại.`);
     } catch (e) { alert('Lỗi xuất Excel: ' + e.message); }
     finally { setAllBusy(false); setAllProg(0); }
+  };
+
+  // ── XUẤT GỘP TOÀN BỘ NHÂN SỰ (Khánh 6/8) ────────────────────────────────────
+  // Nút cũ chỉ xuất 1 nhân sự đang mở → muốn coi cả đội phải bấm 12-14 lần. Nút này chạy
+  // vòng qua MỌI nhân sự đang thấy (tôn trọng quyền: acc booking chỉ thấy mình → chỉ ra mình),
+  // lấy ĐỦ 3 loại (link air · có cast · video theo tag), gộp 1 file, thêm cột "Nhân sự".
+  // Có thêm sheet "Tong hop" đếm số dòng từng loại theo từng người để soi nhanh.
+  const [gopBusy, setGopBusy] = useState(false);
+  const [gopProg, setGopProg] = useState('');
+  const exportAllStaff = async () => {
+    const ds = (dsNhanSu || []).filter(x => x && x.nhansu_id);
+    if (!ds.length) return;
+    if (!window.confirm(`Xuất TOÀN BỘ link & video của ${ds.length} nhân sự (đủ 3 loại) vào 1 file?\n\nData khá nhiều nên có thể mất 1-3 phút — đừng đóng tab.`)) return;
+    setGopBusy(true); setGopProg('');
+    try {
+      const CHUNK = 1000;
+      const tatCa = [];
+      for (let i = 0; i < ds.length; i++) {
+        const ns = ds[i];
+        let off = 0;
+        for (;;) {
+          const { data, error } = await supabase.rpc('staff_all_records', {
+            p_nhansu_id: ns.nhansu_id, p_from: ALL_FROM, p_to: ALL_TO,
+            p_loai: null, p_search: null, p_limit: CHUNK, p_offset: off,   // null = LẤY ĐỦ MỌI LOẠI
+          });
+          if (error) throw error;
+          const batch = data || [];
+          if (!batch.length) break;
+          batch.forEach(v => tatCa.push({ ...v, _ns: ns.ten_nhansu }));
+          off += batch.length;
+          setGopProg(`${ns.ten_nhansu}: ${fmt(off)} dòng · (${i + 1}/${ds.length} nhân sự) · tổng ${fmt(tatCa.length)}`);
+          if (batch.length < CHUNK) break;
+        }
+      }
+      if (!tatCa.length) { alert('Không có dòng nào để xuất.'); return; }
+
+      const XLSX = await import('xlsx').then(m => m.default || m);
+      const wb = XLSX.utils.book_new();
+
+      // Sheet 1 — chi tiết đủ dòng
+      const aoa = [
+        ['STT', 'Nhân sự', 'Loại', 'Kênh / KOC', 'Brand', 'Sản phẩm', 'Ngày air', 'CAST (đ)', 'View (tổng)', 'GMV (tổng)', 'Trạng thái', 'Link'],
+        ...tatCa.map((v, i) => [i + 1, v._ns || '', LOAI_LABEL[v.loai] || v.loai, v.koc || '', v.brand || '', v.san_pham || '',
+          v.ngay_air ? new Date(v.ngay_air).toLocaleDateString('vi-VN') : '', num(v.cast_amount), num(v.view_ky), num(v.gmv_ky), v.trang_thai || '', v.link || '']),
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = [{ wch: 6 }, { wch: 14 }, { wch: 18 }, { wch: 20 }, { wch: 14 }, { wch: 22 }, { wch: 11 }, { wch: 13 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 52 }];
+      XLSX.utils.book_append_sheet(wb, ws, 'Chi tiet');
+
+      // Sheet 2 — tổng hợp: mỗi nhân sự bao nhiêu dòng từng loại
+      const dem = {};
+      tatCa.forEach(v => {
+        const k = v._ns || '(trống)';
+        dem[k] = dem[k] || { air: 0, cast: 0, tag: 0, tong: 0 };
+        if (dem[k][v.loai] != null) dem[k][v.loai]++;
+        dem[k].tong++;
+      });
+      const aoa2 = [
+        ['Nhân sự', 'Link air (tự điền)', 'Link air có cast', 'Video theo tag', 'TỔNG'],
+        ...Object.entries(dem).sort((a, b) => b[1].tong - a[1].tong)
+          .map(([k, v]) => [k, v.air, v.cast, v.tag, v.tong]),
+        ['TẤT CẢ', ...['air', 'cast', 'tag'].map(t => Object.values(dem).reduce((s, v) => s + v[t], 0)), tatCa.length],
+      ];
+      const ws2 = XLSX.utils.aoa_to_sheet(aoa2);
+      ws2['!cols'] = [{ wch: 16 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 10 }];
+      XLSX.utils.book_append_sheet(wb, ws2, 'Tong hop');
+
+      // compression: BẮT BUỘC ở file gộp — 89k dòng (nhiều link dài) không nén ra ~47MB, mở/gửi rất cực.
+      XLSX.writeFile(wb, `link-video_TOAN-DOI_${ds.length}NS_${new Date().toISOString().slice(0, 10)}.xlsx`, { compression: true });
+    } catch (e) { alert('Lỗi xuất Excel: ' + e.message); }
+    finally { setGopBusy(false); setGopProg(''); }
   };
   // ── KOC của tôi BỊ GỠ (90 ngày) — để nhân sự biết KOC nào bị gỡ (nhất là auto-gỡ), phân biệt đã-gắn-lại hay còn-gỡ ──
   const [rmKocs, setRmKocs] = useState(null);
@@ -975,7 +1046,20 @@ function StaffDetailPanel({ r, range, bg, currentUser }) {
               ))}
               <input value={allSearch} onChange={e => setAllSearch(e.target.value)} placeholder="🔎 Tìm KOC / brand / SP / ID video / dán nguyên link air..." style={{ ...ctrl, flex: '1 1 220px', minWidth: 180 }} />
               <button onClick={exportAll} disabled={!allTotal || allBusy} style={{ ...ctrl, background: allTotal ? '#16a34a' : '#e2e8f0', color: '#fff', border: 'none', fontWeight: 700, cursor: allTotal && !allBusy ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>{allBusy ? `⏳ Đang xuất ${fmt(allProg)}/${fmt(allTotal)}...` : `📊 Xuất Excel${allTotal ? ` (${fmt(allTotal)})` : ''}`}</button>
+              {/* Xuất GỘP cả đội — chỉ hiện khi tài khoản được xem nhiều hơn 1 nhân sự (Khánh 6/8) */}
+              {(dsNhanSu || []).length > 1 && (
+                <button onClick={exportAllStaff} disabled={gopBusy}
+                  title="Gộp link air + link có cast + video theo tag của TẤT CẢ nhân sự vào 1 file"
+                  style={{ ...ctrl, background: gopBusy ? '#e2e8f0' : '#7c3aed', color: '#fff', border: 'none', fontWeight: 700, cursor: gopBusy ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
+                  {gopBusy ? '⏳ Đang gộp...' : `📦 Xuất TẤT CẢ nhân sự (${dsNhanSu.length})`}
+                </button>
+              )}
             </div>
+            {gopBusy && (
+              <div style={{ marginTop: 6, fontSize: '0.78rem', color: '#6d28d9', background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 8, padding: '6px 10px' }}>
+                ⏳ Đang kéo dữ liệu — {gopProg || 'bắt đầu...'} · <b>đừng đóng tab</b>
+              </div>
+            )}
             {allRows == null ? (
               <div style={{ color: '#94a3b8', fontSize: '0.86rem', padding: 10 }}>⏳ Đang tải...</div>
             ) : allErr ? (
