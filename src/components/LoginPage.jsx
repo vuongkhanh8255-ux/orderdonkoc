@@ -190,7 +190,9 @@ export const ACCOUNTS = [
     { username: 'tuongvi',   password: 'Vqi$6b6t', role: 'booking_staff', name: 'Tường Vi',   staff: 'Tường Vi',   seeAllReport: true },
     { username: 'ngocmai',   password: 'B9ak4q@7', role: 'booking_staff', name: 'Ngọc Mai',   staff: 'Ngọc Mai'   },
     { username: 'nguyenbao', password: 'Xm9xde7$', role: 'booking_staff', name: 'Nguyên Bảo', staff: 'Nguyên Bảo' },
-    { username: 'huudan',    password: 'J6w8$4rg', role: 'booking_staff', name: 'Hữu Đan',    staff: 'Hữu Đan',    seeAllOrders: true },
+    // (Khánh 6/8 chốt: quyền coi đơn full CHỈ mở ở tài khoản ecom `dan`, acc booking này giữ nguyên
+    //  giới hạn như các bạn booking khác — chỉ coi đơn của chính mình.)
+    { username: 'huudan',    password: 'J6w8$4rg', role: 'booking_staff', name: 'Hữu Đan',    staff: 'Hữu Đan'    },
     { username: 'luuhang',   password: 'Utfppj4@', role: 'booking_staff', name: 'Lưu Hằng',   staff: 'Lưu Hằng'   },
     { username: 'tutran',    password: 'Qh67h94$', role: 'booking_staff', name: 'Tú Trần',    staff: 'Tú Trần'    },
     { username: 'hieutran',  password: 'Saq4ep3$', role: 'booking_staff', name: 'Hiếu Trần',  staff: 'Hiếu Trần'  },
