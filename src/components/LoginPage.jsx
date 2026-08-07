@@ -162,7 +162,9 @@ export const ACCOUNTS = [
     // ── ECOM accounts (5 users, propose-only quyền cho phần Định danh KOC) ──
     { username: 'ha',         password: 'Ha@SK2025',       role: 'ecom',       name: 'Hạ'          },
     { username: 'phong',      password: 'Phong@SK2025',    role: 'ecom',       name: 'Phong'       },
-    { username: 'dan',        password: 'Dan@SK2025',      role: 'ecom',       name: 'Đan',        staff: 'Hữu Đan' },
+    // seeAllOrders (Khánh 6/8): Hữu Đan coi được đơn order của MỌI nhân sự. Vẫn khoá TẠO đơn dưới
+    //   tên mình + ở Báo cáo nhân sự chỉ tự gỡ tag KOC của mình (xem 3 bạn lead phía dưới).
+    { username: 'dan',        password: 'Dan@SK2025',      role: 'ecom',       name: 'Đan',        staff: 'Hữu Đan', seeAllOrders: true },
     { username: 'hieu',       password: 'Hieu@SK2025',     role: 'ecom',       name: 'Hiếu'        },
     { username: 'tamnhu',     password: 'TamNhu@SK2025',   role: 'ecom',       name: 'Tâm Như'     },
     { username: 'khanh',      password: 'Khanh@SK2025',    role: 'ecom',       name: 'Khánh'       },
@@ -188,7 +190,7 @@ export const ACCOUNTS = [
     { username: 'tuongvi',   password: 'Vqi$6b6t', role: 'booking_staff', name: 'Tường Vi',   staff: 'Tường Vi',   seeAllReport: true },
     { username: 'ngocmai',   password: 'B9ak4q@7', role: 'booking_staff', name: 'Ngọc Mai',   staff: 'Ngọc Mai'   },
     { username: 'nguyenbao', password: 'Xm9xde7$', role: 'booking_staff', name: 'Nguyên Bảo', staff: 'Nguyên Bảo' },
-    { username: 'huudan',    password: 'J6w8$4rg', role: 'booking_staff', name: 'Hữu Đan',    staff: 'Hữu Đan'    },
+    { username: 'huudan',    password: 'J6w8$4rg', role: 'booking_staff', name: 'Hữu Đan',    staff: 'Hữu Đan',    seeAllOrders: true },
     { username: 'luuhang',   password: 'Utfppj4@', role: 'booking_staff', name: 'Lưu Hằng',   staff: 'Lưu Hằng'   },
     { username: 'tutran',    password: 'Qh67h94$', role: 'booking_staff', name: 'Tú Trần',    staff: 'Tú Trần'    },
     { username: 'hieutran',  password: 'Saq4ep3$', role: 'booking_staff', name: 'Hiếu Trần',  staff: 'Hiếu Trần'  },
